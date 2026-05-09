@@ -33,6 +33,7 @@ class SubnetBase(StrictModel):
     scan_method: list[str] = Field(default_factory=lambda: ["icmp"])
     threshold_pct: Annotated[int | None, Field(ge=0, le=100)] = None
     auto_dns: bool = False
+    scan_agent_id: uuid.UUID | None = None
     custom_fields: dict[str, Any] | None = None
 
     @field_validator("cidr")
@@ -65,6 +66,7 @@ class SubnetUpdate(StrictModel):
     scan_method: list[str] | None = None
     threshold_pct: Annotated[int | None, Field(ge=0, le=100)] = None
     auto_dns: bool | None = None
+    scan_agent_id: uuid.UUID | None = None
     custom_fields: dict[str, Any] | None = None
     # 注意：cidr 不允許更新（會破壞已配發 IP）；如要 resize 走專用 endpoint
 

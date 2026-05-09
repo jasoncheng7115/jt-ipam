@@ -16,7 +16,7 @@ from app.models.user import User
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from app.schemas.totp import ConfirmRequest, EnrollResponse, VerifyRequest
 from app.schemas.user import UserMe
-from app.services import totp as totp_service
+from app.services import ldap_auth, totp as totp_service
 from app.services.auth import (
     AccountInactive,
     AccountLocked,
@@ -239,3 +239,18 @@ async def logout(_user: CurrentUser) -> None:
 @router.get("/me", response_model=UserMe)
 async def me(user: CurrentUser) -> UserMe:
     return UserMe.model_validate(user)
+
+
+# ─────────────────── LDAP admin test ───────────────────
+from app.api.v1.dependencies import require_admin as _require_admin
+
+
+@router.get("/ldap/test", dependencies=[Depends(_require_admin)])
+async def ldap_test() -> dict[str, object]:
+    """從伺服器以設定的 bind DN 連線 LDAP，驗證設定是否正確。"""
+    try:
+        return await ldap_auth.test_connection()
+    except ldap_auth.LDAPNotConfigured as exc:
+        raise HTTPException(503, detail=str(exc)) from exc
+    except ldap_auth.LDAPAuthError as exc:
+        raise HTTPException(502, detail=f"LDAP error: {exc}") from exc

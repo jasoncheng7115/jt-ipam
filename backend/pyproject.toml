@@ -35,6 +35,11 @@ dependencies = [
     # ── Network / IP ──
     "httpx[http2]>=0.27",          # 統一 async HTTP client（A10 SSRF 包裝）
 
+    # ── 外部系統連線 ──
+    "pymysql>=1.1",                # phpIPAM 遷移工具：直連舊 MySQL
+    "ldap3>=2.9",                  # AD/LDAP 認證
+    "pyrad>=2.4",                  # Radius 認證
+
     # ── Caching / Queue ──
     "redis[hiredis]>=5.2",
     "celery>=5.4",

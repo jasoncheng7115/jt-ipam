@@ -52,6 +52,11 @@ class Subnet(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     threshold_pct: Mapped[int | None] = mapped_column(Integer)
     auto_dns: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    scan_agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("scan_agents.id", ondelete="SET NULL"),
+    )
+
     custom_fields: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     __table_args__ = (

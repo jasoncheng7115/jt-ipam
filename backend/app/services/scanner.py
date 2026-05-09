@@ -82,7 +82,18 @@ async def scan_subnet_icmp(session: AsyncSession, subnet: Subnet) -> dict[str, i
     """執行 ICMP scan；更新 ip_addresses 表中對應 IP 的 last_seen_scanner / effective_status。
 
     回傳 {"hosts": N, "online": M, "offline": K}。
+
+    若 subnet.scan_agent_id 有設定，理論上應 dispatch 到遠端 agent；
+    Phase 1 agent 通訊協定還未實作，先在 log 中記錄並 fall back 到本機掃描。
     """
+    if subnet.scan_agent_id is not None:
+        import structlog
+        structlog.get_logger("scanner").info(
+            "scan_agent_assigned_falling_back_to_local",
+            subnet_id=str(subnet.id),
+            scan_agent_id=str(subnet.scan_agent_id),
+        )
+
     targets = _enumerate_targets(subnet)
     if not targets:
         return {"hosts": 0, "online": 0, "offline": 0}

@@ -118,6 +118,30 @@ class Settings(BaseSettings):
     smtp_tls_mode: Literal["none", "starttls", "tls"] = "starttls"
     smtp_timeout: float = 10.0
 
+    # ── LDAP / AD ──
+    ldap_enabled: bool = False
+    ldap_server: str | None = None         # 不含 scheme，例 "ldap.example.com"
+    ldap_port: int = 389
+    ldap_use_ssl: bool = False             # LDAPS（直接 TLS，通常 port 636）
+    ldap_use_starttls: bool = True
+    ldap_bind_dn: str | None = None
+    ldap_bind_password: SecretStr | None = None
+    ldap_search_base: str | None = None
+    ldap_user_filter: str = "(uid={username})"   # AD 通常用 (sAMAccountName={username})
+    ldap_attr_email: str = "mail"
+    ldap_attr_display_name: str = "displayName"
+    ldap_attr_member_of: str = "memberOf"
+    ldap_timeout: float = 8.0
+    ldap_admin_groups: Annotated[list[str], Field(default_factory=list)]
+
+    # ── Radius ──
+    radius_enabled: bool = False
+    radius_server: str | None = None
+    radius_port: int = 1812
+    radius_secret: SecretStr | None = None
+    radius_timeout: float = 5.0
+    radius_nas_identifier: str = "jt-ipam"
+
     # ── Frontend defaults ──
     default_locale: Locale = "zh-TW"
     default_theme: Theme = "auto"
@@ -126,7 +150,13 @@ class Settings(BaseSettings):
     # 驗證器
     # =====================================================================
 
-    @field_validator("cors_origins", "outbound_allow_cidrs", "outbound_allow_hosts", mode="before")
+    @field_validator(
+        "cors_origins",
+        "outbound_allow_cidrs",
+        "outbound_allow_hosts",
+        "ldap_admin_groups",
+        mode="before",
+    )
     @classmethod
     def _split_csv(cls, v: object) -> list[str]:
         if v is None or v == "":

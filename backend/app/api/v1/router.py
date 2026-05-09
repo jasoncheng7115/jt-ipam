@@ -11,13 +11,16 @@ from app.api.v1.endpoints import (
     custom_fields,
     dashboard,
     devices,
+    import_external,
     ip_requests,
     locations,
+    migration,
     nat,
     notifications,
     preferences,
     rack_diagram,
     scan,
+    scan_agents,
     search,
     sections,
     subnets,
@@ -46,5 +49,8 @@ api_v1_router.include_router(notifications.router)
 api_v1_router.include_router(search.router)
 api_v1_router.include_router(ip_requests.router)
 api_v1_router.include_router(rack_diagram.router)
+api_v1_router.include_router(migration.router)
+api_v1_router.include_router(import_external.router)
+api_v1_router.include_router(scan_agents.router)
 
-# Phase 1 待補：users(管理), groups, scan_agents
+# Phase 1 餘項：users(管理) / groups（前端管理頁；Phase 2 進行）

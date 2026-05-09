@@ -20,10 +20,12 @@ from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
     decode_access_token,
+    hash_password,
     password_needs_rehash,
     verify_password,
 )
 from app.models.user import User
+from app.services import ldap_auth, radius_auth
 
 # A07：lockout 政策
 _MAX_FAILED_ATTEMPTS: Final[int] = 5
@@ -64,79 +66,163 @@ async def authenticate(
     actor_user_agent: str | None,
     request_id: str | None,
 ) -> User:
-    """以使用者名 / Email + 密碼驗證；同步處理失敗計數與鎖定。
+    """以使用者名 / Email + 密碼驗證。
 
-    成功時：重置 failed_login_count、寫 audit、回傳 User。
-    失敗時：累加計數、超過閾值鎖定、寫 audit、丟例外。
+    驗證順序（A07）：
+      1. 找本機 user → auth_provider 決定走哪個 backend
+      2. 若 settings.ldap_enabled 且 jt-ipam 沒這個 user，嘗試 LDAP；成功則 auto-provision
+      3. 若 settings.radius_enabled 且 user.auth_provider=='radius'，走 Radius
+
+    無論成功失敗皆寫 audit；失敗的 reason 不對外顯示（防 enumeration）。
     """
-    # 用 username 或 email 查詢（CITEXT 已經大小寫不敏感）
+    settings = get_settings()
     stmt = select(User).where((User.username == username) | (User.email == username))
     user = (await session.execute(stmt)).scalar_one_or_none()
-
     now = datetime.now(UTC)
 
-    # 一律執行密碼比對（防 user enumeration timing attack）
-    dummy_hash = "$argon2id$v=19$m=65536,t=3,p=4$00000000000000000000000000000000$" \
-                 "00000000000000000000000000000000000000000000"
-    target_hash = (user.password_hash if (user and user.password_hash) else dummy_hash)
-    password_ok = verify_password(password, target_hash)
-
-    async def _audit(action: str, *, success: bool, reason: str | None = None) -> None:
+    async def _audit(action: str, *, success: bool, reason: str | None,
+                     target_user: User | None) -> None:
         await append_audit(
             session,
-            actor_user_id=str(user.id) if user else None,
+            actor_user_id=str(target_user.id) if target_user else None,
             actor_ip=actor_ip,
             actor_user_agent=actor_user_agent,
             object_type="auth",
-            object_id=str(user.id) if user else None,
+            object_id=str(target_user.id) if target_user else None,
             action=action,
-            diff={
-                "username": username,
-                "success": success,
-                "reason": reason,
-            },
+            diff={"username": username, "success": success, "reason": reason},
             request_id=request_id,
         )
 
-    if user is None or not password_ok:
-        if user is not None:
+    # ── 帳號鎖定 / inactive 先檢查 ──
+    if user is not None:
+        if not user.is_active:
+            await _audit("login_failed", success=False, reason="inactive", target_user=user)
+            await session.commit()
+            raise AccountInactive
+        if user.locked_until is not None and user.locked_until > now:
+            await _audit("login_failed", success=False, reason="locked", target_user=user)
+            await session.commit()
+            raise AccountLocked
+
+    # ── 走哪個 backend ──
+    provider: str = (user.auth_provider if user else "auto")
+
+    # auto-provision via LDAP：jt-ipam 沒這個帳號但 LDAP 有
+    if user is None and settings.ldap_enabled:
+        try:
+            info = await ldap_auth.authenticate(username, password)
+        except ldap_auth.LDAPInvalidCredentials:
+            await _audit("login_failed", success=False, reason="ldap_invalid", target_user=None)
+            await session.commit()
+            raise InvalidCredentials from None
+        except ldap_auth.LDAPNotConfigured:
+            pass
+        except ldap_auth.LDAPAuthError as exc:
+            await _audit("login_failed", success=False, reason=f"ldap_error:{exc}", target_user=None)
+            await session.commit()
+            raise InvalidCredentials from exc
+        else:
+            # 建 user
+            user = User(
+                username=info.username,
+                email=info.email or f"{info.username}@ldap.local",
+                display_name=info.display_name,
+                auth_provider="ldap",
+                external_subject=info.dn,
+                is_active=True,
+                is_admin=info.is_admin,
+            )
+            session.add(user)
+            await session.flush()
+            await _audit("ldap_auto_provision", success=True, reason=None, target_user=user)
+            user.last_login_at = now
+            user.last_login_ip = actor_ip
+            await _audit("login_success", success=True, reason="ldap", target_user=user)
+            await session.commit()
+            return user
+
+    # 本機帳號 + 外部 provider 已登錄
+    if user is not None and provider == "local":
+        # 抗 timing：一律執行密碼比對
+        dummy_hash = ("$argon2id$v=19$m=65536,t=3,p=4$00000000000000000000000000000000$"
+                      "00000000000000000000000000000000000000000000")
+        target_hash = user.password_hash or dummy_hash
+        if not verify_password(password, target_hash):
             user.failed_login_count = (user.failed_login_count or 0) + 1
             if user.failed_login_count >= _MAX_FAILED_ATTEMPTS:
                 user.locked_until = now + _LOCK_DURATION
-        await _audit("login_failed", success=False, reason="invalid_credentials")
+            await _audit("login_failed", success=False, reason="invalid_password", target_user=user)
+            await session.commit()
+            raise InvalidCredentials
+
+        if password_needs_rehash(user.password_hash or ""):
+            user.password_hash = hash_password(password)
+        user.failed_login_count = 0
+        user.locked_until = None
+        user.last_login_at = now
+        user.last_login_ip = actor_ip
+        await _audit("login_success", success=True, reason="local", target_user=user)
         await session.commit()
-        raise InvalidCredentials
+        return user
 
-    if not user.is_active:
-        await _audit("login_failed", success=False, reason="inactive")
+    if user is not None and provider == "ldap":
+        if not settings.ldap_enabled:
+            await _audit("login_failed", success=False, reason="ldap_disabled", target_user=user)
+            await session.commit()
+            raise InvalidCredentials
+        try:
+            info = await ldap_auth.authenticate(username, password)
+        except (ldap_auth.LDAPInvalidCredentials, ldap_auth.LDAPAuthError) as exc:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= _MAX_FAILED_ATTEMPTS:
+                user.locked_until = now + _LOCK_DURATION
+            await _audit("login_failed", success=False, reason="ldap_reject", target_user=user)
+            await session.commit()
+            raise InvalidCredentials from exc
+        # 同步 admin / display_name
+        user.is_admin = info.is_admin
+        if info.display_name:
+            user.display_name = info.display_name
+        if info.email:
+            user.email = info.email
+        user.failed_login_count = 0
+        user.locked_until = None
+        user.last_login_at = now
+        user.last_login_ip = actor_ip
+        await _audit("login_success", success=True, reason="ldap", target_user=user)
         await session.commit()
-        raise AccountInactive
+        return user
 
-    if user.locked_until is not None and user.locked_until > now:
-        await _audit("login_failed", success=False, reason="locked")
+    if user is not None and provider == "radius":
+        if not settings.radius_enabled:
+            await _audit("login_failed", success=False, reason="radius_disabled", target_user=user)
+            await session.commit()
+            raise InvalidCredentials
+        try:
+            await radius_auth.authenticate(username, password)
+        except (radius_auth.RadiusInvalidCredentials, radius_auth.RadiusAuthError) as exc:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= _MAX_FAILED_ATTEMPTS:
+                user.locked_until = now + _LOCK_DURATION
+            await _audit("login_failed", success=False, reason="radius_reject", target_user=user)
+            await session.commit()
+            raise InvalidCredentials from exc
+        user.failed_login_count = 0
+        user.locked_until = None
+        user.last_login_at = now
+        user.last_login_ip = actor_ip
+        await _audit("login_success", success=True, reason="radius", target_user=user)
         await session.commit()
-        raise AccountLocked
+        return user
 
-    if user.auth_provider != "local":
-        # 僅本機帳號走此流程；外部 IdP 走 OIDC/SAML
-        await _audit("login_failed", success=False, reason="external_account")
-        await session.commit()
-        raise InvalidCredentials
-
-    # 成功
-    user.failed_login_count = 0
-    user.locked_until = None
-    user.last_login_at = now
-    user.last_login_ip = actor_ip
-
-    if password_needs_rehash(user.password_hash or ""):
-        # argon2 參數提升時自動 rehash（A02）
-        from app.core.security import hash_password
-        user.password_hash = hash_password(password)
-
-    await _audit("login_success", success=True)
+    # 找不到使用者也跑一次密碼比對抵消 timing
+    dummy_hash = ("$argon2id$v=19$m=65536,t=3,p=4$00000000000000000000000000000000$"
+                  "00000000000000000000000000000000000000000000")
+    verify_password(password, dummy_hash)
+    await _audit("login_failed", success=False, reason="no_user", target_user=None)
     await session.commit()
-    return user
+    raise InvalidCredentials
 
 
 def issue_access_token(user: User) -> str:
