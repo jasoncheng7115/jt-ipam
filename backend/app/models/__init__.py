@@ -49,6 +49,7 @@ from app.models.virt import (
 )
 from app.models.vlan import VLAN, VLANDomain
 from app.models.vrf import VRF
+from app.models.wazuh import WazuhAgent, WazuhInstance
 
 __all__ = [
     "APIToken",
@@ -105,6 +106,8 @@ __all__ = [
     "VRF",
     "VirtCluster",
     "VirtualMachine",
+    "WazuhAgent",
+    "WazuhInstance",
     "WebhookSubscription",
     "WirelessLink",
     "WirelessSSID",

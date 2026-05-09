@@ -38,6 +38,7 @@ from app.api.v1.endpoints import (
     virt,
     vlans,
     vrfs,
+    wazuh,
 )
 
 api_v1_router = APIRouter()
@@ -74,6 +75,7 @@ api_v1_router.include_router(physical.router)
 api_v1_router.include_router(topology.router)
 api_v1_router.include_router(plugins.router)
 api_v1_router.include_router(firewall.router)
+api_v1_router.include_router(wazuh.router)
 
 # Phase 3 ✅ Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
 #           Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）
