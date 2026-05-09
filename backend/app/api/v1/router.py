@@ -13,7 +13,9 @@ from app.api.v1.endpoints import (
     locations,
     nat,
     notifications,
+    preferences,
     scan,
+    search,
     sections,
     subnets,
     tools,
@@ -24,6 +26,7 @@ from app.api.v1.endpoints import (
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router)
 api_v1_router.include_router(api_tokens.router)
+api_v1_router.include_router(preferences.router)
 api_v1_router.include_router(sections.router)
 api_v1_router.include_router(subnets.router)
 api_v1_router.include_router(addresses.router)
@@ -36,5 +39,6 @@ api_v1_router.include_router(scan.router)
 api_v1_router.include_router(tools.router)
 api_v1_router.include_router(custom_fields.router)
 api_v1_router.include_router(notifications.router)
+api_v1_router.include_router(search.router)
 
-# Phase 1 待補：users(管理), groups, scan_agents, search
+# Phase 1 待補：users(管理), groups, scan_agents

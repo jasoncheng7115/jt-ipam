@@ -64,6 +64,13 @@
     "parent": "Parent",
     "strict_mode": "Strict mode"
   },
+  "settings": {
+    "security": {
+      "totp_enabled_msg": "TOTP enabled",
+      "totp_disabled_msg": "TOTP disabled",
+      "totp_invalid": "Invalid code, please retry"
+    }
+  },
   "errors": {
     "network": "Network error, please try again later",
     "unauthorized": "You do not have permission for this action",

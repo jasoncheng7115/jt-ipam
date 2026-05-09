@@ -64,6 +64,13 @@
     "parent": "父區段",
     "strict_mode": "嚴格模式"
   },
+  "settings": {
+    "security": {
+      "totp_enabled_msg": "TOTP 已啟用",
+      "totp_disabled_msg": "TOTP 已停用",
+      "totp_invalid": "驗證碼錯誤，請重試"
+    }
+  },
   "errors": {
     "network": "連線失敗，請稍後再試",
     "unauthorized": "您沒有此操作的權限",

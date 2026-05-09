@@ -19,6 +19,7 @@ import { storeToRefs } from "pinia";
 import { useUiStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import NotificationBell from "@/components/NotificationBell.vue";
+import GlobalSearch from "@/components/GlobalSearch.vue";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -67,6 +68,8 @@ async function handleUserMenu(key: string) {
   if (key === "logout") {
     await auth.logout();
     router.push({ name: "login" });
+  } else if (key === "preferences" || key === "profile") {
+    router.push({ name: "settings" });
   }
 }
 
@@ -96,6 +99,7 @@ const userInitial = computed(() => (me.value?.username || "?").slice(0, 2).toUpp
         <n-space align="center" justify="space-between" style="width: 100%">
           <span class="title">{{ t("app.title") }}</span>
           <n-space align="center">
+            <global-search v-if="me" />
             <n-select
               :value="locale"
               :options="localeOptions"

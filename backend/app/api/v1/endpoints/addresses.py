@@ -5,7 +5,18 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +39,10 @@ from app.services.address import (
     allocate_first_free,
     assert_in_subnet,
     create_ip,
+)
+from app.services.csv_io import (
+    export_addresses_csv,
+    import_addresses_csv,
 )
 from app.services.custom_field import CustomFieldError, validate_custom_fields
 from app.services.permission import (
@@ -271,3 +286,89 @@ async def delete_address(
     )
     await session.delete(obj)
     await session.commit()
+
+
+# ─────────────────── CSV 匯出 / 匯入 ───────────────────
+@router.get("/export.csv")
+async def export_csv(
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    subnet_id: uuid.UUID = Query(..., description="必要：限定要匯出的 subnet"),
+) -> Response:
+    """以 CSV 匯出某個 subnet 的所有 IP（須對該 subnet 有 read 權限）。
+
+    Excel 直開友善：UTF-8 + BOM。
+    """
+    await _require_subnet_perm(session, user, subnet_id, "read")
+    rows = list(
+        (
+            await session.execute(
+                select(IPAddress)
+                .where(IPAddress.subnet_id == subnet_id)
+                .order_by(IPAddress.ip)
+            )
+        ).scalars().all()
+    )
+    body = export_addresses_csv(rows)
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="addresses-{subnet_id}.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/import")
+async def import_csv(
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    subnet_id: Annotated[uuid.UUID, Form()],
+    file: Annotated[UploadFile, File()],
+    dry_run: Annotated[bool, Form()] = False,
+) -> dict[str, object]:
+    """匯入 CSV 至指定 subnet。
+
+    比 phpIPAM 改進：
+    - header-driven（欄位順序不重要，只要 header 含 ip）
+    - 容忍 BOM、自動偵測 delimiter
+    - dry_run=true 只回傳預覽與錯誤，不寫 DB
+    - idempotent：已存在的 (subnet_id, ip) 自動 skip
+    """
+    subnet = await _require_subnet_perm(session, user, subnet_id, "write")
+
+    # 檔案大小限制（A04）：1 MB；對 10k 筆已綽綽有餘
+    raw = await file.read()
+    if len(raw) > 1_048_576:
+        raise HTTPException(413, detail="CSV file too large (max 1 MB)")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(400, detail=f"CSV must be UTF-8: {exc}") from exc
+
+    result = await import_addresses_csv(
+        session, subnet=subnet, csv_text=text, dry_run=dry_run,
+    )
+
+    if not dry_run:
+        await append_audit(
+            session,
+            actor_user_id=str(user.id),
+            actor_ip=request.client.host if request.client else None,
+            actor_user_agent=request.headers.get("user-agent"),
+            object_type="subnet",
+            object_id=str(subnet.id),
+            action="ip_csv_import",
+            diff={
+                "inserted": result.inserted,
+                "skipped": result.skipped,
+                "errored": result.errored,
+                "filename": file.filename,
+            },
+            request_id=getattr(request.state, "request_id", None),
+        )
+        await session.commit()
+
+    return {"dry_run": dry_run, **result.to_dict()}
