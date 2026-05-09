@@ -9,6 +9,17 @@
 #
 # OWASP A05 — sandbox：NoNewPrivileges、ProtectSystem、PrivateTmp、
 # 只可寫 /var/log/jt-ipam，其餘 read-only。
+#
+# TLS（A02，強制）：依 /etc/jt-ipam/backend.env 的 BACKEND_TLS_MODE：
+#   * nginx：後端綁 127.0.0.1:8000，nginx 終結 HTTPS（預設）
+#   * direct：uvicorn 直接吃自簽憑證，預設綁 0.0.0.0:8443
+#
+# 若 direct 模式想用 443（< 1024 特權 port），覆蓋如下：
+#   sudo systemctl edit jt-ipam-backend
+# 然後加入：
+#   [Service]
+#   AmbientCapabilities=CAP_NET_BIND_SERVICE
+#   CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 # =============================================================================
 
 [Unit]
@@ -24,12 +35,8 @@ User=jtipam
 Group=jtipam
 WorkingDirectory=/opt/jt-ipam/backend
 EnvironmentFile=/etc/jt-ipam/backend.env
-ExecStart=/opt/jt-ipam/backend/.venv/bin/uvicorn app.main:app \
-    --host 127.0.0.1 \
-    --port 8000 \
-    --workers 4 \
-    --proxy-headers \
-    --forwarded-allow-ips 127.0.0.1
+# wrapper 依 BACKEND_TLS_MODE 決定是否啟用 uvicorn 的 --ssl-* 旗標
+ExecStart=/opt/jt-ipam/scripts/run-backend.sh
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=mixed
 KillSignal=SIGTERM

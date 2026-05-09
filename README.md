@@ -24,6 +24,7 @@ phpIPAM 老用戶零學習成本，現代化技術解決效能/UI/API 的歷史�
 本專案安全是 day-one 需求，所有設計與實作對齊 **OWASP Top 10 (2021)**。詳見 [`docs/SECURITY.md`](docs/SECURITY.md)。
 
 重點：
+- **TLS 強制**：兩模式擇一 — nginx 反代終結（`BACKEND_TLS_MODE=nginx`）或 uvicorn 直接吃自簽（`BACKEND_TLS_MODE=direct`）
 - A01 RBAC：deny-by-default、Per-Section/Subnet 權限、物件級檢查
 - A02 加密：argon2id 密碼、應用層加密儲存敏感欄位（DNS 帳密 / SNMP / API token）
 - A03 注入防護：SQLAlchemy 參數化、Pydantic 嚴格驗證、CSP/輸出跳脫
@@ -51,24 +52,40 @@ phpIPAM 老用戶零學習成本，現代化技術解決效能/UI/API 的歷史�
 
 ## 快速安裝（單機 / Proxmox LXC）
 
-> Debian 12 / Ubuntu 22.04+，2 vCPU / 4 GB RAM 起跳。
+> Debian 12 / Ubuntu 22.04+，2 vCPU / 4 GB RAM 起跳。**TLS 強制**，二擇一：
 
 ```bash
 git clone https://github.com/jasontools/jt-ipam.git /opt/jt-ipam
 cd /opt/jt-ipam
-sudo ./scripts/install-debian.sh
+
+# 模式 A：nginx 反代 HTTPS（建議；公開服務）
+sudo ./scripts/install-debian.sh \
+    --tls-mode nginx \
+    --public-fqdn ipam.your-domain.tld
+# 之後 sudo certbot --nginx -d ipam.your-domain.tld 取得憑證
+
+# 模式 B：後端 uvicorn 直接吃自簽憑證（極簡 / 內網）
+sudo ./scripts/install-debian.sh \
+    --tls-mode self-signed \
+    --public-fqdn ipam.local \
+    --bind-port 8443
 ```
 
-腳本會自動：apt 安裝 `postgresql-16` / `redis-server` / `python3.12` / `nginx`，建立 `jtipam` 系統帳號、PG role、Redis password、自動產生金鑰寫入 `/etc/jt-ipam/backend.env`、跑 `alembic upgrade head`、`pnpm build` 前端，並啟用 `jt-ipam-backend.service`。
+腳本會自動：apt 安裝 `postgresql-16` / `redis-server` / `python3.12` / `nginx`*，建立 `jtipam` 系統帳號、PG role、Redis password、自動產生金鑰寫入 `/etc/jt-ipam/backend.env`、跑 `alembic upgrade head`、`pnpm build` 前端，並啟用 `jt-ipam-backend.service`。
+
+> *nginx 僅模式 A 安裝；模式 B 由 uvicorn 直接終結 TLS。
 
 完成後：
 
 ```bash
 systemctl status jt-ipam-backend
+# 模式 A
 curl -fsS http://127.0.0.1:8000/healthz
+# 模式 B
+curl -fsSk https://127.0.0.1:8443/healthz
 ```
 
-詳見 [`deploy/README.md`](deploy/README.md)（含 TLS、升級、備份、HA、Proxmox LXC 範本）。
+詳見 [`deploy/README.md`](deploy/README.md)（含兩種 TLS 模式、升級、備份、HA、Proxmox LXC 範本）。
 
 ---
 

@@ -55,8 +55,13 @@
   - SNMP community（v1/v2c）、SNMPv3 auth/priv password
   - LibreNMS API token、Webhook secret、外部整合 OAuth refresh token
   - 使用者 TOTP secret
-- **TLS**：所有對外與內部呼叫強制 TLS 1.2+，建議 1.3；驗證憑證鏈，不接受 `verify=False`。
-- **Cookie**：`Secure`、`HttpOnly`、`SameSite=Lax`（敏感操作 token 用 `Strict`）。
+- **TLS（強制 SSL — 任何環境）**：使用者瀏覽器到 jt-ipam 的傳輸層必須是 HTTPS；**不存在 HTTP-only 部署選項**。`config.py._tls_guards` 會在啟動時擋下任何 `http://` 的 `APP_PUBLIC_URL` / `API_PUBLIC_URL`。
+  - 兩種支援模式：
+    - **`BACKEND_TLS_MODE=nginx`**（預設）：uvicorn 綁 `127.0.0.1:8000` 純 HTTP loopback，nginx 終結 TLS。Production guard 會擋住 `BACKEND_BIND_HOST` 非 loopback 的設定，避免後端意外對外曝露。
+    - **`BACKEND_TLS_MODE=direct`**：uvicorn 直接吃 PEM cert/key（可自簽，預設綁 `0.0.0.0:8443`）。`scripts/run-backend.sh` 啟動前驗證 cert/key 存在且私鑰權限不可 world-readable。
+  - 自簽憑證走 ECDSA P-384 / SHA-384 / 5 年（見 `scripts/generate-self-signed-cert.sh`）。SAN 自動偵測 hostname / IP 並加入 `localhost` 與 `127.0.0.1`。
+  - 對外整合呼叫（DNS server / LibreNMS / Webhook）強制 TLS 1.2+，建議 1.3；驗證憑證鏈，**不接受 `verify=False`**。
+- **Cookie**：`Secure`、`HttpOnly`、`SameSite=Lax`（敏感操作 token 用 `Strict`）— `session_cookie_secure=true` 在 production 由 guard 強制。
 - **JWT**：HS256 用於 short-lived access token；refresh token 不放 LocalStorage，用 HttpOnly cookie。
 - **金鑰輪替**：`SECRET_KEY` / `ENCRYPTION_KEY` 支援多版本（kid），可平滑輪替。
 

@@ -44,10 +44,13 @@ case "$cmd" in
             echo "[error] $ENV_FILE missing — copy from .env.example first" >&2
             exit 1
         fi
-        echo "[up] backend on :8000, frontend on :5173 — Ctrl+C 結束兩者"
         cd "$BACKEND_DIR"
         set -a; source "$ENV_FILE"; set +a
-        .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+        # dev 預設 direct TLS + 自簽（避免 prod guard 擋 https://localhost）
+        export UVICORN_EXTRA_OPTS="${UVICORN_EXTRA_OPTS:-} --reload"
+        echo "[up] backend (TLS=${BACKEND_TLS_MODE:-nginx}) on ${BACKEND_BIND_HOST:-127.0.0.1}:${BACKEND_BIND_PORT:-8000}"
+        echo "     frontend on :5173 — Ctrl+C 結束兩者"
+        "$REPO_ROOT/scripts/run-backend.sh" &
         BACKEND_PID=$!
         cd "$FRONTEND_DIR"
         pnpm dev &

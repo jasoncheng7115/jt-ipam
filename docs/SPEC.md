@@ -679,6 +679,7 @@ Switch + Port
 
 ### 12.1 資安（總覽，細節見 docs/SECURITY.md）
 - 對齊 OWASP Top 10 (2021)
+- **TLS 強制**：使用者層一律 HTTPS；支援兩模式（① nginx 反代終結，② uvicorn 直接吃自簽）
 - SHA-256 異動鏈
 - Graylog 外送
 - 登入失敗鎖定、IP 白名單、API Token 到期

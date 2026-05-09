@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -26,6 +27,7 @@ Environment = Literal["development", "staging", "production"]
 Theme = Literal["light", "dark", "auto"]
 Locale = Literal["zh-TW", "en-US"]
 SameSite = Literal["lax", "strict", "none"]
+TlsMode = Literal["nginx", "direct"]
 
 _PLACEHOLDER_PREFIX = "__CHANGE_ME__"
 _MIN_SECRET_BYTES = 32
@@ -67,6 +69,15 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 14
     session_cookie_secure: bool = True
     session_cookie_samesite: SameSite = "lax"
+
+    # ── TLS（A02：強制 SSL；雙模式）──
+    # nginx：後端綁 127.0.0.1:8000（純 HTTP loopback），nginx 終結 HTTPS
+    # direct：uvicorn 直接吃 cert/key，綁 0.0.0.0:443
+    backend_tls_mode: TlsMode = "nginx"
+    backend_bind_host: str = "127.0.0.1"
+    backend_bind_port: int = 8000
+    backend_tls_cert_file: str | None = None
+    backend_tls_key_file: str | None = None
 
     # ── Database ──
     postgres_host: str = "postgres"
@@ -127,24 +138,54 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def _production_guards(self) -> "Settings":
-        """A05 — production 安全檢查。"""
-        if self.app_env != "production":
-            return self
+    def _tls_guards(self) -> "Settings":
+        """A02 — SSL 強制檢查（任何環境）+ A05 production 安全檢查。
 
+        SSL 為硬性需求：
+        - APP_PUBLIC_URL / API_PUBLIC_URL 必須是 https://
+        - direct 模式：cert/key 必填且必須是絕對路徑
+        - nginx 模式：後端必須綁 loopback（127.0.0.1 / ::1），不對外曝露
+        """
         errors: list[str] = []
-        if self.app_debug:
-            errors.append("APP_DEBUG must be false in production")
-        if "*" in self.cors_origins or "" in self.cors_origins:
-            errors.append("CORS_ORIGINS must not be wildcard in production")
-        if not self.session_cookie_secure:
-            errors.append("SESSION_COOKIE_SECURE must be true in production")
-        if str(self.app_public_url).startswith("http://"):
-            errors.append("APP_PUBLIC_URL must use HTTPS in production")
-        if str(self.api_public_url).startswith("http://"):
-            errors.append("API_PUBLIC_URL must use HTTPS in production")
+
+        # ── SSL 強制（任何環境）──
+        if not str(self.app_public_url).startswith("https://"):
+            errors.append("APP_PUBLIC_URL must use https:// (SSL is required)")
+        if not str(self.api_public_url).startswith("https://"):
+            errors.append("API_PUBLIC_URL must use https:// (SSL is required)")
+
+        if self.backend_tls_mode == "direct":
+            if not self.backend_tls_cert_file or not self.backend_tls_key_file:
+                errors.append(
+                    "BACKEND_TLS_MODE=direct requires BACKEND_TLS_CERT_FILE and BACKEND_TLS_KEY_FILE"
+                )
+            else:
+                cert = Path(self.backend_tls_cert_file)
+                key = Path(self.backend_tls_key_file)
+                if not cert.is_absolute() or not key.is_absolute():
+                    errors.append("BACKEND_TLS_CERT_FILE and BACKEND_TLS_KEY_FILE must be absolute paths")
+                # 啟動時讀檔由 wrapper / uvicorn 處理；此處不在 settings 載入時做 I/O
+        else:
+            # nginx 模式：後端不能對外曝露（loopback only）
+            if self.backend_bind_host not in ("127.0.0.1", "::1", "localhost"):
+                errors.append(
+                    f"BACKEND_TLS_MODE=nginx requires BACKEND_BIND_HOST to be loopback "
+                    f"(got {self.backend_bind_host!r}); reverse proxy must terminate TLS"
+                )
+
+        # ── A05 production 額外檢查 ──
+        if self.app_env == "production":
+            if self.app_debug:
+                errors.append("APP_DEBUG must be false in production")
+            if "*" in self.cors_origins or "" in self.cors_origins:
+                errors.append("CORS_ORIGINS must not be wildcard in production")
+            if not self.session_cookie_secure:
+                errors.append("SESSION_COOKIE_SECURE must be true in production")
+            if any(str(origin).startswith("http://") for origin in self.cors_origins):
+                errors.append("CORS_ORIGINS must all use https:// in production")
+
         if errors:
-            raise ValueError("Production security violations: " + "; ".join(errors))
+            raise ValueError("Configuration security violations: " + "; ".join(errors))
         return self
 
     # =====================================================================
