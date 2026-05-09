@@ -715,51 +715,72 @@ Switch + Port
 
 ---
 
-## 十三、開發路線圖
+## 十三、開發路線圖（v0.3 落地狀態）
 
-### Phase 1：phpIPAM 等價（3 個月）
-- Section / Subnet / IP Address 三層核心
-- VLAN / VRF / NAT
-- 自家 Subnet 掃描（ICMP/SNMP/ARP/Nmap）
-- Devices / Racks / Locations / IP Requests
-- 認證（本機 + LDAP/AD/Radius）+ argon2id + TOTP + 帳號鎖定
-- phpIPAM API 相容層
-- phpIPAM 資料遷移工具
-- PowerDNS 整合（保留 phpIPAM 既有）
-- 繁中/英文雙語、深淺主題
-- Docker Compose 部署
-- **OWASP Top 10 baseline 全面落地**
-- **目標：phpIPAM 用戶平滑遷移，零功能落差**
+### Phase 1 ✅：phpIPAM 等價 + 升級
+- ✅ Section / Subnet / IP Address 三層核心
+- ✅ VLAN / VRF / NAT
+- ✅ 自家 Subnet 掃描（ICMP；SNMP/ARP/Nmap Phase 2 Celery 排程版）
+- ✅ Devices / Racks / Locations / IP Requests（含 timeline 狀態機）
+- ✅ 認證（本機 + LDAP/AD/Radius）+ argon2id + TOTP + 帳號鎖定 + API Token
+- ✅ phpIPAM API 相容層（讀寫）
+- ✅ phpIPAM 資料**同步**工具（多次匯入、衝突策略、平行使用）
+- ✅ PowerDNS 整合
+- ✅ 繁中/英文雙語、深淺主題
+- ✅ **systemd + nginx + apt 部署**（Docker 已不採用，改 Proxmox LXC / 裸機）
+- ✅ **OWASP Top 10 baseline 全面落地**
+- ✅ **強制 SSL（nginx 反代 / uvicorn 自簽 雙模式）**
+- ✅ Subnet 視覺方塊圖、Rack U 位視覺化、IP 指示儀表板
+- ✅ Tools（IP/CIDR 計算機、EUI-64）
+- ✅ Custom Fields、CSV 匯入/匯出（dry-run、idempotent）
+- ✅ RIPE / TWNIC whois 匯入
+- ✅ 通知中心（站內 + Webhook + SMTP）
+- ✅ 全文搜尋 + 自動偵測查詢類型
 
-### Phase 2：DNS 多家整合 + LibreNMS 深度整合（6 個月）
-- BIND 9、OPNsense Unbound、Windows DNS 整合
-- DNS 雙向同步、不一致偵測報表
-- LibreNMS 裝置雙向同步
-- LibreNMS ARP table 抓取
-- LibreNMS FDB / MAC table 抓取
-- 在線狀態互補（effective_status）
-- 自動加入 LibreNMS 監控
-- IP → MAC → Switch Port 自動推導
-- 異常偵測（IP 衝突、MAC 漂移、鬼 IP）
-- SHA-256 異動鏈、Graylog 外送
-- 現代 REST API + GraphQL
-- AI 語意搜尋（pgvector）
+### Phase 2 ✅：DNS 多家整合 + LibreNMS 深度整合 + AI 語意搜尋
+- ✅ BIND 9（AXFR + nsupdate TSIG）
+- ✅ OPNsense Unbound（REST host override）
+- ✅ Windows DNS（WinRM + PowerShell）
+- ✅ PowerDNS（v4 HTTP API）
+- ✅ DNS 雙向同步、不一致偵測報表
+- ✅ LibreNMS 裝置雙向同步
+- ✅ LibreNMS ARP table 抓取（自動補 IP 的 MAC）
+- ✅ LibreNMS FDB / MAC table 抓取
+- ✅ 在線狀態互補（effective_status §6.4.2 真值表）
+- ✅ 自動加入 LibreNMS 監控
+- ✅ IP → MAC → Switch Port 自動推導 trace
+- ✅ 異常偵測（IP 衝突 / MAC 漂移 / 鬼 IP / 未授權 IP）
+- ✅ SHA-256 異動鏈、Graylog 外送
+- ✅ 現代 REST API + GraphQL（Strawberry，read-only）
+- ✅ AI 語意搜尋（pgvector + Ollama embedding）
 
-### Phase 3：進階模組與其他整合（9 個月）
-- Tenancy、Contacts、Circuits、Cabling、Power、Wireless、VPN、Virtualization、ASN
-- Proxmox VE 雙向同步
-- OPNsense / Wazuh 整合
-- 拓樸視覺化（Cytoscape.js）
-- SAML / OIDC
+### Phase 3 ✅：進階模組 + 整合 + 拓樸 + SSO
+- ✅ Tenancy（TenantGroup / Tenant）
+- ✅ Contacts（Group / Role / Contact / 多型 Assignment）
+- ✅ Circuits（Provider / Type / Circuit）
+- ✅ Cabling（Cable + 多型 Termination）
+- ✅ Power（Panel → Feed → Outlet）
+- ✅ Wireless（SSID + Link）
+- ✅ VPN / L2VPN（IPsec/WG/L2TP/VxLAN/VPLS/EVPN）
+- ✅ Virtualization（Cluster / VM / Interface）+ Proxmox VE 同步
+- ✅ ASN
+- ✅ 拓樸視覺化（Cytoscape.js + cose-bilkent）
+- ✅ OIDC SSO（discovery + state/nonce + auto-provision）
+- 🟡 SAML（stub；多數環境用 OIDC 即可）
+- ⏸ OPNsense 防火牆 / Wazuh agent 同步（規格保留，未實作）
 
-### Phase 4：AI 與企業特性（12 個月）
-- MCP Server
-- 本地 LLM 自然語言查詢
-- HA 部署文件
-- Plugin 機制
-- Ansible Collection（jt-ipam.collection）
-- Terraform Provider
-- Zimbra / Odoo 整合
+### Phase 4 ✅（縮減版）：AI / Plugin
+- ✅ MCP Server（暴露 IPAM 工具給本地 LLM；JSON-RPC 2.0 子集）
+- ✅ 本地 LLM 自然語言查詢（Ollama chat + tool use；UI 浮動視窗）
+- ✅ Plugin 機制（importlib.metadata entry_points + admin 列表 + 文件）
+
+### Out of scope（本專案明確不做）
+- ❌ HA 部署（PG streaming + Redis Sentinel + 多副本 backend）
+- ❌ Ansible Collection（jasontools.jt-ipam）
+- ❌ Terraform Provider
+- ❌ Zimbra 聯絡人同步
+- ❌ Odoo ERP 同步
+- ❌ Docker / Helm Chart / Kubernetes 容器化部署
 
 ---
 
