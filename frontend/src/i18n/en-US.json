@@ -1,0 +1,62 @@
+{
+  "app": {
+    "title": "jt-ipam",
+    "tagline": "Modern IPAM — phpIPAM-aligned, integrating DNS / LibreNMS / AI"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "sections": "Sections",
+    "subnets": "Subnets",
+    "addresses": "Addresses",
+    "vlans": "VLANs",
+    "vrfs": "VRFs",
+    "devices": "Devices",
+    "racks": "Racks",
+    "locations": "Locations",
+    "tools": "Tools",
+    "audit": "Audit",
+    "settings": "Settings"
+  },
+  "topbar": {
+    "search": "Search…",
+    "language": "Language",
+    "theme": {
+      "light": "Light",
+      "dark": "Dark",
+      "auto": "Auto"
+    },
+    "user_menu": {
+      "profile": "Profile",
+      "preferences": "Preferences",
+      "logout": "Sign out"
+    }
+  },
+  "common": {
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "loading": "Loading…",
+    "no_data": "No data",
+    "confirm_delete": "Delete this item? This cannot be undone."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome to jt-ipam"
+  },
+  "sections": {
+    "title": "Sections",
+    "name": "Name",
+    "description": "Description",
+    "parent": "Parent",
+    "strict_mode": "Strict mode"
+  },
+  "errors": {
+    "network": "Network error, please try again later",
+    "unauthorized": "You do not have permission for this action",
+    "not_found": "Resource not found",
+    "server": "Internal server error"
+  }
+}

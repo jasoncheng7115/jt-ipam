@@ -1,0 +1,91 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Secrets & local env
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+**/secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+dist/
+build/
+.venv/
+venv/
+env/
+.python-version
+uv.lock.local
+
+# Node / Frontend
+node_modules/
+.pnpm-store/
+.turbo/
+.parcel-cache/
+.next/
+.nuxt/
+.output/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite / build outputs
+frontend/dist/
+frontend/.vite/
+
+# Docker / Compose local overrides
+docker-compose.override.yml
+docker-compose.*.local.yml
+
+# Database / runtime
+*.sqlite
+*.sqlite3
+*.db
+postgres-data/
+redis-data/
+data/
+volumes/
+
+# Logs
+logs/
+*.log
+
+# Coverage / test artifacts
+coverage/
+.nyc_output/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+*.rej
+
+# Local notes (may contain sensitive context)
+NOTES.local.md
+TODO.local.md

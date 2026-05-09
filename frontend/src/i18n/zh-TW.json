@@ -1,0 +1,62 @@
+{
+  "app": {
+    "title": "jt-ipam",
+    "tagline": "新世代 IPAM — 以 phpIPAM 為核心，整合 DNS / LibreNMS / AI"
+  },
+  "nav": {
+    "dashboard": "儀表板",
+    "sections": "區段",
+    "subnets": "子網",
+    "addresses": "位址",
+    "vlans": "VLAN",
+    "vrfs": "VRF",
+    "devices": "設備",
+    "racks": "機櫃",
+    "locations": "地點",
+    "tools": "工具",
+    "audit": "稽核",
+    "settings": "系統設定"
+  },
+  "topbar": {
+    "search": "搜尋…",
+    "language": "語言",
+    "theme": {
+      "light": "淺色",
+      "dark": "深色",
+      "auto": "自動"
+    },
+    "user_menu": {
+      "profile": "個人資料",
+      "preferences": "偏好設定",
+      "logout": "登出"
+    }
+  },
+  "common": {
+    "create": "新增",
+    "edit": "編輯",
+    "delete": "刪除",
+    "save": "儲存",
+    "cancel": "取消",
+    "search": "搜尋",
+    "loading": "載入中…",
+    "no_data": "無資料",
+    "confirm_delete": "確定刪除？此操作無法復原。"
+  },
+  "dashboard": {
+    "title": "儀表板",
+    "welcome": "歡迎使用 jt-ipam"
+  },
+  "sections": {
+    "title": "區段",
+    "name": "名稱",
+    "description": "說明",
+    "parent": "父區段",
+    "strict_mode": "嚴格模式"
+  },
+  "errors": {
+    "network": "連線失敗，請稍後再試",
+    "unauthorized": "您沒有此操作的權限",
+    "not_found": "找不到資源",
+    "server": "伺服器發生錯誤"
+  }
+}

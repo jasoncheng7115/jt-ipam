@@ -1,0 +1,134 @@
+# jt-ipam
+
+> 新世代 IPAM — 以 phpIPAM 操作邏輯為核心，整合多家 DNS Server、LibreNMS 與本地 AI。
+>
+> 作者：Jason Tools Co., Ltd.（節省工具箱）｜授權：AGPL-3.0｜版本：v0.3 (Phase 1 in progress)
+
+---
+
+## 為什麼是 jt-ipam？
+
+phpIPAM 老用戶零學習成本，現代化技術解決效能/UI/API 的歷史包袱。深度整合：
+
+- **DNS**：PowerDNS、BIND 9、OPNsense Unbound、Microsoft Windows DNS（雙向同步）
+- **LibreNMS**：裝置同步、ARP / FDB 抓取、在線狀態互補、自動加入監控
+- **Jason 開源生態系**：Proxmox VE、Wazuh、Graylog、OPNsense、Zimbra、Odoo
+- **本地 AI**：Ollama、自然語言查詢、語意搜尋（資料不外送）
+
+完整規格詳見 [`docs/SPEC.md`](docs/SPEC.md)。
+
+---
+
+## 安全（OWASP Top 10）
+
+本專案安全是 day-one 需求，所有設計與實作對齊 **OWASP Top 10 (2021)**。詳見 [`docs/SECURITY.md`](docs/SECURITY.md)。
+
+重點：
+- A01 RBAC：deny-by-default、Per-Section/Subnet 權限、物件級檢查
+- A02 加密：argon2id 密碼、應用層加密儲存敏感欄位（DNS 帳密 / SNMP / API token）
+- A03 注入防護：SQLAlchemy 參數化、Pydantic 嚴格驗證、CSP/輸出跳脫
+- A05 安全 Headers：HSTS、CSP、X-Frame-Options、Referrer-Policy
+- A07 認證：TOTP MFA、帳號鎖定、Cookie HttpOnly+Secure+SameSite、API Token TTL
+- A08 完整性：SHA-256 異動鏈
+- A09 監控：結構化稽核日誌外送 Graylog
+- A10 SSRF：外部整合 URL 白名單、阻擋 metadata/link-local
+
+---
+
+## 技術堆疊
+
+| 層級 | 選型 |
+|------|------|
+| 後端 | Python 3.12 · FastAPI · SQLAlchemy 2.0 (async) · Alembic · Pydantic v2 |
+| 資料庫 | PostgreSQL 16（原生 inet/cidr/macaddr） |
+| 快取 / 佇列 | Redis 7 · RQ / Celery |
+| 前端 | Vue 3 · TypeScript · Vite · Naive UI · Pinia · vue-i18n |
+| 認證 | argon2id · TOTP · JWT (短) + refresh · OIDC / SAML / LDAP / Radius |
+| 容器 | Docker / Podman · Compose · Helm Chart |
+| AI | Ollama（本地）· pgvector · MCP Server |
+
+---
+
+## 快速啟動（開發）
+
+```bash
+# 1. 複製環境變數
+cp .env.example .env
+# 編輯 .env，產生強密碼與金鑰：
+#   openssl rand -hex 64    # SECRET_KEY / AUDIT_CHAIN_GENESIS
+#   openssl rand -base64 32 # ENCRYPTION_KEY
+
+# 2. 啟動全套服務（Postgres + Redis + backend + frontend）
+docker compose up -d
+
+# 3. 開瀏覽器
+#    Frontend:  http://localhost:5173
+#    API Docs:  http://localhost:8000/docs
+#    Health:    http://localhost:8000/healthz
+```
+
+### 純後端開發（無 Docker）
+
+```bash
+cd backend
+uv sync                              # 或 pip install -e ".[dev]"
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
+
+### 純前端開發
+
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+---
+
+## 專案結構
+
+```
+jt-ipam/
+├── docs/              # 規格、安全、資料模型、API 對照
+├── backend/           # FastAPI 應用
+│   └── app/
+│       ├── core/      # config / db / security / audit / middleware
+│       ├── models/    # SQLAlchemy 2.0
+│       ├── schemas/   # Pydantic v2
+│       ├── api/v1/    # 現代 REST API
+│       ├── api/phpipam/ # phpIPAM v1.7 相容層
+│       └── services/  # 業務邏輯
+├── frontend/          # Vue 3 + TS
+│   └── src/
+│       ├── views/     # 頁面
+│       ├── components/layout/ # 樹狀導航 / 頂部列
+│       ├── i18n/      # zh-TW / en-US
+│       ├── stores/    # Pinia
+│       └── api/       # API client
+└── docker-compose.yml
+```
+
+---
+
+## 開發路線圖
+
+- **Phase 1（3 個月）**：phpIPAM 等價 — Section/Subnet/IP、VLAN/VRF/NAT、掃描、Devices/Racks/Locations、認證、phpIPAM API 相容層、繁中/英文、深淺主題
+- **Phase 2（6 個月）**：DNS 多家整合 + LibreNMS 深度整合 + 異動鏈 + GraphQL + AI 語意搜尋
+- **Phase 3（9 個月）**：進階模組（Tenancy/Cabling/Power…）+ Proxmox / OPNsense / Wazuh
+- **Phase 4（12 個月）**：MCP Server + 本地 LLM + HA + Plugin + Ansible/Terraform
+
+---
+
+## 貢獻
+
+1. 每個 PR 都要過一次 `docs/SECURITY.md` 的 OWASP Top 10 心智檢查清單
+2. Backend 跑 `ruff`、`mypy`、`pytest`、`pip-audit`
+3. Frontend 跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm audit`
+4. 異動敏感檔（auth / crypto / SSRF / migration）需另行 review
+
+---
+
+## 授權
+
+AGPL-3.0｜商業支援請聯繫 Jason Tools。

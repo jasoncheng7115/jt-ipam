@@ -1,0 +1,127 @@
+[project]
+name = "jt-ipam-backend"
+version = "0.3.0"
+description = "jt-ipam — 新世代 IPAM 系統後端"
+authors = [
+    {name = "Jason Tools Co., Ltd.", email = "support@jason.tools"},
+]
+license = {text = "AGPL-3.0-or-later"}
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    # ── Web framework ──
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.32",
+    "starlette>=0.41",
+
+    # ── Validation ──
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "email-validator>=2.2",
+
+    # ── Database ──
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+
+    # ── Security (A02 / A07) ──
+    "argon2-cffi>=23.1",          # argon2id 密碼雜湊
+    "cryptography>=43.0",          # AES-GCM、TLS、簽章
+    "pyjwt[crypto]>=2.10",         # JWT
+    "pyotp>=2.9",                  # TOTP MFA
+    "python-multipart>=0.0.20",    # 表單
+
+    # ── Network / IP ──
+    "httpx[http2]>=0.27",          # 統一 async HTTP client（A10 SSRF 包裝）
+
+    # ── Caching / Queue ──
+    "redis[hiredis]>=5.2",
+    "celery>=5.4",
+
+    # ── Observability ──
+    "structlog>=24.4",             # 結構化日誌（A09）
+    "python-json-logger>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.27",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "bandit[toml]>=1.8",           # SAST
+    "pip-audit>=2.7",              # CVE 掃描
+    "types-redis",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ─────────────────────────────────────────────────────────
+# Ruff
+# ─────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "C4",       # comprehensions
+    "UP",       # pyupgrade
+    "N",        # pep8-naming
+    "S",        # bandit (security)
+    "RUF",
+    "ASYNC",
+    "PT",
+]
+ignore = [
+    "S101",  # assert in tests OK
+    "E501",  # line length 由 formatter 處理
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"alembic/**" = ["E402"]
+
+# ─────────────────────────────────────────────────────────
+# Mypy
+# ─────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_errors = true
+
+# ─────────────────────────────────────────────────────────
+# Pytest
+# ─────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+# ─────────────────────────────────────────────────────────
+# Bandit (SAST)
+# ─────────────────────────────────────────────────────────
+[tool.bandit]
+exclude_dirs = ["tests", "alembic/versions"]
+skips = ["B101"]
