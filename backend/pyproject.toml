@@ -49,6 +49,7 @@ dependencies = [
     # ── GraphQL & AI ──
     "strawberry-graphql[fastapi]>=0.247",   # Phase 2 GraphQL
     "pgvector>=0.3",                        # Phase 2 語意搜尋向量欄位
+    "mcp>=1.6",                             # Phase 4 Model Context Protocol
 
     # ── Caching / Queue ──
     "redis[hiredis]>=5.2",

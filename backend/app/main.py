@@ -76,6 +76,14 @@ def create_app() -> FastAPI:
     from app.graphql.schema import make_graphql_router
     app.include_router(make_graphql_router(), prefix="/graphql")
 
+    # ── MCP server（Phase 4）──
+    from app.mcp.server import build_mcp_app
+    app.mount("/mcp", build_mcp_app())
+
+    # ── Plugins（Phase 4）──
+    from app.plugins import load_plugins
+    load_plugins(app)
+
     # ── Exception handlers ──
     @app.exception_handler(RequestValidationError)
     async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

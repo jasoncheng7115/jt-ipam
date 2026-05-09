@@ -20,6 +20,7 @@ import { useUiStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import NotificationBell from "@/components/NotificationBell.vue";
 import GlobalSearch from "@/components/GlobalSearch.vue";
+import ChatWidget from "@/components/ChatWidget.vue";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -135,6 +136,7 @@ const userInitial = computed(() => (me.value?.username || "?").slice(0, 2).toUpp
         <router-view />
       </n-layout-content>
     </n-layout>
+    <chat-widget v-if="me" />
   </n-layout>
 </template>
 

@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     nat,
     notifications,
     physical,
+    plugins,
     preferences,
     rack_diagram,
     scan,
@@ -70,6 +71,9 @@ api_v1_router.include_router(advanced.router)
 api_v1_router.include_router(virt.router)
 api_v1_router.include_router(physical.router)
 api_v1_router.include_router(topology.router)
+api_v1_router.include_router(plugins.router)
 
-# Phase 3 完成：Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
-# Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）
+# Phase 3 ✅ Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
+#           Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）
+# Phase 4 ✅ MCP Server、本地 LLM 自然語言查詢、Plugin 機制
+# Phase 4 範圍縮減（不做）：Zimbra/Odoo/Ansible/Terraform/HA

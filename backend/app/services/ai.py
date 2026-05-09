@@ -206,6 +206,120 @@ async def semantic_search(
     }
 
 
+# ─────────────────── Chat：自然語言 + tool use（Phase 4）───────────────────
+
+
+async def chat(
+    session: AsyncSession,
+    *,
+    user,                                # type: ignore[no-untyped-def]
+    messages: list[dict[str, Any]],
+    max_iterations: int = 4,
+) -> dict[str, Any]:
+    """以 Ollama chat 模型 + jt-ipam tools 處理自然語言。
+
+    流程：
+      1. 把 IPAM tools 註冊表轉成 Ollama tools schema
+      2. 用 system prompt 框定身份（jt-ipam 助手）
+      3. 呼叫 Ollama；若回 tool_calls，執行對應 jt-ipam 工具
+      4. 把 tool 結果 append 回 messages，再呼叫一次（最多 max_iterations 輪）
+
+    OWASP A02 / A10：
+      - chat 對外 URL 走 safe_request
+      - tool 執行時的 user 與 session 都從本端拿，不從 LLM 輸入信任
+    """
+    settings = get_settings()
+    if not settings.ollama_enabled:
+        raise AINotConfigured("Ollama is disabled")
+
+    from app.mcp.tools import IPAMToolError, TOOLS
+
+    ollama_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": meta["description"],
+                "parameters": meta["parameters"],
+            },
+        }
+        for name, meta in TOOLS.items()
+    ]
+
+    convo: list[dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": (
+                "You are jt-ipam's network operations assistant. Use the provided "
+                "tools to answer questions about subnets, IPs, devices, and DNS. "
+                "Always cite the IPs / CIDRs / device names returned by tools. "
+                "If a tool errors, explain it briefly. Never invent IP data — only "
+                "report what tools return."
+            ),
+        }
+    ]
+    convo.extend(messages)
+
+    url = f"{settings.ollama_url.rstrip('/')}/api/chat"
+
+    for _ in range(max_iterations):
+        body = {
+            "model": settings.ollama_chat_model,
+            "messages": convo,
+            "tools": ollama_tools,
+            "stream": False,
+        }
+        try:
+            resp = await safe_request(
+                "POST", url,
+                headers={"Content-Type": "application/json"},
+                json=body, timeout=settings.ollama_timeout,
+            )
+        except UnsafeOutboundURL as exc:
+            raise AIError(f"SSRF guard: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise AIError(f"transport: {exc.__class__.__name__}") from exc
+        if resp.status_code != 200:
+            raise AIError(f"Ollama chat {resp.status_code}: {resp.text[:200]}")
+        data = resp.json()
+
+        msg = data.get("message") or {}
+        convo.append(msg)
+
+        tool_calls = msg.get("tool_calls") or []
+        if not tool_calls:
+            return {"answer": msg.get("content") or "", "messages": convo}
+
+        for call in tool_calls:
+            fn = call.get("function") or {}
+            name = fn.get("name")
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            if name not in TOOLS:
+                tool_result = {"error": f"unknown tool {name!r}"}
+            else:
+                try:
+                    tool_result = await TOOLS[name]["fn"](session, user=user, **args)
+                except IPAMToolError as exc:
+                    tool_result = {"error": str(exc)}
+                except Exception as exc:  # noqa: BLE001
+                    tool_result = {"error": f"tool failed: {exc.__class__.__name__}"}
+            convo.append({
+                "role": "tool",
+                "name": name,
+                "content": json.dumps(tool_result, ensure_ascii=False, default=str),
+            })
+
+    return {
+        "answer": "(reached max iterations without final answer)",
+        "messages": convo,
+    }
+
+
 # ─────────────────── 全表 reindex（admin 一次性） ───────────────────
 
 
