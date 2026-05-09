@@ -161,7 +161,7 @@ async def find_first_free_address(
                   FROM ip_addresses
                  WHERE subnet_id = :sid
             )
-            SELECT (CAST(:base AS inet) + g)::text AS candidate
+            SELECT host(CAST(:base AS inet) + g) AS candidate
               FROM generate_series(0, :span) AS g
              WHERE (CAST(:base AS inet) + g) NOT IN (SELECT ip FROM used)
              LIMIT 1

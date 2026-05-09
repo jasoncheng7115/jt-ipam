@@ -54,7 +54,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "max-age=63072000; includeSubDomains; preload",
             )
         # 移除可能洩漏資訊的預設 header
-        response.headers.pop("Server", None)
+        if "Server" in response.headers:
+            del response.headers["Server"]
         return response
 
 

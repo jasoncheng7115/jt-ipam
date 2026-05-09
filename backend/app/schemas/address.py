@@ -33,14 +33,18 @@ class IPAddressBase(StrictModel):
     note: Annotated[str | None, Field(max_length=2048)] = None
     custom_fields: dict[str, Any] | None = None
 
-    @field_validator("ip")
+    @field_validator("ip", mode="before")
     @classmethod
-    def _ip_valid(cls, v: str) -> str:
+    def _ip_valid(cls, v: object) -> str:
+        if v is None:
+            raise ValueError("ip is required")
+        # asyncpg 把 inet 反序列化為 ipaddress.IPv4Address/IPv6Address；轉成字串
+        s = str(v).split("/")[0] if hasattr(v, "compressed") else str(v)
         try:
-            ipaddress.ip_address(v)
+            ipaddress.ip_address(s)
         except ValueError as exc:
-            raise ValueError(f"Invalid IP address: {v}") from exc
-        return v
+            raise ValueError(f"Invalid IP address: {s}") from exc
+        return s
 
     @field_validator("hostname")
     @classmethod
@@ -51,11 +55,12 @@ class IPAddressBase(StrictModel):
             raise ValueError("Invalid hostname")
         return v
 
-    @field_validator("mac")
+    @field_validator("mac", mode="before")
     @classmethod
-    def _mac_valid(cls, v: str | None) -> str | None:
+    def _mac_valid(cls, v: object) -> str | None:
         if v is None or v == "":
             return None
+        v = str(v)   # asyncpg macaddr → str
         if not _MAC_RE.match(v):
             raise ValueError("Invalid MAC address")
         return v

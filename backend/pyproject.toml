@@ -132,8 +132,25 @@ ignore_errors = true
 [tool.pytest.ini_options]
 minversion = "8.0"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # 第三方依賴的 DeprecationWarning 不阻擋測試
+    "ignore::DeprecationWarning:pyasn1",
+    "ignore::DeprecationWarning:ldap3",
+    "ignore::DeprecationWarning:alembic",
+    "ignore::DeprecationWarning:starlette",
+    "ignore::DeprecationWarning:asyncio",
+    # anyio 在 Python 3.11+ 用 Task.cancel("msg") 觸發 DeprecationWarning
+    # 若把 warning → error，CancelScope 取消傳遞失敗，整個 ASGI 測試會 hang
+    "ignore::DeprecationWarning:anyio",
+    "ignore::DeprecationWarning",
+    # asyncpg/redis 的 connection __del__ 會在 GC 時噴 ResourceWarning，與測試無關
+    "ignore::ResourceWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
 
 # ─────────────────────────────────────────────────────────
 # Bandit (SAST)

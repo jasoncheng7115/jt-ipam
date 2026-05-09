@@ -36,10 +36,13 @@ class SubnetBase(StrictModel):
     scan_agent_id: uuid.UUID | None = None
     custom_fields: dict[str, Any] | None = None
 
-    @field_validator("cidr")
+    @field_validator("cidr", mode="before")
     @classmethod
-    def _cidr_normalised(cls, v: str) -> str:
-        return _validate_cidr(v)
+    def _cidr_normalised(cls, v: object) -> str:
+        # 接受 str 或 ipaddress.IPv4Network/IPv6Network（asyncpg 反序列化結果）
+        if v is None:
+            raise ValueError("cidr is required")
+        return _validate_cidr(str(v))
 
     @field_validator("scan_method")
     @classmethod

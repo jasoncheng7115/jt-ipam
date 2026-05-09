@@ -25,7 +25,9 @@ class SubnetFull(ValueError):
 
 
 def assert_in_subnet(ip: str, subnet_cidr: str) -> None:
-    addr = ipaddress.ip_address(ip)
+    # 容忍 "192.168.10.1/32" 這種帶 mask 的字串（asyncpg INET 反序列化結果）
+    addr = ipaddress.ip_address(ip.split("/", 1)[0])
+    # 同樣 subnet_cidr 也可能是 IPv4Network 物件被轉字串
     net = ipaddress.ip_network(subnet_cidr, strict=False)
     if addr not in net:
         raise IPNotInSubnet(f"{ip} not in {subnet_cidr}")

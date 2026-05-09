@@ -21,7 +21,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 Environment = Literal["development", "staging", "production"]
 Theme = Literal["light", "dark", "auto"]
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     api_public_url: HttpUrl = Field(default=HttpUrl("http://localhost:8000"))
 
     # ── CORS ──
-    cors_origins: Annotated[list[str], Field(default_factory=lambda: ["http://localhost:5173"])]
+    cors_origins: Annotated[list[str], NoDecode, Field(default_factory=lambda: ["http://localhost:5173"])]
 
     # ── Secrets (A02 / A07) ──
     secret_key: SecretStr
@@ -100,8 +100,8 @@ class Settings(BaseSettings):
     rate_limit_api_token: str = "600/minute"
 
     # ── SSRF Allowlist (A10) ──
-    outbound_allow_cidrs: Annotated[list[str], Field(default_factory=list)]
-    outbound_allow_hosts: Annotated[list[str], Field(default_factory=list)]
+    outbound_allow_cidrs: Annotated[list[str], NoDecode, Field(default_factory=list)]
+    outbound_allow_hosts: Annotated[list[str], NoDecode, Field(default_factory=list)]
     outbound_allow_private: bool = True
 
     # ── Graylog ──
@@ -132,7 +132,7 @@ class Settings(BaseSettings):
     ldap_attr_display_name: str = "displayName"
     ldap_attr_member_of: str = "memberOf"
     ldap_timeout: float = 8.0
-    ldap_admin_groups: Annotated[list[str], Field(default_factory=list)]
+    ldap_admin_groups: Annotated[list[str], NoDecode, Field(default_factory=list)]
 
     # ── Radius ──
     radius_enabled: bool = False
@@ -149,7 +149,7 @@ class Settings(BaseSettings):
     oidc_client_secret: SecretStr | None = None
     oidc_redirect_uri: str | None = None
     oidc_scope: str = "openid email profile"
-    oidc_admin_groups: Annotated[list[str], Field(default_factory=list)]
+    oidc_admin_groups: Annotated[list[str], NoDecode, Field(default_factory=list)]
     oidc_groups_claim: str = "groups"
     oidc_username_claim: str = "preferred_username"
 
