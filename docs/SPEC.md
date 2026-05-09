@@ -766,8 +766,9 @@ Switch + Port
 - ✅ ASN
 - ✅ 拓樸視覺化（Cytoscape.js + cose-bilkent）
 - ✅ OIDC SSO（discovery + state/nonce + auto-provision）
-- 🟡 SAML（stub；多數環境用 OIDC 即可）
-- ⏸ OPNsense 防火牆 / Wazuh agent 同步（規格保留，未實作）
+- ✅ SAML 2.0 SSO（python3-saml；metadata/ACS/SLO；assertion 簽章預設 on）
+- ✅ OPNsense 防火牆 alias 同步（雙向；selector by section/subnet/tag/custom_field）
+- ✅ Wazuh agent inventory 同步 + missing-agent 偵測（給 SOC 的漏裝清單）
 
 ### Phase 4 ✅（縮減版）：AI / Plugin
 - ✅ MCP Server（暴露 IPAM 工具給本地 LLM；JSON-RPC 2.0 子集）

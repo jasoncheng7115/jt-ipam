@@ -139,7 +139,7 @@ jt-ipam/
 
 - **Phase 1 ✅**：phpIPAM 等價 + 升級（Section/Subnet/IP/VLAN/VRF/NAT/Devices/Racks/Locations/IP Requests、TOTP/API Token/RBAC、phpIPAM 同步工具、CSV/RIPE/TWNIC、視覺方塊、Tools、強制 SSL）
 - **Phase 2 ✅**：DNS 多家（PowerDNS/BIND9/Unbound/WinDNS）+ LibreNMS 深度整合（裝置/ARP/FDB/effective_status）+ 異常偵測 + SHA-256 異動鏈 + GraphQL + pgvector AI 語意搜尋
-- **Phase 3 ✅**：Tenancy/Contacts/ASN/Circuits/Wireless/Cabling/Power/VPN/Virtualization + Proxmox 同步 + Cytoscape.js 拓樸 + OIDC SSO
+- **Phase 3 ✅**：Tenancy/Contacts/ASN/Circuits/Wireless/Cabling/Power/VPN/Virtualization + Proxmox 同步 + Cytoscape.js 拓樸 + OIDC SSO + SAML 2.0 SSO + OPNsense 防火牆 alias 同步 + Wazuh agent inventory（missing-agent 偵測）
 - **Phase 4 ✅**（縮減版）：MCP Server + 本地 LLM 自然語言（Ollama chat） + Plugin 機制
 
 **明確不做（out of scope）**：HA 部署、Ansible Collection、Terraform Provider、Zimbra/Odoo 整合、Docker/Helm/K8s 容器化。
