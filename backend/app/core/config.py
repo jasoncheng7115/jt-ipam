@@ -109,6 +109,15 @@ class Settings(BaseSettings):
     graylog_port: int = 12201
     graylog_facility: str = "jt-ipam"
 
+    # ── SMTP（Email 通知）──
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str = "jt-ipam@localhost"
+    smtp_tls_mode: Literal["none", "starttls", "tls"] = "starttls"
+    smtp_timeout: float = 10.0
+
     # ── Frontend defaults ──
     default_locale: Locale = "zh-TW"
     default_theme: Theme = "auto"

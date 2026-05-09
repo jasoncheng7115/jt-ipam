@@ -15,13 +15,14 @@ from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.safe_http import UnsafeOutboundURL, assert_url_safe
 from app.models.notification import Notification, WebhookSubscription
-from app.schemas.base import Paginated
+from app.schemas.base import Paginated, StrictModel
 from app.schemas.notification import (
     NotificationRead,
     WebhookCreate,
     WebhookCreateResponse,
     WebhookRead,
 )
+from app.services import email as email_service
 from app.services.notification import encrypt_webhook_secret, generate_webhook_secret
 
 router = APIRouter(tags=["notifications"])
@@ -195,3 +196,82 @@ async def delete_webhook(
     )
     await session.delete(obj)
     await session.commit()
+
+
+# ─────────────────── Email channel ───────────────────
+from typing import Annotated as _Ann
+from pydantic import EmailStr as _EmailStr, Field as _Field
+
+
+class EmailTestRequest(StrictModel):
+    to: _EmailStr
+    subject: _Ann[str, _Field(min_length=1, max_length=256)] = "jt-ipam test email"
+    body: _Ann[str, _Field(min_length=1, max_length=4096)] = "This is a test from jt-ipam SMTP channel."
+
+
+class EmailStatus(StrictModel):
+    configured: bool
+    host: str | None
+    port: int
+    tls_mode: str
+
+
+@router.get("/notifications/email/status", response_model=EmailStatus,
+            dependencies=[Depends(require_admin)])
+async def email_status() -> EmailStatus:
+    from app.core.config import get_settings
+    s = get_settings()
+    return EmailStatus(
+        configured=email_service.is_configured(),
+        host=s.smtp_host,
+        port=s.smtp_port,
+        tls_mode=s.smtp_tls_mode,
+    )
+
+
+@router.post("/notifications/email/test", status_code=200,
+             dependencies=[Depends(require_admin)])
+async def email_test(
+    payload: EmailTestRequest,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object]:
+    """從伺服器發一封測試信，驗證 SMTP 設定是否正確。"""
+    try:
+        await email_service.send_email(
+            to=str(payload.to),
+            subject=payload.subject,
+            body_text=payload.body,
+        )
+    except email_service.EmailNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except email_service.EmailSendError as exc:
+        # 失敗也記入 audit（A09）
+        await append_audit(
+            session,
+            actor_user_id=str(user.id),
+            actor_ip=request.client.host if request.client else None,
+            actor_user_agent=request.headers.get("user-agent"),
+            object_type="email",
+            object_id=None,
+            action="test_failed",
+            diff={"to": str(payload.to), "error": str(exc)},
+            request_id=getattr(request.state, "request_id", None),
+        )
+        await session.commit()
+        raise HTTPException(status_code=502, detail=f"SMTP error: {exc}") from exc
+
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="email",
+        object_id=None,
+        action="test_sent",
+        diff={"to": str(payload.to), "subject": payload.subject},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return {"sent": True, "to": str(payload.to)}

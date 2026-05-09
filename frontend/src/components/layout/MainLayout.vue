@@ -39,6 +39,7 @@ const menuOptions = computed<MenuOption[]>(() => [
   { label: () => t("nav.devices"), key: "devices" },
   { label: () => t("nav.racks"), key: "racks" },
   { label: () => t("nav.locations"), key: "locations" },
+  { label: () => t("nav.requests"), key: "requests" },
   { label: () => t("nav.tools"), key: "tools" },
 ]);
 

@@ -9,11 +9,14 @@ from app.api.v1.endpoints import (
     api_tokens,
     auth,
     custom_fields,
+    dashboard,
     devices,
+    ip_requests,
     locations,
     nat,
     notifications,
     preferences,
+    rack_diagram,
     scan,
     search,
     sections,
@@ -27,6 +30,7 @@ api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router)
 api_v1_router.include_router(api_tokens.router)
 api_v1_router.include_router(preferences.router)
+api_v1_router.include_router(dashboard.router)
 api_v1_router.include_router(sections.router)
 api_v1_router.include_router(subnets.router)
 api_v1_router.include_router(addresses.router)
@@ -40,5 +44,7 @@ api_v1_router.include_router(tools.router)
 api_v1_router.include_router(custom_fields.router)
 api_v1_router.include_router(notifications.router)
 api_v1_router.include_router(search.router)
+api_v1_router.include_router(ip_requests.router)
+api_v1_router.include_router(rack_diagram.router)
 
 # Phase 1 待補：users(管理), groups, scan_agents

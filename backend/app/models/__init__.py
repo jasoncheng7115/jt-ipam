@@ -6,6 +6,7 @@ from app.models.base import Base
 from app.models.custom_field import CustomFieldDefinition
 from app.models.device import Device
 from app.models.encrypted_secret import EncryptedSecret
+from app.models.ip_request import IPRequest, IPRequestEvent
 from app.models.location import Location, Rack
 from app.models.nat import NATTranslation
 from app.models.notification import Notification, WebhookSubscription
@@ -25,6 +26,8 @@ __all__ = [
     "EncryptedSecret",
     "Group",
     "IPAddress",
+    "IPRequest",
+    "IPRequestEvent",
     "Location",
     "NATTranslation",
     "Notification",
