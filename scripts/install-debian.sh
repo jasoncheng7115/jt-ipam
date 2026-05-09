@@ -348,8 +348,14 @@ fi
 log "Installing systemd units…"
 install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-backend.service" \
     /etc/systemd/system/jt-ipam-backend.service
+install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-sync.service" \
+    /etc/systemd/system/jt-ipam-sync.service
+install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-sync.timer" \
+    /etc/systemd/system/jt-ipam-sync.timer
 systemctl daemon-reload
 systemctl enable --now jt-ipam-backend
+# 定期同步 OPNsense / Wazuh / LibreNMS（依各 instance 自己的 sync_interval_seconds）
+systemctl enable --now jt-ipam-sync.timer
 
 # ── 11. nginx site（僅 nginx 模式）──
 if [[ "$TLS_MODE" == "nginx" ]]; then

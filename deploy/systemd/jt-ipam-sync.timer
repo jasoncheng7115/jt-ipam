@@ -1,0 +1,14 @@
+[Unit]
+Description=Run jt-ipam-sync every 5 minutes
+Documentation=https://github.com/jasontools/jt-ipam
+
+[Timer]
+# 開機後 2 分鐘跑一次，之後每 5 分鐘
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Unit=jt-ipam-sync.service
+
+[Install]
+WantedBy=timers.target
