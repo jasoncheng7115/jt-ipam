@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     addresses,
+    advanced,
     ai,
     anomaly,
     api_tokens,
@@ -21,20 +22,25 @@ from app.api.v1.endpoints import (
     migration,
     nat,
     notifications,
+    physical,
     preferences,
     rack_diagram,
     scan,
     scan_agents,
     search,
     sections,
+    sso,
     subnets,
     tools,
+    topology,
+    virt,
     vlans,
     vrfs,
 )
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router)
+api_v1_router.include_router(sso.router)
 api_v1_router.include_router(api_tokens.router)
 api_v1_router.include_router(preferences.router)
 api_v1_router.include_router(dashboard.router)
@@ -60,6 +66,10 @@ api_v1_router.include_router(dns.router)
 api_v1_router.include_router(librenms.router)
 api_v1_router.include_router(anomaly.router)
 api_v1_router.include_router(ai.router)
+api_v1_router.include_router(advanced.router)
+api_v1_router.include_router(virt.router)
+api_v1_router.include_router(physical.router)
+api_v1_router.include_router(topology.router)
 
-# Phase 2 完成：DNS 多家、LibreNMS、異常偵測、GraphQL、語意搜尋
-# Phase 3：進階模組（Tenancy / Cabling / Power / VPN / Virtualization）
+# Phase 3 完成：Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
+# Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）

@@ -24,6 +24,8 @@
     "vue-i18n": "^10.0.4",
     "@vueuse/core": "^11.2.0",
     "axios": "^1.7.9",
+    "cytoscape": "^3.30.4",
+    "cytoscape-cose-bilkent": "^4.1.0",
     "qrcode": "^1.5.4",
     "zod": "^3.23.8"
   },
@@ -38,7 +40,8 @@
     "typescript": "~5.6.3",
     "vite": "^6.0.5",
     "vue-tsc": "^2.1.10",
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "@types/cytoscape": "^3.21.7"
   },
   "engines": {
     "node": ">=20",

@@ -142,6 +142,23 @@ class Settings(BaseSettings):
     radius_timeout: float = 5.0
     radius_nas_identifier: str = "jt-ipam"
 
+    # ── OIDC SSO（Phase 3）──
+    oidc_enabled: bool = False
+    oidc_issuer: str | None = None              # 例 https://accounts.google.com
+    oidc_client_id: str | None = None
+    oidc_client_secret: SecretStr | None = None
+    oidc_redirect_uri: str | None = None
+    oidc_scope: str = "openid email profile"
+    oidc_admin_groups: Annotated[list[str], Field(default_factory=list)]
+    oidc_groups_claim: str = "groups"
+    oidc_username_claim: str = "preferred_username"
+
+    # ── SAML SSO（Phase 3）──
+    saml_enabled: bool = False
+    saml_metadata_url: str | None = None
+    saml_entity_id: str | None = None
+    saml_acs_url: str | None = None
+
     # ── AI / Ollama（語意搜尋；本地推論不外送，符合規格 §11.1）──
     ollama_enabled: bool = False
     ollama_url: str = "http://127.0.0.1:11434"
@@ -163,6 +180,7 @@ class Settings(BaseSettings):
         "outbound_allow_cidrs",
         "outbound_allow_hosts",
         "ldap_admin_groups",
+        "oidc_admin_groups",
         mode="before",
     )
     @classmethod

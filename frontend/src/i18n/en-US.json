@@ -26,6 +26,7 @@
     "locations": "Locations",
     "tools": "Tools",
     "requests": "IP Requests",
+    "topology": "Topology",
     "audit": "Audit",
     "settings": "Settings"
   },

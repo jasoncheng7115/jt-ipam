@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
       { path: "requests", name: "requests", component: () => import("@/views/IPRequests.vue") },
       { path: "requests/:id", name: "request-detail", component: () => import("@/views/IPRequestDetail.vue") },
       { path: "tools", name: "tools", component: () => import("@/views/Tools.vue") },
+      { path: "topology", name: "topology", component: () => import("@/views/Topology.vue") },
       { path: "settings", name: "settings", component: () => import("@/views/Settings.vue") },
     ],
   },
