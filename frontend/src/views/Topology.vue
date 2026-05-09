@@ -74,8 +74,8 @@ function render(data: TopologyData) {
       {
         selector: "node",
         style: {
-          "background-color": (node: any) =>
-            NODE_COLOURS[node.data("type") as string] || NODE_COLOURS.other,
+          "background-color": ((node: any) =>
+            NODE_COLOURS[node.data("type") as string] || NODE_COLOURS.other) as any,
           label: "data(label)",
           color: "#fff",
           "text-outline-color": "#0f172a",

@@ -13,7 +13,7 @@
 #   self-signed  — = direct + 自動產生自簽憑證（最快上線；瀏覽器會警示）
 #
 # 行為：
-#   1. apt 安裝：postgresql-16、redis-server、python3.12（venv）、nginx、build-essential
+#   1. apt 安裝：postgresql-16、redis-server、python ≥ 3.11（venv）、nginx、build-essential
 #   2. 建立系統使用者 jtipam（無 shell）
 #   3. 設定 PostgreSQL 帳號 jt_ipam + DB jt_ipam
 #   4. 設定 Redis（requirepass）
@@ -82,32 +82,61 @@ warn() { echo -e "\033[1;33m[warn]\033[0m $*" >&2; }
 log "Installing apt packages…"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
+
+# 偵測可用 Python（由新到舊取，需 ≥ 3.11）。
+# 用 apt-cache madison：實際可裝才算數（apt-cache show 會匹配 Provides，不可靠）。
+PYTHON_BIN=""
+PYTHON_PKGS=()
+for ver in python3.13 python3.12 python3.11; do
+    if apt-cache madison "${ver}-venv" 2>/dev/null | grep -q .; then
+        PYTHON_BIN="$ver"
+        PYTHON_PKGS=("$ver" "${ver}-venv" "${ver}-dev")
+        break
+    fi
+done
+if [[ -z "$PYTHON_BIN" ]] && command -v python3 >/dev/null && \
+        python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+    PYTHON_BIN="python3"
+    PYTHON_PKGS=(python3 python3-venv python3-dev)
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+    echo "[error] need Python ≥ 3.11；Ubuntu 22.04 請改 24.04，或啟用 deadsnakes PPA：" >&2
+    echo "        sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt-get update" >&2
+    exit 1
+fi
+log "Using $PYTHON_BIN for backend venv"
+
 PKGS=(
     postgresql-16 postgresql-contrib-16
+    postgresql-16-pgvector
     redis-server
-    python3.12 python3.12-venv python3.12-dev
+    "${PYTHON_PKGS[@]}"
     build-essential libpq-dev pkg-config
     curl ca-certificates gnupg openssl
-    nodejs npm
 )
+
+# Node：若系統已裝 nodejs（例如 nodesource v20），不要動；否則裝 distro nodejs+npm
+if ! command -v node >/dev/null 2>&1; then
+    PKGS+=(nodejs npm)
+fi
 # nginx 模式才裝 nginx
 if [[ "$TLS_MODE" == "nginx" ]]; then
     PKGS+=(nginx)
 fi
 
-apt-get install -y -qq "${PKGS[@]}" \
-    || {
-        # postgresql-16 在較舊 Ubuntu 需要加 PGDG repo
-        warn "Falling back to PGDG repo for PostgreSQL 16…"
-        install -d /usr/share/postgresql-common/pgdg
-        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
-        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] \
-              https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            > /etc/apt/sources.list.d/pgdg.list
-        apt-get update -qq
-        apt-get install -y -qq postgresql-16 postgresql-contrib-16
-    }
+# Ubuntu < 24.04 / Debian < 13 沒有 postgresql-16；先檢查並在需要時加 PGDG repo
+if ! apt-cache show postgresql-16 >/dev/null 2>&1; then
+    warn "postgresql-16 not in default repos; adding PGDG repo…"
+    install -d /usr/share/postgresql-common/pgdg
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] \
+          https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list
+    apt-get update -qq
+fi
+
+apt-get install -y "${PKGS[@]}"
 
 # corepack 啟用 pnpm（給 frontend build）
 if ! command -v pnpm >/dev/null 2>&1; then
@@ -125,6 +154,9 @@ fi
 install -d -o "$JTIPAM_USER" -g "$JTIPAM_GROUP" -m 0750 \
     /var/lib/jt-ipam /var/log/jt-ipam
 install -d -m 0755 "$ETC_DIR"
+
+# 讓 jtipam 能寫 /opt/jt-ipam/backend/.venv 與 /opt/jt-ipam/frontend/{node_modules,dist}
+chown -R "$JTIPAM_USER:$JTIPAM_GROUP" "$BACKEND_DIR" "$FRONTEND_DIR"
 
 # ── 3. PostgreSQL ──
 log "Configuring PostgreSQL…"
@@ -160,6 +192,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
+-- pgvector：alembic migration 0009 也會 IF NOT EXISTS 一次，但需要 superuser，
+-- 所以先在這以 postgres 身分建好；之後 alembic 跑時是 no-op
+CREATE EXTENSION IF NOT EXISTS vector;
 SQL
 
 systemctl reload postgresql || systemctl restart postgresql
@@ -192,7 +227,7 @@ systemctl restart redis-server
 # ── 5. backend venv ──
 log "Setting up backend venv…"
 cd "$BACKEND_DIR"
-sudo -u "$JTIPAM_USER" python3.12 -m venv .venv
+sudo -u "$JTIPAM_USER" "$PYTHON_BIN" -m venv .venv
 sudo -u "$JTIPAM_USER" .venv/bin/pip install --upgrade pip wheel
 sudo -u "$JTIPAM_USER" .venv/bin/pip install -e ".[dev]"
 

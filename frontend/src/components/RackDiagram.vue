@@ -111,7 +111,7 @@ function colorFor(type: string): string {
           :style="cell.device ? { background: colorFor(cell.device.type) } : {}"
           :title="
             cell.device
-              ? `${cell.device.name} · ${cell.device.type} · ${cell.u_size ?? cell.device.u_size}U`
+              ? `${cell.device.name} · ${cell.device.type} · ${cell.device.u_size}U`
               : `Empty (U${cell.u})`
           "
         >

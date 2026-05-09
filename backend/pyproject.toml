@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "AGPL-3.0-or-later"}
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11,<3.14"
 
 dependencies = [
     # ── Web framework ──
@@ -85,7 +85,7 @@ packages = ["app"]
 # ─────────────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 src = ["app", "tests"]
 
 [tool.ruff.lint]
@@ -115,7 +115,7 @@ ignore = [
 # Mypy
 # ─────────────────────────────────────────────────────────
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 warn_unused_ignores = true
 warn_return_any = true
