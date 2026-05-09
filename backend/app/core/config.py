@@ -155,9 +155,30 @@ class Settings(BaseSettings):
 
     # ── SAML SSO（Phase 3）──
     saml_enabled: bool = False
-    saml_metadata_url: str | None = None
-    saml_entity_id: str | None = None
-    saml_acs_url: str | None = None
+    # IdP（IdP-side metadata：URL 二擇一；遠端 URL 會被快取）
+    saml_idp_metadata_url: str | None = None
+    saml_idp_metadata_xml: str | None = None    # 直接貼 XML（離線環境用）
+    # SP（Service Provider）— 我方
+    saml_sp_entity_id: str | None = None        # 預設用 API_PUBLIC_URL/saml/metadata
+    saml_sp_acs_url: str | None = None          # 預設用 API_PUBLIC_URL/auth/saml/acs
+    saml_sp_sls_url: str | None = None          # Single Logout（選填）
+    saml_sp_x509_cert: str | None = None        # PEM；簽名 / 加密用（選填，但建議生產配）
+    saml_sp_private_key: SecretStr | None = None
+    # 安全選項
+    saml_want_assertions_signed: bool = True
+    saml_want_assertions_encrypted: bool = False
+    saml_want_name_id_encrypted: bool = False
+    saml_authn_requests_signed: bool = False    # 開了要 SP cert/key
+    # Attribute mapping（IdP 送 attribute 的名字；常見預設）
+    saml_attr_username: str = "uid"
+    saml_attr_email: str = "mail"
+    saml_attr_displayname: str = "cn"
+    saml_attr_groups: str = "memberOf"
+    saml_admin_groups: Annotated[list[str], NoDecode, Field(default_factory=list)]
+    # 舊鍵保留兼容
+    saml_metadata_url: str | None = None        # alias of saml_idp_metadata_url
+    saml_entity_id: str | None = None           # alias of saml_sp_entity_id
+    saml_acs_url: str | None = None             # alias of saml_sp_acs_url
 
     # ── AI / Ollama（語意搜尋；本地推論不外送，符合規格 §11.1）──
     ollama_enabled: bool = False
@@ -181,6 +202,7 @@ class Settings(BaseSettings):
         "outbound_allow_hosts",
         "ldap_admin_groups",
         "oidc_admin_groups",
+        "saml_admin_groups",
         mode="before",
     )
     @classmethod
