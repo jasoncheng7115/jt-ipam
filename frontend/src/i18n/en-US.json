@@ -3,6 +3,17 @@
     "title": "jt-ipam",
     "tagline": "Modern IPAM — phpIPAM-aligned, integrating DNS / LibreNMS / AI"
   },
+  "login": {
+    "title": "Sign in to jt-ipam",
+    "username": "Username or Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "failed": "Sign in failed; check username and password",
+    "mfa_prompt": "Enter the 6-digit code from your authenticator app",
+    "mfa_code": "Code",
+    "mfa_submit": "Verify",
+    "mfa_failed": "Invalid or expired code"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "sections": "Sections",

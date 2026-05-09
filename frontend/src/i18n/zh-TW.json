@@ -3,6 +3,17 @@
     "title": "jt-ipam",
     "tagline": "新世代 IPAM — 以 phpIPAM 為核心，整合 DNS / LibreNMS / AI"
   },
+  "login": {
+    "title": "登入 jt-ipam",
+    "username": "帳號或 Email",
+    "password": "密碼",
+    "submit": "登入",
+    "failed": "登入失敗，請確認帳號密碼",
+    "mfa_prompt": "請輸入 Authenticator 上的 6 位數驗證碼",
+    "mfa_code": "驗證碼",
+    "mfa_submit": "驗證",
+    "mfa_failed": "驗證碼錯誤或已逾期"
+  },
   "nav": {
     "dashboard": "儀表板",
     "sections": "區段",
