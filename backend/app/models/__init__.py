@@ -21,6 +21,7 @@ from app.models.custom_field import CustomFieldDefinition
 from app.models.device import Device
 from app.models.dns import DNSRecord, DNSServer, DNSZone
 from app.models.encrypted_secret import EncryptedSecret
+from app.models.firewall import OPNsenseAliasMapping, OPNsenseFirewall
 from app.models.ip_request import IPRequest, IPRequestEvent
 from app.models.librenms import ARPEntry, FDBEntry, LibreNMSDevice, LibreNMSInstance
 from app.models.location import Location, Rack
@@ -79,6 +80,8 @@ __all__ = [
     "Location",
     "NATTranslation",
     "Notification",
+    "OPNsenseAliasMapping",
+    "OPNsenseFirewall",
     "Permission",
     "PhpIPAMMigrationMapping",
     "PowerFeed",

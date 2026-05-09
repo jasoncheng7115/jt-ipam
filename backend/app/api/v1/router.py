@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     dashboard,
     devices,
     dns,
+    firewall,
     import_external,
     ip_requests,
     librenms,
@@ -72,6 +73,7 @@ api_v1_router.include_router(virt.router)
 api_v1_router.include_router(physical.router)
 api_v1_router.include_router(topology.router)
 api_v1_router.include_router(plugins.router)
+api_v1_router.include_router(firewall.router)
 
 # Phase 3 ✅ Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
 #           Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）
