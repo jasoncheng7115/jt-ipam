@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     ai,
     anomaly,
     api_tokens,
+    audit,
     auth,
     custom_fields,
     dashboard,
@@ -35,6 +36,7 @@ from app.api.v1.endpoints import (
     subnets,
     tools,
     topology,
+    users,
     virt,
     vlans,
     vrfs,
@@ -76,6 +78,8 @@ api_v1_router.include_router(topology.router)
 api_v1_router.include_router(plugins.router)
 api_v1_router.include_router(firewall.router)
 api_v1_router.include_router(wazuh.router)
+api_v1_router.include_router(audit.router)
+api_v1_router.include_router(users.router)
 
 # Phase 3 ✅ Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
 #           Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）

@@ -52,7 +52,7 @@ async def list_instances(
             .offset(offset).limit(limit)
         )
     ).scalars().all()
-    return {"items": rows, "total": total, "offset": offset, "limit": limit}
+    return {"items": rows, "total": total, "page": offset // limit + 1, "page_size": limit}
 
 
 @router.post("/instances", response_model=WazuhInstanceRead,
@@ -232,7 +232,7 @@ async def list_agents(
             .offset(offset).limit(limit)
         )
     ).scalars().all()
-    return {"items": rows, "total": total, "offset": offset, "limit": limit}
+    return {"items": rows, "total": total, "page": offset // limit + 1, "page_size": limit}
 
 
 @router.get("/missing-agents", response_model=list[MissingAgentRow])

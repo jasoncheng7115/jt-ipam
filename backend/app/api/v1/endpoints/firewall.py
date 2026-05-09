@@ -52,7 +52,7 @@ async def list_firewalls(
             .offset(offset).limit(limit)
         )
     ).scalars().all()
-    return {"items": rows, "total": total, "offset": offset, "limit": limit}
+    return {"items": rows, "total": total, "page": offset // limit + 1, "page_size": limit}
 
 
 @router.post("", response_model=OPNsenseFirewallRead, status_code=status.HTTP_201_CREATED)
@@ -228,7 +228,7 @@ async def list_mappings(
             base.order_by(OPNsenseAliasMapping.alias_name).offset(offset).limit(limit)
         )
     ).scalars().all()
-    return {"items": rows, "total": total, "offset": offset, "limit": limit}
+    return {"items": rows, "total": total, "page": offset // limit + 1, "page_size": limit}
 
 
 @router.post("/mappings", response_model=OPNsenseAliasMappingRead,
