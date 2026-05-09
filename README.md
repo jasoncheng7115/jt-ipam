@@ -44,44 +44,51 @@ phpIPAM 老用戶零學習成本，現代化技術解決效能/UI/API 的歷史�
 | 快取 / 佇列 | Redis 7 · RQ / Celery |
 | 前端 | Vue 3 · TypeScript · Vite · Naive UI · Pinia · vue-i18n |
 | 認證 | argon2id · TOTP · JWT (短) + refresh · OIDC / SAML / LDAP / Radius |
-| 容器 | Docker / Podman · Compose · Helm Chart |
+| 部署 | systemd + nginx + apt 套件（Proxmox LXC 友善），不採容器化 |
 | AI | Ollama（本地）· pgvector · MCP Server |
 
 ---
 
-## 快速啟動（開發）
+## 快速安裝（單機 / Proxmox LXC）
+
+> Debian 12 / Ubuntu 22.04+，2 vCPU / 4 GB RAM 起跳。
 
 ```bash
-# 1. 複製環境變數
-cp .env.example .env
-# 編輯 .env，產生強密碼與金鑰：
+git clone https://github.com/jasontools/jt-ipam.git /opt/jt-ipam
+cd /opt/jt-ipam
+sudo ./scripts/install-debian.sh
+```
+
+腳本會自動：apt 安裝 `postgresql-16` / `redis-server` / `python3.12` / `nginx`，建立 `jtipam` 系統帳號、PG role、Redis password、自動產生金鑰寫入 `/etc/jt-ipam/backend.env`、跑 `alembic upgrade head`、`pnpm build` 前端，並啟用 `jt-ipam-backend.service`。
+
+完成後：
+
+```bash
+systemctl status jt-ipam-backend
+curl -fsS http://127.0.0.1:8000/healthz
+```
+
+詳見 [`deploy/README.md`](deploy/README.md)（含 TLS、升級、備份、HA、Proxmox LXC 範本）。
+
+---
+
+## 開發模式（無容器）
+
+```bash
+# 前置：本機已有 PostgreSQL 16 + Redis 7
+cp backend/.env.example backend/.env   # 編輯，產生金鑰
 #   openssl rand -hex 64    # SECRET_KEY / AUDIT_CHAIN_GENESIS
 #   openssl rand -base64 32 # ENCRYPTION_KEY
 
-# 2. 啟動全套服務（Postgres + Redis + backend + frontend）
-docker compose up -d
-
-# 3. 開瀏覽器
-#    Frontend:  http://localhost:5173
-#    API Docs:  http://localhost:8000/docs
-#    Health:    http://localhost:8000/healthz
+./scripts/dev.sh setup                  # venv + deps + alembic
+./scripts/dev.sh up                     # backend (8000) + frontend (5173)
 ```
 
-### 純後端開發（無 Docker）
+子命令：
 
 ```bash
-cd backend
-uv sync                              # 或 pip install -e ".[dev]"
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
-```
-
-### 純前端開發
-
-```bash
-cd frontend
-pnpm install
-pnpm dev
+./scripts/dev.sh migrate revision --autogenerate -m "msg"
+./scripts/dev.sh test
 ```
 
 ---

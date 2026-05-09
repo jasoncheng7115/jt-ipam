@@ -1,0 +1,82 @@
+# =============================================================================
+# jt-ipam backend (FastAPI / uvicorn)
+#
+# 安裝路徑：/etc/systemd/system/jt-ipam-backend.service
+# 使用方式：
+#   sudo cp deploy/systemd/jt-ipam-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jt-ipam-backend
+#
+# OWASP A05 — sandbox：NoNewPrivileges、ProtectSystem、PrivateTmp、
+# 只可寫 /var/log/jt-ipam，其餘 read-only。
+# =============================================================================
+
+[Unit]
+Description=jt-ipam backend (FastAPI / uvicorn)
+Documentation=https://github.com/jasontools/jt-ipam
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=exec
+User=jtipam
+Group=jtipam
+WorkingDirectory=/opt/jt-ipam/backend
+EnvironmentFile=/etc/jt-ipam/backend.env
+ExecStart=/opt/jt-ipam/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 4 \
+    --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5s
+
+# ── Sandbox / hardening (A05) ──────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @debug
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0027
+
+# ── Writable paths ──
+ReadWritePaths=/var/log/jt-ipam /var/lib/jt-ipam
+StateDirectory=jt-ipam
+LogsDirectory=jt-ipam
+
+# ── Resource limits (A04) ──
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=1024
+
+# ── Logging ──
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jt-ipam-backend
+
+[Install]
+WantedBy=multi-user.target

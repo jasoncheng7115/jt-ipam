@@ -137,12 +137,17 @@
   - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
   - `Cross-Origin-Opener-Policy: same-origin`
 - **CORS**：白名單來源；prod 禁止 `*`。
-- **Docker**：
-  - 非 root 使用者（uid 10001）
-  - 唯讀 root filesystem（`read_only: true`）+ 必要 tmpfs
-  - `cap_drop: [ALL]`，必要時 `cap_add` 個別 capability
-  - `no-new-privileges: true`
-  - 最小 base image（python:3.12-slim 或 distroless）
+- **systemd hardening**（不採容器化；見 `deploy/systemd/jt-ipam-backend.service`）：
+  - `User=jtipam` / `Group=jtipam`（非 root；apt 安裝後由 install 腳本自動建立）
+  - `NoNewPrivileges=true`、`CapabilityBoundingSet=`（drop 全部）、`AmbientCapabilities=`
+  - `ProtectSystem=strict`（整個 `/` 唯讀，僅 `ReadWritePaths` 可寫）
+  - `ProtectHome=true`、`PrivateTmp=true`、`PrivateDevices=true`
+  - `ProtectKernelTunables/Modules/Logs=true`、`ProtectControlGroups=true`、`ProtectClock=true`、`ProtectHostname=true`、`ProtectProc=invisible`
+  - `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`、`RestrictNamespaces=true`、`RestrictRealtime=true`、`RestrictSUIDSGID=true`
+  - `LockPersonality=true`、`MemoryDenyWriteExecute=true`
+  - `SystemCallArchitectures=native`、`SystemCallFilter=@system-service` 並排除 `@privileged @resources @obsolete @debug`
+  - `LimitNOFILE=65536` / `TasksMax=1024`（A04 資源耗盡防護）
+  - 驗證：`systemd-analyze security jt-ipam-backend`（目標分數 ≤ 3.5）
 - **預設帳密**：首次啟動強制 admin 改密碼；安裝程式產生隨機密碼而非寫死。
 - **健康檢查端點**：`/healthz`（liveness）只回 200，不洩漏內部資訊。
 
@@ -161,14 +166,14 @@
 - **CI 掃描**：
   - `pip-audit`（Python CVE）
   - `pnpm audit --audit-level=high`
-  - `trivy image jt-ipam:latest`（容器層）
-  - `osv-scanner`（補強）
+  - `osv-scanner`（補強，Python + Node 雙軌）
+  - `apt list --upgradable` + `unattended-upgrades`（OS 層；LXC / 裸機定期 patch）
 - **Dependabot / Renovate**：自動 PR 更新；CVSS ≥ 7 的 patch 24 小時內 review。
 - **SBOM**：每次 release 產生 CycloneDX / SPDX SBOM。
 - **Supply chain**：
-  - PyPI 用 `uv` 並啟用 hash check
-  - 限定特定 base image digest（pin sha256）
-  - Container image 簽章（cosign）
+  - PyPI 用 `uv`（或 `pip` + `--require-hashes`）啟用 hash check
+  - 釋出 `.deb` 與離線安裝包均以 GPG 簽章
+  - 鎖定 `apt` 來源（PGDG、official Debian/Ubuntu 倉庫；不啟用第三方 PPA 除非審核過）
 
 ---
 
@@ -209,8 +214,7 @@
   - 每筆 audit record 包含前一筆的 hash
   - 鏈頭來自 `AUDIT_CHAIN_GENESIS`（部署不可變）
   - 定期匯出 hash 至外部不可變儲存（jt-glogarch / S3 Object Lock）
-- **Release 簽章**：每個 release artifact 用 sigstore / GPG 簽章。
-- **Container image 簽章**：cosign + Rekor 透明日誌。
+- **Release 簽章**：每個 release artifact（`.tar.gz`、`.deb`、wheel 快取、Proxmox LXC 範本）用 GPG / sigstore 簽章。
 - **Webhook 出站簽章**：HMAC-SHA256（`X-Signature` header），對方可驗。
 - **Webhook 入站驗證**：對端來源亦需簽章（OPNsense / LibreNMS callback）。
 - **CI/CD**：

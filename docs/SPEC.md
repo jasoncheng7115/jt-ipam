@@ -64,8 +64,8 @@
 | 圖表 | ECharts + Cytoscape.js | 拓樸、機櫃、ARP/FDB 關聯圖 |
 | API | REST（OpenAPI 3.1）+ GraphQL + phpIPAM 相容層 | 三軌並行 |
 | 認證 | 本機 / AD / LDAP / Radius / SAML2 / OIDC | argon2id + TOTP MFA |
-| 容器化 | Docker / Podman + Compose / Helm Chart | 支援 Proxmox LXC 部署 |
-| 部署 | 單機、HA（PG streaming replication + Redis Sentinel） | |
+| 部署 | systemd + nginx + apt（不採容器化）；Proxmox LXC 範本、裸機 | 與 Jason 既有運維生態一致 |
+| HA | PG streaming replication + Redis Sentinel + 多副本 backend | Phase 3+ |
 
 ### 2.2 模組架構
 
@@ -690,11 +690,12 @@ Switch + Port
 - 民國紀年支援
 - 備份策略：每日 PG pg_dump + 每週完整 + 異地（Proxmox Backup Server 安康/太平雙站）
 
-### 12.3 部署形式
-1. Docker Compose（最快上線）
-2. Proxmox LXC 範本（Jason 客戶熟悉）
-3. Kubernetes Helm Chart（大型部署）
-4. 離線安裝包（封閉政府環境）
+### 12.3 部署形式（不採容器化）
+1. **Proxmox LXC 範本**（首選，Jason 客戶熟悉）
+2. **裸機 Debian / Ubuntu**（systemd + nginx + apt 套件）
+3. **離線安裝包**（封閉政府環境；含 .deb 與 wheel 快取）
+
+> 一鍵腳本見 `scripts/install-debian.sh`；systemd unit 見 `deploy/systemd/`。
 
 ### 12.4 系統需求（最小）
 - 2 vCPU、4 GB RAM、20 GB 磁碟
