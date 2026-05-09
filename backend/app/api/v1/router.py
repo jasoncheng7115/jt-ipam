@@ -6,13 +6,16 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     addresses,
+    anomaly,
     api_tokens,
     auth,
     custom_fields,
     dashboard,
     devices,
+    dns,
     import_external,
     ip_requests,
+    librenms,
     locations,
     migration,
     nat,
@@ -52,5 +55,8 @@ api_v1_router.include_router(rack_diagram.router)
 api_v1_router.include_router(migration.router)
 api_v1_router.include_router(import_external.router)
 api_v1_router.include_router(scan_agents.router)
+api_v1_router.include_router(dns.router)
+api_v1_router.include_router(librenms.router)
+api_v1_router.include_router(anomaly.router)
 
-# Phase 1 餘項：users(管理) / groups（前端管理頁；Phase 2 進行）
+# Phase 2：dns multi-provider, graphql, pgvector AI

@@ -5,8 +5,10 @@ from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.custom_field import CustomFieldDefinition
 from app.models.device import Device
+from app.models.dns import DNSRecord, DNSServer, DNSZone
 from app.models.encrypted_secret import EncryptedSecret
 from app.models.ip_request import IPRequest, IPRequestEvent
+from app.models.librenms import ARPEntry, FDBEntry, LibreNMSDevice, LibreNMSInstance
 from app.models.location import Location, Rack
 from app.models.migration_mapping import PhpIPAMMigrationMapping
 from app.models.nat import NATTranslation
@@ -21,15 +23,22 @@ from app.models.vrf import VRF
 
 __all__ = [
     "APIToken",
+    "ARPEntry",
     "AuditLog",
     "Base",
     "CustomFieldDefinition",
+    "DNSRecord",
+    "DNSServer",
+    "DNSZone",
     "Device",
     "EncryptedSecret",
+    "FDBEntry",
     "Group",
     "IPAddress",
     "IPRequest",
     "IPRequestEvent",
+    "LibreNMSDevice",
+    "LibreNMSInstance",
     "Location",
     "NATTranslation",
     "Notification",
