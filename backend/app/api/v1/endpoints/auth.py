@@ -14,7 +14,9 @@ from app.core.db import get_session
 from app.core.rate_limit import limit_per_ip
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.totp import ConfirmRequest, EnrollResponse, VerifyRequest
 from app.schemas.user import UserMe
+from app.services import totp as totp_service
 from app.services.auth import (
     AccountInactive,
     AccountLocked,
@@ -59,12 +61,138 @@ async def login(
             ) from exc
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from exc
 
+    # A07：若使用者啟用了 TOTP，發 challenge 而非直接發 token
+    if totp_service.is_enabled(user):
+        return TokenResponse(
+            mfa_required=True,
+            mfa_token=totp_service.issue_mfa_challenge(user),
+        )
+
     settings = get_settings()
     return TokenResponse(
         access_token=issue_access_token(user),
         refresh_token=issue_refresh_token(user),
         expires_in=settings.access_token_expire_minutes * 60,
     )
+
+
+@router.post("/mfa/verify", response_model=TokenResponse)
+async def mfa_verify(
+    payload: VerifyRequest,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TokenResponse:
+    """登入第二步：用 mfa_token + 6-digit code 換 access/refresh token。"""
+    await limit_per_ip(request, name="auth")
+
+    try:
+        claims = decode_token(payload.mfa_token, expected_type="mfa_challenge")
+    except TokenInvalid as exc:
+        raise HTTPException(status_code=401, detail="Invalid MFA challenge") from exc
+
+    sub = claims.get("sub")
+    if not isinstance(sub, str):
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+    try:
+        user_id = uuid.UUID(sub)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Invalid token subject") from exc
+
+    user = await session.get(User, user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="Account inactive")
+
+    if not await totp_service.verify_code(user, payload.code):
+        # 失敗時也記入 audit（A09）
+        from app.core.audit import append_audit
+        await append_audit(
+            session,
+            actor_user_id=str(user.id),
+            actor_ip=request.client.host if request.client else None,
+            actor_user_agent=request.headers.get("user-agent"),
+            object_type="auth",
+            object_id=str(user.id),
+            action="mfa_failed",
+            diff={"reason": "invalid_code"},
+            request_id=getattr(request.state, "request_id", None),
+        )
+        await session.commit()
+        raise HTTPException(status_code=401, detail="Invalid MFA code")
+
+    settings = get_settings()
+    return TokenResponse(
+        access_token=issue_access_token(user),
+        refresh_token=issue_refresh_token(user),
+        expires_in=settings.access_token_expire_minutes * 60,
+    )
+
+
+@router.post("/totp/enroll", response_model=EnrollResponse)
+async def totp_enroll(user: CurrentUser) -> EnrollResponse:
+    """產生新 secret 與 otpauth URI；client 顯示 QR；下一步 /totp/confirm。
+
+    注意：尚未寫入 DB；client 需 confirm 才生效。
+    """
+    secret = totp_service.begin_enrollment()
+    uri = totp_service.provisioning_uri(secret, account=user.username)
+    return EnrollResponse(secret=secret, otpauth_uri=uri)
+
+
+@router.post("/totp/confirm", status_code=204)
+async def totp_confirm(
+    payload: ConfirmRequest,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """用 enroll 拿到的 secret + 第一筆 6-digit code 確認；正確才寫入 DB。"""
+    if totp_service.is_enabled(user):
+        raise HTTPException(status_code=409, detail="TOTP already enabled")
+
+    ok = await totp_service.confirm_enrollment(
+        session, user=user, secret=payload.secret, code=payload.code
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid TOTP code")
+
+    from app.core.audit import append_audit
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="user",
+        object_id=str(user.id),
+        action="totp_enabled",
+        diff=None,
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+
+
+@router.post("/totp/disable", status_code=204)
+async def totp_disable(
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    if not totp_service.is_enabled(user):
+        raise HTTPException(status_code=409, detail="TOTP not enabled")
+    await totp_service.disable(session, user=user)
+
+    from app.core.audit import append_audit
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="user",
+        object_id=str(user.id),
+        action="totp_disabled",
+        diff=None,
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
 
 
 @router.post("/refresh", response_model=TokenResponse)

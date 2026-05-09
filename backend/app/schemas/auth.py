@@ -15,10 +15,16 @@ class LoginRequest(StrictModel):
 
 
 class TokenResponse(StrictModel):
-    access_token: str
-    refresh_token: str
+    """登入 / refresh 成功的回應；若 user 有開 TOTP 則回傳 mfa_required + mfa_token。"""
+
+    access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
-    expires_in: int  # seconds
+    expires_in: int | None = None  # seconds
+
+    # MFA 挑戰（僅 login 第一步成功且 user 有 TOTP 時設定）
+    mfa_required: bool = False
+    mfa_token: str | None = None
 
 
 class RefreshRequest(StrictModel):
