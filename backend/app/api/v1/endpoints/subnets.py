@@ -22,6 +22,8 @@ from app.schemas.subnet import (
     SubnetUpdate,
     SubnetUsage,
 )
+from app.services.custom_field import CustomFieldError, validate_custom_fields
+from app.services.notification import deliver_event
 from app.services.permission import (
     filter_visible,
     get_object_permission,
@@ -148,12 +150,20 @@ async def create_subnet(
     except SubnetOverlap as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    try:
+        validated_cf = await validate_custom_fields(
+            session, object_type="subnet", payload=payload.custom_fields
+        )
+    except CustomFieldError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     master_id = await compute_master_subnet(
         session, cidr=payload.cidr, vrf_id=payload.vrf_id
     )
 
     data = payload.model_dump()
     data["master_subnet_id"] = master_id
+    data["custom_fields"] = validated_cf or None
     subnet = Subnet(**data)
     session.add(subnet)
     await session.flush()
@@ -171,6 +181,17 @@ async def create_subnet(
     )
     await session.commit()
     await session.refresh(subnet)
+    await deliver_event(
+        session,
+        event="subnet.created",
+        payload={
+            "id": str(subnet.id),
+            "cidr": str(subnet.cidr),
+            "section_id": str(subnet.section_id),
+            "actor": str(user.id),
+        },
+    )
+    await session.commit()
     return SubnetRead.model_validate(subnet)
 
 
@@ -198,6 +219,13 @@ async def update_subnet(
         "is_full": subnet.is_full,
     }
     changes = payload.model_dump(exclude_unset=True)
+    if "custom_fields" in changes:
+        try:
+            changes["custom_fields"] = await validate_custom_fields(
+                session, object_type="subnet", payload=changes["custom_fields"]
+            ) or None
+        except CustomFieldError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     for key, value in changes.items():
         setattr(subnet, key, value)
 

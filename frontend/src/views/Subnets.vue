@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import {
   NCard,
   NDataTable,
@@ -11,6 +12,8 @@ import {
 } from "naive-ui";
 import { listSubnets, getSubnetUsage } from "@/api/subnets";
 import type { Subnet, SubnetUsage } from "@/types";
+
+const router = useRouter();
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -81,6 +84,10 @@ onMounted(() => {
       :loading="loading"
       :pagination="{ pageSize: 50 }"
       :bordered="false"
+      :row-props="(row: Subnet) => ({
+        style: 'cursor: pointer',
+        onClick: () => router.push({ name: 'subnet-detail', params: { id: row.id } }),
+      })"
     >
       <template #empty>
         <n-space justify="center">{{ t("common.no_data") }}</n-space>

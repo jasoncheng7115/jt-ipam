@@ -15,6 +15,7 @@ from app.core.db import get_session
 from app.models.device import Device
 from app.schemas.base import Paginated
 from app.schemas.device import DeviceCreate, DeviceRead, DeviceUpdate
+from app.services.custom_field import CustomFieldError, validate_custom_fields
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -67,7 +68,15 @@ async def create_device(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DeviceRead:
-    obj = Device(**payload.model_dump())
+    try:
+        cf = await validate_custom_fields(
+            session, object_type="device", payload=payload.custom_fields
+        )
+    except CustomFieldError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    data = payload.model_dump()
+    data["custom_fields"] = cf or None
+    obj = Device(**data)
     session.add(obj)
     await session.flush()
     await append_audit(
@@ -98,6 +107,13 @@ async def update_device(
         raise HTTPException(404, detail="Device not found")
     before = {"name": obj.name, "type": obj.type, "vendor": obj.vendor, "model": obj.model}
     changes = payload.model_dump(exclude_unset=True)
+    if "custom_fields" in changes:
+        try:
+            changes["custom_fields"] = await validate_custom_fields(
+                session, object_type="device", payload=changes["custom_fields"]
+            ) or None
+        except CustomFieldError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     for k, v in changes.items():
         setattr(obj, k, v)
     await append_audit(

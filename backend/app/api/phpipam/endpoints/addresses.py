@@ -134,3 +134,185 @@ async def first_free(
     if ip is None:
         return phpipam_response(success=False, code=404, message="No free address", started=started)
     return phpipam_response(success=True, data=ip, started=started)
+
+
+from fastapi import Body, Request
+from app.core.audit import append_audit
+from app.services.address import (
+    IPAlreadyExists,
+    IPNotInSubnet,
+    SubnetFull,
+    allocate_first_free,
+    create_ip,
+)
+from app.services.permission import has_permission as _has_perm
+from app.services.permission import get_object_permission as _get_perm
+
+
+def _bool(v: object) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v != 0
+    if isinstance(v, str):
+        return v.lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+async def _require_subnet_write(session, user, subnet_id):  # type: ignore[no-untyped-def]
+    s = await session.get(Subnet, subnet_id)
+    if s is None:
+        raise HTTPException(404, detail="Subnet not found")
+    level = await _get_perm(session, user=user, object_type="subnet", object_id=s.id)
+    if not _has_perm(level, "write"):
+        raise HTTPException(404, detail="Subnet not found")
+    return s
+
+
+@router.post("/{app_id}/addresses/")
+async def create_address(
+    app_id: str,
+    request: Request,
+    payload: Annotated[dict[str, object], Body()],
+    user=Depends(phpipam_current_user),
+    session: Annotated[AsyncSession, Depends(get_session)] = None,
+) -> dict[str, object]:
+    started = time.perf_counter()
+    raw_subnet = payload.get("subnetId")
+    raw_ip = payload.get("ip")
+    if not raw_subnet:
+        raise HTTPException(400, detail="subnetId is required")
+    try:
+        subnet_id = uuid.UUID(str(raw_subnet))
+    except ValueError as exc:
+        raise HTTPException(400, detail="Invalid subnetId") from exc
+    subnet = await _require_subnet_write(session, user, subnet_id)
+
+    try:
+        if not raw_ip:
+            obj = await allocate_first_free(
+                session, subnet=subnet,
+                hostname=payload.get("hostname"),  # type: ignore[arg-type]
+                description=payload.get("description"),  # type: ignore[arg-type]
+                mac=payload.get("mac"),  # type: ignore[arg-type]
+                state=str(payload.get("tag") or "active"),
+            )
+        else:
+            obj = await create_ip(
+                session, subnet=subnet, ip=str(raw_ip),
+                hostname=payload.get("hostname"),  # type: ignore[arg-type]
+                description=payload.get("description"),  # type: ignore[arg-type]
+                mac=payload.get("mac"),  # type: ignore[arg-type]
+                state=str(payload.get("tag") or "active"),
+            )
+    except IPNotInSubnet as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except IPAlreadyExists as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
+    except SubnetFull as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
+
+    if "owner" in payload:
+        obj.owner = payload["owner"]  # type: ignore[assignment]
+    if "port" in payload:
+        obj.switch_port = payload["port"]  # type: ignore[assignment]
+    if "note" in payload:
+        obj.note = payload["note"]  # type: ignore[assignment]
+    if "excludePing" in payload:
+        obj.exclude_from_ping = _bool(payload["excludePing"])
+    if "PTRignore" in payload:
+        obj.ptr_ignore = _bool(payload["PTRignore"])
+
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="ip_address",
+        object_id=str(obj.id),
+        action="create",
+        diff={"after": {"ip": str(obj.ip), "subnet_id": str(obj.subnet_id)}, "via": "phpipam"},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    await session.refresh(obj)
+    return phpipam_response(
+        success=True, code=201, message="Address created",
+        data={"id": str(obj.id), "ip": str(obj.ip).split("/")[0]}, started=started,
+    )
+
+
+@router.patch("/{app_id}/addresses/{address_id}/")
+async def update_address(
+    app_id: str,
+    address_id: uuid.UUID,
+    request: Request,
+    payload: Annotated[dict[str, object], Body()],
+    user=Depends(phpipam_current_user),
+    session: Annotated[AsyncSession, Depends(get_session)] = None,
+) -> dict[str, object]:
+    started = time.perf_counter()
+    a = await session.get(IPAddress, address_id)
+    if a is None:
+        raise HTTPException(404, detail="Address not found")
+    await _require_subnet_write(session, user, a.subnet_id)
+
+    before = {"hostname": a.hostname, "tag": a.state, "description": a.description}
+    if "hostname" in payload:
+        a.hostname = payload["hostname"]  # type: ignore[assignment]
+    if "description" in payload:
+        a.description = payload["description"]  # type: ignore[assignment]
+    if "tag" in payload:
+        a.state = str(payload["tag"])
+    if "owner" in payload:
+        a.owner = payload["owner"]  # type: ignore[assignment]
+    if "port" in payload:
+        a.switch_port = payload["port"]  # type: ignore[assignment]
+    if "note" in payload:
+        a.note = payload["note"]  # type: ignore[assignment]
+    if "mac" in payload:
+        a.mac = payload["mac"]  # type: ignore[assignment]
+
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="ip_address",
+        object_id=str(a.id),
+        action="update",
+        diff={"before": before, "via": "phpipam"},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return phpipam_response(success=True, message="Address updated", started=started)
+
+
+@router.delete("/{app_id}/addresses/{address_id}/")
+async def delete_address(
+    app_id: str,
+    address_id: uuid.UUID,
+    request: Request,
+    user=Depends(phpipam_current_user),
+    session: Annotated[AsyncSession, Depends(get_session)] = None,
+) -> dict[str, object]:
+    started = time.perf_counter()
+    a = await session.get(IPAddress, address_id)
+    if a is None:
+        raise HTTPException(404, detail="Address not found")
+    await _require_subnet_write(session, user, a.subnet_id)
+
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="ip_address",
+        object_id=str(a.id),
+        action="delete",
+        diff={"before": {"ip": str(a.ip)}, "via": "phpipam"},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.delete(a)
+    await session.commit()
+    return phpipam_response(success=True, message="Address deleted", started=started)

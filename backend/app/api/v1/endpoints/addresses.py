@@ -29,6 +29,7 @@ from app.services.address import (
     assert_in_subnet,
     create_ip,
 )
+from app.services.custom_field import CustomFieldError, validate_custom_fields
 from app.services.permission import (
     filter_visible,
     get_object_permission,
@@ -132,13 +133,19 @@ async def create_address(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # 應用後續欄位
+    try:
+        cf = await validate_custom_fields(
+            session, object_type="ip", payload=payload.custom_fields
+        )
+    except CustomFieldError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     obj.owner = payload.owner
     obj.device_id = payload.device_id
     obj.switch_port = payload.switch_port
     obj.exclude_from_ping = payload.exclude_from_ping
     obj.ptr_ignore = payload.ptr_ignore
     obj.note = payload.note
-    obj.custom_fields = payload.custom_fields
+    obj.custom_fields = cf or None
 
     await append_audit(
         session,
@@ -213,6 +220,13 @@ async def update_address(
         "description": obj.description,
     }
     changes = payload.model_dump(exclude_unset=True)
+    if "custom_fields" in changes:
+        try:
+            changes["custom_fields"] = await validate_custom_fields(
+                session, object_type="ip", payload=changes["custom_fields"]
+            ) or None
+        except CustomFieldError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     for key, value in changes.items():
         setattr(obj, key, value)
 

@@ -18,6 +18,7 @@ import {
 import { storeToRefs } from "pinia";
 import { useUiStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
+import NotificationBell from "@/components/NotificationBell.vue";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -37,6 +38,7 @@ const menuOptions = computed<MenuOption[]>(() => [
   { label: () => t("nav.devices"), key: "devices" },
   { label: () => t("nav.racks"), key: "racks" },
   { label: () => t("nav.locations"), key: "locations" },
+  { label: () => t("nav.tools"), key: "tools" },
 ]);
 
 const localeOptions = [
@@ -108,6 +110,7 @@ const userInitial = computed(() => (me.value?.username || "?").slice(0, 2).toUpp
               style="width: 100px"
               @update:value="ui.setTheme"
             />
+            <notification-bell v-if="me" />
             <n-dropdown
               v-if="me"
               :options="userMenuOptions"

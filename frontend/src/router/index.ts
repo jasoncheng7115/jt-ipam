@@ -15,7 +15,9 @@ const routes: RouteRecordRaw[] = [
       { path: "", name: "dashboard", component: () => import("@/views/Dashboard.vue") },
       { path: "sections", name: "sections", component: () => import("@/views/Sections.vue") },
       { path: "subnets", name: "subnets", component: () => import("@/views/Subnets.vue") },
+      { path: "subnets/:id", name: "subnet-detail", component: () => import("@/views/SubnetDetail.vue") },
       { path: "addresses", name: "addresses", component: () => import("@/views/Addresses.vue") },
+      { path: "tools", name: "tools", component: () => import("@/views/Tools.vue") },
     ],
   },
 ];

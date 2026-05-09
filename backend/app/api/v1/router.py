@@ -8,12 +8,15 @@ from app.api.v1.endpoints import (
     addresses,
     api_tokens,
     auth,
+    custom_fields,
     devices,
     locations,
     nat,
+    notifications,
     scan,
     sections,
     subnets,
+    tools,
     vlans,
     vrfs,
 )
@@ -30,5 +33,8 @@ api_v1_router.include_router(devices.router)
 api_v1_router.include_router(locations.router)
 api_v1_router.include_router(nat.router)
 api_v1_router.include_router(scan.router)
+api_v1_router.include_router(tools.router)
+api_v1_router.include_router(custom_fields.router)
+api_v1_router.include_router(notifications.router)
 
-# Phase 1 待補：users(管理), groups, scan_agents, custom_fields, search, calculator
+# Phase 1 待補：users(管理), groups, scan_agents, search
