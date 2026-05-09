@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     addresses,
+    ai,
     anomaly,
     api_tokens,
     auth,
@@ -58,5 +59,7 @@ api_v1_router.include_router(scan_agents.router)
 api_v1_router.include_router(dns.router)
 api_v1_router.include_router(librenms.router)
 api_v1_router.include_router(anomaly.router)
+api_v1_router.include_router(ai.router)
 
-# Phase 2：dns multi-provider, graphql, pgvector AI
+# Phase 2 完成：DNS 多家、LibreNMS、異常偵測、GraphQL、語意搜尋
+# Phase 3：進階模組（Tenancy / Cabling / Power / VPN / Virtualization）

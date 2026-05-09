@@ -72,6 +72,10 @@ def create_app() -> FastAPI:
     app.include_router(api_v1_router, prefix="/api/v1")
     app.include_router(phpipam_router, prefix="/api/phpipam")
 
+    # ── GraphQL（Phase 2）──
+    from app.graphql.schema import make_graphql_router
+    app.include_router(make_graphql_router(), prefix="/graphql")
+
     # ── Exception handlers ──
     @app.exception_handler(RequestValidationError)
     async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

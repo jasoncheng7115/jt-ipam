@@ -39,6 +39,12 @@ dependencies = [
     "pymysql>=1.1",                # phpIPAM 遷移工具：直連舊 MySQL
     "ldap3>=2.9",                  # AD/LDAP 認證
     "pyrad>=2.4",                  # Radius 認證
+    "dnspython>=2.6",              # BIND 9 AXFR + nsupdate (TSIG)
+    "pywinrm>=0.5",                # Windows DNS（WinRM + PowerShell）
+
+    # ── GraphQL & AI ──
+    "strawberry-graphql[fastapi]>=0.247",   # Phase 2 GraphQL
+    "pgvector>=0.3",                        # Phase 2 語意搜尋向量欄位
 
     # ── Caching / Queue ──
     "redis[hiredis]>=5.2",

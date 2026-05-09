@@ -142,6 +142,14 @@ class Settings(BaseSettings):
     radius_timeout: float = 5.0
     radius_nas_identifier: str = "jt-ipam"
 
+    # ── AI / Ollama（語意搜尋；本地推論不外送，符合規格 §11.1）──
+    ollama_enabled: bool = False
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_embedding_model: str = "qwen3-embedding:8b"
+    ollama_chat_model: str = "gpt-oss:120b"
+    ollama_timeout: float = 30.0
+    embedding_dim: int = 768
+
     # ── Frontend defaults ──
     default_locale: Locale = "zh-TW"
     default_theme: Theme = "auto"

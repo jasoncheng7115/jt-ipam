@@ -22,6 +22,7 @@ from app.schemas.subnet import (
     SubnetUpdate,
     SubnetUsage,
 )
+from app.services import ai as ai_service
 from app.services.custom_field import CustomFieldError, validate_custom_fields
 from app.services.notification import deliver_event
 from app.services.permission import (
@@ -181,6 +182,13 @@ async def create_subnet(
     )
     await session.commit()
     await session.refresh(subnet)
+    # Phase 2：自動 index description（失敗不擋主流程）
+    if subnet.description:
+        try:
+            await ai_service.index_subnet(session, str(subnet.id), subnet.description)
+            await session.commit()
+        except Exception:  # noqa: BLE001
+            pass
     await deliver_event(
         session,
         event="subnet.created",
