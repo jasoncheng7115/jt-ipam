@@ -30,20 +30,42 @@ const auth = useAuthStore();
 const { theme, locale } = storeToRefs(ui);
 const { me } = storeToRefs(auth);
 
-const menuOptions = computed<MenuOption[]>(() => [
-  { label: () => t("nav.dashboard"), key: "dashboard" },
-  { label: () => t("nav.sections"), key: "sections" },
-  { label: () => t("nav.subnets"), key: "subnets" },
-  { label: () => t("nav.addresses"), key: "addresses" },
-  { label: () => t("nav.vlans"), key: "vlans" },
-  { label: () => t("nav.vrfs"), key: "vrfs" },
-  { label: () => t("nav.devices"), key: "devices" },
-  { label: () => t("nav.racks"), key: "racks" },
-  { label: () => t("nav.locations"), key: "locations" },
-  { label: () => t("nav.requests"), key: "requests" },
-  { label: () => t("nav.topology"), key: "topology" },
-  { label: () => t("nav.tools"), key: "tools" },
-]);
+const menuOptions = computed<MenuOption[]>(() => {
+  const base: MenuOption[] = [
+    { label: () => t("nav.dashboard"), key: "dashboard" },
+    { label: () => t("nav.sections"), key: "sections" },
+    { label: () => t("nav.subnets"), key: "subnets" },
+    { label: () => t("nav.addresses"), key: "addresses" },
+    { label: () => t("nav.vlans"), key: "vlans" },
+    { label: () => t("nav.vrfs"), key: "vrfs" },
+    { label: () => t("nav.devices"), key: "devices" },
+    { label: () => t("nav.racks"), key: "racks" },
+    { label: () => t("nav.locations"), key: "locations" },
+    { label: () => t("nav.requests"), key: "requests" },
+    { label: () => t("nav.topology"), key: "topology" },
+    { label: () => t("nav.tools"), key: "tools" },
+  ];
+  if (me.value?.is_admin) {
+    base.push(
+      { type: "divider", key: "d-admin" },
+      {
+        label: () => t("nav.admin_section"),
+        key: "admin",
+        children: [
+          { label: () => t("nav.audit"), key: "audit" },
+          { label: () => t("nav.users"), key: "users" },
+          { label: () => t("nav.groups"), key: "groups" },
+          { label: () => t("nav.dns"), key: "dns" },
+          { label: () => t("nav.librenms"), key: "librenms" },
+          { label: () => t("nav.firewall"), key: "firewall" },
+          { label: () => t("nav.wazuh"), key: "wazuh" },
+          { label: () => t("nav.plugins"), key: "plugins" },
+        ],
+      },
+    );
+  }
+  return base;
+});
 
 const localeOptions = [
   { label: "繁體中文", value: "zh-TW" },

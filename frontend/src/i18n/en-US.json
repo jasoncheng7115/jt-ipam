@@ -8,11 +8,14 @@
     "username": "Username or Email",
     "password": "Password",
     "submit": "Sign in",
-    "failed": "Sign in failed; check username and password",
-    "mfa_prompt": "Enter the 6-digit code from your authenticator app",
+    "failed": "Login failed; please check your credentials",
+    "mfa_prompt": "Enter the 6-digit code from your authenticator",
     "mfa_code": "Code",
     "mfa_submit": "Verify",
-    "mfa_failed": "Invalid or expired code"
+    "mfa_failed": "Invalid or expired code",
+    "sso_oidc": "Sign in with OIDC",
+    "sso_saml": "Sign in with SAML",
+    "or_sso": "Or use SSO"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -27,8 +30,16 @@
     "tools": "Tools",
     "requests": "IP Requests",
     "topology": "Topology",
-    "audit": "Audit",
-    "settings": "Settings"
+    "audit": "Audit Log",
+    "users": "Users",
+    "groups": "Groups",
+    "dns": "DNS Servers",
+    "librenms": "LibreNMS",
+    "firewall": "OPNsense Firewall",
+    "wazuh": "Wazuh",
+    "plugins": "Plugins",
+    "settings": "Settings",
+    "admin_section": "Admin"
   },
   "topbar": {
     "search": "Search…",
@@ -41,7 +52,7 @@
     "user_menu": {
       "profile": "Profile",
       "preferences": "Preferences",
-      "logout": "Sign out"
+      "logout": "Logout"
     }
   },
   "common": {
@@ -53,7 +64,21 @@
     "search": "Search",
     "loading": "Loading…",
     "no_data": "No data",
-    "confirm_delete": "Delete this item? This cannot be undone."
+    "confirm_delete": "Confirm delete? This action cannot be undone.",
+    "yes": "Yes",
+    "no": "No",
+    "actions": "Actions",
+    "test": "Test",
+    "sync": "Sync",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "refresh": "Refresh",
+    "ok": "OK",
+    "fail": "Failed",
+    "name": "Name",
+    "status": "Status",
+    "created_at": "Created",
+    "updated_at": "Updated"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -66,17 +91,96 @@
     "parent": "Parent",
     "strict_mode": "Strict mode"
   },
+  "audit": {
+    "title": "Audit Log",
+    "id": "ID",
+    "ts": "Timestamp",
+    "actor": "Actor",
+    "object_type": "Object Type",
+    "object_id": "Object ID",
+    "action": "Action",
+    "diff": "Diff",
+    "this_hash": "Hash",
+    "filter_object_type": "Filter object type (e.g. user, subnet)",
+    "filter_action": "Filter action (e.g. create, login_success)",
+    "verify_chain": "Verify chain integrity",
+    "chain_ok": "✅ Chain intact (checked {n} entries)",
+    "chain_broken": "⚠️ Chain broken at #{id}"
+  },
+  "users": {
+    "title": "Users",
+    "username": "Username",
+    "email": "Email",
+    "display_name": "Display name",
+    "auth_provider": "Auth",
+    "is_active": "Active",
+    "is_admin": "Admin",
+    "last_login": "Last login",
+    "failed_login": "Failed",
+    "locked_until": "Locked until",
+    "create_user": "Create local user",
+    "password": "Password (>= 12 chars)",
+    "unlock": "Unlock",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate"
+  },
+  "groups": {
+    "title": "Groups",
+    "name": "Name",
+    "description": "Description",
+    "members": "Members",
+    "is_builtin": "Builtin"
+  },
+  "dns_admin": {
+    "title": "DNS Servers",
+    "type": "Type",
+    "endpoint": "Endpoint",
+    "view_zones": "View zones"
+  },
+  "librenms_admin": {
+    "title": "LibreNMS",
+    "endpoint": "API URL",
+    "test_ok": "Connection OK",
+    "sync_summary": "Sync done: {summary}"
+  },
+  "firewall_admin": {
+    "title": "OPNsense Firewall",
+    "name": "Name",
+    "api_url": "API URL",
+    "verify_tls": "Verify TLS",
+    "alias_mappings": "Alias mappings",
+    "alias_name": "Alias name",
+    "alias_type": "Type",
+    "selector": "Selector (JSON)",
+    "direction": "Direction",
+    "last_synced_count": "Last synced count",
+    "create_firewall": "Add firewall",
+    "create_mapping": "Add mapping"
+  },
+  "wazuh_admin": {
+    "title": "Wazuh",
+    "missing_agents": "IPs missing Wazuh agent",
+    "agents_count": "Agents",
+    "active_count": "Active",
+    "create_instance": "Add Wazuh instance"
+  },
+  "plugins_admin": {
+    "title": "Plugins",
+    "loaded": "Loaded",
+    "version": "Version",
+    "entry_point": "Entry point"
+  },
   "settings": {
     "security": {
       "totp_enabled_msg": "TOTP enabled",
       "totp_disabled_msg": "TOTP disabled",
-      "totp_invalid": "Invalid code, please retry"
+      "totp_invalid": "Invalid code"
     }
   },
   "errors": {
-    "network": "Network error, please try again later",
-    "unauthorized": "You do not have permission for this action",
-    "not_found": "Resource not found",
-    "server": "Internal server error"
+    "network": "Network error",
+    "unauthorized": "Unauthorized",
+    "not_found": "Not found",
+    "server": "Server error"
   }
 }

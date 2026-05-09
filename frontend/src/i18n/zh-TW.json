@@ -12,7 +12,10 @@
     "mfa_prompt": "請輸入 Authenticator 上的 6 位數驗證碼",
     "mfa_code": "驗證碼",
     "mfa_submit": "驗證",
-    "mfa_failed": "驗證碼錯誤或已逾期"
+    "mfa_failed": "驗證碼錯誤或已逾期",
+    "sso_oidc": "用 OIDC 單一登入",
+    "sso_saml": "用 SAML 單一登入",
+    "or_sso": "或使用 SSO"
   },
   "nav": {
     "dashboard": "儀表板",
@@ -27,8 +30,16 @@
     "tools": "工具",
     "requests": "IP 申請",
     "topology": "拓樸圖",
-    "audit": "稽核",
-    "settings": "系統設定"
+    "audit": "稽核日誌",
+    "users": "使用者",
+    "groups": "群組",
+    "dns": "DNS 服務",
+    "librenms": "LibreNMS",
+    "firewall": "OPNsense 防火牆",
+    "wazuh": "Wazuh",
+    "plugins": "Plugin",
+    "settings": "系統設定",
+    "admin_section": "管理"
   },
   "topbar": {
     "search": "搜尋…",
@@ -53,7 +64,21 @@
     "search": "搜尋",
     "loading": "載入中…",
     "no_data": "無資料",
-    "confirm_delete": "確定刪除？此操作無法復原。"
+    "confirm_delete": "確定刪除？此操作無法復原。",
+    "yes": "是",
+    "no": "否",
+    "actions": "操作",
+    "test": "測試",
+    "sync": "同步",
+    "enabled": "啟用中",
+    "disabled": "已停用",
+    "refresh": "重新整理",
+    "ok": "成功",
+    "fail": "失敗",
+    "name": "名稱",
+    "status": "狀態",
+    "created_at": "建立時間",
+    "updated_at": "更新時間"
   },
   "dashboard": {
     "title": "儀表板",
@@ -65,6 +90,85 @@
     "description": "說明",
     "parent": "父區段",
     "strict_mode": "嚴格模式"
+  },
+  "audit": {
+    "title": "稽核日誌",
+    "id": "ID",
+    "ts": "時間",
+    "actor": "操作者",
+    "object_type": "物件類型",
+    "object_id": "物件 ID",
+    "action": "動作",
+    "diff": "差異",
+    "this_hash": "雜湊",
+    "filter_object_type": "篩選物件類型（如 user、subnet）",
+    "filter_action": "篩選動作（如 create、login_success）",
+    "verify_chain": "驗證鏈完整性",
+    "chain_ok": "✅ 鏈完整（已檢查 {n} 筆）",
+    "chain_broken": "⚠️ 鏈異常，第一個錯誤位於 #{id}"
+  },
+  "users": {
+    "title": "使用者",
+    "username": "帳號",
+    "email": "Email",
+    "display_name": "顯示名稱",
+    "auth_provider": "認證",
+    "is_active": "啟用",
+    "is_admin": "管理者",
+    "last_login": "最近登入",
+    "failed_login": "失敗次數",
+    "locked_until": "鎖定到",
+    "create_user": "新增本機帳號",
+    "password": "密碼（≥ 12 字元）",
+    "unlock": "解鎖",
+    "deactivate": "停用",
+    "reactivate": "啟用"
+  },
+  "groups": {
+    "title": "群組",
+    "name": "名稱",
+    "description": "說明",
+    "members": "成員數",
+    "is_builtin": "內建"
+  },
+  "dns_admin": {
+    "title": "DNS 服務",
+    "type": "類型",
+    "endpoint": "Endpoint",
+    "view_zones": "查看 zone"
+  },
+  "librenms_admin": {
+    "title": "LibreNMS 整合",
+    "endpoint": "API URL",
+    "test_ok": "連線正常",
+    "sync_summary": "同步完成：{summary}"
+  },
+  "firewall_admin": {
+    "title": "OPNsense 防火牆",
+    "name": "名稱",
+    "api_url": "API URL",
+    "verify_tls": "驗證 TLS",
+    "alias_mappings": "Alias 映射",
+    "alias_name": "Alias 名稱",
+    "alias_type": "類型",
+    "selector": "Selector (JSON)",
+    "direction": "方向",
+    "last_synced_count": "上次同步筆數",
+    "create_firewall": "新增防火牆",
+    "create_mapping": "新增 mapping"
+  },
+  "wazuh_admin": {
+    "title": "Wazuh 整合",
+    "missing_agents": "未裝 Agent 的 IP",
+    "agents_count": "代理數",
+    "active_count": "Active 數",
+    "create_instance": "新增 Wazuh 實例"
+  },
+  "plugins_admin": {
+    "title": "Plugin",
+    "loaded": "已載入",
+    "version": "版本",
+    "entry_point": "Entry point"
   },
   "settings": {
     "security": {

@@ -10,6 +10,7 @@ import {
   NButton,
   NSpace,
   NAlert,
+  NDivider,
   useMessage,
 } from "naive-ui";
 import { storeToRefs } from "pinia";
@@ -61,6 +62,17 @@ async function submitMfa() {
     loading.value = false;
   }
 }
+
+function ssoOidc() {
+  // backend 處理重導與 cookie
+  window.location.assign("/api/v1/auth/oidc/login");
+}
+
+function ssoSaml() {
+  const next = route.query.next;
+  const returnTo = typeof next === "string" && next.startsWith("/") ? next : "/";
+  window.location.assign(`/api/v1/auth/saml/login?return_to=${encodeURIComponent(returnTo)}`);
+}
 </script>
 
 <template>
@@ -95,6 +107,12 @@ async function submitMfa() {
           <n-button type="primary" :loading="loading" @click="submitLogin">
             {{ t("login.submit") }}
           </n-button>
+        </n-space>
+
+        <n-divider style="margin: 16px 0 12px 0">{{ t("login.or_sso") }}</n-divider>
+        <n-space vertical size="small">
+          <n-button block @click="ssoOidc">{{ t("login.sso_oidc") }}</n-button>
+          <n-button block @click="ssoSaml">{{ t("login.sso_saml") }}</n-button>
         </n-space>
       </n-form>
 

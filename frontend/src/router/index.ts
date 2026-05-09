@@ -23,6 +23,19 @@ const routes: RouteRecordRaw[] = [
       { path: "tools", name: "tools", component: () => import("@/views/Tools.vue") },
       { path: "topology", name: "topology", component: () => import("@/views/Topology.vue") },
       { path: "settings", name: "settings", component: () => import("@/views/Settings.vue") },
+      // Admin
+      { path: "audit", name: "audit", component: () => import("@/views/Audit.vue"), meta: { admin: true } },
+      { path: "users", name: "users", component: () => import("@/views/Users.vue"), meta: { admin: true } },
+      { path: "groups", name: "groups", component: () => import("@/views/Groups.vue"), meta: { admin: true } },
+      { path: "vlans", name: "vlans", component: () => import("@/views/VLANs.vue") },
+      { path: "vrfs", name: "vrfs", component: () => import("@/views/VRFs.vue") },
+      { path: "devices", name: "devices", component: () => import("@/views/Devices.vue") },
+      { path: "locations", name: "locations", component: () => import("@/views/Locations.vue") },
+      { path: "dns", name: "dns", component: () => import("@/views/DNSAdmin.vue"), meta: { admin: true } },
+      { path: "librenms", name: "librenms", component: () => import("@/views/LibreNMSAdmin.vue"), meta: { admin: true } },
+      { path: "firewall", name: "firewall", component: () => import("@/views/FirewallAdmin.vue"), meta: { admin: true } },
+      { path: "wazuh", name: "wazuh", component: () => import("@/views/WazuhAdmin.vue"), meta: { admin: true } },
+      { path: "plugins", name: "plugins", component: () => import("@/views/PluginsAdmin.vue"), meta: { admin: true } },
     ],
   },
 ];
@@ -54,6 +67,11 @@ router.beforeEach(async (to, _from) => {
         query: { next: to.fullPath },
       };
     }
+  }
+
+  // admin-only routes — non-admin 退回 dashboard（實際權限由 backend 401/403 把關）
+  if (to.meta.admin && !auth.me?.is_admin) {
+    return { name: "dashboard" };
   }
   return true;
 });

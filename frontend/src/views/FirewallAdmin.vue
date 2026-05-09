@@ -1,0 +1,215 @@
+<script setup lang="ts">
+import { computed, h, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import {
+  NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
+  NInput, NSwitch, NTabs, NTabPane, NSelect, NPopconfirm, NTag,
+  useMessage, type DataTableColumns,
+} from "naive-ui";
+import {
+  listFirewalls, createFirewall, deleteFirewall, testFirewall, syncFirewall,
+  listAliasMappings, createAliasMapping, deleteAliasMapping, syncOneMapping,
+  type OPNsenseFirewall, type OPNsenseAliasMapping,
+} from "@/api/integrations";
+
+const { t } = useI18n();
+const msg = useMessage();
+const tab = ref<"firewalls" | "mappings">("firewalls");
+const fws = ref<OPNsenseFirewall[]>([]);
+const mappings = ref<OPNsenseAliasMapping[]>([]);
+const loading = ref(false);
+
+const showFwCreate = ref(false);
+const newFw = ref({
+  name: "", api_url: "https://", api_key: "", api_secret: "",
+  verify_tls: true, description: "",
+});
+const showMapCreate = ref(false);
+const newMap = ref({
+  firewall_id: "", alias_name: "", alias_type: "host",
+  selector_text: '{"type":"section","section_id":"<uuid>"}',
+  direction: "push" as "push" | "pull" | "both",
+});
+
+const fwOptions = computed(() => fws.value.map((f) => ({ label: f.name, value: f.id })));
+
+async function refresh() {
+  loading.value = true;
+  try {
+    const [f, m] = await Promise.all([listFirewalls(200, 0), listAliasMappings()]);
+    fws.value = f.items;
+    mappings.value = m.items;
+  } catch { msg.error(t("errors.network")); }
+  finally { loading.value = false; }
+}
+async function submitFw() {
+  try {
+    await createFirewall({
+      name: newFw.value.name, api_url: newFw.value.api_url,
+      api_key: newFw.value.api_key, api_secret: newFw.value.api_secret,
+      verify_tls: newFw.value.verify_tls,
+      description: newFw.value.description || undefined,
+    });
+    showFwCreate.value = false;
+    newFw.value = { name: "", api_url: "https://", api_key: "", api_secret: "", verify_tls: true, description: "" };
+    await refresh();
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function submitMap() {
+  try {
+    const sel = JSON.parse(newMap.value.selector_text);
+    await createAliasMapping({
+      firewall_id: newMap.value.firewall_id,
+      alias_name: newMap.value.alias_name,
+      alias_type: newMap.value.alias_type,
+      selector: sel,
+      direction: newMap.value.direction,
+    });
+    showMapCreate.value = false;
+    newMap.value = { firewall_id: "", alias_name: "", alias_type: "host",
+      selector_text: '{"type":"section","section_id":"<uuid>"}', direction: "push" };
+    await refresh();
+  } catch (e: any) { msg.error(e?.message ?? e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function testFw(id: string) {
+  try { const r = await testFirewall(id); msg.success(JSON.stringify(r).slice(0, 80)); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function syncFw(id: string) {
+  try { const r = await syncFirewall(id); msg.success(JSON.stringify(r).slice(0, 100)); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function delFw(id: string) {
+  try { await deleteFirewall(id); await refresh(); } catch { msg.error(t("errors.server")); }
+}
+async function syncMap(id: string) {
+  try { const r = await syncOneMapping(id); msg.success(JSON.stringify(r).slice(0, 100)); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function delMap(id: string) {
+  try { await deleteAliasMapping(id); await refresh(); } catch { msg.error(t("errors.server")); }
+}
+
+const fwCols = computed<DataTableColumns<OPNsenseFirewall>>(() => [
+  { title: t("firewall_admin.name"), key: "name" },
+  { title: "API URL", key: "api_url" },
+  {
+    title: "TLS", key: "verify_tls",
+    render: (r) => h(NTag, { size: "small", type: r.verify_tls ? "success" : "warning" },
+      () => r.verify_tls ? "verified" : "skip"),
+  },
+  {
+    title: "last sync", key: "last_sync_at",
+    render: (r) => r.last_sync_at ? new Date(r.last_sync_at).toLocaleString() : "—",
+  },
+  { title: "last error", key: "last_error", render: (r) => r.last_error ?? "—" },
+  {
+    title: t("common.actions"), key: "actions",
+    render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", onClick: () => testFw(r.id) }, () => t("common.test")),
+      h(NButton, { size: "small", type: "primary", onClick: () => syncFw(r.id) }, () => t("common.sync")),
+      h(NPopconfirm, { onPositiveClick: () => delFw(r.id) },
+        { trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+          default: () => t("common.confirm_delete") }),
+    ]),
+  },
+]);
+const mapCols = computed<DataTableColumns<OPNsenseAliasMapping>>(() => [
+  { title: t("firewall_admin.alias_name"), key: "alias_name" },
+  { title: t("firewall_admin.alias_type"), key: "alias_type" },
+  {
+    title: "fw", key: "firewall_id",
+    render: (r) => fws.value.find((f) => f.id === r.firewall_id)?.name ?? r.firewall_id.slice(0, 8),
+  },
+  { title: t("firewall_admin.direction"), key: "direction" },
+  { title: t("firewall_admin.last_synced_count"), key: "last_synced_count",
+    render: (r) => r.last_synced_count ?? "—" },
+  {
+    title: "selector", key: "selector",
+    render: (r) => h("code", { style: "font-size: 11px" }, JSON.stringify(r.selector).slice(0, 60)),
+  },
+  {
+    title: t("common.actions"), key: "actions",
+    render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", type: "primary", onClick: () => syncMap(r.id) }, () => t("common.sync")),
+      h(NPopconfirm, { onPositiveClick: () => delMap(r.id) },
+        { trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+          default: () => t("common.confirm_delete") }),
+    ]),
+  },
+]);
+
+onMounted(() => { void refresh(); });
+</script>
+
+<template>
+  <n-card :title="t('firewall_admin.title')">
+    <n-tabs v-model:value="tab" type="line">
+      <n-tab-pane name="firewalls" :tab="t('firewall_admin.title')">
+        <n-space style="margin-bottom: 12px">
+          <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
+          <n-button type="primary" @click="showFwCreate = true">{{ t("firewall_admin.create_firewall") }}</n-button>
+        </n-space>
+        <n-data-table :columns="fwCols" :data="fws" :loading="loading" :bordered="false" />
+      </n-tab-pane>
+      <n-tab-pane name="mappings" :tab="t('firewall_admin.alias_mappings')">
+        <n-space style="margin-bottom: 12px">
+          <n-button type="primary" @click="showMapCreate = true">{{ t("firewall_admin.create_mapping") }}</n-button>
+        </n-space>
+        <n-data-table :columns="mapCols" :data="mappings" :loading="loading" :bordered="false" />
+      </n-tab-pane>
+    </n-tabs>
+
+    <n-modal v-model:show="showFwCreate" preset="card" :title="t('firewall_admin.create_firewall')"
+             style="width: 480px">
+      <n-form>
+        <n-form-item :label="t('firewall_admin.name')"><n-input v-model:value="newFw.name" /></n-form-item>
+        <n-form-item :label="t('firewall_admin.api_url')">
+          <n-input v-model:value="newFw.api_url" placeholder="https://opnsense.example.com" />
+        </n-form-item>
+        <n-form-item label="API key"><n-input v-model:value="newFw.api_key" /></n-form-item>
+        <n-form-item label="API secret">
+          <n-input v-model:value="newFw.api_secret" type="password" show-password-on="click" />
+        </n-form-item>
+        <n-form-item :label="t('firewall_admin.verify_tls')">
+          <n-switch v-model:value="newFw.verify_tls" />
+        </n-form-item>
+        <n-form-item :label="t('sections.description')">
+          <n-input v-model:value="newFw.description" type="textarea" :rows="2" />
+        </n-form-item>
+      </n-form>
+      <n-space justify="end">
+        <n-button @click="showFwCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" @click="submitFw">{{ t("common.save") }}</n-button>
+      </n-space>
+    </n-modal>
+
+    <n-modal v-model:show="showMapCreate" preset="card" :title="t('firewall_admin.create_mapping')"
+             style="width: 520px">
+      <n-form>
+        <n-form-item label="Firewall">
+          <n-select v-model:value="newMap.firewall_id" :options="fwOptions" />
+        </n-form-item>
+        <n-form-item :label="t('firewall_admin.alias_name')">
+          <n-input v-model:value="newMap.alias_name" placeholder="jt_section_addrs" />
+        </n-form-item>
+        <n-form-item :label="t('firewall_admin.alias_type')">
+          <n-select v-model:value="newMap.alias_type"
+                    :options="['host','network','port','url','urltable','geoip','networkgroup','mac','asn'].map(v => ({label: v, value: v}))" />
+        </n-form-item>
+        <n-form-item :label="t('firewall_admin.selector')">
+          <n-input v-model:value="newMap.selector_text" type="textarea" :rows="3"
+                   placeholder='{"type":"section","section_id":"..."}' />
+        </n-form-item>
+        <n-form-item :label="t('firewall_admin.direction')">
+          <n-select v-model:value="newMap.direction"
+                    :options="[{label:'push',value:'push'},{label:'pull',value:'pull'},{label:'both',value:'both'}]" />
+        </n-form-item>
+      </n-form>
+      <n-space justify="end">
+        <n-button @click="showMapCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" @click="submitMap">{{ t("common.save") }}</n-button>
+      </n-space>
+    </n-modal>
+  </n-card>
+</template>
