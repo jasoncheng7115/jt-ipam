@@ -352,6 +352,24 @@ async def delete_group(
     await session.commit()
 
 
+@router.get("/groups/{group_id}/members", response_model=list[UserRead])
+async def list_members(
+    group_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Any:
+    g = (await session.execute(select(Group).where(Group.id == group_id))).scalar_one_or_none()
+    if g is None:
+        raise HTTPException(404, detail="group not found")
+    rows = (
+        await session.execute(
+            select(User).join(
+                UserGroupMember, UserGroupMember.user_id == User.id
+            ).where(UserGroupMember.group_id == group_id).order_by(User.username)
+        )
+    ).scalars().all()
+    return rows
+
+
 @router.post("/groups/{group_id}/members/{user_id}", status_code=204)
 async def add_member(
     group_id: uuid.UUID, user_id: uuid.UUID,

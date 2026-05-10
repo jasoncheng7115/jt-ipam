@@ -7,7 +7,7 @@ import {
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
-  listFirewalls, createFirewall, deleteFirewall, testFirewall, syncFirewall,
+  listFirewalls, createFirewall, updateFirewall, deleteFirewall, testFirewall, syncFirewall,
   listAliasMappings, createAliasMapping, deleteAliasMapping, syncOneMapping,
   type OPNsenseFirewall, type OPNsenseAliasMapping,
 } from "@/api/integrations";
@@ -19,11 +19,26 @@ const fws = ref<OPNsenseFirewall[]>([]);
 const mappings = ref<OPNsenseAliasMapping[]>([]);
 const loading = ref(false);
 
-const showFwCreate = ref(false);
+const showFw = ref(false);
+const editingFw = ref<OPNsenseFirewall | null>(null);
 const newFw = ref({
   name: "", api_url: "https://", api_key: "", api_secret: "",
   verify_tls: true, description: "",
 });
+
+function openFwCreate() {
+  editingFw.value = null;
+  newFw.value = { name: "", api_url: "https://", api_key: "", api_secret: "", verify_tls: true, description: "" };
+  showFw.value = true;
+}
+function openFwEdit(r: OPNsenseFirewall) {
+  editingFw.value = r;
+  newFw.value = {
+    name: r.name, api_url: r.api_url, api_key: "", api_secret: "",
+    verify_tls: r.verify_tls, description: r.description ?? "",
+  };
+  showFw.value = true;
+}
 const showMapCreate = ref(false);
 const newMap = ref({
   firewall_id: "", alias_name: "", alias_type: "host",
@@ -44,14 +59,28 @@ async function refresh() {
 }
 async function submitFw() {
   try {
-    await createFirewall({
-      name: newFw.value.name, api_url: newFw.value.api_url,
-      api_key: newFw.value.api_key, api_secret: newFw.value.api_secret,
-      verify_tls: newFw.value.verify_tls,
-      description: newFw.value.description || undefined,
-    });
-    showFwCreate.value = false;
-    newFw.value = { name: "", api_url: "https://", api_key: "", api_secret: "", verify_tls: true, description: "" };
+    if (editingFw.value) {
+      const payload: any = {
+        name: newFw.value.name,
+        api_url: newFw.value.api_url,
+        verify_tls: newFw.value.verify_tls,
+        description: newFw.value.description || undefined,
+      };
+      // 只在使用者輸入新憑證時才送 — backend 要 key+secret 同時送
+      if (newFw.value.api_key && newFw.value.api_secret) {
+        payload.api_key = newFw.value.api_key;
+        payload.api_secret = newFw.value.api_secret;
+      }
+      await updateFirewall(editingFw.value.id, payload);
+    } else {
+      await createFirewall({
+        name: newFw.value.name, api_url: newFw.value.api_url,
+        api_key: newFw.value.api_key, api_secret: newFw.value.api_secret,
+        verify_tls: newFw.value.verify_tls,
+        description: newFw.value.description || undefined,
+      });
+    }
+    showFw.value = false;
     await refresh();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
@@ -106,6 +135,7 @@ const fwCols = computed<DataTableColumns<OPNsenseFirewall>>(() => [
   {
     title: t("common.actions"), key: "actions",
     render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", onClick: () => openFwEdit(r) }, () => t("common.edit")),
       h(NButton, { size: "small", onClick: () => testFw(r.id) }, () => t("common.test")),
       h(NButton, { size: "small", type: "primary", onClick: () => syncFw(r.id) }, () => t("common.sync")),
       h(NPopconfirm, { onPositiveClick: () => delFw(r.id) },
@@ -148,7 +178,7 @@ onMounted(() => { void refresh(); });
       <n-tab-pane name="firewalls" :tab="t('firewall_admin.title')">
         <n-space style="margin-bottom: 12px">
           <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-          <n-button type="primary" @click="showFwCreate = true">{{ t("firewall_admin.create_firewall") }}</n-button>
+          <n-button type="primary" @click="openFwCreate">{{ t("firewall_admin.create_firewall") }}</n-button>
         </n-space>
         <n-data-table :columns="fwCols" :data="fws" :loading="loading" :bordered="false" />
       </n-tab-pane>
@@ -160,15 +190,18 @@ onMounted(() => { void refresh(); });
       </n-tab-pane>
     </n-tabs>
 
-    <n-modal v-model:show="showFwCreate" preset="card" :title="t('firewall_admin.create_firewall')"
+    <n-modal v-model:show="showFw" preset="card"
+             :title="editingFw ? t('common.edit') : t('firewall_admin.create_firewall')"
              style="width: 480px">
       <n-form>
         <n-form-item :label="t('firewall_admin.name')"><n-input v-model:value="newFw.name" /></n-form-item>
         <n-form-item :label="t('firewall_admin.api_url')">
           <n-input v-model:value="newFw.api_url" placeholder="https://opnsense.example.com" />
         </n-form-item>
-        <n-form-item label="API key"><n-input v-model:value="newFw.api_key" /></n-form-item>
-        <n-form-item label="API secret">
+        <n-form-item :label="`API key${editingFw ? ' (' + t('users.password_blank_unchanged') + ')' : ''}`">
+          <n-input v-model:value="newFw.api_key" />
+        </n-form-item>
+        <n-form-item :label="`API secret${editingFw ? ' (' + t('users.password_blank_unchanged') + ')' : ''}`">
           <n-input v-model:value="newFw.api_secret" type="password" show-password-on="click" />
         </n-form-item>
         <n-form-item :label="t('firewall_admin.verify_tls')">
@@ -179,7 +212,7 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showFwCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button @click="showFw = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" @click="submitFw">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>

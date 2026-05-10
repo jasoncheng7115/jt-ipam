@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
-  NInput, useMessage, type DataTableColumns,
+  NInput, NPopconfirm,
+  useMessage, type DataTableColumns,
 } from "naive-ui";
-import { listLocations, createLocation, type Location } from "@/api/basic";
+import {
+  listLocations, createLocation, updateLocation, deleteLocation, type Location,
+} from "@/api/basic";
 
 const { t } = useI18n();
 const msg = useMessage();
 const rows = ref<Location[]>([]);
 const loading = ref(false);
-const showCreate = ref(false);
-const newRow = ref({ name: "", site: "", address: "", description: "" });
+const show = ref(false);
+const editing = ref<Location | null>(null);
+const form = ref({ name: "", site: "", address: "", description: "" });
 
 async function refresh() {
   loading.value = true;
@@ -20,24 +24,53 @@ async function refresh() {
   catch { msg.error(t("errors.network")); }
   finally { loading.value = false; }
 }
+function openCreate() {
+  editing.value = null;
+  form.value = { name: "", site: "", address: "", description: "" };
+  show.value = true;
+}
+function openEdit(r: Location) {
+  editing.value = r;
+  form.value = {
+    name: r.name, site: r.site ?? "", address: r.address ?? "",
+    description: r.description ?? "",
+  };
+  show.value = true;
+}
 async function submit() {
   try {
-    await createLocation({
-      name: newRow.value.name,
-      site: newRow.value.site || undefined,
-      address: newRow.value.address || undefined,
-      description: newRow.value.description || undefined,
-    });
-    showCreate.value = false;
-    newRow.value = { name: "", site: "", address: "", description: "" };
+    const payload = {
+      name: form.value.name,
+      site: form.value.site || undefined,
+      address: form.value.address || undefined,
+      description: form.value.description || undefined,
+    };
+    if (editing.value) await updateLocation(editing.value.id, payload);
+    else await createLocation(payload);
+    show.value = false;
     await refresh();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
+async function del(r: Location) {
+  try { await deleteLocation(r.id); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+
 const cols = computed<DataTableColumns<Location>>(() => [
   { title: t("common.name"), key: "name" },
-  { title: "site", key: "site", render: (r) => r.site ?? "—" },
-  { title: "address", key: "address", render: (r) => r.address ?? "—" },
+  { title: t("locations.site"), key: "site", render: (r) => r.site ?? "—" },
+  { title: t("locations.address"), key: "address", render: (r) => r.address ?? "—" },
   { title: t("sections.description"), key: "description", render: (r) => r.description ?? "" },
+  {
+    title: t("common.actions"), key: "actions", width: 160,
+    render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
+      h(NPopconfirm, { onPositiveClick: () => del(r) }, {
+        trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+        default: () => t("common.confirm_delete"),
+      }),
+    ]),
+  },
 ]);
 onMounted(() => { void refresh(); });
 </script>
@@ -46,20 +79,21 @@ onMounted(() => { void refresh(); });
   <n-card :title="t('nav.locations')">
     <n-space style="margin-bottom: 12px">
       <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="showCreate = true">{{ t("common.create") }}</n-button>
+      <n-button type="primary" @click="openCreate">{{ t("common.create") }}</n-button>
     </n-space>
     <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" />
-    <n-modal v-model:show="showCreate" preset="card" title="Location" style="width: 460px">
+    <n-modal v-model:show="show" preset="card"
+             :title="editing ? t('common.edit') : t('common.create')" style="width: 460px">
       <n-form>
-        <n-form-item :label="t('common.name')"><n-input v-model:value="newRow.name" /></n-form-item>
-        <n-form-item label="site"><n-input v-model:value="newRow.site" /></n-form-item>
-        <n-form-item label="address"><n-input v-model:value="newRow.address" /></n-form-item>
+        <n-form-item :label="t('common.name')"><n-input v-model:value="form.name" /></n-form-item>
+        <n-form-item :label="t('locations.site')"><n-input v-model:value="form.site" /></n-form-item>
+        <n-form-item :label="t('locations.address')"><n-input v-model:value="form.address" /></n-form-item>
         <n-form-item :label="t('sections.description')">
-          <n-input v-model:value="newRow.description" type="textarea" :rows="2" />
+          <n-input v-model:value="form.description" type="textarea" :rows="2" />
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>

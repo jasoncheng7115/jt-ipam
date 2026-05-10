@@ -34,6 +34,24 @@ export async function createVLAN(payload: {
   const { data } = await apiClient.post<VLAN>("/api/v1/vlans", payload);
   return data;
 }
+export async function updateVLAN(
+  id: string, payload: { name?: string; description?: string },
+): Promise<VLAN> {
+  const { data } = await apiClient.patch<VLAN>(`/api/v1/vlans/${id}`, payload);
+  return data;
+}
+export async function deleteVLAN(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/vlans/${id}`);
+}
+export async function updateVLANDomain(
+  id: string, payload: { name?: string; description?: string },
+): Promise<VLANDomain> {
+  const { data } = await apiClient.patch<VLANDomain>(`/api/v1/vlan-domains/${id}`, payload);
+  return data;
+}
+export async function deleteVLANDomain(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/vlan-domains/${id}`);
+}
 
 // VRF
 export interface VRF {
@@ -51,6 +69,15 @@ export async function createVRF(payload: {
 }): Promise<VRF> {
   const { data } = await apiClient.post<VRF>("/api/v1/vrfs", payload);
   return data;
+}
+export async function updateVRF(
+  id: string, payload: { name?: string; rd?: string; description?: string; allow_overlap?: boolean },
+): Promise<VRF> {
+  const { data } = await apiClient.patch<VRF>(`/api/v1/vrfs/${id}`, payload);
+  return data;
+}
+export async function deleteVRF(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/vrfs/${id}`);
 }
 
 // Device
@@ -75,6 +102,17 @@ export async function createDevice(payload: {
   const { data } = await apiClient.post<Device>("/api/v1/devices", payload);
   return data;
 }
+export async function updateDevice(
+  id: string,
+  payload: Partial<{ name: string; type: string; vendor: string; model: string;
+                     serial: string; description: string }>,
+): Promise<Device> {
+  const { data } = await apiClient.patch<Device>(`/api/v1/devices/${id}`, payload);
+  return data;
+}
+export async function deleteDevice(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/devices/${id}`);
+}
 
 // Location
 export interface Location {
@@ -93,4 +131,14 @@ export async function createLocation(payload: {
 }): Promise<Location> {
   const { data } = await apiClient.post<Location>("/api/v1/locations", payload);
   return data;
+}
+export async function updateLocation(
+  id: string,
+  payload: Partial<{ name: string; site: string; address: string; description: string }>,
+): Promise<Location> {
+  const { data } = await apiClient.patch<Location>(`/api/v1/locations/${id}`, payload);
+  return data;
+}
+export async function deleteLocation(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/locations/${id}`);
 }

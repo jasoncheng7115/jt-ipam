@@ -120,6 +120,8 @@
     "locked_until": "Locked until",
     "create_user": "Create local user",
     "password": "Password (>= 12 chars)",
+    "password_optional": "optional",
+    "password_blank_unchanged": "leave blank to keep",
     "unlock": "Unlock",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate"
@@ -129,7 +131,18 @@
     "name": "Name",
     "description": "Description",
     "members": "Members",
-    "is_builtin": "Builtin"
+    "is_builtin": "Builtin",
+    "add_member_placeholder": "Search and add a member…"
+  },
+  "devices": {
+    "type": "Type",
+    "vendor": "Vendor",
+    "model": "Model",
+    "serial": "Serial"
+  },
+  "locations": {
+    "site": "Site",
+    "address": "Address"
   },
   "dns_admin": {
     "title": "DNS Servers",

@@ -142,8 +142,18 @@ export async function createGroup(name: string, description?: string): Promise<G
   return data;
 }
 
+export async function updateGroup(id: string, description: string): Promise<Group> {
+  const { data } = await apiClient.patch<Group>(`/api/v1/groups/${id}`, { description });
+  return data;
+}
+
 export async function deleteGroup(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/groups/${id}`);
+}
+
+export async function listGroupMembers(groupId: string): Promise<User[]> {
+  const { data } = await apiClient.get<User[]>(`/api/v1/groups/${groupId}/members`);
+  return data;
 }
 
 export async function addGroupMember(groupId: string, userId: string): Promise<void> {

@@ -7,7 +7,7 @@ import {
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
-  listWazuh, createWazuh, deleteWazuh, testWazuh, syncWazuh,
+  listWazuh, createWazuh, updateWazuh, deleteWazuh, testWazuh, syncWazuh,
   listWazuhAgents, listMissingAgents,
   type WazuhInstance, type WazuhAgent, type MissingAgent,
 } from "@/api/integrations";
@@ -20,12 +20,28 @@ const agents = ref<WazuhAgent[]>([]);
 const missing = ref<MissingAgent[]>([]);
 const loading = ref(false);
 
-const showCreate = ref(false);
+const showInst = ref(false);
+const editing = ref<WazuhInstance | null>(null);
 const newInst = ref({
   name: "", api_url: "https://wazuh:55000",
   api_user: "wazuh-api-user", api_password: "",
   verify_tls: true,
 });
+
+function openCreate() {
+  editing.value = null;
+  newInst.value = { name: "", api_url: "https://wazuh:55000",
+    api_user: "wazuh-api-user", api_password: "", verify_tls: true };
+  showInst.value = true;
+}
+function openEdit(r: WazuhInstance) {
+  editing.value = r;
+  newInst.value = {
+    name: r.name, api_url: r.api_url, api_user: r.api_user,
+    api_password: "", verify_tls: r.verify_tls,
+  };
+  showInst.value = true;
+}
 
 async function refresh() {
   loading.value = true;
@@ -42,13 +58,21 @@ async function refresh() {
 }
 async function submit() {
   try {
-    await createWazuh({
-      name: newInst.value.name, api_url: newInst.value.api_url,
-      api_user: newInst.value.api_user, api_password: newInst.value.api_password,
-      verify_tls: newInst.value.verify_tls,
-    });
-    showCreate.value = false;
-    newInst.value = { name: "", api_url: "https://wazuh:55000", api_user: "wazuh-api-user", api_password: "", verify_tls: true };
+    if (editing.value) {
+      const payload: any = {
+        name: newInst.value.name, api_url: newInst.value.api_url,
+        api_user: newInst.value.api_user, verify_tls: newInst.value.verify_tls,
+      };
+      if (newInst.value.api_password) payload.api_password = newInst.value.api_password;
+      await updateWazuh(editing.value.id, payload);
+    } else {
+      await createWazuh({
+        name: newInst.value.name, api_url: newInst.value.api_url,
+        api_user: newInst.value.api_user, api_password: newInst.value.api_password,
+        verify_tls: newInst.value.verify_tls,
+      });
+    }
+    showInst.value = false;
     await refresh();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
@@ -76,6 +100,7 @@ const instCols = computed<DataTableColumns<WazuhInstance>>(() => [
   {
     title: t("common.actions"), key: "actions",
     render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
       h(NButton, { size: "small", onClick: () => test(r.id) }, () => t("common.test")),
       h(NButton, { size: "small", type: "primary", onClick: () => sync(r.id) }, () => t("common.sync")),
       h(NPopconfirm, { onPositiveClick: () => del(r.id) },
@@ -117,7 +142,7 @@ onMounted(() => { void refresh(); });
       <n-tab-pane name="instances" :tab="t('wazuh_admin.title')">
         <n-space style="margin-bottom: 12px">
           <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-          <n-button type="primary" @click="showCreate = true">{{ t("wazuh_admin.create_instance") }}</n-button>
+          <n-button type="primary" @click="openCreate">{{ t("wazuh_admin.create_instance") }}</n-button>
         </n-space>
         <n-data-table :columns="instCols" :data="insts" :loading="loading" :bordered="false" />
       </n-tab-pane>
@@ -133,19 +158,20 @@ onMounted(() => { void refresh(); });
       </n-tab-pane>
     </n-tabs>
 
-    <n-modal v-model:show="showCreate" preset="card" :title="t('wazuh_admin.create_instance')"
+    <n-modal v-model:show="showInst" preset="card"
+             :title="editing ? t('common.edit') : t('wazuh_admin.create_instance')"
              style="width: 460px">
       <n-form>
         <n-form-item :label="t('common.name')"><n-input v-model:value="newInst.name" /></n-form-item>
         <n-form-item label="API URL"><n-input v-model:value="newInst.api_url" /></n-form-item>
         <n-form-item label="API user"><n-input v-model:value="newInst.api_user" /></n-form-item>
-        <n-form-item label="API password">
+        <n-form-item :label="`API password${editing ? ' (' + t('users.password_blank_unchanged') + ')' : ''}`">
           <n-input v-model:value="newInst.api_password" type="password" show-password-on="click" />
         </n-form-item>
         <n-form-item label="Verify TLS"><n-switch v-model:value="newInst.verify_tls" /></n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button @click="showInst = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>

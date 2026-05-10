@@ -2,22 +2,16 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard,
-  NDataTable,
-  NSpace,
-  NInput,
-  NButton,
-  NTag,
-  NModal,
-  NForm,
-  NFormItem,
-  NPopconfirm,
-  useMessage,
-  type DataTableColumns,
+  NCard, NDataTable, NSpace, NInput, NButton, NTag,
+  NModal, NDrawer, NDrawerContent, NForm, NFormItem,
+  NPopconfirm, NSelect, NList, NListItem, NThing,
+  useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
-  listGroups, createGroup, deleteGroup,
-  type Group,
+  listGroups, createGroup, updateGroup, deleteGroup,
+  listGroupMembers, addGroupMember, removeGroupMember,
+  listUsers,
+  type Group, type User,
 } from "@/api/admin";
 
 const { t } = useI18n();
@@ -25,9 +19,17 @@ const msg = useMessage();
 const rows = ref<Group[]>([]);
 const total = ref(0);
 const loading = ref(false);
-const showCreate = ref(false);
-const newName = ref("");
-const newDesc = ref("");
+
+const showEdit = ref(false);
+const editing = ref<Group | null>(null);
+const form = ref({ name: "", description: "" });
+
+const showMembers = ref(false);
+const membersGroup = ref<Group | null>(null);
+const members = ref<User[]>([]);
+const membersLoading = ref(false);
+const allUsers = ref<User[]>([]);
+const memberToAdd = ref<string | null>(null);
 
 async function refresh() {
   loading.value = true;
@@ -35,53 +37,100 @@ async function refresh() {
     const res = await listGroups(200, 0);
     rows.value = res.items;
     total.value = res.total;
-  } catch {
-    msg.error(t("errors.network"));
-  } finally {
-    loading.value = false;
-  }
+  } catch { msg.error(t("errors.network")); }
+  finally { loading.value = false; }
 }
 
+function openCreate() {
+  editing.value = null;
+  form.value = { name: "", description: "" };
+  showEdit.value = true;
+}
+function openEdit(r: Group) {
+  editing.value = r;
+  form.value = { name: r.name, description: r.description ?? "" };
+  showEdit.value = true;
+}
 async function submit() {
-  if (!newName.value.trim()) return;
+  if (!form.value.name.trim() && !editing.value) return;
   try {
-    await createGroup(newName.value.trim(), newDesc.value || undefined);
-    showCreate.value = false;
-    newName.value = "";
-    newDesc.value = "";
-    msg.success(t("common.ok"));
+    if (editing.value) {
+      await updateGroup(editing.value.id, form.value.description);
+    } else {
+      await createGroup(form.value.name.trim(), form.value.description || undefined);
+    }
+    showEdit.value = false;
     await refresh();
-  } catch (e: any) {
-    msg.error(e?.response?.data?.detail ?? t("errors.server"));
-  }
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function del(g: Group) {
+  try { await deleteGroup(g.id); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
-async function remove(g: Group) {
-  try {
-    await deleteGroup(g.id);
-    msg.success(t("common.ok"));
-    await refresh();
-  } catch (e: any) {
-    msg.error(e?.response?.data?.detail ?? t("errors.server"));
+async function openMembers(g: Group) {
+  membersGroup.value = g;
+  showMembers.value = true;
+  await loadMembers();
+  if (allUsers.value.length === 0) {
+    try { allUsers.value = (await listUsers("", "", 500, 0)).items; } catch {}
   }
 }
+async function loadMembers() {
+  if (!membersGroup.value) return;
+  membersLoading.value = true;
+  try { members.value = await listGroupMembers(membersGroup.value.id); }
+  catch { msg.error(t("errors.network")); }
+  finally { membersLoading.value = false; }
+}
+async function add() {
+  if (!membersGroup.value || !memberToAdd.value) return;
+  try {
+    await addGroupMember(membersGroup.value.id, memberToAdd.value);
+    memberToAdd.value = null;
+    await loadMembers();
+    await refresh();   // member_count 會變
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function removeMember(u: User) {
+  if (!membersGroup.value) return;
+  try {
+    await removeGroupMember(membersGroup.value.id, u.id);
+    await loadMembers();
+    await refresh();
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+
+const userOptions = computed(() => {
+  const memberIds = new Set(members.value.map((m) => m.id));
+  return allUsers.value
+    .filter((u) => !memberIds.has(u.id))
+    .map((u) => ({ label: `${u.username} (${u.email})`, value: u.id }));
+});
 
 const columns = computed<DataTableColumns<Group>>(() => [
   { title: t("groups.name"), key: "name" },
   { title: t("groups.description"), key: "description", render: (r) => r.description ?? "—" },
-  { title: t("groups.members"), key: "member_count" },
+  {
+    title: t("groups.members"), key: "member_count",
+    render: (r) => h(NButton, { size: "small", text: true, onClick: () => openMembers(r) },
+      () => `${r.member_count} →`),
+  },
   {
     title: t("groups.is_builtin"), key: "is_builtin",
     render: (r) => r.is_builtin ? h(NTag, { size: "small", type: "info" }, () => "built-in") : "—",
   },
   {
-    title: t("common.actions"), key: "actions", width: 120,
-    render: (r) => r.is_builtin ? "—" : h(NPopconfirm, {
-      onPositiveClick: () => remove(r),
-    }, {
-      trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
-      default: () => t("common.confirm_delete"),
-    }),
+    title: t("common.actions"), key: "actions", width: 200,
+    render: (r) => r.is_builtin
+      ? h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit"))
+      : h(NSpace, { size: "small" }, () => [
+          h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
+          h(NPopconfirm, { onPositiveClick: () => del(r) }, {
+            trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+            default: () => t("common.confirm_delete"),
+          }),
+        ]),
   },
 ]);
 
@@ -92,7 +141,7 @@ onMounted(() => { void refresh(); });
   <n-card :title="t('groups.title')">
     <n-space style="margin-bottom: 12px">
       <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="showCreate = true">{{ t("common.create") }}</n-button>
+      <n-button type="primary" @click="openCreate">{{ t("common.create") }}</n-button>
       <span style="opacity: 0.6">total: {{ total }}</span>
     </n-space>
     <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false">
@@ -100,20 +149,58 @@ onMounted(() => { void refresh(); });
         <n-space justify="center">{{ t("common.no_data") }}</n-space>
       </template>
     </n-data-table>
-    <n-modal v-model:show="showCreate" preset="card" :title="t('groups.title')"
-             style="width: 420px">
+
+    <n-modal v-model:show="showEdit" preset="card"
+             :title="editing ? t('common.edit') : t('common.create')" style="width: 460px">
       <n-form>
         <n-form-item :label="t('groups.name')">
-          <n-input v-model:value="newName" />
+          <n-input v-model:value="form.name" :disabled="!!editing" />
         </n-form-item>
         <n-form-item :label="t('groups.description')">
-          <n-input v-model:value="newDesc" type="textarea" :rows="2" />
+          <n-input v-model:value="form.description" type="textarea" :rows="3" />
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button @click="showEdit = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>
+
+    <n-drawer v-model:show="showMembers" :width="480">
+      <n-drawer-content :title="`${t('groups.members')} — ${membersGroup?.name ?? ''}`">
+        <n-space style="margin-bottom: 16px">
+          <n-select
+            v-model:value="memberToAdd" :options="userOptions" filterable
+            :placeholder="t('groups.add_member_placeholder')" style="width: 280px"
+          />
+          <n-button type="primary" :disabled="!memberToAdd" @click="add">
+            {{ t("common.create") }}
+          </n-button>
+        </n-space>
+        <n-list bordered>
+          <template v-if="!membersLoading && members.length === 0">
+            <n-list-item>
+              <n-thing>
+                <template #header>{{ t("common.no_data") }}</template>
+              </n-thing>
+            </n-list-item>
+          </template>
+          <n-list-item v-for="u in members" :key="u.id">
+            <n-thing>
+              <template #header>{{ u.username }}</template>
+              <template #description>{{ u.email }} · {{ u.auth_provider }}</template>
+            </n-thing>
+            <template #suffix>
+              <n-popconfirm @positive-click="removeMember(u)">
+                <template #trigger>
+                  <n-button size="small" type="error">{{ t("common.delete") }}</n-button>
+                </template>
+                {{ t("common.confirm_delete") }}
+              </n-popconfirm>
+            </template>
+          </n-list-item>
+        </n-list>
+      </n-drawer-content>
+    </n-drawer>
   </n-card>
 </template>

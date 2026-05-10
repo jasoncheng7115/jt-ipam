@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
-  NInput, NSwitch, useMessage, type DataTableColumns,
+  NInput, NSwitch, NPopconfirm,
+  useMessage, type DataTableColumns,
 } from "naive-ui";
-import { listVRFs, createVRF, type VRF } from "@/api/basic";
+import { listVRFs, createVRF, updateVRF, deleteVRF, type VRF } from "@/api/basic";
 
 const { t } = useI18n();
 const msg = useMessage();
 const rows = ref<VRF[]>([]);
 const loading = ref(false);
-const showCreate = ref(false);
-const newRow = ref({ name: "", rd: "", description: "", allow_overlap: true });
+const show = ref(false);
+const editing = ref<VRF | null>(null);
+const form = ref({ name: "", rd: "", description: "", allow_overlap: true });
 
 async function refresh() {
   loading.value = true;
@@ -20,18 +22,36 @@ async function refresh() {
   catch { msg.error(t("errors.network")); }
   finally { loading.value = false; }
 }
+function openCreate() {
+  editing.value = null;
+  form.value = { name: "", rd: "", description: "", allow_overlap: true };
+  show.value = true;
+}
+function openEdit(r: VRF) {
+  editing.value = r;
+  form.value = {
+    name: r.name, rd: r.rd ?? "", description: r.description ?? "",
+    allow_overlap: r.allow_overlap,
+  };
+  show.value = true;
+}
 async function submit() {
   try {
-    await createVRF({
-      name: newRow.value.name,
-      rd: newRow.value.rd || undefined,
-      description: newRow.value.description || undefined,
-      allow_overlap: newRow.value.allow_overlap,
-    });
-    showCreate.value = false;
-    newRow.value = { name: "", rd: "", description: "", allow_overlap: true };
+    const payload = {
+      name: form.value.name,
+      rd: form.value.rd || undefined,
+      description: form.value.description || undefined,
+      allow_overlap: form.value.allow_overlap,
+    };
+    if (editing.value) await updateVRF(editing.value.id, payload);
+    else await createVRF(payload);
+    show.value = false;
     await refresh();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function del(r: VRF) {
+  try { await deleteVRF(r.id); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
 const cols = computed<DataTableColumns<VRF>>(() => [
@@ -40,6 +60,16 @@ const cols = computed<DataTableColumns<VRF>>(() => [
   { title: t("sections.description"), key: "description", render: (r) => r.description ?? "" },
   { title: "allow overlap", key: "allow_overlap",
     render: (r) => r.allow_overlap ? "✓" : "—" },
+  {
+    title: t("common.actions"), key: "actions", width: 160,
+    render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
+      h(NPopconfirm, { onPositiveClick: () => del(r) }, {
+        trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+        default: () => t("common.confirm_delete"),
+      }),
+    ]),
+  },
 ]);
 onMounted(() => { void refresh(); });
 </script>
@@ -48,22 +78,23 @@ onMounted(() => { void refresh(); });
   <n-card :title="t('nav.vrfs')">
     <n-space style="margin-bottom: 12px">
       <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="showCreate = true">{{ t("common.create") }}</n-button>
+      <n-button type="primary" @click="openCreate">{{ t("common.create") }}</n-button>
     </n-space>
     <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" />
-    <n-modal v-model:show="showCreate" preset="card" title="VRF" style="width: 460px">
+    <n-modal v-model:show="show" preset="card"
+             :title="editing ? t('common.edit') : t('common.create')" style="width: 460px">
       <n-form>
-        <n-form-item :label="t('common.name')"><n-input v-model:value="newRow.name" /></n-form-item>
-        <n-form-item label="RD"><n-input v-model:value="newRow.rd" placeholder="65000:1" /></n-form-item>
+        <n-form-item :label="t('common.name')"><n-input v-model:value="form.name" /></n-form-item>
+        <n-form-item label="RD"><n-input v-model:value="form.rd" placeholder="65000:1" /></n-form-item>
         <n-form-item :label="t('sections.description')">
-          <n-input v-model:value="newRow.description" type="textarea" :rows="2" />
+          <n-input v-model:value="form.description" type="textarea" :rows="2" />
         </n-form-item>
         <n-form-item label="Allow overlap">
-          <n-switch v-model:value="newRow.allow_overlap" />
+          <n-switch v-model:value="form.allow_overlap" />
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>

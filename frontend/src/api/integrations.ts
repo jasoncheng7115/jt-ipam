@@ -126,6 +126,16 @@ export async function createFirewall(payload: OPNsenseFirewallCreate): Promise<O
   return data;
 }
 
+export async function updateFirewall(
+  id: string,
+  payload: Partial<OPNsenseFirewallCreate & { sync_interval_seconds: number }>,
+): Promise<OPNsenseFirewall> {
+  const { data } = await apiClient.patch<OPNsenseFirewall>(
+    `/api/v1/firewalls/opnsense/${id}`, payload,
+  );
+  return data;
+}
+
 export async function deleteFirewall(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/firewalls/opnsense/${id}`);
 }
@@ -225,6 +235,15 @@ export async function listWazuh(
 
 export async function createWazuh(payload: WazuhInstanceCreate): Promise<WazuhInstance> {
   const { data } = await apiClient.post<WazuhInstance>("/api/v1/wazuh/instances", payload);
+  return data;
+}
+
+export async function updateWazuh(
+  id: string, payload: Partial<WazuhInstanceCreate & { sync_interval_seconds: number }>,
+): Promise<WazuhInstance> {
+  const { data } = await apiClient.patch<WazuhInstance>(
+    `/api/v1/wazuh/instances/${id}`, payload,
+  );
   return data;
 }
 

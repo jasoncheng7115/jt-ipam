@@ -38,6 +38,12 @@ const newUser = ref<UserCreate>({
   username: "", email: "", display_name: "", password: "", is_admin: false,
 });
 
+const showEdit = ref(false);
+const editing = ref<User | null>(null);
+const editForm = ref({
+  email: "", display_name: "", password: "",
+});
+
 const providerOptions = [
   { label: "All", value: "" },
   { label: "local", value: "local" },
@@ -80,42 +86,47 @@ async function submitCreate() {
   }
 }
 
-async function toggleActive(u: User) {
-  try {
-    await updateUser(u.id, { is_active: !u.is_active });
-    await refresh();
-  } catch {
-    msg.error(t("errors.server"));
-  }
+function openEdit(u: User) {
+  editing.value = u;
+  editForm.value = {
+    email: u.email,
+    display_name: u.display_name ?? "",
+    password: "",
+  };
+  showEdit.value = true;
 }
-
-async function toggleAdmin(u: User) {
+async function submitEdit() {
+  if (!editing.value) return;
   try {
-    await updateUser(u.id, { is_admin: !u.is_admin });
-    await refresh();
-  } catch {
-    msg.error(t("errors.server"));
-  }
-}
-
-async function unlock(u: User) {
-  try {
-    await updateUser(u.id, { unlock: true });
-    msg.success(t("common.ok"));
-    await refresh();
-  } catch {
-    msg.error(t("errors.server"));
-  }
-}
-
-async function remove(u: User) {
-  try {
-    await deleteUser(u.id);
+    const payload: any = {
+      email: editForm.value.email,
+      display_name: editForm.value.display_name || undefined,
+    };
+    if (editForm.value.password) payload.password = editForm.value.password;
+    await updateUser(editing.value.id, payload);
+    showEdit.value = false;
     msg.success(t("common.ok"));
     await refresh();
   } catch (e: any) {
     msg.error(e?.response?.data?.detail ?? t("errors.server"));
   }
+}
+
+async function toggleActive(u: User) {
+  try { await updateUser(u.id, { is_active: !u.is_active }); await refresh(); }
+  catch { msg.error(t("errors.server")); }
+}
+async function toggleAdmin(u: User) {
+  try { await updateUser(u.id, { is_admin: !u.is_admin }); await refresh(); }
+  catch { msg.error(t("errors.server")); }
+}
+async function unlock(u: User) {
+  try { await updateUser(u.id, { unlock: true }); msg.success(t("common.ok")); await refresh(); }
+  catch { msg.error(t("errors.server")); }
+}
+async function remove(u: User) {
+  try { await deleteUser(u.id); msg.success(t("common.ok")); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
 const columns = computed<DataTableColumns<User>>(() => [
@@ -154,14 +165,13 @@ const columns = computed<DataTableColumns<User>>(() => [
       : "—",
   },
   {
-    title: t("common.actions"), key: "actions", width: 220,
+    title: t("common.actions"), key: "actions", width: 260,
     render: (r) => h(NSpace, { size: "small" }, () => [
+      h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
       r.locked_until
         ? h(NButton, { size: "small", onClick: () => unlock(r) }, () => t("users.unlock"))
         : null,
-      h(NPopconfirm, {
-        onPositiveClick: () => remove(r),
-      }, {
+      h(NPopconfirm, { onPositiveClick: () => remove(r) }, {
         trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
         default: () => t("common.confirm_delete"),
       }),
@@ -221,6 +231,28 @@ onMounted(() => { void refresh(); });
       <n-space justify="end">
         <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" @click="submitCreate">{{ t("common.save") }}</n-button>
+      </n-space>
+    </n-modal>
+
+    <n-modal v-model:show="showEdit" preset="card"
+             :title="editing ? `${t('common.edit')} ${editing.username}` : ''"
+             style="width: 460px">
+      <n-form>
+        <n-form-item :label="t('users.email')">
+          <n-input v-model:value="editForm.email" />
+        </n-form-item>
+        <n-form-item :label="t('users.display_name')">
+          <n-input v-model:value="editForm.display_name" />
+        </n-form-item>
+        <n-form-item v-if="editing?.auth_provider === 'local'"
+                     :label="`${t('users.password')} (${t('users.password_optional')})`">
+          <n-input v-model:value="editForm.password" type="password"
+                   show-password-on="click" :placeholder="t('users.password_blank_unchanged')" />
+        </n-form-item>
+      </n-form>
+      <n-space justify="end">
+        <n-button @click="showEdit = false">{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" @click="submitEdit">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>
   </n-card>
