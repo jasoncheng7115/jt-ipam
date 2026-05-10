@@ -24,6 +24,7 @@
     "addresses": "位址",
     "vlans": "VLAN",
     "vrfs": "VRF",
+    "nat": "NAT 規則",
     "devices": "設備",
     "racks": "機櫃",
     "locations": "地點",
@@ -39,7 +40,17 @@
     "wazuh": "Wazuh",
     "plugins": "Plugin",
     "settings": "系統設定",
-    "admin_section": "管理"
+    "admin_section": "管理",
+    "phase3_section": "進階模組",
+    "custom_fields": "自訂欄位",
+    "scan_agents": "掃描代理",
+    "webhooks": "Webhook",
+    "anomaly": "異常偵測",
+    "advanced": "Tenancy / Contacts / ASN",
+    "virtualization": "虛擬化",
+    "physical": "佈線 / 電力 / VPN",
+    "migration": "phpIPAM 遷移",
+    "import": "RIPE / TWNIC 匯入"
   },
   "topbar": {
     "search": "搜尋…",
@@ -182,6 +193,77 @@
     "loaded": "已載入",
     "version": "版本",
     "entry_point": "Entry point"
+  },
+  "anomaly": {
+    "title": "異常偵測",
+    "run_scan": "執行偵測",
+    "last_run": "上次執行",
+    "help": "點上方按鈕執行所有偵測規則：IP 衝突、MAC 漂移、鬼 IP、未授權 IP。",
+    "ip_conflicts": "IP 衝突",
+    "mac_drifts": "MAC 漂移",
+    "ghost_ips": "鬼 IP",
+    "unauthorized": "未授權 IP",
+    "raw_report": "完整報告"
+  },
+  "webhooks": {
+    "events_label": "events（* = 全部）",
+    "secret_title": "Webhook 已建立",
+    "secret_warning": "下方 secret 只會顯示這一次；請立即複製存到貴方系統用來驗 X-jt-ipam-Signature header。"
+  },
+  "advanced": {
+    "tenancy": "Tenancy",
+    "tenants": "Tenant",
+    "tenant_groups": "Tenant Group",
+    "circuits": "Circuit",
+    "contacts": "Contact",
+    "contact_groups": "聯絡人群組",
+    "wireless": "Wireless"
+  },
+  "circuits": {
+    "providers": "電路供應商",
+    "provider": "供應商",
+    "type": "類型",
+    "account": "帳號"
+  },
+  "contacts": {
+    "group": "群組"
+  },
+  "virt": {
+    "clusters": "Cluster",
+    "vms": "VM",
+    "proxmox": "Proxmox 實例",
+    "cluster": "Cluster"
+  },
+  "physical": {
+    "cabling": "佈線",
+    "power": "電力",
+    "panels": "Panel",
+    "feeds": "Feed",
+    "outlets": "Outlet"
+  },
+  "migration": {
+    "title": "phpIPAM 一鍵遷移",
+    "help": "從現有 phpIPAM MySQL 拉資料。建議第一次先用 dry-run 看影響再 commit。on_conflict=skip 可在平行使用階段反覆執行（已有的不動）。",
+    "mysql_url": "phpIPAM MySQL URL",
+    "on_conflict": "衝突處理",
+    "skip": "skip — 跳過已存在",
+    "overwrite": "overwrite — 覆寫",
+    "dry_run": "Dry run（不寫入）",
+    "dry_run_btn": "預覽（dry-run）",
+    "commit_btn": "執行遷移",
+    "existing_mappings": "已建立的 mapping 統計",
+    "last_run_result": "本次結果"
+  },
+  "import": {
+    "title": "RIPE / TWNIC 匯入",
+    "ripe_help": "從 RIPE WHOIS 拉指定 handle 或 CIDR 的 inetnum 資料；preview 會顯示要匯入什麼，commit 才實際寫入。",
+    "twnic_help": "TWNIC 匯入（規劃中）。",
+    "handle": "Handle（NIC handle）",
+    "target_section": "目標 section",
+    "target_section_placeholder": "選擇要寫入的 section",
+    "section_required": "請先選 section",
+    "preview": "預覽",
+    "commit": "匯入"
   },
   "settings": {
     "security": {

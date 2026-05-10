@@ -36,6 +36,17 @@ const routes: RouteRecordRaw[] = [
       { path: "firewall", name: "firewall", component: () => import("@/views/FirewallAdmin.vue"), meta: { admin: true } },
       { path: "wazuh", name: "wazuh", component: () => import("@/views/WazuhAdmin.vue"), meta: { admin: true } },
       { path: "plugins", name: "plugins", component: () => import("@/views/PluginsAdmin.vue"), meta: { admin: true } },
+      // Phase 3
+      { path: "custom-fields", name: "custom_fields", component: () => import("@/views/CustomFields.vue"), meta: { admin: true } },
+      { path: "scan-agents", name: "scan_agents", component: () => import("@/views/ScanAgents.vue"), meta: { admin: true } },
+      { path: "webhooks", name: "webhooks", component: () => import("@/views/Webhooks.vue"), meta: { admin: true } },
+      { path: "nat", name: "nat", component: () => import("@/views/NAT.vue") },
+      { path: "anomaly", name: "anomaly", component: () => import("@/views/Anomaly.vue"), meta: { admin: true } },
+      { path: "advanced", name: "advanced", component: () => import("@/views/Advanced.vue") },
+      { path: "virt", name: "virt", component: () => import("@/views/Virtualization.vue") },
+      { path: "physical", name: "physical", component: () => import("@/views/Physical.vue") },
+      { path: "migration", name: "migration", component: () => import("@/views/Migration.vue"), meta: { admin: true } },
+      { path: "import", name: "import", component: () => import("@/views/ImportExternal.vue"), meta: { admin: true } },
     ],
   },
 ];

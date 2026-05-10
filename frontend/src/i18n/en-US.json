@@ -24,6 +24,7 @@
     "addresses": "Addresses",
     "vlans": "VLANs",
     "vrfs": "VRFs",
+    "nat": "NAT Rules",
     "devices": "Devices",
     "racks": "Racks",
     "locations": "Locations",
@@ -39,7 +40,17 @@
     "wazuh": "Wazuh",
     "plugins": "Plugins",
     "settings": "Settings",
-    "admin_section": "Admin"
+    "admin_section": "Admin",
+    "phase3_section": "Advanced Modules",
+    "custom_fields": "Custom Fields",
+    "scan_agents": "Scan Agents",
+    "webhooks": "Webhooks",
+    "anomaly": "Anomaly Detection",
+    "advanced": "Tenancy / Contacts / ASN",
+    "virtualization": "Virtualization",
+    "physical": "Cabling / Power / VPN",
+    "migration": "phpIPAM Migration",
+    "import": "RIPE / TWNIC Import"
   },
   "topbar": {
     "search": "Search…",
@@ -182,6 +193,77 @@
     "loaded": "Loaded",
     "version": "Version",
     "entry_point": "Entry point"
+  },
+  "anomaly": {
+    "title": "Anomaly Detection",
+    "run_scan": "Run scan",
+    "last_run": "Last run",
+    "help": "Click the button to run all detection rules: IP conflicts, MAC drift, ghost IPs, unauthorized IPs.",
+    "ip_conflicts": "IP conflicts",
+    "mac_drifts": "MAC drifts",
+    "ghost_ips": "Ghost IPs",
+    "unauthorized": "Unauthorized IPs",
+    "raw_report": "Raw report"
+  },
+  "webhooks": {
+    "events_label": "events (* = all)",
+    "secret_title": "Webhook created",
+    "secret_warning": "The secret below is shown only once — copy it now and store it on your end to verify the X-jt-ipam-Signature header."
+  },
+  "advanced": {
+    "tenancy": "Tenancy",
+    "tenants": "Tenants",
+    "tenant_groups": "Tenant Groups",
+    "circuits": "Circuits",
+    "contacts": "Contacts",
+    "contact_groups": "Contact Groups",
+    "wireless": "Wireless"
+  },
+  "circuits": {
+    "providers": "Providers",
+    "provider": "Provider",
+    "type": "Type",
+    "account": "Account"
+  },
+  "contacts": {
+    "group": "Group"
+  },
+  "virt": {
+    "clusters": "Clusters",
+    "vms": "VMs",
+    "proxmox": "Proxmox Instances",
+    "cluster": "Cluster"
+  },
+  "physical": {
+    "cabling": "Cabling",
+    "power": "Power",
+    "panels": "Panels",
+    "feeds": "Feeds",
+    "outlets": "Outlets"
+  },
+  "migration": {
+    "title": "phpIPAM migration",
+    "help": "Pull from your existing phpIPAM MySQL. First run dry-run to preview, then commit. on_conflict=skip is safe to re-run repeatedly during parallel use (already-imported rows untouched).",
+    "mysql_url": "phpIPAM MySQL URL",
+    "on_conflict": "On conflict",
+    "skip": "skip - keep existing",
+    "overwrite": "overwrite - replace",
+    "dry_run": "Dry run (no writes)",
+    "dry_run_btn": "Preview (dry-run)",
+    "commit_btn": "Run migration",
+    "existing_mappings": "Existing mapping counts",
+    "last_run_result": "Last run result"
+  },
+  "import": {
+    "title": "RIPE / TWNIC import",
+    "ripe_help": "Pull inetnum data for the given handle or CIDR from RIPE WHOIS. Preview shows what would be imported; commit writes it in.",
+    "twnic_help": "TWNIC import (planned).",
+    "handle": "Handle (NIC handle)",
+    "target_section": "Target section",
+    "target_section_placeholder": "Pick a section",
+    "section_required": "Pick a section first",
+    "preview": "Preview",
+    "commit": "Commit"
   },
   "settings": {
     "security": {
