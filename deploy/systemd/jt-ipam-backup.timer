@@ -1,0 +1,14 @@
+[Unit]
+Description=Run jt-ipam-backup daily
+Documentation=https://github.com/jasontools/jt-ipam
+
+[Timer]
+# 每天 03:30 跑（避開常見維護窗）；若漏跑會在開機後 5 分鐘補
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=2min
+AccuracySec=1min
+Unit=jt-ipam-backup.service
+
+[Install]
+WantedBy=timers.target

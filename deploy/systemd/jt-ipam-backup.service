@@ -1,0 +1,29 @@
+# jt-ipam 每日備份（由 jt-ipam-backup.timer 觸發）
+[Unit]
+Description=jt-ipam daily backup (pg_dump + env + tls certs)
+Documentation=https://github.com/jasontools/jt-ipam
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/bin/jt-ipam-backup.sh
+TimeoutStartSec=600
+
+# ── Sandbox ──
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/jt-ipam
+ReadOnlyPaths=/etc/jt-ipam
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jt-ipam-backup

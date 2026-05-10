@@ -352,10 +352,18 @@ install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-sync.service" \
     /etc/systemd/system/jt-ipam-sync.service
 install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-sync.timer" \
     /etc/systemd/system/jt-ipam-sync.timer
+install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-backup.service" \
+    /etc/systemd/system/jt-ipam-backup.service
+install -m 0644 "$REPO_ROOT/deploy/systemd/jt-ipam-backup.timer" \
+    /etc/systemd/system/jt-ipam-backup.timer
+install -m 0755 "$REPO_ROOT/scripts/jt-ipam-backup.sh" \
+    /usr/local/bin/jt-ipam-backup.sh
 systemctl daemon-reload
 systemctl enable --now jt-ipam-backend
 # 定期同步 OPNsense / Wazuh / LibreNMS（依各 instance 自己的 sync_interval_seconds）
 systemctl enable --now jt-ipam-sync.timer
+# 每日 03:30 備份；保留 14 天到 /var/backups/jt-ipam/
+systemctl enable --now jt-ipam-backup.timer
 
 # ── 11. nginx site（僅 nginx 模式）──
 if [[ "$TLS_MODE" == "nginx" ]]; then
