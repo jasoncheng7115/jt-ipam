@@ -42,9 +42,29 @@ function openFwEdit(r: OPNsenseFirewall) {
 const showMapCreate = ref(false);
 const newMap = ref({
   firewall_id: "", alias_name: "", alias_type: "host",
-  selector_text: '{"type":"section","section_id":"<uuid>"}',
+  selector_type: "section" as "section" | "subnet" | "tag" | "custom_field",
+  selector_section_id: "" as string,
+  selector_subnet_id: "" as string,
+  selector_tag: "",
+  selector_field: "",
+  selector_value: "",
   direction: "push" as "push" | "pull" | "both",
 });
+
+import { listSections } from "@/api/sections";
+import { listSubnets } from "@/api/subnets";
+const sectionOpts = ref<{ label: string; value: string }[]>([]);
+const subnetOpts = ref<{ label: string; value: string }[]>([]);
+
+async function loadAliasSelectorOpts() {
+  try {
+    const [secs, subs] = await Promise.all([listSections(1, 200), listSubnets({ page: 1, pageSize: 500 })]);
+    sectionOpts.value = secs.items.map((s) => ({ label: s.name, value: s.id }));
+    subnetOpts.value = subs.items.map((s: any) => ({
+      label: `${s.cidr}${s.description ? ' — ' + s.description : ''}`, value: s.id,
+    }));
+  } catch {}
+}
 
 const fwOptions = computed(() => fws.value.map((f) => ({ label: f.name, value: f.id })));
 
@@ -86,7 +106,17 @@ async function submitFw() {
 }
 async function submitMap() {
   try {
-    const sel = JSON.parse(newMap.value.selector_text);
+    let sel: Record<string, unknown> = { type: newMap.value.selector_type };
+    if (newMap.value.selector_type === "section") {
+      sel.section_id = newMap.value.selector_section_id;
+    } else if (newMap.value.selector_type === "subnet") {
+      sel.subnet_id = newMap.value.selector_subnet_id;
+    } else if (newMap.value.selector_type === "tag") {
+      sel.tag = newMap.value.selector_tag;
+    } else if (newMap.value.selector_type === "custom_field") {
+      sel.field = newMap.value.selector_field;
+      sel.value = newMap.value.selector_value;
+    }
     await createAliasMapping({
       firewall_id: newMap.value.firewall_id,
       alias_name: newMap.value.alias_name,
@@ -96,7 +126,9 @@ async function submitMap() {
     });
     showMapCreate.value = false;
     newMap.value = { firewall_id: "", alias_name: "", alias_type: "host",
-      selector_text: '{"type":"section","section_id":"<uuid>"}', direction: "push" };
+      selector_type: "section", selector_section_id: "", selector_subnet_id: "",
+      selector_tag: "", selector_field: "", selector_value: "",
+      direction: "push" };
     await refresh();
   } catch (e: any) { msg.error(e?.message ?? e?.response?.data?.detail ?? t("errors.server")); }
 }
@@ -184,7 +216,10 @@ onMounted(() => { void refresh(); });
       </n-tab-pane>
       <n-tab-pane name="mappings" :tab="t('firewall_admin.alias_mappings')">
         <n-space style="margin-bottom: 12px">
-          <n-button type="primary" @click="showMapCreate = true">{{ t("firewall_admin.create_mapping") }}</n-button>
+          <n-button type="primary"
+                    @click="loadAliasSelectorOpts(); showMapCreate = true">
+            {{ t("firewall_admin.create_mapping") }}
+          </n-button>
         </n-space>
         <n-data-table :columns="mapCols" :data="mappings" :loading="loading" :bordered="false" />
       </n-tab-pane>
@@ -230,10 +265,32 @@ onMounted(() => { void refresh(); });
           <n-select v-model:value="newMap.alias_type"
                     :options="['host','network','port','url','urltable','geoip','networkgroup','mac','asn'].map(v => ({label: v, value: v}))" />
         </n-form-item>
-        <n-form-item :label="t('firewall_admin.selector')">
-          <n-input v-model:value="newMap.selector_text" type="textarea" :rows="3"
-                   placeholder='{"type":"section","section_id":"..."}' />
+        <n-form-item :label="t('firewall_admin.selector_type')">
+          <n-select v-model:value="newMap.selector_type"
+                    :options="[
+                      {label: 'Section', value: 'section'},
+                      {label: 'Subnet', value: 'subnet'},
+                      {label: 'Tag', value: 'tag'},
+                      {label: 'Custom field', value: 'custom_field'},
+                    ]" />
         </n-form-item>
+        <n-form-item v-if="newMap.selector_type === 'section'" label="Section">
+          <n-select v-model:value="newMap.selector_section_id" :options="sectionOpts" filterable />
+        </n-form-item>
+        <n-form-item v-else-if="newMap.selector_type === 'subnet'" label="Subnet">
+          <n-select v-model:value="newMap.selector_subnet_id" :options="subnetOpts" filterable />
+        </n-form-item>
+        <n-form-item v-else-if="newMap.selector_type === 'tag'" label="Tag">
+          <n-input v-model:value="newMap.selector_tag" placeholder="wifi-guest" />
+        </n-form-item>
+        <template v-else>
+          <n-form-item label="Custom field name">
+            <n-input v-model:value="newMap.selector_field" placeholder="role" />
+          </n-form-item>
+          <n-form-item label="Value">
+            <n-input v-model:value="newMap.selector_value" placeholder="monitoring" />
+          </n-form-item>
+        </template>
         <n-form-item :label="t('firewall_admin.direction')">
           <n-select v-model:value="newMap.direction"
                     :options="[{label:'push',value:'push'},{label:'pull',value:'pull'},{label:'both',value:'both'}]" />

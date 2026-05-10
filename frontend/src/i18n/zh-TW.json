@@ -176,6 +176,7 @@
     "alias_name": "Alias 名稱",
     "alias_type": "類型",
     "selector": "Selector (JSON)",
+    "selector_type": "Selector 類型",
     "direction": "方向",
     "last_synced_count": "上次同步筆數",
     "create_firewall": "新增防火牆",

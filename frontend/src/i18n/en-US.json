@@ -176,6 +176,7 @@
     "alias_name": "Alias name",
     "alias_type": "Type",
     "selector": "Selector (JSON)",
+    "selector_type": "Selector type",
     "direction": "Direction",
     "last_synced_count": "Last synced count",
     "create_firewall": "Add firewall",
