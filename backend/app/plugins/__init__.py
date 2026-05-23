@@ -14,7 +14,7 @@ plugin 物件需是 JtIpamPlugin 實例：
 
 啟動時 main.py 會呼叫 load_plugins() 自動掃 entry_points 並執行 on_load。
 
-OWASP A06：plugin 是受信任程式碼（pip install 階段已過 SBOM 審核），不做
+OWASP A03：plugin 是受信任程式碼（pip install 階段已過 SBOM 審核），不做
 signature 驗證；但 plugin 不能繞過 RBAC（應該用 jt-ipam 提供的 dependencies）。
 """
 

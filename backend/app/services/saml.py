@@ -8,7 +8,7 @@ Flow：
   3. /auth/saml/metadata        → 回 SP metadata XML（給 IdP 註冊）
   4. /auth/saml/sls (GET/POST)  → Single Logout（選填）
 
-OWASP A02 / A07：
+OWASP A04 / A07：
 - python3-saml 預設要求 assertion 簽章；可選擇加密 assertion
 - 我方驗 InResponseTo / Destination / Conditions / Audience；防 replay
 - relay_state 包到 short-lived JWT cookie，回呼必須驗

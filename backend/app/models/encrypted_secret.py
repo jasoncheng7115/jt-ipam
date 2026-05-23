@@ -1,4 +1,4 @@
-"""加密欄位儲存表（OWASP A02）。
+"""加密欄位儲存表（OWASP A04）。
 
 任何敏感欄位（DNS 帳密、SNMP community、API key、TOTP secret 等）
 都用 AES-256-GCM 加密後存到這張表，並以 (object_type, object_id, field) 索引。

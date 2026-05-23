@@ -1,4 +1,4 @@
-"""Redis-backed rate limit（OWASP A04 / A07）。
+"""Redis-backed rate limit（OWASP A06 / A07）。
 
 簡單 sliding window；給認證、寫入、API token 三個典型 case 用。
 未來可換 slowapi / fastapi-limiter；先寫成最小實作避免引入額外依賴。

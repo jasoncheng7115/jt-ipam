@@ -19,9 +19,9 @@ phpIPAM 老用戶零學習成本，現代化技術解決效能/UI/API 的歷史�
 
 ---
 
-## 安全（OWASP Top 10）
+## 安全（OWASP Top 10:2025）
 
-本專案安全是 day-one 需求，所有設計與實作對齊 **OWASP Top 10 (2021)**。詳見 [`docs/SECURITY.md`](docs/SECURITY.md)。
+本專案安全是 day-one 需求，所有設計與實作對齊 **OWASP Top 10:2025**。詳見 [`docs/SECURITY.md`](docs/SECURITY.md)。
 
 重點：
 - **TLS 強制**：兩模式擇一 — nginx 反代終結（`BACKEND_TLS_MODE=nginx`）或 uvicorn 直接吃自簽（`BACKEND_TLS_MODE=direct`）
@@ -148,7 +148,7 @@ jt-ipam/
 
 ## 貢獻
 
-1. 每個 PR 都要過一次 `docs/SECURITY.md` 的 OWASP Top 10 心智檢查清單
+1. 每個 PR 都要過一次 `docs/SECURITY.md` 的 OWASP Top 10:2025 心智檢查清單
 2. Backend 跑 `ruff`、`mypy`、`pytest`、`pip-audit`
 3. Frontend 跑 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm audit`
 4. 異動敏感檔（auth / crypto / SSRF / migration）需另行 review

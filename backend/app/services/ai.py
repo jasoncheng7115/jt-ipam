@@ -5,7 +5,7 @@
 - 寫入時 / 排程時對 Subnet / IPAddress / Device 的 description 計算向量
 - /api/v1/search/semantic?q=... 走 cosine 相似度（pgvector ivfflat）
 
-OWASP A02 / A10：ollama_url 走 safe_request（私網允許）；任何回到 Ollama
+OWASP A04 / A06：ollama_url 走 safe_request（私網允許）；任何回到 Ollama
 之外的呼叫都會被擋住。
 """
 
@@ -224,7 +224,7 @@ async def chat(
       3. 呼叫 Ollama；若回 tool_calls，執行對應 jt-ipam 工具
       4. 把 tool 結果 append 回 messages，再呼叫一次（最多 max_iterations 輪）
 
-    OWASP A02 / A10：
+    OWASP A04 / A06：
       - chat 對外 URL 走 safe_request
       - tool 執行時的 user 與 session 都從本端拿，不從 LLM 輸入信任
     """

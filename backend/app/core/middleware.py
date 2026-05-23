@@ -1,6 +1,6 @@
 """ASGI middleware：security headers、request id、結構化日誌。
 
-OWASP A05 / A09。
+OWASP A02 / A09。
 """
 
 from __future__ import annotations

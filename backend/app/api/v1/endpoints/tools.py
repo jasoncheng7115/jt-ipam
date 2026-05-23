@@ -1,6 +1,6 @@
 """IP / CIDR 計算機與工具端點（純運算，無 DB 寫入）。
 
-OWASP A03：所有輸入透過 stdlib `ipaddress` 解析，拒絕不合法 input。
+OWASP A05：所有輸入透過 stdlib `ipaddress` 解析，拒絕不合法 input。
 """
 
 from __future__ import annotations

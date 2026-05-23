@@ -5,7 +5,7 @@ API：https://pve.proxmox.com/wiki/Proxmox_VE_API
 認證走 API Token（推薦）：
   Authorization: PVEAPIToken=<USER@REALM>!<TOKEN_ID>=<TOKEN_SECRET>
 
-OWASP A02：token secret 走 EncryptedSecret 表（aad 綁 instance id）；不在
+OWASP A04：token secret 走 EncryptedSecret 表（aad 綁 instance id）；不在
 ProxmoxInstance 上常駐
 A05：所有對外請求一律走 safe_request；TLS verify 預設 True
 A09：每次 sync 寫 audit summary

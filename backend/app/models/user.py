@@ -1,6 +1,6 @@
 """使用者 / 群組 / 使用者偏好 / API Token。
 
-OWASP A01 / A02 / A07：
+OWASP A01 / A04 / A07：
 - password_hash 永遠是 argon2id（外部認證者為 NULL）
 - totp_secret_enc 為 AES-GCM 密文 + nonce
 - failed_login_count / locked_until 用於帳號鎖定

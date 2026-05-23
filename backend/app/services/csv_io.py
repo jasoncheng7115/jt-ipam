@@ -8,7 +8,7 @@
 - idempotent：已存在 (subnet_id, ip) 預設 skip 而非 error
 - 逐列錯誤回報，不因為某列錯誤而整批失敗
 
-OWASP A03：每列以 Pydantic schema 驗證；不接受 schema 外欄位。
+OWASP A05：每列以 Pydantic schema 驗證；不接受 schema 外欄位。
 """
 
 from __future__ import annotations

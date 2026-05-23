@@ -7,7 +7,7 @@
 - 分類回傳，每筆帶 score 0..1（trigram 為主，精確命中固定 1.0）
 - 透過 RBAC `filter_visible` 過濾無權看到的物件
 
-OWASP A03：所有輸入只在 SQL 中以參數化使用；不字串拼接。
+OWASP A05：所有輸入只在 SQL 中以參數化使用；不字串拼接。
 """
 
 from __future__ import annotations

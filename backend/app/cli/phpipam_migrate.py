@@ -18,7 +18,7 @@
 
     # 排程：systemd timer 每 10 分鐘跑一次（mysql_url 由 /etc/jt-ipam/backend.env 額外提供）
 
-OWASP A02：不從命令列接受 password；建議用 mysql:///path-to-config 或
+OWASP A04：不從命令列接受 password；建議用 mysql:///path-to-config 或
 .my.cnf；若必須在命令列，使用者要清楚理解 shell history 風險。
 """
 

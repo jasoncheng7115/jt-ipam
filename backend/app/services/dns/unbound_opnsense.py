@@ -10,8 +10,8 @@ Basic（API key 當 username、API secret 當 password）。
   POST /api/unbound/settings/delHostOverride/{uuid}   刪除
   POST /api/unbound/service/reconfigure               套用變更
 
-OWASP A02：API key/secret 即時解密、不在 instance 上常駐
-OWASP A10：所有對外請求一律走 safe_request
+OWASP A04：API key/secret 即時解密、不在 instance 上常駐
+OWASP A06：所有對外請求一律走 safe_request
 """
 
 from __future__ import annotations

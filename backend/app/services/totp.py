@@ -1,6 +1,6 @@
 """TOTP MFA：enroll、confirm、verify、disable。
 
-OWASP A02 / A07：
+OWASP A04 / A07：
 - secret 用 AES-256-GCM 加密儲存（aad 綁定 user.id）
 - 啟用 / 停用都寫 audit
 - 防 replay：可在 Redis 用 (user_id, code) 24h 過期 hold 一次

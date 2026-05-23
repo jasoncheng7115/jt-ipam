@@ -7,7 +7,7 @@
 - 每個 endpoint 都會 RBAC 過濾（與 REST 行為一致）
 
 OWASP A01：透過 filter_visible 把 user 沒權限的 Section/Subnet 過濾掉
-OWASP A04：每個 list 都有 limit 上限避免 DoS
+OWASP A06：每個 list 都有 limit 上限避免 DoS
 """
 
 from __future__ import annotations

@@ -9,10 +9,10 @@ PowerShell cmdlets：
   Remove-DnsServerResourceRecord
   Set-DnsServerResourceRecord（透過 Get + 修改 + Set 的舊紀錄）
 
-OWASP A02：password 即時解密、不在 instance 上常駐
-OWASP A03：所有 PowerShell 參數透過 winrm 的 named parameters 傳，不字串拼接
-OWASP A05：use_ssl=true 為預設；不接受 cert validation skip
-OWASP A10：host 透過 socket 解析後檢查（DNS 解析後 pin IP 防 rebinding）
+OWASP A04：password 即時解密、不在 instance 上常駐
+OWASP A05：所有 PowerShell 參數透過 winrm 的 named parameters 傳，不字串拼接
+OWASP A02：use_ssl=true 為預設；不接受 cert validation skip
+OWASP A06：host 透過 socket 解析後檢查（DNS 解析後 pin IP 防 rebinding）
 """
 
 from __future__ import annotations

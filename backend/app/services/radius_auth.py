@@ -2,7 +2,7 @@
 
 Phase 1：用 pyrad 同步 client，包進 thread executor。
 
-OWASP A02：shared secret 從 SecretStr 取；不接受明文設定。
+OWASP A04：shared secret 從 SecretStr 取；不接受明文設定。
 """
 
 from __future__ import annotations

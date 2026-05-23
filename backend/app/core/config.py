@@ -1,6 +1,6 @@
 """應用設定。
 
-OWASP A05 / A02：
+OWASP A02 / A04：
 - 不允許在 production 啟用 debug、留預設密鑰、放寬 CORS
 - SECRET_KEY / ENCRYPTION_KEY / AUDIT_CHAIN_GENESIS 必填且不可為範例值
 """

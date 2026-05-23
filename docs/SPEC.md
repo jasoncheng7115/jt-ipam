@@ -45,7 +45,7 @@
 4. **不綁專屬技術**（開源元件、AGPL 授權）
 5. **效能優先**（解決 phpIPAM /8 大網段、IPv6 /48 規模的瓶頸）
 6. **整合優於重造**：能從 LibreNMS、DNS Server 拿到的資料就直接抓，不重複造輪子
-7. **資安內建（Security by Design）**：對齊 OWASP Top 10 (2021)，詳見 `docs/SECURITY.md`
+7. **資安內建（Security by Design）**：對齊 OWASP Top 10:2025，詳見 `docs/SECURITY.md`
 
 ---
 
@@ -678,7 +678,7 @@ Switch + Port
 ## 十二、資安與部署
 
 ### 12.1 資安（總覽，細節見 docs/SECURITY.md）
-- 對齊 OWASP Top 10 (2021)
+- 對齊 OWASP Top 10:2025
 - **TLS 強制**：使用者層一律 HTTPS；支援兩模式（① nginx 反代終結，② uvicorn 直接吃自簽）
 - SHA-256 異動鏈
 - Graylog 外送
@@ -728,7 +728,7 @@ Switch + Port
 - ✅ PowerDNS 整合
 - ✅ 繁中/英文雙語、深淺主題
 - ✅ **systemd + nginx + apt 部署**（Docker 已不採用，改 Proxmox LXC / 裸機）
-- ✅ **OWASP Top 10 baseline 全面落地**
+- ✅ **OWASP Top 10:2025 baseline 全面落地**（含 A10 Mishandling of Exceptional Conditions）
 - ✅ **強制 SSL（nginx 反代 / uvicorn 自簽 雙模式）**
 - ✅ Subnet 視覺方塊圖、Rack U 位視覺化、IP 指示儀表板
 - ✅ Tools（IP/CIDR 計算機、EUI-64）
@@ -846,7 +846,7 @@ Switch + Port
 | AI | MCP Server | 4 |
 | AI | 本地 LLM 自然語言查詢 | 4 |
 | AI | 語意搜尋（pgvector） | 2 |
-| Security | OWASP Top 10 baseline | 1 |
+| Security | OWASP Top 10:2025 baseline | 1 |
 | Security | argon2id + TOTP MFA | 1 |
 | Security | SHA-256 異動鏈 | 2 |
 | Security | SSRF allowlist | 2 |
@@ -881,4 +881,4 @@ Switch + Port
    - 在線狀態互補（自家測不到時用 LibreNMS 結果）
    - 自動加入監控（以單一裝置為單位個別決定）
 6. 異常偵測：IP 衝突、MAC 漂移、鬼 IP、未授權設備
-7. **資安內建**：對齊 OWASP Top 10 (2021)
+7. **資安內建**：對齊 OWASP Top 10:2025

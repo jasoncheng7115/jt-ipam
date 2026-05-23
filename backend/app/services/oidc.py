@@ -9,7 +9,7 @@ Flow：
   3. 比對 jt-ipam User（用 email 或 username 做 key），auto-provision 或更新
   4. 簽發本機 access/refresh token
 
-OWASP A02 / A07：
+OWASP A04 / A07：
 - client_secret 從 SecretStr；TLS 強制（authlib 內建驗證）
 - state + nonce 都會檢查；CSRF 透過 session cookie 帶 state
 - 回呼 redirect_uri 必須與設定值精確相符（IdP 端與本端都會驗）

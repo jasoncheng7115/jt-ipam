@@ -1,4 +1,4 @@
-"""統一外部 HTTP client，內建 SSRF 防護（OWASP A10）。
+"""統一外部 HTTP client，內建 SSRF 防護（OWASP A06）。
 
 使用方式：
 
