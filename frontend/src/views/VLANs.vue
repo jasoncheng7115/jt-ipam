@@ -2,7 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
+  NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NInputNumber, NSelect, NTabs, NTabPane, NPopconfirm,
   useMessage, type DataTableColumns,
 } from "naive-ui";
@@ -11,6 +11,9 @@ import {
   updateVLAN, deleteVLAN, updateVLANDomain, deleteVLANDomain,
   type VLAN, type VLANDomain,
 } from "@/api/basic";
+import {
+  VlansIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+} from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -115,9 +118,11 @@ const vlanCols = computed<DataTableColumns<VLAN>>(() => [
   {
     title: t("common.actions"), key: "actions", width: 160,
     render: (r) => h(NSpace, { size: "small" }, () => [
-      h(NButton, { size: "small", onClick: () => openVlanEdit(r) }, () => t("common.edit")),
+      h(NButton, { size: "small", onClick: () => openVlanEdit(r) },
+        { default: () => t("common.edit"), icon: () => h(NIcon, null, () => h(EditIcon)) }),
       h(NPopconfirm, { onPositiveClick: () => delVlan(r) }, {
-        trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+        trigger: () => h(NButton, { size: "small", type: "error" },
+          { default: () => t("common.delete"), icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
         default: () => t("common.confirm_delete"),
       }),
     ]),
@@ -129,9 +134,11 @@ const domCols = computed<DataTableColumns<VLANDomain>>(() => [
   {
     title: t("common.actions"), key: "actions", width: 160,
     render: (r) => h(NSpace, { size: "small" }, () => [
-      h(NButton, { size: "small", onClick: () => openDomEdit(r) }, () => t("common.edit")),
+      h(NButton, { size: "small", onClick: () => openDomEdit(r) },
+        { default: () => t("common.edit"), icon: () => h(NIcon, null, () => h(EditIcon)) }),
       h(NPopconfirm, { onPositiveClick: () => delDom(r) }, {
-        trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+        trigger: () => h(NButton, { size: "small", type: "error" },
+          { default: () => t("common.delete"), icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
         default: () => t("common.confirm_delete"),
       }),
     ]),
@@ -142,26 +149,45 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('nav.vlans')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><VlansIcon /></n-icon>
+        <span>{{ t("nav.vlans") }}</span>
+      </n-space>
+    </template>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane name="vlans" :tab="t('nav.vlans')">
         <n-space style="margin-bottom: 12px">
-          <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-          <n-button type="primary" @click="openVlanCreate">{{ t("common.create") }}</n-button>
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>
+            {{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openVlanCreate">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
+            {{ t("common.create") }}
+          </n-button>
         </n-space>
         <n-data-table :columns="vlanCols" :data="vlans" :loading="loading" :bordered="false" />
       </n-tab-pane>
       <n-tab-pane name="domains" tab="VLAN Domain">
         <n-space style="margin-bottom: 12px">
-          <n-button type="primary" @click="openDomCreate">{{ t("common.create") }}</n-button>
+          <n-button type="primary" @click="openDomCreate">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
+            {{ t("common.create") }}
+          </n-button>
         </n-space>
         <n-data-table :columns="domCols" :data="domains" :loading="loading" :bordered="false" />
       </n-tab-pane>
     </n-tabs>
 
-    <n-modal v-model:show="showVLAN" preset="card"
-             :title="editingVLAN ? t('common.edit') : t('common.create')"
-             style="width: 460px">
+    <n-modal v-model:show="showVLAN" preset="card" style="width: 460px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><component :is="editingVLAN ? EditIcon : PlusIcon" /></n-icon>
+          <span>{{ editingVLAN ? t("common.edit") : t("common.create") }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item label="Domain">
           <n-select v-model:value="vlanForm.domain_id" :options="domainOptions"
@@ -179,14 +205,24 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showVLAN = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submitVlan">{{ t("common.save") }}</n-button>
+        <n-button @click="showVLAN = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submitVlan">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
 
-    <n-modal v-model:show="showDom" preset="card"
-             :title="editingDom ? t('common.edit') : t('common.create')"
-             style="width: 460px">
+    <n-modal v-model:show="showDom" preset="card" style="width: 460px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><component :is="editingDom ? EditIcon : PlusIcon" /></n-icon>
+          <span>{{ editingDom ? t("common.edit") : t("common.create") }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item :label="t('common.name')">
           <n-input v-model:value="domForm.name" />
@@ -196,8 +232,14 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showDom = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submitDom">{{ t("common.save") }}</n-button>
+        <n-button @click="showDom = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submitDom">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
   </n-card>

@@ -25,6 +25,8 @@ import {
   NPopconfirm,
   useMessage,
 } from "naive-ui";
+import { NIcon } from "naive-ui";
+import { SettingsIcon } from "@/icons";
 import QRCode from "qrcode";
 import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/auth";
@@ -158,7 +160,13 @@ onMounted(loadPrefs);
 </script>
 
 <template>
-  <n-card title="Settings">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><SettingsIcon /></n-icon>
+        <span>Settings</span>
+      </n-space>
+    </template>
     <n-tabs type="line" default-value="profile">
       <!-- Profile -->
       <n-tab-pane name="profile" tab="Profile">

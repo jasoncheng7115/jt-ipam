@@ -8,6 +8,7 @@ import {
   NFormItem,
   NInput,
   NButton,
+  NIcon,
   NSpace,
   NAlert,
   NDivider,
@@ -15,6 +16,8 @@ import {
 } from "naive-ui";
 import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/auth";
+import { LoginIcon } from "@/icons";
+import { ShieldCheck, Globe } from "@iconoir/vue";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -105,14 +108,21 @@ function ssoSaml() {
         </n-form-item>
         <n-space justify="end">
           <n-button type="primary" :loading="loading" @click="submitLogin">
+            <template #icon><n-icon><LoginIcon /></n-icon></template>
             {{ t("login.submit") }}
           </n-button>
         </n-space>
 
         <n-divider style="margin: 16px 0 12px 0">{{ t("login.or_sso") }}</n-divider>
         <n-space vertical size="small">
-          <n-button block @click="ssoOidc">{{ t("login.sso_oidc") }}</n-button>
-          <n-button block @click="ssoSaml">{{ t("login.sso_saml") }}</n-button>
+          <n-button block @click="ssoOidc">
+            <template #icon><n-icon><Globe /></n-icon></template>
+            {{ t("login.sso_oidc") }}
+          </n-button>
+          <n-button block @click="ssoSaml">
+            <template #icon><n-icon><ShieldCheck /></n-icon></template>
+            {{ t("login.sso_saml") }}
+          </n-button>
         </n-space>
       </n-form>
 

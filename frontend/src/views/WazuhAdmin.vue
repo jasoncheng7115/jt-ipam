@@ -2,10 +2,13 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
+  NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSwitch, NTabs, NTabPane, NTag, NPopconfirm, NAlert,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import {
+  WazuhIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, WarnIcon, MissingIcon,
+} from "@/icons";
 import {
   listWazuh, createWazuh, updateWazuh, deleteWazuh, testWazuh, syncWazuh,
   listWazuhAgents, listMissingAgents,
@@ -137,12 +140,24 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('wazuh_admin.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><WazuhIcon /></n-icon>
+        <span>{{ t("wazuh_admin.title") }}</span>
+      </n-space>
+    </template>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane name="instances" :tab="t('wazuh_admin.title')">
         <n-space style="margin-bottom: 12px">
-          <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-          <n-button type="primary" @click="openCreate">{{ t("wazuh_admin.create_instance") }}</n-button>
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>
+            {{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openCreate">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
+            {{ t("wazuh_admin.create_instance") }}
+          </n-button>
         </n-space>
         <n-data-table :columns="instCols" :data="insts" :loading="loading" :bordered="false" />
       </n-tab-pane>
@@ -152,6 +167,7 @@ onMounted(() => { void refresh(); });
       <n-tab-pane name="missing"
                   :tab="`${t('wazuh_admin.missing_agents')} (${missing.length})`">
         <n-alert v-if="missing.length" type="warning" style="margin-bottom: 12px">
+          <template #icon><n-icon><MissingIcon /></n-icon></template>
           {{ missing.length }} {{ t("wazuh_admin.missing_agents") }}
         </n-alert>
         <n-data-table :columns="missCols" :data="missing" :loading="loading" :bordered="false" />

@@ -15,7 +15,9 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import {
   NCard,
+  NH2,
   NSpace,
+  NIcon,
   NStatistic,
   NProgress,
   NAlert,
@@ -23,6 +25,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { getOverview, type DashboardOverview } from "@/api/dashboard";
+import { DashboardIcon } from "@/icons";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -72,6 +75,10 @@ onMounted(load);
 <template>
   <n-spin :show="loading">
     <n-space v-if="data" vertical :size="16">
+      <n-space align="center" :wrap-item="false" style="margin-bottom: 4px">
+        <n-icon :size="24"><DashboardIcon /></n-icon>
+        <n-h2 style="margin: 0">{{ t("dashboard.title") }}</n-h2>
+      </n-space>
       <!-- KPI 列 -->
       <n-space :size="16" wrap>
         <n-card style="min-width: 200px"><n-statistic label="Sections" :value="data.sections" /></n-card>

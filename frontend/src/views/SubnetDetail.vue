@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import {
   NCard,
   NSpace,
+  NIcon,
   NDescriptions,
   NDescriptionsItem,
   NProgress,
@@ -16,6 +17,7 @@ import {
   type UploadCustomRequestOptions,
   useMessage,
 } from "naive-ui";
+import { SubnetsIcon } from "@/icons";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";
 import { getSubnetUsage } from "@/api/subnets";
@@ -129,7 +131,13 @@ onMounted(() => {
 <template>
   <n-spin :show="loading">
     <n-space vertical :size="16">
-      <n-card v-if="subnet" :title="subnet.cidr">
+      <n-card v-if="subnet">
+        <template #header>
+          <n-space align="center" :wrap-item="false">
+            <n-icon :size="22"><SubnetsIcon /></n-icon>
+            <span>{{ subnet.cidr }}</span>
+          </n-space>
+        </template>
         <template #header-extra>
           <n-space>
             <n-button @click="handleExport">Export CSV</n-button>

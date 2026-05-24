@@ -2,10 +2,13 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NSpace, NButton, NAlert, NStatistic, NGrid, NGi, NCode,
+  NCard, NSpace, NIcon, NButton, NAlert, NStatistic, NGrid, NGi, NCode,
   useMessage,
 } from "naive-ui";
 import { runAnomalyScan, type AnomalyReport } from "@/api/phase3";
+import {
+  AnomalyIcon, TestIcon, InfoIcon, WarnIcon, FailIcon,
+} from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -27,9 +30,16 @@ async function run() {
 </script>
 
 <template>
-  <n-card :title="t('anomaly.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><AnomalyIcon /></n-icon>
+        <span>{{ t("anomaly.title") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px">
       <n-button type="primary" :loading="loading" @click="run">
+        <template #icon><n-icon><TestIcon /></n-icon></template>
         {{ t("anomaly.run_scan") }}
       </n-button>
       <span v-if="lastRunAt" style="opacity: 0.7">
@@ -38,6 +48,7 @@ async function run() {
     </n-space>
 
     <n-alert v-if="!report" type="info">
+      <template #icon><n-icon><InfoIcon /></n-icon></template>
       {{ t("anomaly.help") }}
     </n-alert>
 

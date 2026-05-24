@@ -5,6 +5,7 @@ import {
   NTabs,
   NTabPane,
   NSpace,
+  NIcon,
   NInput,
   NInputNumber,
   NButton,
@@ -14,6 +15,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { apiClient } from "@/api/client";
+import { ToolsIcon } from "@/icons";
 
 const msg = useMessage();
 
@@ -73,7 +75,13 @@ async function runEui64() {
 </script>
 
 <template>
-  <n-card title="Tools">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><ToolsIcon /></n-icon>
+        <span>Tools</span>
+      </n-space>
+    </template>
     <n-tabs type="line" default-value="ip">
       <n-tab-pane name="ip" tab="IP info">
         <n-space vertical :size="12">

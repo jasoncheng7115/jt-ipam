@@ -2,10 +2,11 @@
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NSpace, NButton, NForm, NFormItem, NInput, NSelect, NCode,
+  NCard, NSpace, NIcon, NButton, NForm, NFormItem, NInput, NSelect, NCode,
   NAlert, NTabs, NTabPane,
   useMessage,
 } from "naive-ui";
+import { ImportIcon, EyeIcon, SaveIcon, InfoIcon } from "@/icons";
 import { ripePreview, ripeCommit } from "@/api/phase3";
 import { listSections } from "@/api/sections";
 
@@ -58,10 +59,17 @@ onMounted(() => { void loadSections(); });
 </script>
 
 <template>
-  <n-card :title="t('import.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><ImportIcon /></n-icon>
+        <span>{{ t("import.title") }}</span>
+      </n-space>
+    </template>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane name="ripe" tab="RIPE">
         <n-alert type="info" style="margin-bottom: 16px">
+          <template #icon><n-icon><InfoIcon /></n-icon></template>
           {{ t("import.ripe_help") }}
         </n-alert>
         <n-form>
@@ -77,8 +85,12 @@ onMounted(() => { void loadSections(); });
           </n-form-item>
         </n-form>
         <n-space style="margin-top: 12px">
-          <n-button :loading="previewing" @click="preview">{{ t("import.preview") }}</n-button>
+          <n-button :loading="previewing" @click="preview">
+            <template #icon><n-icon><EyeIcon /></n-icon></template>
+            {{ t("import.preview") }}
+          </n-button>
           <n-button type="primary" :loading="committing" @click="commit">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>
             {{ t("import.commit") }}
           </n-button>
         </n-space>
@@ -93,6 +105,7 @@ onMounted(() => { void loadSections(); });
       </n-tab-pane>
       <n-tab-pane name="twnic" tab="TWNIC">
         <n-alert type="info">
+          <template #icon><n-icon><InfoIcon /></n-icon></template>
           {{ t("import.twnic_help") }}
         </n-alert>
       </n-tab-pane>

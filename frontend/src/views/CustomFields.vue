@@ -2,10 +2,13 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
+  NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSelect, NSwitch, NInputNumber, NPopconfirm, NTag,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import {
+  CustomFieldsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+} from "@/icons";
 import {
   listCustomFields, createCustomField, updateCustomField, deleteCustomField,
   type CustomField,
@@ -99,9 +102,11 @@ const cols = computed<DataTableColumns<CustomField>>(() => [
   {
     title: t("common.actions"), key: "actions", width: 160,
     render: (r) => h(NSpace, { size: "small" }, () => [
-      h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
+      h(NButton, { size: "small", onClick: () => openEdit(r) },
+        { default: () => t("common.edit"), icon: () => h(NIcon, null, () => h(EditIcon)) }),
       h(NPopconfirm, { onPositiveClick: () => del(r) }, {
-        trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+        trigger: () => h(NButton, { size: "small", type: "error" },
+          { default: () => t("common.delete"), icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
         default: () => t("common.confirm_delete"),
       }),
     ]),
@@ -111,15 +116,32 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('nav.custom_fields')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><CustomFieldsIcon /></n-icon>
+        <span>{{ t("nav.custom_fields") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px">
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="openCreate">{{ t("common.create") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
+      <n-button type="primary" @click="openCreate">
+        <template #icon><n-icon><PlusIcon /></n-icon></template>
+        {{ t("common.create") }}
+      </n-button>
     </n-space>
     <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" />
 
-    <n-modal v-model:show="show" preset="card"
-             :title="editing ? t('common.edit') : t('common.create')" style="width: 520px">
+    <n-modal v-model:show="show" preset="card" style="width: 520px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><component :is="editing ? EditIcon : PlusIcon" /></n-icon>
+          <span>{{ editing ? t("common.edit") : t("common.create") }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item label="object_type">
           <n-select v-model:value="form.object_type" :options="objTypeOpts"
@@ -149,8 +171,14 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
+        <n-button @click="show = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submit">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
   </n-card>

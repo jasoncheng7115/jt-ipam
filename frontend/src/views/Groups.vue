@@ -2,7 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NInput, NButton, NTag,
+  NCard, NDataTable, NSpace, NIcon, NInput, NButton, NTag,
   NModal, NDrawer, NDrawerContent, NForm, NFormItem,
   NPopconfirm, NSelect, NList, NListItem, NThing,
   useMessage, type DataTableColumns,
@@ -13,6 +13,9 @@ import {
   listUsers,
   type Group, type User,
 } from "@/api/admin";
+import {
+  GroupsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+} from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -138,10 +141,22 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('groups.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><GroupsIcon /></n-icon>
+        <span>{{ t("groups.title") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px">
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="openCreate">{{ t("common.create") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
+      <n-button type="primary" @click="openCreate">
+        <template #icon><n-icon><PlusIcon /></n-icon></template>
+        {{ t("common.create") }}
+      </n-button>
       <span style="opacity: 0.6">total: {{ total }}</span>
     </n-space>
     <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false">
@@ -150,8 +165,13 @@ onMounted(() => { void refresh(); });
       </template>
     </n-data-table>
 
-    <n-modal v-model:show="showEdit" preset="card"
-             :title="editing ? t('common.edit') : t('common.create')" style="width: 460px">
+    <n-modal v-model:show="showEdit" preset="card" style="width: 460px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><component :is="editing ? EditIcon : PlusIcon" /></n-icon>
+          <span>{{ editing ? t("common.edit") : t("common.create") }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item :label="t('groups.name')">
           <n-input v-model:value="form.name" :disabled="!!editing" />
@@ -161,8 +181,14 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showEdit = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
+        <n-button @click="showEdit = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submit">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
 

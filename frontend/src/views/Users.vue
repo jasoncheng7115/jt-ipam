@@ -5,6 +5,7 @@ import {
   NCard,
   NDataTable,
   NSpace,
+  NIcon,
   NInput,
   NSelect,
   NButton,
@@ -21,6 +22,9 @@ import {
   listUsers, createUser, updateUser, deleteUser,
   type User, type UserCreate,
 } from "@/api/admin";
+import {
+  UsersIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, TokenIcon,
+} from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -175,12 +179,15 @@ const columns = computed<DataTableColumns<User>>(() => [
   {
     title: t("common.actions"), key: "actions", width: 260,
     render: (r) => h(NSpace, { size: "small" }, () => [
-      h(NButton, { size: "small", onClick: () => openEdit(r) }, () => t("common.edit")),
+      h(NButton, { size: "small", onClick: () => openEdit(r) },
+        { default: () => t("common.edit"), icon: () => h(NIcon, null, () => h(EditIcon)) }),
       r.locked_until
-        ? h(NButton, { size: "small", onClick: () => unlock(r) }, () => t("users.unlock"))
+        ? h(NButton, { size: "small", onClick: () => unlock(r) },
+            { default: () => t("users.unlock"), icon: () => h(NIcon, null, () => h(TokenIcon)) })
         : null,
       h(NPopconfirm, { onPositiveClick: () => remove(r) }, {
-        trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+        trigger: () => h(NButton, { size: "small", type: "error" },
+          { default: () => t("common.delete"), icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
         default: () => t("common.confirm_delete"),
       }),
     ]),
@@ -191,14 +198,26 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('users.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><UsersIcon /></n-icon>
+        <span>{{ t("users.title") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px" align="center">
       <n-input v-model:value="q" :placeholder="t('common.search')" style="width: 240px"
                @keyup.enter="refresh" clearable />
       <n-select v-model:value="providerFilter" :options="providerOptions"
                 style="width: 140px" />
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="showCreate = true">{{ t("users.create_user") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
+      <n-button type="primary" @click="showCreate = true">
+        <template #icon><n-icon><PlusIcon /></n-icon></template>
+        {{ t("users.create_user") }}
+      </n-button>
       <span style="opacity: 0.6">total: {{ total }}</span>
     </n-space>
 
@@ -217,8 +236,13 @@ onMounted(() => { void refresh(); });
       </template>
     </n-data-table>
 
-    <n-modal v-model:show="showCreate" preset="card" :title="t('users.create_user')"
-             style="width: 460px">
+    <n-modal v-model:show="showCreate" preset="card" style="width: 460px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><PlusIcon /></n-icon>
+          <span>{{ t("users.create_user") }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item :label="t('users.username')">
           <n-input v-model:value="newUser.username" />
@@ -237,14 +261,24 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submitCreate">{{ t("common.save") }}</n-button>
+        <n-button @click="showCreate = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submitCreate">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
 
-    <n-modal v-model:show="showEdit" preset="card"
-             :title="editing ? `${t('common.edit')} ${editing.username}` : ''"
-             style="width: 460px">
+    <n-modal v-model:show="showEdit" preset="card" style="width: 460px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><EditIcon /></n-icon>
+          <span>{{ editing ? `${t("common.edit")} ${editing.username}` : "" }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item :label="t('users.email')">
           <n-input v-model:value="editForm.email" />
@@ -259,8 +293,14 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showEdit = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submitEdit">{{ t("common.save") }}</n-button>
+        <n-button @click="showEdit = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submitEdit">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
   </n-card>

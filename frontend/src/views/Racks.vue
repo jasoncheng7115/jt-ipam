@@ -10,6 +10,8 @@ import {
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
+import { NIcon } from "naive-ui";
+import { RacksIcon } from "@/icons";
 import { apiClient } from "@/api/client";
 import RackDiagram from "@/components/RackDiagram.vue";
 import { getRackDiagram, type RackDiagram as RD } from "@/api/racks";
@@ -75,7 +77,13 @@ onMounted(refresh);
 
 <template>
   <n-space vertical :size="16">
-    <n-card title="Racks">
+    <n-card>
+      <template #header>
+        <n-space align="center" :wrap-item="false">
+          <n-icon :size="22"><RacksIcon /></n-icon>
+          <span>Racks</span>
+        </n-space>
+      </template>
       <n-space>
         <n-select
           v-model:value="selected"

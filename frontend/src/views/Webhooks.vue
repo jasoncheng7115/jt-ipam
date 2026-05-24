@@ -2,10 +2,13 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
+  NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NPopconfirm, NTag, NAlert, NCode,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import {
+  WebhooksIcon, PlusIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, OkIcon, WarnIcon,
+} from "@/icons";
 import {
   listWebhooks, createWebhook, deleteWebhook, type Webhook,
 } from "@/api/phase3";
@@ -63,7 +66,8 @@ const cols = computed<DataTableColumns<Webhook>>(() => [
   {
     title: t("common.actions"), key: "actions", width: 100,
     render: (r) => h(NPopconfirm, { onPositiveClick: () => del(r) }, {
-      trigger: () => h(NButton, { size: "small", type: "error" }, () => t("common.delete")),
+      trigger: () => h(NButton, { size: "small", type: "error" },
+        { default: () => t("common.delete"), icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
       default: () => t("common.confirm_delete"),
     }),
   },
@@ -72,14 +76,32 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('nav.webhooks')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><WebhooksIcon /></n-icon>
+        <span>{{ t("nav.webhooks") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px">
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-      <n-button type="primary" @click="show = true">{{ t("common.create") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
+      <n-button type="primary" @click="show = true">
+        <template #icon><n-icon><PlusIcon /></n-icon></template>
+        {{ t("common.create") }}
+      </n-button>
     </n-space>
     <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" />
 
-    <n-modal v-model:show="show" preset="card" :title="t('common.create')" style="width: 480px">
+    <n-modal v-model:show="show" preset="card" style="width: 480px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><PlusIcon /></n-icon>
+          <span>{{ t("common.create") }}</span>
+        </n-space>
+      </template>
       <n-form>
         <n-form-item :label="t('common.name')"><n-input v-model:value="form.name" /></n-form-item>
         <n-form-item label="target URL">
@@ -91,19 +113,34 @@ onMounted(() => { void refresh(); });
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
+        <n-button @click="show = false">
+          <template #icon><n-icon><CancelIcon /></n-icon></template>
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="submit">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
       </n-space>
     </n-modal>
 
-    <n-modal v-model:show="showSecret" preset="card"
-             :title="t('webhooks.secret_title')" style="width: 540px">
+    <n-modal v-model:show="showSecret" preset="card" style="width: 540px">
+      <template #header>
+        <n-space align="center">
+          <n-icon :size="20"><WarnIcon /></n-icon>
+          <span>{{ t("webhooks.secret_title") }}</span>
+        </n-space>
+      </template>
       <n-alert type="warning" style="margin-bottom: 12px">
+        <template #icon><n-icon><WarnIcon /></n-icon></template>
         {{ t("webhooks.secret_warning") }}
       </n-alert>
       <n-code :code="newSecret" language="plaintext" word-wrap />
       <n-space justify="end" style="margin-top: 16px">
-        <n-button type="primary" @click="showSecret = false">{{ t("common.ok") }}</n-button>
+        <n-button type="primary" @click="showSecret = false">
+          <template #icon><n-icon><OkIcon /></n-icon></template>
+          {{ t("common.ok") }}
+        </n-button>
       </n-space>
     </n-modal>
   </n-card>

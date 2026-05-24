@@ -2,10 +2,13 @@
 import { computed, h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NTabs, NTabPane, NDataTable, NSpace, NButton,
+  NCard, NTabs, NTabPane, NDataTable, NSpace, NIcon, NButton,
   NModal, NForm, NFormItem, NInput, NInputNumber, NSelect,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import {
+  AdvancedIcon, PlusIcon, DeleteIcon, SaveIcon, CancelIcon,
+} from "@/icons";
 import { apiClient } from "@/api/client";
 import { Advanced } from "@/api/phase3";
 
@@ -122,7 +125,13 @@ onMounted(() => { void loadAll(); });
 </script>
 
 <template>
-  <n-card :title="t('nav.advanced')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><AdvancedIcon /></n-icon>
+        <span>{{ t("nav.advanced") }}</span>
+      </n-space>
+    </template>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane name="tenancy" :tab="t('advanced.tenancy')">
         <h3>{{ t("advanced.tenants") }}</h3>

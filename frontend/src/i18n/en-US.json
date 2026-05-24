@@ -115,8 +115,8 @@
     "filter_object_type": "Filter object type (e.g. user, subnet)",
     "filter_action": "Filter action (e.g. create, login_success)",
     "verify_chain": "Verify chain integrity",
-    "chain_ok": "✅ Chain intact (checked {n} entries)",
-    "chain_broken": "⚠️ Chain broken at #{id}"
+    "chain_ok": "Chain intact (checked {n} entries)",
+    "chain_broken": "Chain broken at #{id}"
   },
   "users": {
     "title": "Users",

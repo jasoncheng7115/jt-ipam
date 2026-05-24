@@ -115,8 +115,8 @@
     "filter_object_type": "篩選物件類型（如 user、subnet）",
     "filter_action": "篩選動作（如 create、login_success）",
     "verify_chain": "驗證鏈完整性",
-    "chain_ok": "✅ 鏈完整（已檢查 {n} 筆）",
-    "chain_broken": "⚠️ 鏈異常，第一個錯誤位於 #{id}"
+    "chain_ok": "鏈完整（已檢查 {n} 筆）",
+    "chain_broken": "鏈異常，第一個錯誤位於 #{id}"
   },
   "users": {
     "title": "使用者",

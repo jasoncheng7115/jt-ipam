@@ -2,10 +2,11 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NButton, NTag, useMessage,
+  NCard, NDataTable, NSpace, NIcon, NButton, NTag, useMessage,
   type DataTableColumns,
 } from "naive-ui";
 import { listPlugins, type PluginInfo } from "@/api/integrations";
+import { PluginsIcon, RefreshIcon, OkIcon, FailIcon } from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -29,8 +30,10 @@ const cols = computed<DataTableColumns<PluginInfo>>(() => [
   {
     title: t("common.status"), key: "error",
     render: (r) => r.error
-      ? h(NTag, { size: "small", type: "error" }, () => "error")
-      : h(NTag, { size: "small", type: "success" }, () => t("plugins_admin.loaded")),
+      ? h(NTag, { size: "small", type: "error" },
+          { default: () => "error", icon: () => h(NIcon, null, () => h(FailIcon)) })
+      : h(NTag, { size: "small", type: "success" },
+          { default: () => t("plugins_admin.loaded"), icon: () => h(NIcon, null, () => h(OkIcon)) }),
   },
   { title: t("common.fail"), key: "error_msg", render: (r) => r.error ?? "" },
 ]);
@@ -38,9 +41,18 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="`${t('plugins_admin.title')} (${count})`">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><PluginsIcon /></n-icon>
+        <span>{{ t("plugins_admin.title") }} ({{ count }})</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px">
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
     </n-space>
     <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false">
       <template #empty>

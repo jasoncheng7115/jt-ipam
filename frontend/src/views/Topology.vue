@@ -19,6 +19,8 @@ import {
   NText,
   useMessage,
 } from "naive-ui";
+import { NIcon } from "naive-ui";
+import { TopologyIcon } from "@/icons";
 import cytoscape from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import { getTopology, type TopologyData } from "@/api/topology";
@@ -161,7 +163,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <n-card title="Topology">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><TopologyIcon /></n-icon>
+        <span>Topology</span>
+      </n-space>
+    </template>
     <template #header-extra>
       <n-space>
         <n-checkbox v-model:checked="includeWireless">無線連線</n-checkbox>

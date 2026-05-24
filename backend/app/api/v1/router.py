@@ -81,7 +81,7 @@ api_v1_router.include_router(wazuh.router)
 api_v1_router.include_router(audit.router)
 api_v1_router.include_router(users.router)
 
-# Phase 3 ✅ Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
+# Phase 3 [DONE] Tenancy/Contacts/ASN/Circuits/Wireless、Virtualization/Proxmox、
 #           Cabling/Power/VPN、Topology、OIDC SSO（SAML stub）
-# Phase 4 ✅ MCP Server、本地 LLM 自然語言查詢、Plugin 機制
+# Phase 4 [DONE] MCP Server、本地 LLM 自然語言查詢、Plugin 機制
 # Phase 4 範圍縮減（不做）：Zimbra/Odoo/Ansible/Terraform/HA

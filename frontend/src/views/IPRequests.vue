@@ -16,6 +16,8 @@ import {
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
+import { NIcon } from "naive-ui";
+import { RequestsIcon } from "@/icons";
 import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -144,7 +146,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <n-card title="IP Requests">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><RequestsIcon /></n-icon>
+        <span>IP Requests</span>
+      </n-space>
+    </template>
     <template #header-extra>
       <n-space>
         <n-checkbox v-model:checked="showMine" @update:checked="refresh">
@@ -158,7 +166,10 @@ onMounted(() => {
           style="width: 140px"
           @update:value="(v: string) => { filterStatus = v || null; refresh(); }"
         />
-        <n-button type="primary" @click="showCreate = true">新增申請</n-button>
+        <n-button type="primary" @click="showCreate = true">
+          <template #icon><n-icon><RequestsIcon /></n-icon></template>
+          新增申請
+        </n-button>
       </n-space>
     </template>
 

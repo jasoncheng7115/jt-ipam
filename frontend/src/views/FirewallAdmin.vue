@@ -2,10 +2,13 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
+  NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSwitch, NTabs, NTabPane, NSelect, NPopconfirm, NTag,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import {
+  FirewallIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, SaveIcon, CancelIcon,
+} from "@/icons";
 import {
   listFirewalls, createFirewall, updateFirewall, deleteFirewall, testFirewall, syncFirewall,
   listAliasMappings, createAliasMapping, deleteAliasMapping, syncOneMapping,
@@ -205,12 +208,24 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('firewall_admin.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><FirewallIcon /></n-icon>
+        <span>{{ t("firewall_admin.title") }}</span>
+      </n-space>
+    </template>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane name="firewalls" :tab="t('firewall_admin.title')">
         <n-space style="margin-bottom: 12px">
-          <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
-          <n-button type="primary" @click="openFwCreate">{{ t("firewall_admin.create_firewall") }}</n-button>
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>
+            {{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openFwCreate">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
+            {{ t("firewall_admin.create_firewall") }}
+          </n-button>
         </n-space>
         <n-data-table :columns="fwCols" :data="fws" :loading="loading" :bordered="false" />
       </n-tab-pane>
@@ -218,6 +233,7 @@ onMounted(() => { void refresh(); });
         <n-space style="margin-bottom: 12px">
           <n-button type="primary"
                     @click="loadAliasSelectorOpts(); showMapCreate = true">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
             {{ t("firewall_admin.create_mapping") }}
           </n-button>
         </n-space>

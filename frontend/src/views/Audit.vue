@@ -5,6 +5,7 @@ import {
   NCard,
   NDataTable,
   NSpace,
+  NIcon,
   NInput,
   NButton,
   NTag,
@@ -13,6 +14,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import { listAudit, verifyAuditChain, type AuditLog } from "@/api/admin";
+import { AuditIcon, RefreshIcon, AdminIcon as VerifyIcon } from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -121,14 +123,24 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('audit.title')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><AuditIcon /></n-icon>
+        <span>{{ t("audit.title") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px" align="center">
       <n-input v-model:value="filterObjType" :placeholder="t('audit.filter_object_type')"
                style="width: 220px" clearable />
       <n-input v-model:value="filterAction" :placeholder="t('audit.filter_action')"
                style="width: 220px" clearable />
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
       <n-button type="primary" :loading="verifying" @click="verify">
+        <template #icon><n-icon><VerifyIcon /></n-icon></template>
         {{ t("audit.verify_chain") }}
       </n-button>
       <span style="opacity: 0.6">total: {{ total }}</span>

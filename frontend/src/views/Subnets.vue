@@ -6,12 +6,15 @@ import {
   NCard,
   NDataTable,
   NSpace,
+  NIcon,
+  NButton,
   NProgress,
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
 import { listSubnets, getSubnetUsage } from "@/api/subnets";
 import type { Subnet, SubnetUsage } from "@/types";
+import { SubnetsIcon, RefreshIcon } from "@/icons";
 
 const router = useRouter();
 
@@ -77,7 +80,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <n-card :title="t('nav.subnets')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><SubnetsIcon /></n-icon>
+        <span>{{ t("nav.subnets") }}</span>
+      </n-space>
+    </template>
+    <n-space style="margin-bottom: 12px">
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
+    </n-space>
     <n-data-table
       :columns="columns"
       :data="rows"

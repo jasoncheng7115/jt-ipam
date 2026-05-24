@@ -2,9 +2,10 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NTabs, NTabPane, NDataTable, NSpace, NButton, NTag,
+  NCard, NTabs, NTabPane, NDataTable, NSpace, NIcon, NButton, NTag,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import { VirtualizationIcon, RefreshIcon, SyncIcon } from "@/icons";
 import { Virt } from "@/api/phase3";
 
 const { t } = useI18n();
@@ -72,9 +73,18 @@ onMounted(() => { void refresh(); });
 </script>
 
 <template>
-  <n-card :title="t('nav.virtualization')">
+  <n-card>
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="22"><VirtualizationIcon /></n-icon>
+        <span>{{ t("nav.virtualization") }}</span>
+      </n-space>
+    </template>
     <n-space style="margin-bottom: 12px">
-      <n-button @click="refresh" :loading="loading">{{ t("common.refresh") }}</n-button>
+      <n-button @click="refresh" :loading="loading">
+        <template #icon><n-icon><RefreshIcon /></n-icon></template>
+        {{ t("common.refresh") }}
+      </n-button>
     </n-space>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane name="clusters" :tab="`${t('virt.clusters')} (${clusters.length})`">

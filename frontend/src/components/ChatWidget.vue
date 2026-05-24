@@ -8,6 +8,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import {
   NButton,
   NCard,
+  NIcon,
   NInput,
   NSpace,
   NSpin,
@@ -16,6 +17,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { chat, type ChatMessage } from "@/api/chat";
+import { ChatBubbleQuestion } from "@iconoir/vue";
 
 const open = ref(false);
 const input = ref("");
@@ -73,7 +75,7 @@ function reset() {
     title="AI 助手"
     @click="open = true"
   >
-    🤖
+    <n-icon :size="26"><ChatBubbleQuestion /></n-icon>
   </button>
 
   <div v-if="open" class="chat-shell">
