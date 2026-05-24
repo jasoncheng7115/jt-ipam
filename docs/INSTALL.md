@@ -159,7 +159,7 @@ sudo certbot --nginx -d ipam.example.com
 
 ## 4. 整合配置（裝完後）
 
-所有整合都在 admin 介面 (`/firewall`、`/wazuh`、`/librenms`、`/dns`) 加實例。
+所有整合都在 admin 介面 (`/firewall`、`/wazuh`、`/librenms`、`/dns`) 加主機。
 新增後預設每 5 分鐘由 `jt-ipam-sync.timer` 自動同步。
 
 ### OPNsense 防火牆

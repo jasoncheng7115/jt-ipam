@@ -35,7 +35,7 @@ interface Form {
 
 const form = ref<Form>({
   name: "", type: "powerdns",
-  api_url: "https://", server_address: "",
+  api_url: "", server_address: "",
   enabled: true, sync_interval_seconds: 300,
   api_key: "", api_secret: "", tsig_key: "", password: "",
 });
@@ -64,7 +64,7 @@ async function refresh() {
 function openCreate() {
   form.value = {
     name: "", type: "powerdns",
-    api_url: "https://", server_address: "",
+    api_url: "", server_address: "",
     enabled: true, sync_interval_seconds: 300,
     api_key: "", api_secret: "", tsig_key: "", password: "",
   };
@@ -172,7 +172,9 @@ onMounted(() => { void refresh(); });
 
         <n-form-item v-if="showApiUrl" label="API URL">
           <n-input v-model:value="form.api_url"
-                   :placeholder="form.type === 'powerdns' ? 'https://powerdns:8081' : 'https://opnsense'" />
+                   :placeholder="form.type === 'powerdns'
+                     ? 'https://powerdns.example.com:8081'
+                     : 'https://opnsense.example.com'" />
         </n-form-item>
         <n-form-item v-if="showServerAddr" :label="t('dns_admin.server_address')">
           <n-input v-model:value="form.server_address"

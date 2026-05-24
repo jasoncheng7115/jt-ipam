@@ -37,6 +37,7 @@ dependencies = [
 
     # ── 外部系統連線 ──
     "pymysql>=1.1",                # phpIPAM 遷移工具：直連舊 MySQL
+    "asyncssh>=2.18",              # phpIPAM 遷移工具：SSH tunnel（MySQL 通常只 listen 127.0.0.1）
     "ldap3>=2.9",                  # AD/LDAP 認證
     "pyrad>=2.4",                  # Radius 認證
     "dnspython>=2.6",              # BIND 9 AXFR + nsupdate (TSIG)

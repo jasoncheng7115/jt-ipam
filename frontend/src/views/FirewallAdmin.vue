@@ -25,13 +25,13 @@ const loading = ref(false);
 const showFw = ref(false);
 const editingFw = ref<OPNsenseFirewall | null>(null);
 const newFw = ref({
-  name: "", api_url: "https://", api_key: "", api_secret: "",
+  name: "", api_url: "", api_key: "", api_secret: "",
   verify_tls: true, description: "",
 });
 
 function openFwCreate() {
   editingFw.value = null;
-  newFw.value = { name: "", api_url: "https://", api_key: "", api_secret: "", verify_tls: true, description: "" };
+  newFw.value = { name: "", api_url: "", api_key: "", api_secret: "", verify_tls: true, description: "" };
   showFw.value = true;
 }
 function openFwEdit(r: OPNsenseFirewall) {
@@ -247,7 +247,8 @@ onMounted(() => { void refresh(); });
       <n-form>
         <n-form-item :label="t('firewall_admin.name')"><n-input v-model:value="newFw.name" /></n-form-item>
         <n-form-item :label="t('firewall_admin.api_url')">
-          <n-input v-model:value="newFw.api_url" placeholder="https://opnsense.example.com" />
+          <n-input v-model:value="newFw.api_url"
+                   placeholder="https://opnsense.example.com（不含結尾 /）" />
         </n-form-item>
         <n-form-item :label="`API key${editingFw ? ' (' + t('users.password_blank_unchanged') + ')' : ''}`">
           <n-input v-model:value="newFw.api_key" />

@@ -20,7 +20,7 @@ const rows = ref<LibreNMSInstance[]>([]);
 const loading = ref(false);
 const show = ref(false);
 const form = ref({
-  name: "", api_url: "https://", api_token: "",
+  name: "", api_url: "", api_token: "",
   enabled: true,
   sync_devices: true, sync_arp: true, sync_fdb: true,
   use_for_status: true, auto_add_devices: false,
@@ -35,7 +35,7 @@ async function refresh() {
 }
 function openCreate() {
   form.value = {
-    name: "", api_url: "https://", api_token: "",
+    name: "", api_url: "", api_token: "",
     enabled: true,
     sync_devices: true, sync_arp: true, sync_fdb: true,
     use_for_status: true, auto_add_devices: false,
@@ -139,7 +139,8 @@ onMounted(() => { void refresh(); });
           <n-input v-model:value="form.name" placeholder="librenms-main" />
         </n-form-item>
         <n-form-item label="API URL">
-          <n-input v-model:value="form.api_url" placeholder="https://librenms.example.com" />
+          <n-input v-model:value="form.api_url"
+                   placeholder="https://librenms.example.com（不含結尾 /）" />
         </n-form-item>
         <n-form-item :label="t('librenms_admin.api_token')">
           <n-input v-model:value="form.api_token" type="password" show-password-on="click"

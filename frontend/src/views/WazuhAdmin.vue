@@ -26,15 +26,15 @@ const loading = ref(false);
 const showInst = ref(false);
 const editing = ref<WazuhInstance | null>(null);
 const newInst = ref({
-  name: "", api_url: "https://wazuh:55000",
-  api_user: "wazuh-api-user", api_password: "",
+  name: "", api_url: "",
+  api_user: "", api_password: "",
   verify_tls: true,
 });
 
 function openCreate() {
   editing.value = null;
-  newInst.value = { name: "", api_url: "https://wazuh:55000",
-    api_user: "wazuh-api-user", api_password: "", verify_tls: true };
+  newInst.value = { name: "", api_url: "",
+    api_user: "", api_password: "", verify_tls: true };
   showInst.value = true;
 }
 function openEdit(r: WazuhInstance) {
@@ -179,8 +179,13 @@ onMounted(() => { void refresh(); });
              style="width: 460px">
       <n-form>
         <n-form-item :label="t('common.name')"><n-input v-model:value="newInst.name" /></n-form-item>
-        <n-form-item label="API URL"><n-input v-model:value="newInst.api_url" /></n-form-item>
-        <n-form-item label="API user"><n-input v-model:value="newInst.api_user" /></n-form-item>
+        <n-form-item label="API URL">
+          <n-input v-model:value="newInst.api_url"
+                   placeholder="https://wazuh.example.com:55000" />
+        </n-form-item>
+        <n-form-item label="API user">
+          <n-input v-model:value="newInst.api_user" placeholder="wazuh-wui 或自建 API user" />
+        </n-form-item>
         <n-form-item :label="`API password${editing ? ' (' + t('users.password_blank_unchanged') + ')' : ''}`">
           <n-input v-model:value="newInst.api_password" type="password" show-password-on="click" />
         </n-form-item>
