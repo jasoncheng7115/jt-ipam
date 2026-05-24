@@ -171,3 +171,21 @@ async def test_group_crud(client, auth_headers):  # type: ignore[no-untyped-def]
         f"/api/v1/groups/{gid}/members/{uid}", headers=auth_headers,
     )
     assert rm.status_code == 204
+
+
+# ─────────────────── A08 chain regression（real-world bug） ───────────────────
+
+
+async def test_audit_chain_verifies_with_nginx_style_request_id(client, auth_headers):  # type: ignore[no-untyped-def]
+    """Regression：nginx 的 $request_id 是 32-hex 無 hyphen；
+    middleware 必須標準化成 UUID 否則 audit chain verify 會 false。"""
+    # nginx 風格的 X-Request-ID（32-hex 無 hyphen）
+    nginx_rid = "75be0bdc27e61ef421142b08f6647f4c"
+    await client.post(
+        "/api/v1/sections", headers={**auth_headers, "X-Request-ID": nginx_rid},
+        json={"name": "rid-norm", "description": None, "strict_mode": False},
+    )
+    r = await client.post("/api/v1/audit/verify", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True, f"chain broken at #{body.get('broken_at_id')}"

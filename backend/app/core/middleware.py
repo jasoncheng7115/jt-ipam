@@ -60,10 +60,25 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    """為每個 request 配發 X-Request-ID（A09，與 audit/log 串接）。"""
+    """為每個 request 配發 X-Request-ID（A09，與 audit/log 串接）。
+
+    傳入的 X-Request-ID 若可解析為 UUID（含 nginx `$request_id` 那種無 hyphen
+    的 32-hex），一律標準化成 hyphenated UUID 字串。原因：
+      1. audit_logs.request_id 欄位是 UUID 型別，PG 讀回會是 hyphenated
+      2. SHA-256 chain（A08）在 verify 時會用 `str(UUID)` 重組 canonical，
+         若 write 時用了無 hyphen 字串會 hash 對不上 → chain 斷裂
+    無法解析者重產新 UUID，避免奇怪字串注入。
+    """
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
-        rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        raw = request.headers.get("X-Request-ID")
+        if raw:
+            try:
+                rid = str(uuid.UUID(raw))   # 32-hex 或 hyphenated 都吃；輸出一律 hyphenated
+            except ValueError:
+                rid = str(uuid.uuid4())
+        else:
+            rid = str(uuid.uuid4())
         request.state.request_id = rid
         response = await call_next(request)
         response.headers["X-Request-ID"] = rid

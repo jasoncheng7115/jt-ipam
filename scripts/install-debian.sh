@@ -329,7 +329,11 @@ cd "$FRONTEND_DIR"
 sudo -u "$JTIPAM_USER" pnpm install --frozen-lockfile || sudo -u "$JTIPAM_USER" pnpm install
 sudo -u "$JTIPAM_USER" pnpm build
 
-# ── 9. TLS 憑證（self-signed 模式自動產生）──
+# ── 9. TLS 憑證 ──
+# 統一憑證路徑：/etc/jt-ipam/tls/server.{crt,key}
+# - self-signed 模式：強制 force 重產
+# - nginx 模式：若無憑證自動產一個自簽（先讓站起得來；正式憑證之後 cp 過去 reload）
+# - direct 模式：缺憑證時直接產（避免 backend 起不來）
 if [[ "$TLS_MODE" == "self-signed" ]]; then
     log "Generating self-signed TLS certificate…"
     "$REPO_ROOT/scripts/generate-self-signed-cert.sh" \
@@ -338,9 +342,16 @@ if [[ "$TLS_MODE" == "self-signed" ]]; then
         --san "DNS:${PUBLIC_FQDN}" \
         --owner "root:${JTIPAM_GROUP}" \
         --force
-elif [[ "$TLS_MODE" == "direct" ]]; then
+elif [[ "$TLS_MODE" == "nginx" || "$TLS_MODE" == "direct" ]]; then
     if [[ ! -f "$TLS_DIR/server.crt" || ! -f "$TLS_DIR/server.key" ]]; then
-        warn "$TLS_DIR/server.{crt,key} 不存在；direct 模式請手動放入或改用 --tls-mode self-signed"
+        log "Generating bootstrap self-signed cert (用 cp 換成正式憑證即可，路徑：$TLS_DIR/server.{crt,key})…"
+        "$REPO_ROOT/scripts/generate-self-signed-cert.sh" \
+            --out-dir "$TLS_DIR" \
+            --cn "$PUBLIC_FQDN" \
+            --san "DNS:${PUBLIC_FQDN}" \
+            --owner "root:${JTIPAM_GROUP}"
+    else
+        log "Existing TLS cert in $TLS_DIR — keeping it"
     fi
 fi
 
@@ -379,13 +390,11 @@ if [[ "$TLS_MODE" == "nginx" ]]; then
     chmod 0644 /etc/nginx/sites-available/jt-ipam
     ln -sf /etc/nginx/sites-available/jt-ipam /etc/nginx/sites-enabled/jt-ipam
 
-    if [[ ! -f "/etc/letsencrypt/live/${PUBLIC_FQDN}/fullchain.pem" ]]; then
-        warn "尚未取得 ${PUBLIC_FQDN} 的 Let's Encrypt 憑證"
-        warn "請先 sudo apt install certbot python3-certbot-nginx"
-        warn "並執行：sudo certbot --nginx -d ${PUBLIC_FQDN}"
-        warn "若為內網 / 自簽，請參考 deploy/README.md「nginx 模式：使用自簽憑證」"
-        warn "目前 nginx 不會 reload（缺憑證會失敗）；憑證就緒後 sudo systemctl reload nginx"
-    elif nginx -t; then
+    # 預設使用 /etc/jt-ipam/tls/server.{crt,key}（#9 已產自簽當 bootstrap）。
+    # 換正式憑證：cp 你的 cert + key 到上述路徑後 sudo systemctl reload nginx
+    # Let's Encrypt 路線：修 /etc/nginx/sites-available/jt-ipam 把 ssl_certificate 改指到
+    #   /etc/letsencrypt/live/${PUBLIC_FQDN}/{fullchain,privkey}.pem 後跑 certbot
+    if nginx -t; then
         systemctl reload nginx
     else
         warn "nginx config test failed; review /etc/nginx/sites-available/jt-ipam"

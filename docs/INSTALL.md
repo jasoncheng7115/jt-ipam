@@ -10,52 +10,125 @@
 
 ## 1. 系統需求
 
-| 項目 | 最低 | 建議 |
-|---|---|---|
-| OS | Ubuntu 22.04 / Debian 12 | Ubuntu 24.04 LTS |
-| CPU | 2 vCPU | 4 vCPU |
-| RAM | 2 GB | 8 GB（含 pgvector + Ollama） |
-| Disk | 20 GB | 50 GB（audit log 累積）|
-| Python | 3.11 | 3.12 / 3.13 |
-| PostgreSQL | 16 + pgvector | — |
-| Redis | 7 | — |
+| 項目 | 最低 | 建議 | 備註 |
+|---|---|---|---|
+| OS | Ubuntu 22.04 / Debian 12 | **Ubuntu 24.04 LTS** | 24.04 內建 Python 3.12 + PG 16 + Node 18，省事 |
+| CPU | 2 vCPU | 4 vCPU | argon2id + pgvector embedding 吃 CPU |
+| RAM | 4 GB | 8 GB | 開 Ollama 還要再加 8 GB |
+| Disk | 20 GB | 50 GB | audit log 累積 |
+| Python | 3.11 | 3.12 | 24.04 預設就是 3.12 ✓ |
+| PostgreSQL | 16 + pgvector | — | 22.04 需 PGDG repo（腳本會自動加）|
+| Redis | 7 | — | 24.04 預設 7.0.15 ✓ |
+| Node | 20 LTS | 22 LTS | 24.04 預設 18.19；vite 6 跑得動但有 warning |
+
+**虛擬化備註**：在 Proxmox VM / LXC 上跑時，剛開機 / 重開後 1-2 分鐘內 load avg 可能飆高（hypervisor 上其他 VM 在搶 CPU，看 `mpstat` 的 `%steal`）；這不是 VM 本身忙，可以直接跑 install。
 
 ---
 
 ## 2. 一鍵安裝
 
+### 2.1 預備：apt 系統更新 + reboot（強烈建議）
+
+新機器先把 OS 全更新一次再裝，避免新舊核心 + libc 不一致：
+
 ```bash
-# clone
+sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq upgrade
+sudo systemctl reboot
+```
+
+### 2.2 一鍵安裝
+
+```bash
+# clone（或從 dev 機 rsync 過去）
 git clone https://github.com/jasontools/jt-ipam.git /opt/jt-ipam
 cd /opt/jt-ipam
 
-# 任選一種 TLS 模式：
+# 三種 TLS 模式擇一：
+#
+#   nginx         — nginx 終結 HTTPS，後端 loopback；缺憑證時自動產自簽 bootstrap
+#   self-signed   — uvicorn direct 自帶自簽（不裝 nginx；最快上線）
+#   direct        — uvicorn direct，憑證自備（缺則 fallback 產自簽）
 
-# (A) nginx 反代 + Let's Encrypt（建議生產環境）
+# (A) nginx + 暫用自簽（之後 cp 正式憑證即可）— 推薦生產環境
 sudo ./scripts/install-debian.sh --tls-mode nginx --public-fqdn ipam.example.com
 
-# (B) uvicorn direct + 自簽憑證（內網/開發）
+# (B) uvicorn direct 自簽（內網/開發環境最快）
 sudo ./scripts/install-debian.sh --tls-mode self-signed --public-fqdn ipam.local
 ```
 
 腳本會：
 
-1. 安裝 PostgreSQL 16（自動加 PGDG repo if needed）+ pgvector + Redis 7
-2. 建立 `jtipam` 系統使用者、`/opt/jt-ipam/.venv`、安裝 Python deps
+1. 安裝 PostgreSQL 16 + pgvector + Redis 7（Ubuntu 22.04 自動加 PGDG repo；Ubuntu 24.04 直接走官方源）
+2. 建立 `jtipam` 系統使用者、`/opt/jt-ipam/backend/.venv`、安裝 Python deps
 3. 建立 DB role/database `jt_ipam`，套 alembic migrations
-4. 自簽 / 取憑證
-5. 安裝 `jt-ipam-backend.service` + `jt-ipam-sync.timer`（5 分鐘定期同步）
-6. 設定 nginx site 並啟用
+4. 產生 `SECRET_KEY` / `ENCRYPTION_KEY` / `AUDIT_CHAIN_GENESIS` 寫入 `/etc/jt-ipam/backend.env`（0640）
+5. 在 `/etc/jt-ipam/tls/` 產自簽憑證 ECDSA P-384 / 5 年；SAN 自動含 `localhost / FQDN / 短 hostname / 127.0.0.1 / ::1 / 主機 IP`
+6. pnpm install + 前端 vite build
+7. 安裝 `jt-ipam-backend.service` + `jt-ipam-sync.timer`（每 5 分鐘）+ `jt-ipam-backup.timer`（每天 03:30）
+8. nginx 模式才裝 nginx site 並 reload
 
-完成後：
+### 2.3 Bootstrap 第一個 admin
 
 ```bash
-# 第一次 bootstrap admin 帳號
-sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/python \
-    -m app.scripts.bootstrap_admin --username admin --email admin@your.domain
+# 隨機產一個強密碼，從 stdin 讀（不留 shell history）
+ADMIN_PW=$(openssl rand -base64 24)
+sudo -u jtipam env $(grep -v '^#' /etc/jt-ipam/backend.env | xargs) \
+    /opt/jt-ipam/backend/.venv/bin/python -m app.cli.bootstrap create-admin \
+    --username admin --email admin@your.domain --password-stdin <<<"$ADMIN_PW"
+echo "ADMIN_PASSWORD=$ADMIN_PW"   # 自己保管好
 ```
 
-開啟瀏覽器到 `https://<your-fqdn>/` 即可登入。
+開啟瀏覽器到 `https://<your-fqdn>/` 即可登入。瀏覽器會警告自簽憑證，按進階繼續即可。
+
+### 2.4 端對端 sanity check
+
+```bash
+# healthz
+curl -kfsS https://127.0.0.1/healthz                       # 應回 ok
+
+# login + chain verify（驗 A08）
+TOKEN=$(curl -kfsS -X POST https://127.0.0.1/api/v1/auth/login \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PW\"}" | jq -r .access_token)
+curl -kfsS -X POST https://127.0.0.1/api/v1/audit/verify \
+    -H "Authorization: Bearer $TOKEN" | jq .
+# 應該看到 {"ok": true, "broken_at_id": null, "checked": N}
+
+# systemd 安全分數
+systemd-analyze security jt-ipam-backend | tail -3
+# 目標：≤ 3.5；目前實測 1.3 🙂
+```
+
+### 2.5 換成正式 TLS 憑證（nginx 模式）
+
+安裝時用自簽撐起來，正式憑證到手後**只要 cp 過去 reload nginx**：
+
+```bash
+# 把廠商給的 cert + key cp 到固定位置（保留原本權限 root:jtipam）
+sudo install -m 0644 -o root -g jtipam /path/to/your-cert.pem  /etc/jt-ipam/tls/server.crt
+sudo install -m 0640 -o root -g jtipam /path/to/your-key.pem   /etc/jt-ipam/tls/server.key
+
+# 如果你拿到的是 fullchain（含中繼憑證）+ key，建議用 fullchain
+sudo install -m 0644 -o root -g jtipam /path/to/fullchain.pem  /etc/jt-ipam/tls/server.crt
+
+# 驗證 + reload
+sudo nginx -t && sudo systemctl reload nginx
+
+# 確認新憑證生效
+openssl s_client -connect ipam.example.com:443 -servername ipam.example.com </dev/null 2>/dev/null \
+    | openssl x509 -noout -issuer -subject -dates
+```
+
+之後要再換，重複上面三步即可，不需重跑 install。
+
+走 Let's Encrypt 路線：
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+# certbot 會自動改 ssl_certificate 指到 /etc/letsencrypt/live/...
+sudo certbot --nginx -d ipam.example.com
+```
 
 ---
 
@@ -264,3 +337,28 @@ A: backend bind 預設 `127.0.0.1:8000`；確認 systemctl status jt-ipam-backen
 **Q: pgvector 找不到？**
 A: Ubuntu 22.04 沒內建；安裝腳本會自動加 PGDG repo + `postgresql-16-pgvector`。
 手動補：`sudo apt install postgresql-16-pgvector` 後 `CREATE EXTENSION vector;`。
+
+**Q: `/api/v1/audit/verify` 回 `{"ok": false}` chain 斷裂？**
+A: 已知歷史 bug：v0.3.0 之前 nginx 把它的 `$request_id`（32-hex 無 hyphen）
+透傳給 backend，backend 寫進 audit canonical 但 PG 讀回後是 hyphenated UUID，
+verify 時對不上。0.3.1+ middleware 已標準化（見 `app/core/middleware.py`
+`RequestIDMiddleware`）。如果你舊鏈已斷且資料還沒上 production：
+```bash
+# 重置 chain（會清掉所有 audit_logs；只能對未上線環境做）
+sudo -u postgres psql -d jt_ipam -c "TRUNCATE audit_logs RESTART IDENTITY;"
+sudo systemctl restart jt-ipam-backend
+```
+
+**Q: 安裝腳本說 `nginx: $request_id` warning `ssl_stapling ignored, issuer certificate not found`？**
+A: 自簽憑證沒有 issuer 鏈所以 OCSP stapling 用不到，無害。換成正式憑證或 Let's Encrypt 後會消失。
+
+**Q: 整合測試需要 `JTIPAM_TEST_DATABASE_URL`，正式部署也要嗎？**
+A: 不用。正式部署只需要 `backend.env` 裡的 `POSTGRES_*`。`JTIPAM_TEST_DATABASE_URL` 只是給 pytest 用的另一個 DB（避免污染 prod 資料）。
+
+**Q: Ubuntu 24.04 跑前端 build 出現 `Unsupported engine: wanted Node >= 20`？**
+A: 24.04 內建 nodejs 18，vite 6 / vue-tsc 跑得動但有警告。要消警告：用 nvm / nodesource 安裝 Node 20+：
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
+sudo apt install -y nodejs
+```
+然後在 `/opt/jt-ipam/frontend` 重 `pnpm install && pnpm build`。
