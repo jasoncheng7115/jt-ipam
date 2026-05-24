@@ -13,7 +13,10 @@
     "lint": "eslint . --ext .vue,.ts,.tsx --max-warnings 0",
     "lint:fix": "eslint . --ext .vue,.ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,vue,css,scss,json,md}\"",
-    "audit": "pnpm audit --audit-level=high"
+    "audit": "pnpm audit --audit-level=high",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "vue": "^3.5.13",
@@ -41,7 +44,12 @@
     "vite": "^6.0.5",
     "vue-tsc": "^2.1.10",
     "@types/qrcode": "^1.5.5",
-    "@types/cytoscape": "^3.21.7"
+    "@types/cytoscape": "^3.21.7",
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^25.0.1",
+    "@playwright/test": "^1.49.1"
   },
   "engines": {
     "node": ">=20",

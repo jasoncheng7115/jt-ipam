@@ -189,3 +189,24 @@ async def test_audit_chain_verifies_with_nginx_style_request_id(client, auth_hea
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True, f"chain broken at #{body.get('broken_at_id')}"
+
+
+async def test_list_users_with_last_login_ip(client, auth_headers, db_session):  # type: ignore[no-untyped-def]
+    """Regression：UserRead.last_login_ip 是 str | None，但 PG INET 讀回是
+    IPv4Address，Pydantic strict 拒 → /users 列表 500。validator 須把
+    IPv4Address str 化。"""
+    from app.models.user import User
+    from sqlalchemy import select
+
+    # 找到目前的 admin，灌 last_login_ip
+    u = (await db_session.execute(select(User).limit(1))).scalar_one()
+    u.last_login_ip = "10.20.30.40"
+    await db_session.commit()
+
+    r = await client.get("/api/v1/users", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert items, "should have at least one user"
+    # last_login_ip 在 response 裡是 string，不是 dict
+    found = [x for x in items if x.get("last_login_ip")]
+    assert any(isinstance(x["last_login_ip"], str) for x in found)

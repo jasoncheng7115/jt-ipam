@@ -79,6 +79,12 @@ logs/
 # Coverage / test artifacts
 coverage/
 .nyc_output/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+
+# Claude session metadata
+.claude/
 
 # Backup files
 *.bak

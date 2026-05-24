@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import EmailStr
+from pydantic import EmailStr, field_validator
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +46,14 @@ class UserRead(StrictModel):
     locked_until: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("last_login_ip", mode="before")
+    @classmethod
+    def _ip_str(cls, v: object) -> str | None:
+        # asyncpg INET → IPv4Address；Pydantic strict 不收，這裡先 str 化
+        if v is None:
+            return None
+        return str(v).split("/", 1)[0]
 
 
 class UserCreate(StrictModel):
