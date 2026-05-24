@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request
-from pydantic import Field
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import Field, SecretStr, model_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,9 +21,38 @@ router = APIRouter(prefix="/migration/phpipam", tags=["migration"])
 
 
 class SyncRequest(StrictModel):
-    mysql_url: Annotated[str, Field(min_length=10, max_length=512)]
+    """支援兩種輸入：
+    1) 個別欄位（推薦）：host / port / username / password / database
+    2) 或 mysql_url 直接給整條（向後相容）
+
+    至少要提供 host 或 mysql_url。"""
+
+    # 拆開的（推薦）— UI 用這組
+    host: Annotated[str | None, Field(max_length=255)] = None
+    port: Annotated[int, Field(ge=1, le=65535)] = 3306
+    username: Annotated[str | None, Field(max_length=128)] = None
+    password: SecretStr | None = None
+    database: Annotated[str, Field(max_length=128)] = "phpipam"
+
+    # 或一條 URL（CLI / 自動化）
+    mysql_url: Annotated[str | None, Field(min_length=10, max_length=512)] = None
+
     on_conflict: Literal["skip", "overwrite"] = "skip"
     dry_run: bool = False
+
+    @model_validator(mode="after")
+    def _build_url(self) -> "SyncRequest":
+        # 如果 mysql_url 沒給，就從個別欄位組
+        if not self.mysql_url:
+            if not self.host:
+                raise ValueError("必須提供 host 或 mysql_url 其一")
+            pwd = quote(self.password.get_secret_value(), safe="") if self.password else ""
+            user = quote(self.username, safe="") if self.username else ""
+            auth = ""
+            if user:
+                auth = f"{user}:{pwd}@" if pwd else f"{user}@"
+            self.mysql_url = f"mysql://{auth}{self.host}:{self.port}/{self.database}"
+        return self
 
 
 class MappingStat(StrictModel):

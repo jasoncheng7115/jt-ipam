@@ -162,13 +162,32 @@
     "title": "DNS 服務",
     "type": "類型",
     "endpoint": "Endpoint",
-    "view_zones": "查看 zone"
+    "view_zones": "查看 zone",
+    "create": "新增 DNS 服務",
+    "server_address": "Server 位址",
+    "winrm_password": "WinRM 密碼",
+    "error_name_required": "請填名稱",
+    "type_powerdns": "PowerDNS (HTTP API)",
+    "type_bind9": "BIND 9 (rndc / TSIG)",
+    "type_unbound_opnsense": "OPNsense Unbound (REST)",
+    "type_windows_dns": "Microsoft Windows DNS (WinRM)"
   },
   "librenms_admin": {
     "title": "LibreNMS 整合",
     "endpoint": "API URL",
     "test_ok": "連線正常",
-    "sync_summary": "同步完成：{summary}"
+    "sync_summary": "同步完成：{summary}",
+    "create": "新增 LibreNMS 實例",
+    "api_token": "API token",
+    "api_token_placeholder": "LibreNMS → API → 產生 token",
+    "sync_devices": "同步裝置",
+    "sync_arp": "同步 ARP",
+    "sync_fdb": "同步 FDB",
+    "use_for_status": "效力於即時狀態",
+    "auto_add_devices": "自動加入新裝置",
+    "sync_interval": "同步週期 (秒)",
+    "error_name_required": "請填名稱",
+    "error_token_too_short": "API token 至少 8 字元"
   },
   "firewall_admin": {
     "title": "OPNsense 防火牆",
@@ -197,6 +216,21 @@
     "loaded": "已載入",
     "version": "版本",
     "entry_point": "Entry point"
+  },
+  "nat": {
+    "type": "類型",
+    "protocol": "通訊協定",
+    "src_ip": "來源 IP",
+    "dst_ip": "目的 IP",
+    "device": "設備",
+    "src_port": "來源 Port",
+    "dst_port": "目的 Port",
+    "src_ip_placeholder": "選擇來源 IP（可搜尋）",
+    "dst_ip_placeholder": "選擇目的 IP（可搜尋）",
+    "device_placeholder": "選擇執行此規則的設備",
+    "type_one_to_one": "1:1 NAT（雙向）",
+    "type_many_to_one": "多對一（PAT / 出網）",
+    "type_port_forward": "Port forward（連接埠轉發）"
   },
   "anomaly": {
     "title": "異常偵測",
@@ -247,8 +281,13 @@
   },
   "migration": {
     "title": "phpIPAM 一鍵遷移",
-    "help": "從現有 phpIPAM MySQL 拉資料。建議第一次先用 dry-run 看影響再 commit。on_conflict=skip 可在平行使用階段反覆執行（已有的不動）。",
-    "mysql_url": "phpIPAM MySQL URL",
+    "help": "從現有 phpIPAM MySQL 拉資料。第一次建議用 dry-run 看影響再 commit。on_conflict=skip 可在平行使用階段反覆執行（已有的不動）。",
+    "host": "MySQL 主機",
+    "port": "Port",
+    "username": "使用者",
+    "password": "密碼",
+    "database": "資料庫名",
+    "error_host_required": "請填 MySQL 主機",
     "on_conflict": "衝突處理",
     "skip": "skip — 跳過已存在",
     "overwrite": "overwrite — 覆寫",

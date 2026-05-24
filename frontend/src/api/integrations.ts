@@ -24,6 +24,31 @@ export async function listDNSServers(): Promise<{ items: DNSServer[] }> {
   return data;
 }
 
+export type DNSServerType = "powerdns" | "bind9" | "unbound_opnsense" | "windows_dns";
+
+export interface DNSServerCreate {
+  name: string;
+  type: DNSServerType;
+  api_url?: string | null;
+  server_address?: string | null;
+  extra_config?: string | null;
+  enabled?: boolean;
+  sync_interval_seconds?: number;
+  api_key?: string | null;
+  api_secret?: string | null;
+  tsig_key?: string | null;
+  password?: string | null;
+}
+
+export async function createDNSServer(payload: DNSServerCreate): Promise<DNSServer> {
+  const { data } = await apiClient.post<DNSServer>("/api/v1/dns/servers", payload);
+  return data;
+}
+
+export async function deleteDNSServer(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/dns/servers/${id}`);
+}
+
 export async function testDNSServer(id: string): Promise<unknown> {
   const { data } = await apiClient.post(`/api/v1/dns/servers/${id}/test`);
   return data;
@@ -56,6 +81,28 @@ export async function listLibreNMS(
     { params: { page, page_size } },
   );
   return data;
+}
+
+export interface LibreNMSInstanceCreate {
+  name: string;
+  api_url: string;
+  api_token: string;
+  enabled?: boolean;
+  sync_devices?: boolean;
+  sync_arp?: boolean;
+  sync_fdb?: boolean;
+  use_for_status?: boolean;
+  auto_add_devices?: boolean;
+  sync_interval_seconds?: number;
+}
+
+export async function createLibreNMS(payload: LibreNMSInstanceCreate): Promise<LibreNMSInstance> {
+  const { data } = await apiClient.post<LibreNMSInstance>("/api/v1/librenms/instances", payload);
+  return data;
+}
+
+export async function deleteLibreNMS(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/librenms/instances/${id}`);
 }
 
 export async function testLibreNMS(id: string): Promise<unknown> {

@@ -162,13 +162,32 @@
     "title": "DNS Servers",
     "type": "Type",
     "endpoint": "Endpoint",
-    "view_zones": "View zones"
+    "view_zones": "View zones",
+    "create": "Add DNS server",
+    "server_address": "Server address",
+    "winrm_password": "WinRM password",
+    "error_name_required": "Name is required",
+    "type_powerdns": "PowerDNS (HTTP API)",
+    "type_bind9": "BIND 9 (rndc / TSIG)",
+    "type_unbound_opnsense": "OPNsense Unbound (REST)",
+    "type_windows_dns": "Microsoft Windows DNS (WinRM)"
   },
   "librenms_admin": {
     "title": "LibreNMS",
     "endpoint": "API URL",
     "test_ok": "Connection OK",
-    "sync_summary": "Sync done: {summary}"
+    "sync_summary": "Sync done: {summary}",
+    "create": "Add LibreNMS instance",
+    "api_token": "API token",
+    "api_token_placeholder": "LibreNMS -> API -> generate token",
+    "sync_devices": "Sync devices",
+    "sync_arp": "Sync ARP",
+    "sync_fdb": "Sync FDB",
+    "use_for_status": "Use for status",
+    "auto_add_devices": "Auto-add new devices",
+    "sync_interval": "Sync interval (seconds)",
+    "error_name_required": "Name is required",
+    "error_token_too_short": "API token must be at least 8 chars"
   },
   "firewall_admin": {
     "title": "OPNsense Firewall",
@@ -197,6 +216,21 @@
     "loaded": "Loaded",
     "version": "Version",
     "entry_point": "Entry point"
+  },
+  "nat": {
+    "type": "Type",
+    "protocol": "Protocol",
+    "src_ip": "Source IP",
+    "dst_ip": "Destination IP",
+    "device": "Device",
+    "src_port": "Source port",
+    "dst_port": "Destination port",
+    "src_ip_placeholder": "Pick source IP (searchable)",
+    "dst_ip_placeholder": "Pick destination IP (searchable)",
+    "device_placeholder": "Device that enforces this rule",
+    "type_one_to_one": "1:1 NAT (bidirectional)",
+    "type_many_to_one": "Many-to-one (PAT)",
+    "type_port_forward": "Port forward"
   },
   "anomaly": {
     "title": "Anomaly Detection",
@@ -248,7 +282,12 @@
   "migration": {
     "title": "phpIPAM migration",
     "help": "Pull from your existing phpIPAM MySQL. First run dry-run to preview, then commit. on_conflict=skip is safe to re-run repeatedly during parallel use (already-imported rows untouched).",
-    "mysql_url": "phpIPAM MySQL URL",
+    "host": "MySQL host",
+    "port": "Port",
+    "username": "User",
+    "password": "Password",
+    "database": "Database",
+    "error_host_required": "MySQL host is required",
     "on_conflict": "On conflict",
     "skip": "skip - keep existing",
     "overwrite": "overwrite - replace",

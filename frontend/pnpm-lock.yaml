@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@iconoir/vue':
+        specifier: ^7.11.0
+        version: 7.11.0(vue@3.5.34(typescript@5.6.3))
       '@vueuse/core':
         specifier: ^11.2.0
         version: 11.3.0(vue@3.5.34(typescript@5.6.3))
@@ -518,6 +521,11 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@iconoir/vue@7.11.0':
+    resolution: {integrity: sha512-o768Cu9nayRcxryYElKmfRLBOfY26xVKB4T8z+ppJnEWy2QiDLIs8NJVc53HGvTsrfn7JC7+uu32ZUdFpx4m6A==}
+    peerDependencies:
+      vue: '3'
 
   '@intlify/core-base@10.0.8':
     resolution: {integrity: sha512-FoHslNWSoHjdUBLy35bpm9PV/0LVI/DSv9L6Km6J2ad8r/mm0VaGg06C40FqlE8u2ADcGUM60lyoU7Myo4WNZQ==}
@@ -2523,6 +2531,10 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@iconoir/vue@7.11.0(vue@3.5.34(typescript@5.6.3))':
+    dependencies:
+      vue: 3.5.34(typescript@5.6.3)
 
   '@intlify/core-base@10.0.8':
     dependencies:
