@@ -133,6 +133,9 @@
     "password": "密碼（≥ 12 字元）",
     "password_optional": "選填",
     "password_blank_unchanged": "留空表示不變",
+    "error_username_required": "請輸入帳號",
+    "error_email_required": "請輸入 Email",
+    "error_password_too_short": "密碼至少 12 字元",
     "unlock": "解鎖",
     "deactivate": "停用",
     "reactivate": "啟用"

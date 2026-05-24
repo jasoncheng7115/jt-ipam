@@ -69,8 +69,16 @@ async function refresh() {
 }
 
 async function submitCreate() {
-  if (!newUser.value.username || !newUser.value.email || newUser.value.password.length < 12) {
-    msg.error(t("login.failed"));
+  if (!newUser.value.username.trim()) {
+    msg.error(t("users.error_username_required"));
+    return;
+  }
+  if (!newUser.value.email.trim()) {
+    msg.error(t("users.error_email_required"));
+    return;
+  }
+  if (newUser.value.password.length < 12) {
+    msg.error(t("users.error_password_too_short"));
     return;
   }
   try {

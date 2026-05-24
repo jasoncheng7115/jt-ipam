@@ -133,6 +133,9 @@
     "password": "Password (>= 12 chars)",
     "password_optional": "optional",
     "password_blank_unchanged": "leave blank to keep",
+    "error_username_required": "Username is required",
+    "error_email_required": "Email is required",
+    "error_password_too_short": "Password must be at least 12 characters",
     "unlock": "Unlock",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate"
