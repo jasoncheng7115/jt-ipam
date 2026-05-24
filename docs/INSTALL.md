@@ -355,6 +355,48 @@ A: 自簽憑證沒有 issuer 鏈所以 OCSP stapling 用不到，無害。換成
 **Q: 整合測試需要 `JTIPAM_TEST_DATABASE_URL`，正式部署也要嗎？**
 A: 不用。正式部署只需要 `backend.env` 裡的 `POSTGRES_*`。`JTIPAM_TEST_DATABASE_URL` 只是給 pytest 用的另一個 DB（避免污染 prod 資料）。
 
+**Q: 安裝完後預設 IP 訪問會看到 "Welcome to nginx" 而不是 jt-ipam？**
+A: 已知問題（0.3.1 以前）：apt 裝完 nginx 預設啟用 `default` site，會搶 IP-only 訪問。0.3.1+ 的 `install-debian.sh` 會：(1) 自動 `rm /etc/nginx/sites-enabled/default`，(2) jt-ipam site 加 `listen ... default_server`，這樣 IP / FQDN / 任何 hostname 都會走 jt-ipam。舊機可手動：
+```bash
+sudo rm /etc/nginx/sites-enabled/default
+sudo sed -i 's|listen 80;|listen 80 default_server;|; s|listen 443 ssl http2;|listen 443 ssl http2 default_server;|' /etc/nginx/sites-available/jt-ipam
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Q: 預設 admin 帳密是什麼？忘了怎麼辦？**
+A: **沒有預設帳密**。安裝完後必須手動 bootstrap（見 §2.3）；密碼由 `openssl rand` 隨機產，**只在 bootstrap 當下印一次**，要自己存好。忘了或要換：
+```bash
+# 方案 A：再開一個 admin（如果原 admin 還能用，先讓另一個 admin 從 UI /users 改密）
+ADMIN_PW=$(openssl rand -base64 24)
+sudo -u jtipam env $(grep -v '^#' /etc/jt-ipam/backend.env | xargs) \
+    /opt/jt-ipam/backend/.venv/bin/python -m app.cli.bootstrap create-admin \
+    --username admin2 --email admin2@your.domain --password-stdin <<<"$ADMIN_PW"
+echo "$ADMIN_PW"
+
+# 方案 B：原 admin 已鎖死 / 失聯 — 直接改 DB 把它解鎖並重設密碼
+sudo -u jtipam env $(grep -v '^#' /etc/jt-ipam/backend.env | xargs) \
+    /opt/jt-ipam/backend/.venv/bin/python -c '
+import asyncio, sys
+from app.core.db import SessionLocal
+from app.core.security import hash_password
+from app.models.user import User
+from sqlalchemy import select
+
+async def main(username, new_pwd):
+    async with SessionLocal() as s:
+        u = (await s.execute(select(User).where(User.username == username))).scalar_one()
+        u.password_hash = hash_password(new_pwd)
+        u.locked_until = None
+        u.failed_login_count = 0
+        u.is_active = True
+        u.is_admin = True
+        await s.commit()
+        print(f"reset {u.username}")
+
+asyncio.run(main(sys.argv[1], sys.argv[2]))
+' admin "MyNewPassword2026!"
+```
+
 **Q: Ubuntu 24.04 跑前端 build 出現 `Unsupported engine: wanted Node >= 20`？**
 A: 24.04 內建 nodejs 18，vite 6 / vue-tsc 跑得動但有警告。要消警告：用 nvm / nodesource 安裝 Node 20+：
 ```bash

@@ -390,6 +390,13 @@ if [[ "$TLS_MODE" == "nginx" ]]; then
     chmod 0644 /etc/nginx/sites-available/jt-ipam
     ln -sf /etc/nginx/sites-available/jt-ipam /etc/nginx/sites-enabled/jt-ipam
 
+    # 砍 apt 預設的 default site（「Welcome to nginx」會被 IP 訪問時抓到）；
+    # jt-ipam.conf 已是 default_server，砍掉 default 就只剩它
+    if [[ -e /etc/nginx/sites-enabled/default ]]; then
+        rm -f /etc/nginx/sites-enabled/default
+        log "Removed default nginx site (Welcome to nginx page)"
+    fi
+
     # 預設使用 /etc/jt-ipam/tls/server.{crt,key}（#9 已產自簽當 bootstrap）。
     # 換正式憑證：cp 你的 cert + key 到上述路徑後 sudo systemctl reload nginx
     # Let's Encrypt 路線：修 /etc/nginx/sites-available/jt-ipam 把 ssl_certificate 改指到
