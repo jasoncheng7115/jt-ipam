@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,6 +35,26 @@ class NATTranslation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     description: Mapped[str | None] = mapped_column(Text)
 
+    # ── OPNsense 規則完整欄位（對齊防火牆 NAT port-forward）──
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    no_rdr: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    ip_version: Mapped[str] = mapped_column(String(8), default="inet", nullable=False, server_default="inet")  # inet / inet6
+    src_not: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    dst_not: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    src_port_to: Mapped[int | None] = mapped_column(Integer)   # 來源埠範圍結尾（src_port 為起）
+    dst_port_to: Mapped[int | None] = mapped_column(Integer)   # 目的埠範圍結尾
+    log: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    category: Mapped[str | None] = mapped_column(String(128))
+    nat_reflection: Mapped[str | None] = mapped_column(String(16))   # default / enable / disable
+    pool_options: Mapped[str | None] = mapped_column(String(32))
+    filter_rule: Mapped[str | None] = mapped_column(String(128))     # 關聯的 filter rule 名稱 / id
+    # alias 參考（OPNsense 規則常以 alias 名稱表示來源/目的/埠）→ 存名稱以便連到 alias 內容
+    src_alias: Mapped[str | None] = mapped_column(String(64))
+    dst_alias: Mapped[str | None] = mapped_column(String(64))
+    src_port_alias: Mapped[str | None] = mapped_column(String(64))
+    dst_port_alias: Mapped[str | None] = mapped_column(String(64))
+    redirect_alias: Mapped[str | None] = mapped_column(String(64))
+
     # 來源追蹤：來自哪個外部系統（同步用 upsert 鍵 + 表示「OPNsense 蓋舊的」）
     # source_origin 形式：
     #   "manual"             — UI 手動建的
@@ -49,7 +69,7 @@ class NATTranslation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             name="nat_type_valid",
         ),
         CheckConstraint(
-            "protocol IN ('tcp','udp','any')",
+            "protocol IN ('tcp','udp','any','icmp','esp','gre','tcp/udp')",
             name="nat_protocol_valid",
         ),
         CheckConstraint(

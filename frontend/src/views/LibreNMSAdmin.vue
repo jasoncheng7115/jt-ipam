@@ -40,6 +40,8 @@ const lnPicker = [
 
 const msg = useMessage();
 const rows = ref<LibreNMSInstance[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const loading = ref(false);
 const show = ref(false);
 const editing = ref<LibreNMSInstance | null>(null);
@@ -205,7 +207,8 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
       </n-space>
     </template>
 
-    <n-space style="margin-bottom: 12px">
+    <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -219,7 +222,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
       <ExportButton :columns="cols" :rows="rows" filename="librenms" :title="t('librenms_admin.title')" />
     </n-space>
 
-    <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" :scroll-x="1116">
+    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1116">
       <template #empty>
         <n-space justify="center">{{ t("common.no_data") }}</n-space>
       </template>

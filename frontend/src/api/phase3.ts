@@ -145,6 +145,24 @@ export interface NAT {
   protocol: string;
   device_id: string | null;
   description: string | null;
+  // OPNsense 完整欄位
+  disabled: boolean;
+  no_rdr: boolean;
+  ip_version: string;
+  src_not: boolean;
+  dst_not: boolean;
+  src_port_to: number | null;
+  dst_port_to: number | null;
+  log: boolean;
+  category: string | null;
+  nat_reflection: string | null;
+  pool_options: string | null;
+  filter_rule: string | null;
+  src_alias: string | null;
+  dst_alias: string | null;
+  src_port_alias: string | null;
+  dst_port_alias: string | null;
+  redirect_alias: string | null;
   created_at: string;
   updated_at: string;
   source_origin: string | null;
@@ -256,7 +274,7 @@ export interface TenantGroup { id: string; name: string; description: string | n
 export interface ASN { id: string; number: number; rir: string | null; description: string | null; tenant_id: string | null; created_at: string; updated_at: string; }
 export interface Provider { id: string; name: string; account: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface CircuitType { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
-export interface Circuit { id: string; cid: string; provider_id: string; type_id: string; status: string; description: string | null; created_at: string; updated_at: string; }
+export interface Circuit { id: string; cid: string; provider_id: string; type_id: string; status: string; monthly_fee_cents: number | null; commit_rate_kbps: number | null; up_kbps: number | null; down_kbps: number | null; install_date: string | null; contract_end_date: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface ContactGroup { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface ContactRole { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface Contact { id: string; name: string; email: string | null; phone: string | null; group_id: string | null; description: string | null; created_at: string; updated_at: string; }

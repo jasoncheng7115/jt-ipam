@@ -62,6 +62,8 @@ const fws = ref<OPNsenseFirewall[]>([]);
 // Rules tab
 const rulesFw = ref<string | null>(null);
 const rules = ref<OPNsenseRule[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: ruleFilterQ, filtered: rulesFiltered } = useTableQuickFilter(rules);
 const rulesLoading = ref(false);
 async function loadRules() {
   if (!rulesFw.value) { rules.value = []; return; }
@@ -426,13 +428,14 @@ onMounted(() => { void refresh(); });
           <span v-if="rulesFw && rules.length" style="opacity: 0.7;">
             {{ t("firewall_admin.rules_count", { n: rules.length }) }}
           </span>
+          <n-input v-model:value="ruleFilterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
           <ColumnPicker :all="rulePicker" :visible="rulePrefs.visibleKeys.value"
                         @update:visible="rulePrefs.setVisible" @reset="rulePrefs.reset" />
           <ExportButton :columns="ruleCols" :rows="rules" filename="firewall-rules" :title="t('firewall_admin.rules')" />
         </n-space>
         <n-data-table
           v-if="rulesFw"
-          :columns="ruleCols" :data="rules" :loading="rulesLoading"
+          :columns="ruleCols" :data="rulesFiltered" :loading="rulesLoading"
           :bordered="false" size="small" :scroll-x="910"
           :pagination="{ pageSize: 100, showSizePicker: true, pageSizes: [50, 100, 200, 500] }"
         />

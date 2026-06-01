@@ -39,6 +39,8 @@ const zoomPct = computed({
   get: () => Math.round(zoom.value * 100),
   set: (p: number) => { zoom.value = Math.min(4, Math.max(0.1, (p || 100) / 100)); },
 });
+// 控制點反向縮放 → 不論平面圖縮放/方框大小，操作點維持固定螢幕大小（好點選）
+const handleStyle = computed(() => ({ transform: `scale(${1 / zoom.value})` }));
 // 算出「整張剛好塞進可視框」的縮放並置中
 function fitToView() {
   const box = planEl.value;
@@ -190,8 +192,9 @@ function onRotateMove(ev: PointerEvent) {
   const r = racks.value.find((x) => x.id === rotId);
   if (!r) return;
   rotMoved = true;
-  let deg = (Math.atan2(ev.clientY - rotCenter.y, ev.clientX - rotCenter.x) * 180) / Math.PI + 90;
-  r.pos_rot = ((Math.round(deg) % 360) + 360) % 360;
+  const deg = (Math.atan2(ev.clientY - rotCenter.y, ev.clientX - rotCenter.x) * 180) / Math.PI + 90;
+  // 拖曳吸附到 0 / 90 / 180 / 270（機櫃擺放只需正交方向）
+  r.pos_rot = ((Math.round(deg / 90) * 90) % 360 + 360) % 360;
   dirty.value = true;
 }
 function onRotateUp() {
@@ -320,23 +323,24 @@ async function save() {
           <n-icon :size="13"><RacksIcon /></n-icon>
           <span class="m-name">{{ r.name }}</span>
           <span class="m-u">{{ r.u_height }}U</span>
-          <span v-if="editMode" class="m-rot" :title="t('racks.fp_rotate')"
+          <span v-if="editMode" class="m-rot" :style="handleStyle" :title="t('racks.fp_rotate')"
                 @pointerdown.stop="onRotateDown(r, $event)">⟳</span>
-          <span v-if="editMode" class="m-x" @pointerdown.stop @click.stop="unplace(r)">×</span>
-          <span v-if="editMode" class="m-resize" :title="t('racks.fp_resize')"
+          <span v-if="editMode" class="m-x" :style="handleStyle" @pointerdown.stop @click.stop="unplace(r)">×</span>
+          <span v-if="editMode" class="m-resize" :style="handleStyle" :title="t('racks.fp_resize')"
                 @pointerdown.stop="onResizeDown(r, $event)"></span>
         </div>
       </div>
-      <div class="plan-ctrls" @pointerdown.stop @wheel.stop>
-        <n-button size="tiny" circle @click="zoomPct = zoomPct - 10">－</n-button>
-        <n-slider v-model:value="zoomPct" :min="10" :max="400" :step="5" :tooltip="false" style="width: 130px" />
-        <n-button size="tiny" circle @click="zoomPct = zoomPct + 10">＋</n-button>
-        <n-input-number v-model:value="zoomPct" size="tiny" :min="10" :max="400" :step="5"
-                        style="width: 92px" :show-button="false">
-          <template #suffix>%</template>
-        </n-input-number>
-        <n-button size="tiny" @click="resetView">{{ t("racks.fp_reset_view") }}</n-button>
-      </div>
+    </div>
+    <!-- 縮放工具列：移到平面圖下方，避免蓋住圖面 -->
+    <div v-if="imgUrl" class="plan-ctrls" @pointerdown.stop @wheel.stop>
+      <n-button size="tiny" circle @click="zoomPct = zoomPct - 10">－</n-button>
+      <n-slider v-model:value="zoomPct" :min="10" :max="400" :step="5" :tooltip="false" style="width: 130px" />
+      <n-button size="tiny" circle @click="zoomPct = zoomPct + 10">＋</n-button>
+      <n-input-number v-model:value="zoomPct" size="tiny" :min="10" :max="400" :step="5"
+                      style="width: 92px" :show-button="false">
+        <template #suffix>%</template>
+      </n-input-number>
+      <n-button size="tiny" @click="resetView">{{ t("racks.fp_reset_view") }}</n-button>
     </div>
 
     <!-- 未擺放機櫃托盤（編輯模式）-->
@@ -366,11 +370,11 @@ async function save() {
 .plan-inner { position: absolute; top: 0; left: 0; width: 100%; }
 .plan-img { display: block; width: 100%; height: auto; user-select: none; pointer-events: none; }
 .plan-ctrls {
-  position: absolute; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 5;
-  display: flex; gap: 8px; align-items: center;
+  margin-top: 10px;
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+  flex-wrap: wrap;
   padding: 6px 10px; border-radius: 8px;
-  background: var(--n-card-color, rgba(255,255,255,0.92));
-  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  background: rgba(127,127,127,0.06);
   cursor: default;
 }
 /* 機櫃方框：寬度固定、高度隨 U 數，外觀像俯視的機櫃 */

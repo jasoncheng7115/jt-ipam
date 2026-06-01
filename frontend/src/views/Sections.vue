@@ -16,6 +16,7 @@ import { SectionsIcon, RefreshIcon, DeleteIcon, PlusIcon, EditIcon, SaveIcon, Ca
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import { useCustomers } from "@/composables/useCustomers";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { computed } from "vue";
@@ -27,6 +28,7 @@ const msg = useMessage();
 const router = useRouter();
 const links = useEntityLinks(router);
 const rows = ref<Section[]>([]);
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const loading = ref(false);
 const checkedKeys = ref<DataTableRowKey[]>([]);
 const bulkBusy = ref(false);
@@ -204,7 +206,8 @@ onMounted(() => {
         <span>{{ t("sections.title") }}</span>
       </n-space>
     </template>
-    <n-space style="margin-bottom: 12px">
+    <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -232,7 +235,7 @@ onMounted(() => {
     </n-space>
     <n-data-table
       :columns="columns"
-      :data="rows"
+      :data="filteredRows"
       :loading="loading"
       :pagination="{ pageSize: 50 }"
       :bordered="false"

@@ -199,4 +199,31 @@ html[data-theme="light"] .n-layout-sider {
 html[data-theme="light"] .n-layout-header {
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.05);
 }
+
+/* ── 全站卡片層次（讓每一頁都有結構，不只儀表板） ── */
+/* 卡片標題列：淡灰帶狀底，與儀表板一致；modal 標題也會套到，視覺一致。
+   margin-bottom 讓帶狀底與下方內容（工具列 / 表格）留白，不要黏在一起。 */
+.n-card > .n-card-header {
+  background: rgba(100, 116, 139, 0.10);
+  border-radius: 10px 10px 0 0;
+  margin-bottom: 14px;
+}
+/* 深色模式：帶狀底要更亮一點才看得出來（比表頭再亮一階） */
+html[data-theme="dark"] .n-card > .n-card-header {
+  background: rgba(148, 163, 184, 0.18);
+}
+/* 深色模式：卡片加細邊框，從深背景浮出來 */
+html[data-theme="dark"] .n-card {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+/* 深色模式：表格表頭帶底色 + 列分隔，讓表格不再「奄奄一息」 */
+html[data-theme="dark"] .n-data-table-th {
+  background-color: rgba(148, 163, 184, 0.10) !important;
+}
+html[data-theme="dark"] .n-data-table-td {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+}
+html[data-theme="dark"] .n-data-table-tr:hover .n-data-table-td {
+  background-color: rgba(148, 163, 184, 0.06) !important;
+}
 </style>

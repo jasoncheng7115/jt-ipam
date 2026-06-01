@@ -33,7 +33,7 @@
     "devices": "裝置",
     "tasks": "作業",
     "racks": "機櫃",
-    "locations": "地點",
+    "locations": "機房 / 地點",
     "tools": "工具",
     "requests": "IP 申請",
     "topology": "IP 拓樸圖",
@@ -60,7 +60,7 @@
     "physical": "佈線 / 電力 / VPN",
     "cabling": "佈線",
     "power": "電力",
-    "vpn_tunnels": "VPN",
+    "vpn_tunnels": "站對站 VPN",
     "migration": "phpIPAM 匯入",
     "import": "RIPE/TWNIC"
   },
@@ -75,6 +75,7 @@
     "user_menu": {
       "profile": "個人資料",
       "preferences": "偏好設定",
+      "my_chat_history": "我的 AI 對話歷程",
       "logout": "登出"
     }
   },
@@ -85,6 +86,7 @@
     "save": "儲存",
     "cancel": "取消",
     "search": "搜尋",
+    "filter": "篩選",
     "loading": "載入中…",
     "no_data": "無資料",
     "confirm_delete": "確定刪除？此操作無法復原。",
@@ -309,6 +311,7 @@
     "pw_medium": "中",
     "pw_strong": "強",
     "unlock": "解鎖",
+    "assign_perms": "權限指派",
     "deactivate": "停用",
     "reactivate": "啟用"
   },
@@ -411,6 +414,9 @@
     "col_type": "物件類型",
     "col_target": "物件",
     "col_level": "層級",
+    "col_principal": "對象（使用者 / 角色）",
+    "all_grants": "所有已指派的權限",
+    "no_grants": "目前沒有任何權限指派",
     "type_customer": "單位",
     "type_section": "區段",
     "type_subnet": "子網路",
@@ -434,6 +440,14 @@
     "purged": "已清除 {n} 段對話",
     "retention_hint": "0 = 永久保留。系統啟動時會自動清除超過保留天數的對話，也可按「立即清除」手動執行。",
     "role_user": "使用者"
+  },
+  "my_chat_history": {
+    "title": "我的 AI 對話歷程"
+  },
+  "notifications": {
+    "title": "通知",
+    "mark_all_read": "全部標為已讀",
+    "empty": "沒有通知"
   },
   "vlans": {
     "device_count": "裝置數",
@@ -485,7 +499,11 @@
     "legend_links": "連線",
     "legend_nodes": "節點",
     "server_other": "伺服器 / 其他",
-    "click_hint": "點節點看細節"
+    "click_hint": "點節點看細節",
+    "toggle_hint": "點圖例可隱藏 / 顯示該類節點",
+    "fit": "全貌",
+    "zoom_in": "放大",
+    "zoom_out": "縮小"
   },
   "hostnameSrc": {
     "auto": "自動 (跟全域順序)",
@@ -701,6 +719,10 @@
     "add": "新增機櫃",
     "select_placeholder": "選擇機櫃",
     "room_placeholder": "選擇機房（看整排機櫃）",
+    "pin_room": "釘選此機房（進來預設先看）",
+    "unpin_room": "取消釘選",
+    "manage_rooms": "管理機房",
+    "manage_rooms_hint": "機房＝地點；到「地點」頁新增 / 編輯機房與上傳平面圖底圖",
     "room_empty": "此機房尚無機櫃。",
     "or": "或",
     "floor_plan": "機房平面圖",
@@ -777,6 +799,17 @@
     "valid": "合法",
     "invalid": "不合法",
     "lookup": "查詢",
+    "split_btn": "切割",
+    "t_mail": "郵件 / DNS 診斷 (MX / SPF / DKIM)",
+    "power_calc": "機房電力試算",
+    "pw_load": "電力負載 / 容量",
+    "pw_heat": "散熱 (W → BTU)",
+    "pw_ups": "UPS 後備時間估算",
+    "pw_pdu": "PDU 安全負載",
+    "pw_minutes": "分鐘",
+    "pw_safe80": "額定 80%",
+    "pw_1phase": "單相",
+    "pw_3phase": "三相",
     "oui_tab": "MAC 製造商 (OUI)",
     "oui_alert_pre": "來自 Wireshark",
     "oui_alert_post": "檔 (每月更新一次即可)。",
@@ -963,6 +996,19 @@
     "src_ip_placeholder": "選擇來源 IP (可搜尋)",
     "dst_ip_placeholder": "選擇目的 IP (可搜尋)",
     "device_placeholder": "選擇執行此規則的裝置",
+    "ip_version": "IP 版本",
+    "disabled": "停用",
+    "no_rdr": "無 RDR",
+    "log": "記錄",
+    "port_to": "至 (範圍結尾)",
+    "invert": "反向",
+    "nat_reflection": "NAT 反射",
+    "reflect_default": "使用系統預設",
+    "pool_options": "集區選項",
+    "category": "類別",
+    "filter_rule": "篩選規則關聯",
+    "filter_rule_ph": "對應的防火牆規則名稱 / id",
+    "alias_goto": "點擊到防火牆頁查看此 alias",
     "type_one_to_one": "1:1 NAT (雙向)",
     "type_many_to_one": "多對一 (PAT / 出網)",
     "type_port_forward": "Port forward (連接埠轉發)",
@@ -1020,7 +1066,13 @@
     "provider_placeholder": "選擇供應商",
     "type": "類型",
     "type_placeholder": "選擇電路類型",
-    "account": "帳號"
+    "account": "帳號",
+    "down_kbps": "下載 (kbps)",
+    "up_kbps": "上傳 (kbps)",
+    "commit_kbps": "保證頻寬 (kbps)",
+    "monthly_fee": "月費 (分)",
+    "install_date": "開通日",
+    "contract_end": "合約到期"
   },
   "contacts": {
     "group": "群組"
@@ -1068,9 +1120,9 @@
   "physical": {
     "cabling": "佈線",
     "power": "電力",
-    "panels": "Panel",
-    "feeds": "Feed",
-    "outlets": "Outlet",
+    "panels": "配電盤",
+    "feeds": "饋線",
+    "outlets": "插座",
     "vpn_peer": "對接 / 對端"
   },
   "migration": {
@@ -1297,7 +1349,8 @@
   },
   "rack_diagram": {
     "empty": "此機櫃尚無裝置",
-    "height": "高度"
+    "height": "高度",
+    "export_svg_hint": "匯出為可編輯 SVG（可匯入 draw.io 編輯文字 / 圖形 / 線條）"
   },
   "request_detail": {
     "approved_ok": "已核准並配發 IP",

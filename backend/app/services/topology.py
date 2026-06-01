@@ -57,13 +57,45 @@ async def build_topology(
     subnet_filter = set(subnet_ids) if subnet_ids else None
     allowed_device_ids: set[str] | None = None
     if subnet_filter:
-        dev_rows = (await session.execute(
+        # 篩選與「全部」一致：用三種訊號決定哪些裝置屬於這些子網路，
+        # 否則只靠 IPAddress 連結會漏掉「以 IP 命名」或「ARP 看到」的裝置。
+        fsubs = (await session.execute(
+            select(Subnet).where(Subnet.id.in_(subnet_filter))
+        )).scalars().all()
+        fnets = []
+        for sn in fsubs:
+            try:
+                fnets.append(_ipaddr.ip_network(str(sn.cidr), strict=False))
+            except ValueError:
+                continue
+        allowed_device_ids = set()
+        # (ip) 有 IPAddress 連結到這些子網路
+        for d in (await session.execute(
             select(IPAddress.device_id).where(
                 IPAddress.subnet_id.in_(subnet_filter),
                 IPAddress.device_id.is_not(None),
             )
-        )).all()
-        allowed_device_ids = {str(d[0]) for d in dev_rows if d[0] is not None}
+        )).all():
+            if d[0] is not None:
+                allowed_device_ids.add(str(d[0]))
+        # (name) 裝置名稱即 IP 且落在這些子網路
+        for did, dname in (await session.execute(select(Device.id, Device.name))).all():
+            try:
+                nip = _ipaddr.ip_address((dname or "").strip())
+            except ValueError:
+                continue
+            if any(nip in n for n in fnets):
+                allowed_device_ids.add(str(did))
+        # (arp) 裝置的 ARP 鄰居 IP 落在這些子網路
+        for did, ip in (await session.execute(
+            select(ARPEntry.device_id, ARPEntry.ip).where(ARPEntry.device_id.is_not(None))
+        )).all():
+            try:
+                aip = _ipaddr.ip_address(str(ip).split("/")[0])
+            except ValueError:
+                continue
+            if any(aip in n for n in fnets):
+                allowed_device_ids.add(str(did))
 
     # ── nodes：所有 device（可選依 location / subnet 過濾） ──
     dstmt = select(Device)

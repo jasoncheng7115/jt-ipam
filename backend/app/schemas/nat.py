@@ -11,10 +11,31 @@ from pydantic import Field, field_validator
 from app.schemas.base import StrictModel
 
 _TYPES = {"one_to_one", "many_to_one", "port_forward"}
-_PROTOS = {"tcp", "udp", "any"}
+_PROTOS = {"tcp", "udp", "any", "icmp", "esp", "gre", "tcp/udp"}
 
 
-class NATBase(StrictModel):
+class _NATExtra(StrictModel):
+    """OPNsense 規則完整欄位（建立/更新/讀取共用）。"""
+    disabled: bool = False
+    no_rdr: bool = False
+    ip_version: Annotated[str, Field(max_length=8)] = "inet"
+    src_not: bool = False
+    dst_not: bool = False
+    src_port_to: Annotated[int | None, Field(ge=1, le=65535)] = None
+    dst_port_to: Annotated[int | None, Field(ge=1, le=65535)] = None
+    log: bool = False
+    category: Annotated[str | None, Field(max_length=128)] = None
+    nat_reflection: Annotated[str | None, Field(max_length=16)] = None
+    pool_options: Annotated[str | None, Field(max_length=32)] = None
+    filter_rule: Annotated[str | None, Field(max_length=128)] = None
+    src_alias: Annotated[str | None, Field(max_length=64)] = None
+    dst_alias: Annotated[str | None, Field(max_length=64)] = None
+    src_port_alias: Annotated[str | None, Field(max_length=64)] = None
+    dst_port_alias: Annotated[str | None, Field(max_length=64)] = None
+    redirect_alias: Annotated[str | None, Field(max_length=64)] = None
+
+
+class NATBase(_NATExtra):
     name: Annotated[str, Field(min_length=1, max_length=128)]
     type: str
     src_ip_id: uuid.UUID | None = None
@@ -45,7 +66,7 @@ class NATCreate(NATBase):
     pass
 
 
-class NATUpdate(StrictModel):
+class NATUpdate(_NATExtra):
     name: Annotated[str | None, Field(min_length=1, max_length=128)] = None
     src_ip_id: uuid.UUID | None = None
     dst_ip_id: uuid.UUID | None = None

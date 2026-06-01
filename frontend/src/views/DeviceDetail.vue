@@ -8,7 +8,7 @@ import {
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
-import { DevicesIcon, RefreshIcon } from "@/icons";
+import { DevicesIcon, RefreshIcon, EditIcon } from "@/icons";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";
 import { listLocations, listRacks, getDeviceVlans, getDeviceLibrenms, type Device, type Location, type Rack, type DeviceVLAN, type DeviceLibreNMS } from "@/api/basic";
@@ -50,6 +50,7 @@ const rack = ref<Rack | null>(null);
 const addresses = ref<IPAddress[]>([]);
 const vlans = ref<DeviceVLAN[]>([]);
 const lnms = ref<DeviceLibreNMS | null>(null);
+const integrations = ref<{ wazuh: any; vm: any } | null>(null);
 const loading = ref(false);
 
 const selected = ref<IPAddress | null>(null);
@@ -66,6 +67,7 @@ async function load(id: string) {
     addresses.value = addrs.items;
     getDeviceVlans(id).then((v) => { vlans.value = v; }).catch(() => { vlans.value = []; });
     getDeviceLibrenms(id).then((l) => { lnms.value = l; }).catch(() => { lnms.value = null; });
+    apiClient.get(`/api/v1/devices/${id}/integrations`).then((r) => { integrations.value = r.data; }).catch(() => { integrations.value = null; });
 
     const tasks: Promise<unknown>[] = [];
     if (dev.location_id) {
@@ -180,10 +182,17 @@ onMounted(() => {
           </n-space>
         </template>
         <template #header-extra>
-          <n-button @click="router.push({ name: 'devices' })" size="small">
-            <template #icon><n-icon><ArrowLeftIcon /></n-icon></template>
-            {{ t("common.back") }}
-          </n-button>
+          <n-space :size="8">
+            <n-button type="primary" size="small"
+                      @click="router.push({ name: 'devices', query: { edit: device.id } })">
+              <template #icon><n-icon><EditIcon /></n-icon></template>
+              {{ t("common.edit") }}
+            </n-button>
+            <n-button @click="router.push({ name: 'devices' })" size="small">
+              <template #icon><n-icon><ArrowLeftIcon /></n-icon></template>
+              {{ t("common.back") }}
+            </n-button>
+          </n-space>
         </template>
         <n-descriptions bordered :column="3" size="small" label-placement="left">
           <n-descriptions-item :label="t('common.name')">{{ device.name }}</n-descriptions-item>
@@ -257,6 +266,34 @@ onMounted(() => {
           <n-descriptions-item label="status">{{ lnms.status ?? "—" }}</n-descriptions-item>
           <n-descriptions-item label="primary IP">{{ lnms.primary_ip ?? "—" }}</n-descriptions-item>
           <n-descriptions-item :label="t('scanAgentHelp.col_last_seen')">{{ fmtDateTime(lnms.last_seen_at) }}</n-descriptions-item>
+        </n-descriptions>
+      </n-card>
+
+      <!-- Wazuh agent（依裝置 IP 比對）-->
+      <n-card v-if="integrations && integrations.wazuh" title="Wazuh" style="margin-top: 16px">
+        <n-descriptions bordered :column="2" size="small" label-placement="left"
+                        :label-style="{ whiteSpace: 'nowrap' }">
+          <n-descriptions-item label="agent">{{ integrations.wazuh.name ?? "—" }} ({{ integrations.wazuh.agent_id }})</n-descriptions-item>
+          <n-descriptions-item label="status">{{ integrations.wazuh.status ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="OS">{{ integrations.wazuh.os_platform ?? "—" }} {{ integrations.wazuh.os_version ?? "" }}</n-descriptions-item>
+          <n-descriptions-item label="agent version">{{ integrations.wazuh.agent_version ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="group">{{ integrations.wazuh.group ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="CVE (high/crit)">{{ integrations.wazuh.cve_high ?? 0 }} / {{ integrations.wazuh.cve_critical ?? 0 }}</n-descriptions-item>
+          <n-descriptions-item label="instance">{{ integrations.wazuh.instance ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item :label="t('scanAgentHelp.col_last_seen')">{{ fmtDateTime(integrations.wazuh.last_keep_alive) }}</n-descriptions-item>
+        </n-descriptions>
+      </n-card>
+
+      <!-- Proxmox VM（依裝置 IP 比對）-->
+      <n-card v-if="integrations && integrations.vm" :title="t('nav.virtualization')" style="margin-top: 16px">
+        <n-descriptions bordered :column="2" size="small" label-placement="left"
+                        :label-style="{ whiteSpace: 'nowrap' }">
+          <n-descriptions-item label="VM">{{ integrations.vm.name ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="status">{{ integrations.vm.status ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="node">{{ integrations.vm.node ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="cluster">{{ integrations.vm.cluster ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="vCPU">{{ integrations.vm.vcpus ?? "—" }}</n-descriptions-item>
+          <n-descriptions-item label="RAM (MB)">{{ integrations.vm.memory_mb ?? "—" }}</n-descriptions-item>
         </n-descriptions>
       </n-card>
 

@@ -41,7 +41,7 @@ async function refresh() {
 
 const pageTitle = computed(() =>
   mode.value === "power" ? t("nav.power")
-    : mode.value === "vpn" ? "VPN"
+    : mode.value === "vpn" ? t("nav.vpn_tunnels")
     : t("nav.cabling"));
 const PageIcon = computed(() => (mode.value === "power" ? PowerIcon : mode.value === "vpn" ? VpnIcon : PhysicalIcon));
 

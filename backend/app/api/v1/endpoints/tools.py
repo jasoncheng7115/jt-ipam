@@ -404,3 +404,50 @@ async def dns_lookup(
     except (socket.gaierror, socket.herror) as exc:
         out["error"] = f"解析失敗：{exc}"
     return out
+
+
+@router.get("/dns-mail")
+async def dns_mail(
+    _user: CurrentUser,
+    domain: Annotated[str, Query(min_length=1, max_length=255)],
+    dkim_selector: Annotated[str, Query(max_length=128)] = "",
+) -> dict:
+    """郵件相關 DNS 診斷：MX / SPF (TXT v=spf1) / DMARC (_dmarc TXT) /
+    DKIM (<selector>._domainkey TXT)。用 dnspython 查。"""
+    import asyncio
+
+    import dns.resolver
+
+    domain = domain.strip().rstrip(".")
+    out: dict = {"domain": domain}
+
+    def _q(name: str, rdtype: str) -> list[str]:
+        try:
+            res = dns.resolver.Resolver()
+            res.lifetime = 5.0
+            res.timeout = 5.0
+            ans = res.resolve(name, rdtype)
+            if rdtype == "MX":
+                return sorted(f"{r.preference} {r.exchange.to_text().rstrip('.')}" for r in ans)
+            return ["".join(s.decode() if isinstance(s, bytes) else s for s in r.strings)
+                    if hasattr(r, "strings") else r.to_text().strip('"') for r in ans]
+        except Exception as exc:  # noqa: BLE001 — 回報而非中斷
+            return [f"__error__:{type(exc).__name__}"]
+
+    def _work() -> dict:
+        mx = _q(domain, "MX")
+        txt = _q(domain, "TXT")
+        spf = [t for t in txt if t.lower().startswith("v=spf1")]
+        dmarc = _q(f"_dmarc.{domain}", "TXT")
+        result = {"mx": mx, "txt": txt, "spf": spf, "dmarc": dmarc}
+        if dkim_selector.strip():
+            sel = dkim_selector.strip()
+            result["dkim"] = _q(f"{sel}._domainkey.{domain}", "TXT")
+            result["dkim_selector"] = sel
+        return result
+
+    try:
+        out.update(await asyncio.wait_for(asyncio.to_thread(_work), timeout=20))
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="DNS 查詢逾時") from None
+    return out

@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.31] — 2026-06-01
+
+### Added
+- NAT/Circuit field expansion (migration 0053): NAT gains the full OPNsense
+  rule set (disabled / no-RDR / IP-version / source·dest invert / port ranges /
+  log / category / NAT-reflection / pool / filter-rule / alias references);
+  Circuit gains up/down bandwidth. OPNsense sync populates them.
+- Device detail: Wazuh agent + Proxmox VM panels (matched by IP); edit button.
+- Tools: DNS/mail diagnostics (MX/SPF/DKIM/DMARC) + data-center power calculators.
+- Rack diagram → draw.io-editable SVG export; room pinning; quick filter across
+  list pages; self AI chat-history in the user menu; permissions overview.
+- Topology: zoom/fit buttons, clickable legend toggles, default-to-pinned-subnets.
+
+### Changed
+- 機房 = 地點 (nav relabelled「機房 / 地點」); 站對站 VPN; NAT alias references are
+  clickable to the Firewall page.
+- VPN WireGuard pairing cross-fills each side's real WAN IP (was showing LAN).
+- Floor plan: fixed-size handles, 0/90/180/270 rotation snap, toolbar below canvas.
+- Global card header band + dark-mode table/card depth.
+
+### Fixed
+- Topology subnet filter dropped name-/ARP-derived devices.
+- Many i18n/terminology/button-height fixes (協定, 配電盤/饋線/插座, Notifications…).
+
 ## [0.4.30] — 2026-06-01
 
 ### Added

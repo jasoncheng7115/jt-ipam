@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
   NInput, NSelect, NInputNumber, NPopconfirm, NTag, NIcon, NTooltip,
+  NSwitch, NDivider,
   useMessage, type DataTableColumns, type DataTableRowKey,
 } from "naive-ui";
 import {
@@ -45,6 +46,8 @@ import { autoSort } from "@/composables/useTableSort";
 
 const msg = useMessage();
 const rows = ref<NAT[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const checkedKeys = ref<DataTableRowKey[]>([]);
 const bulkBusy = ref(false);
 
@@ -67,16 +70,29 @@ async function doBulkDelete() {
 const loading = ref(false);
 const show = ref(false);
 const editing = ref<NAT | null>(null);
-const form = ref({
-  name: "", type: "many_to_one", protocol: "any",
-  src_ip_id: null as string | null,
-  dst_ip_id: null as string | null,
-  device_id: null as string | null,
-  src_interface: "" as string,
-  src_port: null as number | null,
-  dst_port: null as number | null,
-  description: "",
-});
+function blankForm() {
+  return {
+    name: "", type: "many_to_one", protocol: "any",
+    src_ip_id: null as string | null,
+    dst_ip_id: null as string | null,
+    device_id: null as string | null,
+    src_interface: "" as string,
+    src_port: null as number | null,
+    dst_port: null as number | null,
+    description: "",
+    // OPNsense 完整欄位
+    disabled: false, no_rdr: false, ip_version: "inet",
+    src_not: false, dst_not: false,
+    src_port_to: null as number | null,
+    dst_port_to: null as number | null,
+    log: false,
+    category: "" as string,
+    nat_reflection: null as string | null,
+    pool_options: null as string | null,
+    filter_rule: "" as string,
+  };
+}
+const form = ref(blankForm());
 
 const addrOpts = ref<{ label: string; value: string }[]>([]);
 const deviceOpts = ref<{ label: string; value: string }[]>([]);
@@ -99,7 +115,13 @@ const typeOpts = [
   { label: t("nat.type_many_to_one"), value: "many_to_one" },
   { label: t("nat.type_port_forward"), value: "port_forward" },
 ];
-const protoOpts = ["tcp", "udp", "any"].map((v) => ({ label: v, value: v }));
+const protoOpts = ["tcp", "udp", "tcp/udp", "icmp", "esp", "gre", "any"].map((v) => ({ label: v, value: v }));
+const ipVersionOpts = [{ label: "IPv4", value: "inet" }, { label: "IPv6", value: "inet6" }];
+const natReflectionOpts = [
+  { label: t("nat.reflect_default"), value: "default" },
+  { label: t("common.enable"), value: "enable" },
+  { label: t("common.disabled"), value: "disable" },
+];
 
 const filterDeviceId = ref<string | null>(null);
 
@@ -117,6 +139,16 @@ function ipLinkCell(ipId: string | null) {
       void router.push({ name: "addresses", query: { q: ipText } });
     },
   }, label);
+}
+
+// alias 參考 → 可點的 tag，導到防火牆頁（alias 對映）查看
+function aliasCell(name: string | null) {
+  if (!name) return null;
+  return h(NTag, {
+    size: "small", type: "info", bordered: false, style: "cursor: pointer",
+    title: t("nat.alias_goto"),
+    onClick: () => router.push({ name: "firewall" }),
+  }, { default: () => `@${name}` });
 }
 
 function deviceLinkCell(devId: string | null) {
@@ -170,12 +202,7 @@ import { watch } from "vue";
 watch([filterDeviceId, sourceKindFilter, sourceFwFilter], () => { void refresh(); });
 function openCreate() {
   editing.value = null;
-  form.value = {
-    name: "", type: "many_to_one", protocol: "any",
-    src_ip_id: null, dst_ip_id: null, device_id: null,
-    src_interface: "",
-    src_port: null, dst_port: null, description: "",
-  };
+  form.value = blankForm();
   show.value = true;
 }
 function openEdit(r: NAT) {
@@ -186,6 +213,12 @@ function openEdit(r: NAT) {
     src_interface: r.src_interface ?? "",
     src_port: r.src_port, dst_port: r.dst_port,
     description: r.description ?? "",
+    disabled: r.disabled, no_rdr: r.no_rdr, ip_version: r.ip_version || "inet",
+    src_not: r.src_not, dst_not: r.dst_not,
+    src_port_to: r.src_port_to, dst_port_to: r.dst_port_to,
+    log: r.log, category: r.category ?? "",
+    nat_reflection: r.nat_reflection, pool_options: r.pool_options,
+    filter_rule: r.filter_rule ?? "",
   };
   show.value = true;
 }
@@ -202,6 +235,18 @@ async function submit() {
       src_port: form.value.src_port ?? null,
       dst_port: form.value.dst_port ?? null,
       description: form.value.description || null,
+      disabled: form.value.disabled,
+      no_rdr: form.value.no_rdr,
+      ip_version: form.value.ip_version,
+      src_not: form.value.src_not,
+      dst_not: form.value.dst_not,
+      src_port_to: form.value.src_port_to ?? null,
+      dst_port_to: form.value.dst_port_to ?? null,
+      log: form.value.log,
+      category: form.value.category.trim() || null,
+      nat_reflection: form.value.nat_reflection ?? null,
+      pool_options: form.value.pool_options ?? null,
+      filter_rule: form.value.filter_rule.trim() || null,
     } as any;
     if (editing.value) await updateNAT(editing.value.id, payload);
     else await createNAT(payload);
@@ -231,16 +276,18 @@ const allCols = computed<DataTableColumns<NAT>>(() => autoSort([
   },
   { title: t("nat.protocol"), key: "protocol", width: 100 },
   {
-    title: t("nat.src_ip"), key: "src_ip_id", width: 96,
-    render: (r) => ipLinkCell(r.src_ip_id),
+    title: t("nat.src_ip"), key: "src_ip_id", width: 110,
+    render: (r) => r.src_ip_id ? ipLinkCell(r.src_ip_id) : (aliasCell(r.src_alias) ?? "—"),
   },
   { title: t("nat.src_interface"), key: "src_interface", width: 130, render: (r) => r.src_interface ?? "—" },
-  { title: t("nat.src_port"), key: "src_port", width: 100, render: (r) => r.src_port ?? "—" },
+  { title: t("nat.src_port"), key: "src_port", width: 110,
+    render: (r) => r.src_port != null ? String(r.src_port) : (aliasCell(r.src_port_alias) ?? "—") },
   {
     title: t("nat.dst_ip"), key: "dst_ip_id", width: 150,
-    render: (r) => ipLinkCell(r.dst_ip_id),
+    render: (r) => r.dst_ip_id ? ipLinkCell(r.dst_ip_id) : (aliasCell(r.dst_alias) ?? aliasCell(r.redirect_alias) ?? "—"),
   },
-  { title: t("nat.dst_port"), key: "dst_port", width: 100, render: (r) => r.dst_port ?? "—" },
+  { title: t("nat.dst_port"), key: "dst_port", width: 110,
+    render: (r) => r.dst_port != null ? String(r.dst_port) : (aliasCell(r.dst_port_alias) ?? "—") },
   {
     title: t("nav.devices"), key: "device_id", width: 150, ellipsis: { tooltip: true },
     render: (r) => deviceLinkCell(r.device_id),
@@ -285,6 +332,7 @@ onMounted(() => { void refresh(); void loadOpts(); });
     </template>
 
     <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -335,7 +383,7 @@ onMounted(() => { void refresh(); void loadOpts(); });
 
     <n-data-table
       :columns="cols"
-      :data="rows"
+      :data="filteredRows"
       :loading="loading"
       :bordered="false"
       :scroll-x="1656"
@@ -361,6 +409,20 @@ onMounted(() => { void refresh(); void loadOpts(); });
         <n-form-item :label="t('nat.protocol')">
           <n-select v-model:value="form.protocol" :options="protoOpts" />
         </n-form-item>
+        <n-form-item :label="t('nat.ip_version')">
+          <n-select v-model:value="form.ip_version" :options="ipVersionOpts" />
+        </n-form-item>
+        <n-space :size="20" style="margin-bottom: 6px">
+          <n-form-item :label="t('nat.disabled')" :show-feedback="false">
+            <n-switch v-model:value="form.disabled" />
+          </n-form-item>
+          <n-form-item :label="t('nat.no_rdr')" :show-feedback="false">
+            <n-switch v-model:value="form.no_rdr" />
+          </n-form-item>
+          <n-form-item :label="t('nat.log')" :show-feedback="false">
+            <n-switch v-model:value="form.log" />
+          </n-form-item>
+        </n-space>
         <n-form-item :label="t('nat.device')">
           <n-select v-model:value="form.device_id" :options="deviceOpts" filterable clearable
                     :placeholder="t('nat.device_placeholder')" />
@@ -373,16 +435,47 @@ onMounted(() => { void refresh(); void loadOpts(); });
         <n-form-item :label="t('nat.src_interface')">
           <n-input v-model:value="form.src_interface" placeholder="wan / lan / opt2 …" />
         </n-form-item>
-        <n-form-item :label="t('nat.src_port')">
-          <n-input-number v-model:value="form.src_port" :min="1" :max="65535" clearable />
-        </n-form-item>
+        <n-space :size="12" align="end">
+          <n-form-item :label="t('nat.src_port')" :show-feedback="false">
+            <n-input-number v-model:value="form.src_port" :min="1" :max="65535" clearable style="width: 120px" />
+          </n-form-item>
+          <n-form-item :label="t('nat.port_to')" :show-feedback="false">
+            <n-input-number v-model:value="form.src_port_to" :min="1" :max="65535" clearable style="width: 120px" />
+          </n-form-item>
+          <n-form-item :label="t('nat.invert')" :show-feedback="false">
+            <n-switch v-model:value="form.src_not" />
+          </n-form-item>
+        </n-space>
         <!-- 目的相關欄位放一起 -->
         <n-form-item :label="t('nat.dst_ip')">
           <n-select v-model:value="form.dst_ip_id" :options="addrOpts" filterable clearable
                     :placeholder="t('nat.dst_ip_placeholder')" />
         </n-form-item>
-        <n-form-item :label="t('nat.dst_port')">
-          <n-input-number v-model:value="form.dst_port" :min="1" :max="65535" clearable />
+        <n-space :size="12" align="end">
+          <n-form-item :label="t('nat.dst_port')" :show-feedback="false">
+            <n-input-number v-model:value="form.dst_port" :min="1" :max="65535" clearable style="width: 120px" />
+          </n-form-item>
+          <n-form-item :label="t('nat.port_to')" :show-feedback="false">
+            <n-input-number v-model:value="form.dst_port_to" :min="1" :max="65535" clearable style="width: 120px" />
+          </n-form-item>
+          <n-form-item :label="t('nat.invert')" :show-feedback="false">
+            <n-switch v-model:value="form.dst_not" />
+          </n-form-item>
+        </n-space>
+        <n-divider style="margin: 8px 0" />
+        <n-space :size="12">
+          <n-form-item :label="t('nat.nat_reflection')" :show-feedback="false">
+            <n-select v-model:value="form.nat_reflection" :options="natReflectionOpts" style="width: 140px" />
+          </n-form-item>
+          <n-form-item :label="t('nat.pool_options')" :show-feedback="false">
+            <n-input v-model:value="form.pool_options" placeholder="default" style="width: 160px" />
+          </n-form-item>
+          <n-form-item :label="t('nat.category')" :show-feedback="false">
+            <n-input v-model:value="form.category" style="width: 160px" />
+          </n-form-item>
+        </n-space>
+        <n-form-item :label="t('nat.filter_rule')">
+          <n-input v-model:value="form.filter_rule" :placeholder="t('nat.filter_rule_ph')" />
         </n-form-item>
         <n-form-item :label="t('sections.description')">
           <n-input v-model:value="form.description" type="textarea" :rows="2" />

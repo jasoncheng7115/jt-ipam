@@ -16,6 +16,7 @@ import {
   NCheckbox,
   NSpin,
   NButton,
+  NButtonGroup,
   NText,
   NSelect,
   useMessage,
@@ -27,6 +28,7 @@ import cytoscape from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import { getTopology, type TopologyData } from "@/api/topology";
 import { listSubnets } from "@/api/subnets";
+import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 
 cytoscape.use(coseBilkent as any);
 
@@ -159,6 +161,43 @@ const NODE_COLOURS: Record<string, string> = {
   vpn_site: "#9333ea",  // site-to-site VPN 遠端站點 — 紫色（跟 vpn 邊一致）
 };
 
+const { pinned, ensureLoaded } = usePinnedSubnets();
+
+// 圖例可點：點暗某類別 → 圖上隱藏該類節點（及其連線）
+const hiddenTypes = ref<Set<string>>(new Set());
+const LEGEND_GROUPS: Record<string, string[]> = {
+  firewall: ["firewall"], router: ["router"], switch: ["switch"], ap: ["ap"],
+  server: ["server", "storage", "ipmi", "other"], vpn_site: ["vpn_site"], subnet: ["subnet"],
+};
+function isGroupOff(group: string): boolean {
+  return (LEGEND_GROUPS[group] || [group]).every((ty) => hiddenTypes.value.has(ty));
+}
+function toggleGroup(group: string) {
+  const types = LEGEND_GROUPS[group] || [group];
+  const off = isGroupOff(group);
+  const next = new Set(hiddenTypes.value);
+  for (const ty of types) { if (off) next.delete(ty); else next.add(ty); }
+  hiddenTypes.value = next;
+  applyVisibility();
+}
+function applyVisibility() {
+  if (!cy) return;
+  cy.batch(() => {
+    cy!.nodes().forEach((n) => {
+      n.style("display", hiddenTypes.value.has(n.data("type") as string) ? "none" : "element");
+    });
+    cy!.edges().forEach((e) => {
+      const hide = e.source().style("display") === "none" || e.target().style("display") === "none";
+      e.style("display", hide ? "none" : "element");
+    });
+  });
+}
+function zoomBy(f: number) {
+  if (!cy) return;
+  cy.zoom({ level: cy.zoom() * f, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+}
+function fitView() { if (cy) cy.fit(undefined, 30); }
+
 async function refresh() {
   loading.value = true;
   try {
@@ -232,14 +271,24 @@ function render(data: TopologyData) {
           "line-style": "dashed",
           "line-dash-pattern": [10, 5],
           width: 4,
-          label: "data(label)",
+          // 中間標 tunnel 類型；兩端各自標「該端的對外位址」，貼在各自節點旁，不互蓋
+          label: "data(type)",
+          "source-label": "data(a_endpoint)",
+          "target-label": "data(b_endpoint)",
+          "source-text-offset": 46 as any,
+          "target-text-offset": 46 as any,
           "font-size": 10,
           "font-weight": "bold",
-          color: "#7e22ce",
+          color: "#6b21a8",
+          "text-rotation": 0 as any,
           "text-background-color": "#ffffff",
-          "text-background-opacity": 0.9,
+          "text-background-opacity": 1,
           "text-background-padding": "3px",
-          "text-rotation": "autorotate",
+          "text-background-shape": "roundrectangle",
+          "text-border-color": "#9333ea",
+          "text-border-width": 1,
+          "text-border-opacity": 1,
+          "z-index": 9999,
         },
       },
       {
@@ -298,6 +347,7 @@ function render(data: TopologyData) {
       selected.value = null;
     }
   });
+  applyVisibility();   // 套用圖例的點暗（隱藏類別）狀態
 }
 
 watch(subnetIds, () => { void refresh(); });
@@ -305,7 +355,17 @@ watch([includeWireless, includeVpn, includeL3], () => {
   void refresh();
 });
 
-onMounted(() => { void loadSubnetOptions(); void refresh(); });
+onMounted(async () => {
+  await loadSubnetOptions();
+  // 有設常用子網路 → 進來預設只畫這些；否則畫全部
+  let usedPinned = false;
+  try {
+    await ensureLoaded();
+    if (pinned.value.length) { subnetIds.value = [...pinned.value]; usedPinned = true; }
+  } catch { /* ignore */ }
+  // 設了 subnetIds 會觸發 watch → refresh；沒設才在這裡主動畫一次
+  if (!usedPinned) void refresh();
+});
 onUnmounted(() => {
   if (cy) cy.destroy();
 });
@@ -326,13 +386,19 @@ onUnmounted(() => {
           :options="subnetOptions"
           multiple filterable clearable
           :placeholder="t('topology.filter_subnets')"
-          style="min-width: 220px; max-width: 380px"
+          style="min-width: 240px; max-width: 460px"
+          :consistent-menu-width="false"
           :max-tag-count="2"
         />
         <n-checkbox v-model:checked="includeWireless">{{ t("topology.wireless") }}</n-checkbox>
         <n-checkbox v-model:checked="includeVpn">{{ t("topology.vpn") }}</n-checkbox>
         <n-checkbox v-model:checked="includeL3">{{ t("topology.l3") }}</n-checkbox>
-        <n-button size="small" @click="refresh">
+        <n-button-group>
+          <n-button @click="zoomBy(1.2)" :title="t('topology.zoom_in')">＋</n-button>
+          <n-button @click="zoomBy(0.83)" :title="t('topology.zoom_out')">－</n-button>
+          <n-button @click="fitView">{{ t("topology.fit") }}</n-button>
+        </n-button-group>
+        <n-button @click="refresh">
           <template #icon><n-icon><RefreshIcon /></n-icon></template>
           {{ t("common.refresh") }}
         </n-button>
@@ -369,14 +435,14 @@ onUnmounted(() => {
       <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="5,3"/></svg>{{ t("topology.kind_l3") }}</span>
       <span class="lg lg-sep"></span>
       <span class="lg lg-head">{{ t("topology.legend_nodes") }}</span>
-      <span class="lg"><i class="dot" style="background:#ef4444"></i>{{ t("topology.type_firewall") }}</span>
-      <span class="lg"><i class="dot" style="background:#6366f1"></i>{{ t("topology.type_router") }}</span>
-      <span class="lg"><i class="dot" style="background:#22c55e"></i>{{ t("topology.type_switch") }}</span>
-      <span class="lg"><i class="dot" style="background:#3b82f6"></i>AP</span>
-      <span class="lg"><i class="dot" style="background:#9ca3af"></i>{{ t("topology.server_other") }}</span>
-      <span class="lg"><svg width="14" height="14"><rect x="2" y="2" width="9" height="9" transform="rotate(45 7 7)" fill="#9333ea"/></svg>{{ t("topology.type_vpn_site") }}</span>
-      <span class="lg"><i class="dot dot-rect" style="background:#0ea5e9"></i>{{ t("topology.type_subnet") }}</span>
-      <span class="lg muted">{{ t("topology.click_hint") }}</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('firewall') }" @click="toggleGroup('firewall')"><i class="dot" style="background:#ef4444"></i>{{ t("topology.type_firewall") }}</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('router') }" @click="toggleGroup('router')"><i class="dot" style="background:#6366f1"></i>{{ t("topology.type_router") }}</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('switch') }" @click="toggleGroup('switch')"><i class="dot" style="background:#22c55e"></i>{{ t("topology.type_switch") }}</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('ap') }" @click="toggleGroup('ap')"><i class="dot" style="background:#3b82f6"></i>AP</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('server') }" @click="toggleGroup('server')"><i class="dot" style="background:#9ca3af"></i>{{ t("topology.server_other") }}</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('vpn_site') }" @click="toggleGroup('vpn_site')"><svg width="14" height="14"><rect x="2" y="2" width="9" height="9" transform="rotate(45 7 7)" fill="#9333ea"/></svg>{{ t("topology.type_vpn_site") }}</span>
+      <span class="lg clickable" :class="{ off: isGroupOff('subnet') }" @click="toggleGroup('subnet')"><i class="dot dot-rect" style="background:#0ea5e9"></i>{{ t("topology.type_subnet") }}</span>
+      <span class="lg muted">{{ t("topology.toggle_hint") }}</span>
     </div>
   </n-card>
 </template>
@@ -392,6 +458,9 @@ onUnmounted(() => {
   opacity: 0.85;
 }
 .topo-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+.topo-legend .lg.clickable { cursor: pointer; user-select: none; padding: 1px 4px; border-radius: 4px; }
+.topo-legend .lg.clickable:hover { background: rgba(127,127,127,0.12); }
+.topo-legend .lg.off { opacity: 0.32; text-decoration: line-through; }
 .topo-legend .lg.muted { opacity: 0.6; margin-left: auto; }
 .topo-legend .lg-head { font-weight: 600; opacity: 0.55; }
 .topo-legend .lg-sep { width: 1px; height: 14px; background: rgba(127,127,127,0.3); }

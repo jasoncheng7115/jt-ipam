@@ -20,7 +20,8 @@ import {
   type DataTableRowKey,
 } from "naive-ui";
 import { NIcon } from "naive-ui";
-import { RacksIcon, DeleteIcon, PlusIcon, EditIcon, SaveIcon, CancelIcon } from "@/icons";
+import { RacksIcon, DeleteIcon, PlusIcon, EditIcon, SaveIcon, CancelIcon, LocationsIcon } from "@/icons";
+import { useRouter } from "vue-router";
 import { apiClient } from "@/api/client";
 import RackDiagram from "@/components/RackDiagram.vue";
 import { RACK_DEVICE_TYPES, rackTypeColor } from "@/utils/rackColors";
@@ -47,6 +48,19 @@ interface Rack {
 const { t } = useI18n();
 const msg = useMessage();
 const auth = useAuthStore();
+const router = useRouter();
+function goRooms() { router.push({ name: "locations" }); }
+// 釘選機房（存 localStorage，每瀏覽器）：進機櫃頁時預設先看釘選的機房
+const PINNED_ROOM_KEY = "jt_pinned_room";
+const pinnedRoom = ref<string | null>(localStorage.getItem(PINNED_ROOM_KEY));
+function togglePinRoom() {
+  if (!roomId.value) return;
+  if (pinnedRoom.value === roomId.value) {
+    pinnedRoom.value = null; localStorage.removeItem(PINNED_ROOM_KEY);
+  } else {
+    pinnedRoom.value = roomId.value; localStorage.setItem(PINNED_ROOM_KEY, roomId.value);
+  }
+}
 const isAdmin = computed(() => !!auth.me?.is_admin);
 const roomFocus = ref<RD | null>(null);   // 在平面圖上點選的機櫃 → 顯示其 U 位
 async function onRoomRackSelect(rackId: string) {
@@ -62,6 +76,8 @@ const diagramLoading = ref(false);
 // 機房（= location）：選一間機房可一次把該機房所有機櫃並排成一排
 const locations = ref<Location[]>([]);
 const roomId = ref<string | null>(null);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const roomDiagrams = ref<RD[]>([]);
 const roomLoading = ref(false);
 const locationOptions = computed(() =>
@@ -246,6 +262,8 @@ watch(selected, (v) => {
 onMounted(() => {
   void refresh();
   listLocations().then((r) => { locations.value = r.items; }).catch(() => { /* silent */ });
+  // 有釘選機房 → 進來預設先看它（watch(roomId) 會載入該機房整排機櫃）
+  if (pinnedRoom.value && !roomId.value && !selected.value) roomId.value = pinnedRoom.value;
 });
 </script>
 
@@ -266,6 +284,12 @@ onMounted(() => {
           style="width: 260px"
           clearable
         />
+        <n-button v-if="roomId" size="small" quaternary
+                  :type="pinnedRoom === roomId ? 'warning' : 'default'"
+                  @click="togglePinRoom"
+                  :title="pinnedRoom === roomId ? t('racks.unpin_room') : t('racks.pin_room')">
+          {{ pinnedRoom === roomId ? '★' : '☆' }}
+        </n-button>
         <span style="opacity: .4">{{ t("racks.or") }}</span>
         <n-select
           v-model:value="selected"
@@ -274,6 +298,10 @@ onMounted(() => {
           style="width: 280px"
           clearable
         />
+        <n-button quaternary size="small" @click="goRooms" :title="t('racks.manage_rooms_hint')">
+          <template #icon><n-icon><LocationsIcon /></n-icon></template>
+          {{ t("racks.manage_rooms") }}
+        </n-button>
       </n-space>
     </n-card>
 
@@ -318,7 +346,8 @@ onMounted(() => {
     </n-spin>
 
     <n-card :title="t('racks.all_title')">
-      <n-space style="margin-bottom: 8px">
+      <n-space style="margin-bottom: 8px" align="center">
+        <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
         <n-button type="primary" @click="openCreate">
           <template #icon><n-icon><PlusIcon /></n-icon></template>
           {{ t("racks.add") }}
@@ -342,7 +371,7 @@ onMounted(() => {
       </n-space>
       <n-data-table
         :columns="columns"
-        :data="rows"
+        :data="filteredRows"
         :loading="loading"
         :pagination="{ pageSize: 50 }"
         :bordered="false"

@@ -52,6 +52,65 @@ async def get_device_librenms(
     }
 
 
+@router.get("/{device_id}/integrations")
+async def get_device_integrations(
+    device_id: uuid.UUID,
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """此裝置在其他整合系統的資料：Wazuh agent / Proxmox VM（依裝置的 IP 比對）。"""
+    from app.models.address import IPAddress
+    from app.models.virt import VirtCluster, VirtualMachine
+    from app.models.wazuh import WazuhAgent, WazuhInstance
+    dev = await session.get(Device, device_id)
+    if dev is None:
+        raise HTTPException(404, detail="Device not found")
+    ip_ids: list[Any] = []
+    ip_strs: list[str] = []
+    for ipid, ipv in (await session.execute(
+        select(IPAddress.id, IPAddress.ip).where(IPAddress.device_id == device_id)
+    )).all():
+        ip_ids.append(ipid)
+        ip_strs.append(str(ipv).split("/")[0])
+    if dev.primary_ip_id and dev.primary_ip_id not in ip_ids:
+        pr = await session.get(IPAddress, dev.primary_ip_id)
+        if pr:
+            ip_ids.append(pr.id)
+            ip_strs.append(str(pr.ip).split("/")[0])
+    out: dict[str, Any] = {"wazuh": None, "vm": None}
+    if not ip_ids:
+        return out
+    wa = (await session.execute(
+        select(WazuhAgent).where(WazuhAgent.jt_ipam_address_id.in_(ip_ids)).limit(1)
+    )).scalar_one_or_none()
+    if wa is None and ip_strs:
+        wa = (await session.execute(
+            select(WazuhAgent).where(WazuhAgent.ip.in_(ip_strs)).limit(1)
+        )).scalar_one_or_none()
+    if wa is not None:
+        inst = await session.get(WazuhInstance, wa.instance_id)
+        out["wazuh"] = {
+            "agent_id": wa.agent_id, "name": wa.name,
+            "ip": str(wa.ip) if wa.ip else None, "status": wa.status,
+            "os_platform": wa.os_platform, "os_version": wa.os_version,
+            "agent_version": wa.agent_version, "group": wa.group,
+            "cve_critical": wa.cve_critical_count, "cve_high": wa.cve_high_count,
+            "instance": inst.name if inst else None,
+            "last_keep_alive": wa.last_keep_alive.isoformat() if wa.last_keep_alive else None,
+        }
+    vm = (await session.execute(
+        select(VirtualMachine).where(VirtualMachine.primary_ip_id.in_(ip_ids)).limit(1)
+    )).scalar_one_or_none()
+    if vm is not None:
+        cl = await session.get(VirtCluster, vm.cluster_id)
+        out["vm"] = {
+            "name": vm.name, "node": vm.node, "status": vm.status,
+            "vcpus": vm.vcpus, "memory_mb": vm.memory_mb,
+            "cluster": cl.name if cl else None,
+        }
+    return out
+
+
 @router.get("/{device_id}/vlans", response_model=list[DeviceVLANRead])
 async def get_device_vlans(
     device_id: uuid.UUID,

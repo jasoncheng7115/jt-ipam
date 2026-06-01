@@ -33,7 +33,7 @@
     "devices": "Devices",
     "tasks": "Tasks",
     "racks": "Racks",
-    "locations": "Locations",
+    "locations": "Rooms / Locations",
     "tools": "Tools",
     "requests": "IP Requests",
     "topology": "IP Topology",
@@ -60,7 +60,7 @@
     "physical": "Cabling / Power / VPN",
     "cabling": "Cabling",
     "power": "Power",
-    "vpn_tunnels": "VPN",
+    "vpn_tunnels": "Site-to-Site VPN",
     "migration": "phpIPAM Migration",
     "import": "RIPE / TWNIC Import"
   },
@@ -75,6 +75,7 @@
     "user_menu": {
       "profile": "Profile",
       "preferences": "Preferences",
+      "my_chat_history": "My AI chat history",
       "logout": "Logout"
     }
   },
@@ -85,6 +86,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "search": "Search",
+    "filter": "Filter",
     "loading": "Loading…",
     "no_data": "No data",
     "confirm_delete": "Confirm delete? This action cannot be undone.",
@@ -309,6 +311,7 @@
     "pw_medium": "medium",
     "pw_strong": "strong",
     "unlock": "Unlock",
+    "assign_perms": "Assign permissions",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate"
   },
@@ -411,6 +414,9 @@
     "col_type": "Object type",
     "col_target": "Object",
     "col_level": "Level",
+    "col_principal": "Principal (user / role)",
+    "all_grants": "All assigned permissions",
+    "no_grants": "No permission grants yet",
     "type_customer": "Customer",
     "type_section": "Section",
     "type_subnet": "Subnet",
@@ -434,6 +440,14 @@
     "purged": "Purged {n} conversations",
     "retention_hint": "0 = keep forever. Old conversations beyond the retention period are purged on startup; you can also purge manually.",
     "role_user": "User"
+  },
+  "my_chat_history": {
+    "title": "My AI chat history"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "mark_all_read": "Mark all read",
+    "empty": "No notifications"
   },
   "vlans": {
     "device_count": "Devices",
@@ -485,7 +499,11 @@
     "legend_links": "Links",
     "legend_nodes": "Nodes",
     "server_other": "Server / other",
-    "click_hint": "Click a node for details"
+    "click_hint": "Click a node for details",
+    "toggle_hint": "Click a legend item to hide / show that node type",
+    "fit": "Fit",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out"
   },
   "hostnameSrc": {
     "auto": "Auto (follow global order)",
@@ -701,6 +719,10 @@
     "add": "Add rack",
     "select_placeholder": "Select a rack",
     "room_placeholder": "Select a room (whole row)",
+    "pin_room": "Pin this room (default view on entry)",
+    "unpin_room": "Unpin",
+    "manage_rooms": "Manage rooms",
+    "manage_rooms_hint": "A room is a Location; go to the Locations page to add/edit rooms and upload floor-plan backgrounds",
     "room_empty": "No racks in this room yet.",
     "or": "or",
     "floor_plan": "Floor plan",
@@ -777,6 +799,17 @@
     "valid": "Valid",
     "invalid": "Invalid",
     "lookup": "Lookup",
+    "split_btn": "Split",
+    "t_mail": "Mail / DNS diagnostics (MX / SPF / DKIM)",
+    "power_calc": "Data-center power calculators",
+    "pw_load": "Power load / capacity",
+    "pw_heat": "Heat (W → BTU)",
+    "pw_ups": "UPS runtime estimate",
+    "pw_pdu": "PDU safe load",
+    "pw_minutes": "min",
+    "pw_safe80": "80% of rating",
+    "pw_1phase": "1-phase",
+    "pw_3phase": "3-phase",
     "oui_tab": "MAC vendor (OUI)",
     "oui_alert_pre": "From the Wireshark",
     "oui_alert_post": "file (updating once a month is enough).",
@@ -963,6 +996,19 @@
     "src_ip_placeholder": "Pick source IP (searchable)",
     "dst_ip_placeholder": "Pick destination IP (searchable)",
     "device_placeholder": "Device that enforces this rule",
+    "ip_version": "IP version",
+    "disabled": "Disabled",
+    "no_rdr": "No RDR",
+    "log": "Log",
+    "port_to": "to (range end)",
+    "invert": "Invert",
+    "nat_reflection": "NAT reflection",
+    "reflect_default": "System default",
+    "pool_options": "Pool options",
+    "category": "Category",
+    "filter_rule": "Filter rule assoc.",
+    "filter_rule_ph": "Associated firewall rule name / id",
+    "alias_goto": "Click to view this alias on the Firewall page",
     "type_one_to_one": "1:1 NAT (bidirectional)",
     "type_many_to_one": "Many-to-one (PAT)",
     "type_port_forward": "Port forward",
@@ -1020,7 +1066,13 @@
     "provider_placeholder": "Pick a provider",
     "type": "Type",
     "type_placeholder": "Pick a circuit type",
-    "account": "Account"
+    "account": "Account",
+    "down_kbps": "Download (kbps)",
+    "up_kbps": "Upload (kbps)",
+    "commit_kbps": "Commit (kbps)",
+    "monthly_fee": "Monthly fee (cents)",
+    "install_date": "Install date",
+    "contract_end": "Contract end"
   },
   "contacts": {
     "group": "Group"
@@ -1297,7 +1349,8 @@
   },
   "rack_diagram": {
     "empty": "No devices in this rack",
-    "height": "Height"
+    "height": "Height",
+    "export_svg_hint": "Export as editable SVG (import into draw.io to edit text / shapes / lines)"
   },
   "request_detail": {
     "approved_ok": "Approved and IP allocated",

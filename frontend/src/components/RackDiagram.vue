@@ -11,11 +11,50 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { NCard, NTag, NEmpty, NAlert, NSpace, NTooltip } from "naive-ui";
+import { NCard, NTag, NEmpty, NAlert, NSpace, NTooltip, NButton, NIcon } from "naive-ui";
 import type { RackDiagram } from "@/api/racks";
 import { rackTypeColor as colorFor } from "@/utils/rackColors";
+import { ExportIcon } from "@/icons";
 
 const { t } = useI18n();
+
+// 匯出機櫃圖為 draw.io 可編輯的 SVG（rect/line/text，可在 draw.io 取消群組後編輯）
+function exportSvg() {
+  const d = props.diagram;
+  if (!d) return;
+  const rowH = 24, colW = 260, gutter = 32, pad = 12, headerH = 30;
+  const U = d.u_height || 0;
+  const W = gutter + colW + pad * 2;
+  const H = headerH + U * rowH + pad * 2;
+  const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string));
+  const p: string[] = [];
+  p.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" font-family="sans-serif">`);
+  p.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`);
+  p.push(`<text x="${pad}" y="${pad + 16}" font-size="14" font-weight="bold">Rack: ${esc(d.name)} (${U}U)</text>`);
+  const top = headerH + pad;
+  p.push(`<rect x="${gutter}" y="${top}" width="${colW}" height="${U * rowH}" fill="#f5f5f5" stroke="#888" stroke-width="1.5"/>`);
+  for (let i = 0; i < U; i++) {
+    const uNum = U - i;
+    const y = top + i * rowH;
+    p.push(`<text x="${gutter - 4}" y="${y + rowH / 2 + 4}" font-size="10" text-anchor="end" fill="#666">${uNum}</text>`);
+    p.push(`<line x1="${gutter}" y1="${y}" x2="${gutter + colW}" y2="${y}" stroke="#dddddd" stroke-width="0.5"/>`);
+  }
+  for (const dev of (d.devices || [])) {
+    if (!dev.u_position || !dev.u_size) continue;
+    const uTop = dev.u_position + dev.u_size - 1;
+    const yTop = top + (U - uTop) * rowH;
+    const hgt = dev.u_size * rowH;
+    p.push(`<rect x="${gutter + 2}" y="${yTop + 1}" width="${colW - 4}" height="${hgt - 2}" rx="3" fill="${colorFor(dev.type)}" stroke="rgba(0,0,0,0.3)"/>`);
+    const ipPart = (dev as any).primary_ip ? " · " + esc((dev as any).primary_ip) : "";
+    p.push(`<text x="${gutter + 10}" y="${yTop + hgt / 2 + 4}" font-size="11" font-weight="bold" fill="#ffffff">${esc(dev.name)} · ${esc(dev.type)}${ipPart}</text>`);
+  }
+  p.push(`</svg>`);
+  const blob = new Blob([p.join("\n")], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `rack-${d.name}.svg`; a.click();
+  URL.revokeObjectURL(url);
+}
 const router = useRouter();
 function goDevice(id: string) {
   router.push({ name: "device-detail", params: { id } });
@@ -88,6 +127,12 @@ const cells = computed<Cell[]>(() => {
 
 <template>
   <n-card v-if="diagram" :title="`Rack: ${diagram.name} (${diagram.u_height}U)`">
+    <template #header-extra>
+      <n-button size="tiny" quaternary @click="exportSvg" :title="t('rack_diagram.export_svg_hint')">
+        <template #icon><n-icon><ExportIcon /></n-icon></template>
+        SVG
+      </n-button>
+    </template>
     <n-space vertical :size="12">
       <n-alert
         v-if="diagram.conflicts.length > 0"

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -464,6 +465,10 @@ class CircuitRead(StrictModel):
     status: str
     monthly_fee_cents: int | None
     commit_rate_kbps: int | None
+    up_kbps: int | None = None
+    down_kbps: int | None = None
+    install_date: datetime | None = None
+    contract_end_date: datetime | None = None
     description: str | None
 
 
@@ -474,6 +479,10 @@ class CircuitWrite(StrictModel):
     status: str = "active"
     monthly_fee_cents: Annotated[int | None, Field(ge=0)] = None
     commit_rate_kbps: Annotated[int | None, Field(ge=0)] = None
+    up_kbps: Annotated[int | None, Field(ge=0)] = None
+    down_kbps: Annotated[int | None, Field(ge=0)] = None
+    install_date: datetime | None = None
+    contract_end_date: datetime | None = None
     description: Annotated[str | None, Field(max_length=1024)] = None
 
 

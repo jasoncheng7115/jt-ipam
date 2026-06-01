@@ -4,7 +4,7 @@
  * 選一個 使用者 / 角色(群組) → 看其授權 → 新增（物件類型 + 全部或指定物件 + 層級）→ 刪除。
  * 階層繼承由後端處理：授權上層（單位/區段/地點）自動涵蓋下層。
  */
-import { computed, h, onMounted, ref, watch } from "vue";
+import { computed, h, nextTick, onMounted, ref, watch } from "vue";
 import {
   NButton, NCard, NSpace, NSelect, NIcon, NTag, NRadioGroup, NRadioButton,
   NDataTable, NEmpty, NSwitch, useMessage, type DataTableColumns,
@@ -12,13 +12,18 @@ import {
 import { useI18n } from "vue-i18n";
 import { apiClient } from "@/api/client";
 import {
-  listPermissions, upsertPermission, deletePermission, listRoles,
+  listPermissions, listAllPermissions, upsertPermission, deletePermission, listRoles,
   type PermissionGrant, type Role, type PermObjectType, type PermLevel,
 } from "@/api/permissions";
 import { UsersIcon, DeleteIcon, PlusIcon, AdminIcon } from "@/icons";
+import { useRoute } from "vue-router";
 
 const { t } = useI18n();
 const msg = useMessage();
+const route = useRoute();
+
+const allGrants = ref<PermissionGrant[]>([]);
+const loadingAll = ref(false);
 
 // 物件類型 → 清單 endpoint + label 欄位（ip 不提供逐一挑選，只能「全部」靠 cascade）
 const TYPE_CFG: Record<string, { ep: string; label: string }> = {
@@ -109,13 +114,14 @@ async function addGrant() {
     msg.success(t("common.saved"));
     fObjs.value = [];
     await loadGrants();
+    await loadAllGrants();
   } catch (e: any) {
     msg.error(e?.response?.data?.detail ?? t("perm.save_failed"));
   } finally { saving.value = false; }
 }
 
 async function removeGrant(id: string) {
-  try { await deletePermission(id); await loadGrants(); }
+  try { await deletePermission(id); await loadGrants(); await loadAllGrants(); }
   catch { msg.error(t("errors.network")); }
 }
 
@@ -139,7 +145,63 @@ const cols = computed<DataTableColumns<PermissionGrant>>(() => [
       { icon: () => h(NIcon, null, () => h(DeleteIcon)) }) },
 ]);
 
-onMounted(loadLists);
+function principalName(g: PermissionGrant): string {
+  if (g.principal_type === "group") {
+    const r = roles.value.find((x) => x.id === g.principal_id);
+    return r ? (r.is_builtin ? `★ ${r.name}` : r.name) : g.principal_id.slice(0, 8);
+  }
+  const u = users.value.find((x) => x.id === g.principal_id);
+  return u ? (u.display_name ? `${u.display_name} (${u.username})` : u.username) : g.principal_id.slice(0, 8);
+}
+
+async function loadAllGrants() {
+  loadingAll.value = true;
+  try { allGrants.value = await listAllPermissions(); }
+  catch { /* ignore */ }
+  finally { loadingAll.value = false; }
+}
+
+async function selectPrincipal(g: PermissionGrant) {
+  principalType.value = g.principal_type;
+  await nextTick();          // principalType watch 會先清空 principalId
+  principalId.value = g.principal_id;
+}
+
+const allCols = computed<DataTableColumns<PermissionGrant>>(() => [
+  { title: t("perm.col_principal"), key: "principal", minWidth: 200, ellipsis: { tooltip: true },
+    render: (r) => h(NSpace, { size: 6, align: "center", wrapItem: false }, () => [
+      h(NTag, { size: "tiny", type: r.principal_type === "group" ? "warning" : "default", bordered: false },
+        () => r.principal_type === "group" ? t("perm.role_group") : t("perm.user")),
+      principalName(r),
+    ]) },
+  { title: t("perm.col_type"), key: "object_type", width: 110, render: (r) => t(`perm.type_${r.object_type}`) },
+  { title: t("perm.col_target"), key: "object_id", minWidth: 160,
+    render: (r) => r.object_id === null
+      ? h(NTag, { size: "small", type: "info" }, () => t("perm.all"))
+      : targetLabel(r) },
+  { title: t("perm.col_level"), key: "level", width: 100,
+    render: (r) => h(NTag, { size: "small", type: r.level === "admin" ? "error" : r.level === "write" ? "warning" : "success" },
+      () => t(`perm.level_${r.level}`)) },
+  { title: t("common.actions"), key: "actions", width: 120, align: "center", className: "col-actions",
+    render: (r) => h(NSpace, { size: 4, justify: "center", wrapItem: false }, () => [
+      h(NButton, { size: "small", quaternary: true, onClick: () => selectPrincipal(r) }, () => t("common.edit")),
+      h(NButton, { size: "small", quaternary: true, type: "error", onClick: () => removeGrant(r.id) },
+        { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
+    ]) },
+]);
+
+onMounted(async () => {
+  await loadLists();
+  await loadAllGrants();
+  // 從使用者清單帶 query 進來 → 預選該 principal
+  const pt = route.query.ptype as string | undefined;
+  const pid = route.query.pid as string | undefined;
+  if ((pt === "user" || pt === "group") && pid) {
+    principalType.value = pt;
+    await nextTick();
+    principalId.value = pid;
+  }
+});
 </script>
 
 <template>
@@ -178,7 +240,14 @@ onMounted(loadLists);
 
         <n-data-table :columns="cols" :data="grants" :loading="loadingGrants" :bordered="false" :scroll-x="480" />
       </template>
-      <n-empty v-else :description="t('perm.pick_principal')" style="margin: 32px" />
+
+      <!-- 總覽：列出所有已指派的權限（未選 principal 時顯示） -->
+      <n-card v-else size="small" :title="t('perm.all_grants')">
+        <n-data-table v-if="allGrants.length" :columns="allCols" :data="allGrants"
+                      :loading="loadingAll" :bordered="false" :scroll-x="640"
+                      :pagination="{ pageSize: 20 }" />
+        <n-empty v-else :description="t('perm.no_grants')" style="margin: 24px" />
+      </n-card>
     </n-space>
   </n-card>
 </template>

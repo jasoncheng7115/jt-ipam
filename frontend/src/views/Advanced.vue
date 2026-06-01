@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NTabs, NTabPane, NDataTable, NSpace, NIcon, NButton, NTooltip,
   NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NPopconfirm,
+  NDatePicker,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { apiClient } from "@/api/client";
@@ -16,7 +17,30 @@ import { autoSort } from "@/composables/useTableSort";
 
 const { t } = useI18n();
 const msg = useMessage();
-const tab = ref<"tenancy" | "asn" | "circuits" | "contacts" | "wireless">("tenancy");
+// 每個頁籤拆成獨立頁面：由路由帶 mode 進來，設定初始頁籤並隱藏頁籤列
+const props = defineProps<{ mode?: "tenancy" | "asn" | "circuits" | "contacts" | "wireless" }>();
+const tab = ref<"tenancy" | "asn" | "circuits" | "contacts" | "wireless">(props.mode ?? "tenancy");
+// 同一元件被不同路由重用時 setup 不會重跑 → watch mode 同步頁籤
+watch(() => props.mode, (m) => { if (m) tab.value = m; });
+const headerTitle = computed(() => {
+  switch (tab.value) {
+    case "asn": return "ASN";
+    case "circuits": return t("advanced.circuits");
+    case "contacts": return t("advanced.contacts");
+    case "wireless": return t("advanced.wireless");
+    default: return t("advanced.tenancy");
+  }
+});
+// 標題 icon 對應各模組（與左側選單一致）
+const headerIcon = computed(() => {
+  switch (tab.value) {
+    case "asn": return VlansIcon;
+    case "circuits": return PhysicalIcon;
+    case "contacts": return UsersIcon;
+    case "wireless": return ScanAgentsIcon;
+    default: return CustomersIcon;
+  }
+});
 
 const tenants = ref<any[]>([]);
 const tenantGroups = ref<any[]>([]);
@@ -64,7 +88,7 @@ function openCreate(kind: Resource) {
     case "tenant_group":  form.value = { name: "", description: "" }; break;
     case "asn":           form.value = { number: 65000, rir: "", description: "", tenant_id: null }; break;
     case "provider":      form.value = { name: "", account: "", description: "" }; break;
-    case "circuit":       form.value = { cid: "", provider_id: null, type_id: null, status: "active", description: "" }; break;
+    case "circuit":       form.value = { cid: "", provider_id: null, type_id: null, status: "active", up_kbps: null, down_kbps: null, commit_rate_kbps: null, monthly_fee_cents: null, install_date: null, contract_end_date: null, description: "" }; break;
     case "contact_group": form.value = { name: "", description: "" }; break;
     case "contact":       form.value = { name: "", email: "", phone: "", group_id: null, description: "" }; break;
     case "ssid":          form.value = { name: "", description: "" }; break;
@@ -182,8 +206,8 @@ onMounted(() => { void loadAll(); });
   <n-card>
     <template #header>
       <n-space align="center" :wrap-item="false">
-        <n-icon :size="22"><AdvancedIcon /></n-icon>
-        <span>{{ t("nav.advanced") }}</span>
+        <n-icon :size="22"><component :is="mode ? headerIcon : AdvancedIcon" /></n-icon>
+        <span>{{ mode ? headerTitle : t("nav.advanced") }}</span>
       </n-space>
     </template>
     <n-space style="margin-bottom: 12px">
@@ -193,7 +217,7 @@ onMounted(() => { void loadAll(); });
       </n-button>
     </n-space>
 
-    <n-tabs v-model:value="tab" type="line">
+    <n-tabs v-model:value="tab" type="line" :class="{ 'single-mode': !!mode }">
       <n-tab-pane name="tenancy">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><CustomersIcon /></n-icon>{{ t('advanced.tenancy') }}</span>
@@ -371,6 +395,30 @@ onMounted(() => { void loadAll(); });
             <n-select v-model:value="form.status"
                       :options="['active','planned','provisioning','offline','decommissioned'].map(v => ({label: v, value: v}))" />
           </n-form-item>
+          <n-space :size="12">
+            <n-form-item :label="t('circuits.down_kbps')" :show-feedback="false">
+              <n-input-number v-model:value="form.down_kbps" :min="0" :step="1000" style="width: 150px" />
+            </n-form-item>
+            <n-form-item :label="t('circuits.up_kbps')" :show-feedback="false">
+              <n-input-number v-model:value="form.up_kbps" :min="0" :step="1000" style="width: 150px" />
+            </n-form-item>
+          </n-space>
+          <n-space :size="12">
+            <n-form-item :label="t('circuits.commit_kbps')" :show-feedback="false">
+              <n-input-number v-model:value="form.commit_rate_kbps" :min="0" :step="1000" style="width: 150px" />
+            </n-form-item>
+            <n-form-item :label="t('circuits.monthly_fee')" :show-feedback="false">
+              <n-input-number v-model:value="form.monthly_fee_cents" :min="0" style="width: 150px" />
+            </n-form-item>
+          </n-space>
+          <n-space :size="12">
+            <n-form-item :label="t('circuits.install_date')" :show-feedback="false">
+              <n-date-picker v-model:formatted-value="form.install_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 170px" />
+            </n-form-item>
+            <n-form-item :label="t('circuits.contract_end')" :show-feedback="false">
+              <n-date-picker v-model:formatted-value="form.contract_end_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 170px" />
+            </n-form-item>
+          </n-space>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
           </n-form-item>
@@ -431,3 +479,8 @@ onMounted(() => { void loadAll(); });
     </n-modal>
   </n-card>
 </template>
+
+<style scoped>
+/* 拆成獨立頁面時隱藏頁籤列（只顯示該模組內容） */
+.single-mode :deep(.n-tabs-nav) { display: none; }
+</style>

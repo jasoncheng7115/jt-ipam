@@ -425,7 +425,7 @@ onMounted(() => {
         <span style="font-size: 13px; opacity: .75">{{ t("subnets.tree_view") }}</span>
         <n-switch v-model:value="treeMode" size="small" :disabled="showArchived" />
       </n-space>
-      <n-button :type="showArchived ? 'warning' : 'default'" ghost size="small"
+      <n-button :type="showArchived ? 'warning' : 'default'" ghost
                 style="margin-left: 4px" @click="showArchived = !showArchived">
         <template #icon><n-icon><ArchiveIcon /></n-icon></template>
         {{ showArchived ? t("subnets.exit_archive") : t("subnets.archive_area") }}

@@ -35,6 +35,8 @@ const dnsPicker = [
 
 const msg = useMessage();
 const rows = ref<DNSServer[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const loading = ref(false);
 const show = ref(false);
 
@@ -178,7 +180,8 @@ onMounted(() => { void refresh(); });
       </n-space>
     </template>
 
-    <n-space style="margin-bottom: 12px">
+    <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -192,7 +195,7 @@ onMounted(() => { void refresh(); });
       <ExportButton :columns="cols" :rows="rows" filename="dns-servers" :title="t('dns_admin.title')" />
     </n-space>
 
-    <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" :scroll-x="766">
+    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="766">
       <template #empty>
         <n-space justify="center">{{ t("common.no_data") }}</n-space>
       </template>

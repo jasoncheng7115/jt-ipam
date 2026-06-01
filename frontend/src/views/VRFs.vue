@@ -16,6 +16,8 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 const { t } = useI18n();
 const msg = useMessage();
 const rows = ref<VRF[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const loading = ref(false);
 const show = ref(false);
 const editing = ref<VRF | null>(null);
@@ -129,7 +131,8 @@ onMounted(() => { void refresh(); });
         <span>{{ t("nav.vrfs") }}</span>
       </n-space>
     </template>
-    <n-space style="margin-bottom: 12px">
+    <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -155,7 +158,7 @@ onMounted(() => { void refresh(); });
       <n-button size="small" @click="checkedKeys = []">{{ t("common.clear_selection") }}</n-button>
     </n-space>
     <n-data-table
-      :columns="cols" :data="rows" :loading="loading" :bordered="false"
+      :columns="cols" :data="filteredRows" :loading="loading" :bordered="false"
       :scroll-x="796"
       :row-key="(row: VRF) => row.id"
       :checked-row-keys="checkedKeys"

@@ -51,6 +51,8 @@ const router = useRouter();
 const tab = ref<"instances" | "agents" | "missing">("instances");
 const insts = ref<WazuhInstance[]>([]);
 const agents = ref<WazuhAgent[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: agentFilterQ, filtered: agentsFiltered } = useTableQuickFilter(agents);
 const missing = ref<MissingAgent[]>([]);
 const loading = ref(false);
 
@@ -265,12 +267,13 @@ onMounted(() => { void refresh(); });
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><DevicesIcon /></n-icon>{{ `${t('wazuh_admin.agents_count')} (${agents.length})` }}</span>
         </template>
-        <n-space style="margin-bottom: 8px">
+        <n-space style="margin-bottom: 8px" align="center">
+          <n-input v-model:value="agentFilterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
           <ColumnPicker :all="wzAgPicker" :visible="wzAg.visibleKeys.value"
                         @update:visible="wzAg.setVisible" @reset="wzAg.reset" />
           <ExportButton :columns="agentCols" :rows="agents" filename="wazuh-agents" :title="t('wazuh_admin.agents_count')" />
         </n-space>
-        <n-data-table :columns="agentCols" :data="agents" :loading="loading" :bordered="false" :scroll-x="960" />
+        <n-data-table :columns="agentCols" :data="agentsFiltered" :loading="loading" :bordered="false" :scroll-x="960" />
       </n-tab-pane>
       <n-tab-pane name="missing">
         <template #tab>

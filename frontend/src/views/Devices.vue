@@ -2,6 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { apiClient } from "@/api/client";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NInputNumber, NSelect, NPopconfirm, NTag, NTooltip,
@@ -46,6 +47,8 @@ async function doBulkDelete() {
 const { t } = useI18n();
 const msg = useMessage();
 const rows = ref<Device[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const locations = ref<Location[]>([]);
 const racks = ref<Rack[]>([]);
 const loading = ref(false);
@@ -272,7 +275,21 @@ const cols = computed<DataTableColumns<Device>>(() =>
   allCols.value.filter((c: any) => c.type === "selection" || visibleKeys.value.includes(c.key)),
 );
 
-onMounted(() => { void refresh(); void ensureCustomersLoaded(); });
+import { useRoute } from "vue-router";
+const route = useRoute();
+onMounted(async () => {
+  await refresh();
+  void ensureCustomersLoaded();
+  // 從裝置細節頁帶 ?edit=<id> 進來 → 直接開該裝置的編輯
+  const editId = route.query.edit as string | undefined;
+  if (editId) {
+    let r = rows.value.find((d) => d.id === editId);
+    if (!r) {
+      try { const { data } = await apiClient.get(`/api/v1/devices/${editId}`); r = data; } catch { /* ignore */ }
+    }
+    if (r) openEdit(r);
+  }
+});
 </script>
 
 <template>
@@ -283,7 +300,8 @@ onMounted(() => { void refresh(); void ensureCustomersLoaded(); });
         <span>{{ t("nav.devices") }}</span>
       </n-space>
     </template>
-    <n-space style="margin-bottom: 12px">
+    <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -311,7 +329,7 @@ onMounted(() => { void refresh(); void ensureCustomersLoaded(); });
     </n-space>
     <n-data-table
       :columns="cols"
-      :data="rows"
+      :data="filteredRows"
       :loading="loading"
       :bordered="false"
       :scroll-x="1116"

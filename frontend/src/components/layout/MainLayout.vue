@@ -31,7 +31,7 @@ import {
   NatIcon, DevicesIcon, RacksIcon, LocationsIcon, RequestsIcon, TopologyIcon,
   ToolsIcon, SettingsIcon, TasksIcon,
   // Phase 3 / Admin
-  Phase3Icon, AdvancedIcon, VirtualizationIcon, PhysicalIcon, PowerIcon, VpnIcon,
+  Phase3Icon, VirtualizationIcon, PhysicalIcon, PowerIcon, VpnIcon,
   AdminIcon, AuditIcon, UsersIcon, GroupsIcon, CustomFieldsIcon, CustomersIcon, AnomalyIcon, ChatHistoryIcon,
   DnsIcon, LibreNMSIcon, FirewallIcon, WazuhIcon, ScanAgentsIcon, WebhooksIcon,
   MigrationIcon, ImportIcon, PluginsIcon,
@@ -149,7 +149,11 @@ const menuOptions = computed<MenuOption[]>(() => {
       key: "phase3",
       icon: renderIcon(Phase3Icon),
       children: [
-        { label: () => t("nav.advanced"),       key: "advanced", icon: renderIcon(AdvancedIcon) },
+        { label: () => t("advanced.tenancy"),   key: "adv-tenancy",  icon: renderIcon(CustomersIcon) },
+        { label: () => "ASN",                    key: "adv-asn",      icon: renderIcon(VlansIcon) },
+        { label: () => t("advanced.circuits"),   key: "adv-circuits", icon: renderIcon(PhysicalIcon) },
+        { label: () => t("advanced.contacts"),   key: "adv-contacts", icon: renderIcon(UsersIcon) },
+        { label: () => t("advanced.wireless"),   key: "adv-wireless", icon: renderIcon(ScanAgentsIcon) },
         { label: () => t("nav.virtualization"), key: "virt",     icon: renderIcon(VirtualizationIcon) },
         { label: () => t("nav.cabling"),        key: "cabling",     icon: renderIcon(PhysicalIcon) },
         { label: () => t("nav.power"),          key: "power",       icon: renderIcon(PowerIcon) },
@@ -207,6 +211,7 @@ const themeOptions = computed(() => [
 const userMenuOptions = computed(() => [
   { label: t("topbar.user_menu.profile"),     key: "profile",     icon: renderIcon(UserOutline, 16) },
   { label: t("topbar.user_menu.preferences"), key: "preferences", icon: renderIcon(SettingsIcon, 16) },
+  { label: t("topbar.user_menu.my_chat_history"), key: "my_chat_history", icon: renderIcon(ChatHistoryIcon, 16) },
   { type: "divider" as const, key: "d" },
   { label: t("topbar.user_menu.logout"),      key: "logout",      icon: renderIcon(LogoutIcon, 16) },
 ]);
@@ -230,6 +235,8 @@ async function handleUserMenu(key: string) {
     router.push({ name: "login" });
   } else if (key === "preferences" || key === "profile") {
     router.push({ name: "settings" });
+  } else if (key === "my_chat_history") {
+    router.push({ name: "my_chat_history" });
   }
 }
 

@@ -41,6 +41,8 @@ const saPicker = [
 
 const msg = useMessage();
 const rows = ref<ScanAgent[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
 const loading = ref(false);
 const show = ref(false);
 const showHelp = ref(false);
@@ -186,7 +188,8 @@ onMounted(() => { void refresh(); });
         <span>{{ t("nav.scan_agents") }}</span>
       </n-space>
     </template>
-    <n-space style="margin-bottom: 12px">
+    <n-space style="margin-bottom: 12px" align="center">
+      <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
@@ -203,7 +206,7 @@ onMounted(() => { void refresh(); });
                     @update:visible="saSet" @reset="saReset" />
       <ExportButton :columns="cols" :rows="rows" filename="scan-agents" :title="t('nav.scan_agents')" />
     </n-space>
-    <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" :scroll-x="1046" />
+    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1046" />
 
     <!-- 建立 / 編輯 -->
     <n-modal v-model:show="show" preset="card" style="width: 460px">

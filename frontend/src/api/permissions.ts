@@ -26,6 +26,12 @@ export async function listPermissions(principalType: string, principalId: string
   return data;
 }
 
+/** 不帶 principal → 後端回傳所有已指派的權限（總覽用）。 */
+export async function listAllPermissions(): Promise<PermissionGrant[]> {
+  const { data } = await apiClient.get<PermissionGrant[]>("/api/v1/system/permissions");
+  return data;
+}
+
 export async function upsertPermission(g: {
   object_type: PermObjectType; object_id: string | null;
   principal_type: "user" | "group"; principal_id: string; level: PermLevel;

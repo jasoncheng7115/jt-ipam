@@ -187,6 +187,9 @@ class Circuit(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     contract_end_date: Mapped[datetime | None] = mapped_column()
     monthly_fee_cents: Mapped[int | None] = mapped_column(Integer)
     commit_rate_kbps: Mapped[int | None] = mapped_column(Integer)
+    # 非對稱頻寬（上傳 / 下載），單位 kbps
+    up_kbps: Mapped[int | None] = mapped_column(Integer)
+    down_kbps: Mapped[int | None] = mapped_column(Integer)
     description: Mapped[str | None] = mapped_column(Text)
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

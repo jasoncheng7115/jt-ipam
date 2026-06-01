@@ -25,13 +25,16 @@ import {
   type User, type UserCreate,
 } from "@/api/admin";
 import {
-  UsersIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, TokenIcon,
+  UsersIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, TokenIcon, AdminIcon,
 } from "@/icons";
+import { useRouter } from "vue-router";
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 const { t } = useI18n();
+const router = useRouter();
+function goPerms(r: User) { router.push({ name: "permissions", query: { ptype: "user", pid: r.id } }); }
 
 const { visibleKeys: usrVis, setVisible: usrSet, reset: usrReset } = useColumnPrefs(
   "users",
@@ -236,9 +239,10 @@ const allColumns = computed<DataTableColumns<User>>(() => autoSort([
       : "—",
   },
   {
-    title: t("common.actions"), key: "actions", className: "col-actions", width: 120,
+    title: t("common.actions"), key: "actions", className: "col-actions", width: 150,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       iconAction(EditIcon, t("common.edit"), () => openEdit(r)),
+      iconAction(AdminIcon, t("users.assign_perms"), () => goPerms(r)),
       r.locked_until
         ? iconAction(TokenIcon, t("users.unlock"), () => unlock(r))
         : null,

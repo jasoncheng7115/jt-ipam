@@ -431,21 +431,33 @@ async def _fetch_legacy_nat_rules(fw: OPNsenseFirewall) -> list[dict[str, Any]]:
         return t or None
 
     for idx, rule in enumerate(nat_node.findall("rule")):
-        # 跳過 disabled rule（legacy 把 disabled 當 element 存在當 true）
-        if rule.find("disabled") is not None:
-            continue
+        # 不再跳過 disabled rule —— 改用 disabled 欄位呈現（legacy 把 disabled 當 element 存在）
         rule_id = _text(rule.find("associated-rule-id")) or f"legacy-{idx}"
         dest = rule.find("destination")
+        src = rule.find("source")
         out.append({
             "uuid": rule_id,
             "description": _text(rule.find("descr")),
             "protocol": _text(rule.find("protocol")) or "any",
+            "ipprotocol": _text(rule.find("ipprotocol")),
             "target": _text(rule.find("target")),
             "target_port": _text(rule.find("local-port")),
             "destination_port": _text(dest.find("port")) if dest is not None else None,
-            "destination_net": _text(dest.find("network")) or _text(dest.find("address"))
-                if dest is not None else None,
+            "destination_net": (_text(dest.find("network")) or _text(dest.find("address"))
+                                if dest is not None else None),
+            "destination_not": (dest.find("not") is not None) if dest is not None else False,
+            "source_port": _text(src.find("port")) if src is not None else None,
+            "source_net": (_text(src.find("network")) or _text(src.find("address"))
+                           if src is not None else None),
+            "source_not": (src.find("not") is not None) if src is not None else False,
             "interface": _text(rule.find("interface")),
+            "disabled": rule.find("disabled") is not None,
+            "nordr": rule.find("nordr") is not None,
+            "log": rule.find("log") is not None,
+            "category": _text(rule.find("category")),
+            "natreflection": _text(rule.find("natreflection")),
+            "poolopts": _text(rule.find("poolopts")),
+            "filter_rule": _text(rule.find("associated-rule-id")),
             "_legacy": True,
         })
     return out
@@ -553,9 +565,40 @@ async def sync_nat_rules(
             return
         seen_uuids.add(ruuid)
 
-        proto = (r.get("protocol") or r.get("ipprotocol") or "any").strip().lower()
-        if proto not in ("tcp", "udp", "any"):
+        proto = (r.get("protocol") or "any").strip().lower()
+        if proto not in ("tcp", "udp", "any", "icmp", "esp", "gre", "tcp/udp"):
             proto = "any"
+
+        def _is_ipish(s: object) -> bool:
+            s = str(s or "")
+            return bool(s) and any(c.isdigit() for c in s) and ("." in s or ":" in s)
+
+        ipv = (r.get("ipprotocol") or "inet").strip().lower()
+        if ipv not in ("inet", "inet6"):
+            ipv = "inet"
+        # 來源 / 目的 / 埠：非數字 / 非 IP 的值 → 視為 alias 名稱（可連到 alias 內容）
+        sp_raw = r.get("destination_port") if default_type == "port_forward" else r.get("source_port")
+        dp_raw = r.get("target_port")
+        src_net = r.get("source_net")
+        dst_net = r.get("destination_net")
+        tgt = r.get("target")
+        extra = {
+            "disabled": bool(r.get("disabled")),
+            "no_rdr": bool(r.get("nordr")),
+            "ip_version": ipv,
+            "src_not": bool(r.get("source_not")),
+            "dst_not": bool(r.get("destination_not")),
+            "log": bool(r.get("log")),
+            "category": (str(r.get("category"))[:128] if r.get("category") else None),
+            "nat_reflection": (str(r.get("natreflection"))[:16] if r.get("natreflection") else None),
+            "pool_options": (str(r.get("poolopts"))[:32] if r.get("poolopts") else None),
+            "filter_rule": (str(r.get("filter_rule"))[:128] if r.get("filter_rule") else None),
+            "src_port_alias": (str(sp_raw)[:64] if sp_raw and _port(sp_raw) is None else None),
+            "dst_port_alias": (str(dp_raw)[:64] if dp_raw and _port(dp_raw) is None else None),
+            "src_alias": (str(src_net)[:64] if src_net and not _is_ipish(src_net) and str(src_net).lower() != "any" else None),
+            "dst_alias": (str(dst_net)[:64] if dst_net and not _is_ipish(dst_net) and str(dst_net).lower() != "any" else None),
+            "redirect_alias": (str(tgt)[:64] if tgt and not _is_ipish(tgt) else None),
+        }
 
         name = (
             r.get("description") or r.get("descr")
@@ -610,6 +653,7 @@ async def sync_nat_rules(
                 description=(r.get("description") or None),
                 source_origin=origin,
                 external_id=ruuid,
+                **extra,
             )
             session.add(obj)
             inserted += 1
@@ -623,6 +667,8 @@ async def sync_nat_rules(
             existing.dst_ip_id = dst_ip_id
             existing.device_id = device_id
             existing.description = r.get("description") or None
+            for _k, _v in extra.items():
+                setattr(existing, _k, _v)
             updated += 1
 
     for path, default_type in endpoints:
@@ -975,11 +1021,13 @@ async def link_wireguard_peers(session: AsyncSession) -> int:
         select(VPNTunnel).where(VPNTunnel.type == "wireguard")
     )).scalars().all())
 
-    # local_public_key → (tunnel 的 a_device_id)
+    # local_public_key → (tunnel 的 a_device_id) + 反向對應整條 tunnel（拿對端記錄的我方 WAN）
     by_local: dict[str, uuid.UUID] = {}
+    by_local_tunnel: dict[str, Any] = {}
     for t in tunnels:
         if t.local_public_key and t.a_device_id:
             by_local.setdefault(t.local_public_key, t.a_device_id)
+            by_local_tunnel.setdefault(t.local_public_key, t)
 
     linked = 0
     for t in tunnels:
@@ -991,6 +1039,11 @@ async def link_wireguard_peers(session: AsyncSession) -> int:
             if t.b_device_id != peer_dev:
                 t.b_device_id = peer_dev
                 linked += 1
+            # 本端 a_endpoint 常是 LAN/管理 IP；對端 tunnel 記錄的 b_endpoint
+            # 正是「對端看到的我方位址」＝我方 WAN 公網 IP → 拿來補正
+            recip = by_local_tunnel.get(t.peer_public_key)
+            if recip is not None and recip.b_endpoint and t.a_endpoint != recip.b_endpoint:
+                t.a_endpoint = recip.b_endpoint
         elif peer_dev is None and t.b_device_id is not None:
             # 對端 fw 已不再宣告此公鑰 → 還原成遠端站點節點
             t.b_device_id = None

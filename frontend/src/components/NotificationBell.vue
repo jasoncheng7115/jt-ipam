@@ -13,6 +13,9 @@ import {
 } from "naive-ui";
 import { listNotifications, markAllRead, markRead, type Notification } from "@/api/notifications";
 import { BellIcon } from "@/icons";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const items = ref<Notification[]>([]);
 const unread = ref(0);
@@ -68,8 +71,8 @@ onUnmounted(() => {
     </template>
     <n-space vertical :size="8">
       <n-space justify="space-between" align="center">
-        <strong>Notifications</strong>
-        <n-button v-if="unread > 0" size="tiny" @click="clearAll">Mark all read</n-button>
+        <strong>{{ t("notifications.title") }}</strong>
+        <n-button v-if="unread > 0" size="tiny" @click="clearAll">{{ t("notifications.mark_all_read") }}</n-button>
       </n-space>
       <n-list v-if="items.length" hoverable>
         <n-list-item
@@ -86,7 +89,7 @@ onUnmounted(() => {
           </n-space>
         </n-list-item>
       </n-list>
-      <n-empty v-else size="small" />
+      <n-empty v-else size="small" :description="t('notifications.empty')" />
     </n-space>
   </n-popover>
 </template>

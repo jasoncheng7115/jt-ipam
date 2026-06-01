@@ -34,6 +34,8 @@ const tab = ref<"vlans" | "domains">("vlans");
 
 const domains = ref<VLANDomain[]>([]);
 const vlans = ref<VLAN[]>([]);
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+const { query: vlanFilterQ, filtered: vlansFiltered } = useTableQuickFilter(vlans);
 const loading = ref(false);
 
 const showVLAN = ref(false);
@@ -311,7 +313,8 @@ onMounted(() => {
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><VlansIcon /></n-icon>{{ t('nav.vlans') }}</span>
         </template>
-        <n-space style="margin-bottom: 12px">
+        <n-space style="margin-bottom: 12px" align="center">
+          <n-input v-model:value="vlanFilterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
           <n-button @click="refresh" :loading="loading">
             <template #icon><n-icon><RefreshIcon /></n-icon></template>
             {{ t("common.refresh") }}
@@ -342,7 +345,7 @@ onMounted(() => {
           <n-button size="small" @click="vlanChecked = []">{{ t("common.clear_selection") }}</n-button>
         </n-space>
         <n-data-table
-          :columns="vlanCols" :data="vlans" :loading="loading" :bordered="false"
+          :columns="vlanCols" :data="vlansFiltered" :loading="loading" :bordered="false"
           :scroll-x="1116"
           :row-key="(row: VLAN) => row.id"
           :checked-row-keys="vlanChecked"
