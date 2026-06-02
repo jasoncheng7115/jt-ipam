@@ -140,8 +140,8 @@ async function del(r: Location) {
 
 const { visibleKeys, setVisible, reset } = useColumnPrefs(
   "locations",
-  ["name", "address", "coords", "description", "actions"],
-  ["name", "address", "coords", "description", "actions"],
+  ["name", "address", "coords", "description", "rack_count", "device_count", "actions"],
+  ["name", "address", "coords", "description", "rack_count", "device_count", "actions"],
 );
 const columnPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
