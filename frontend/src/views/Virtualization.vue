@@ -13,8 +13,10 @@ import {
 } from "@/icons";
 import { Virt, type ProxmoxInstance } from "@/api/phase3";
 import { autoSort } from "@/composables/useTableSort";
+import { useCustomers } from "@/composables/useCustomers";
 
 const { t } = useI18n();
+const { options: customerOptions, ensureLoaded: ensureCustomerOptsLoaded } = useCustomers();
 
 // VM 狀態翻譯（running/stopped/paused/suspended…）；沒對到就原樣顯示
 function vmStatusLabel(s: string | null | undefined): string {
@@ -56,16 +58,37 @@ async function delProxmox(id: string) {
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
-// ── 新增叢集 ──
+// ── 新增 / 編輯叢集（含所屬單位）──
 const showCluster = ref(false);
-const clusterForm = ref({ name: "", description: "" });
+const editingClusterId = ref<string | null>(null);
+const clusterForm = ref({ name: "", description: "", customer_id: null as string | null });
+function openClusterCreate() {
+  editingClusterId.value = null;
+  clusterForm.value = { name: "", description: "", customer_id: null };
+  showCluster.value = true;
+}
+function openClusterEdit(r: any) {
+  editingClusterId.value = r.id;
+  clusterForm.value = { name: r.name, description: r.description ?? "", customer_id: r.customer_id ?? null };
+  showCluster.value = true;
+}
 async function submitCluster() {
   if (!clusterForm.value.name.trim()) { msg.error(t("virt.err_cluster_name")); return; }
   try {
-    await Virt.createCluster({ name: clusterForm.value.name.trim(), type: "proxmox",
-      description: clusterForm.value.description || undefined });
+    if (editingClusterId.value) {
+      await Virt.updateCluster(editingClusterId.value, {
+        name: clusterForm.value.name.trim(),
+        description: clusterForm.value.description || undefined,
+        customer_id: clusterForm.value.customer_id ?? null,
+      });
+    } else {
+      await Virt.createCluster({ name: clusterForm.value.name.trim(), type: "proxmox",
+        description: clusterForm.value.description || undefined,
+        customer_id: clusterForm.value.customer_id ?? null });
+    }
     showCluster.value = false;
-    clusterForm.value = { name: "", description: "" };
+    editingClusterId.value = null;
+    clusterForm.value = { name: "", description: "", customer_id: null };
     await refresh();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
@@ -157,12 +180,18 @@ function iconAction(icon: any, label: string, onClick: () => void, type?: any) {
 const clusterCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name" },
   { title: t("virt.type"), key: "type" },
+  { title: t("cols.unit"), key: "customer_name", width: 160, ellipsis: { tooltip: true },
+    render: (r) => r.customer_name ?? "—" },
   {
     title: t("virt.cluster_mode"), key: "is_standalone", width: 120,
     render: (r) => h(NTag, { size: "small", type: r.is_standalone ? "warning" : "success" },
       () => r.is_standalone ? t("virt.standalone") : t("virt.clustered")),
   },
   { title: t("sections.description"), key: "description" },
+  {
+    title: t("common.actions"), key: "actions", width: 70,
+    render: (r) => iconAction(EditIcon, t("common.edit"), () => openClusterEdit(r)),
+  },
 ]));
 // 每個 NIC 一行（IP / bridge / MAC 三欄同 index 對齊）— 多 IP 一看就知道對應關係
 function stackedCell(arr?: string[] | null) {
@@ -240,7 +269,7 @@ const proxmoxCols = computed<DataTableColumns<ProxmoxInstance>>(() => autoSort([
     ]),
   },
 ]));
-onMounted(() => { void refresh(); });
+onMounted(() => { void refresh(); void ensureCustomerOptsLoaded(); });
 </script>
 
 <template>
@@ -266,6 +295,12 @@ onMounted(() => { void refresh(); });
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><AdvancedIcon /></n-icon>{{ `${t('virt.clusters')} (${clusters.length})` }}</span>
         </template>
+        <n-space style="margin-bottom: 10px">
+          <n-button type="primary" size="small" @click="openClusterCreate">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
+            {{ t("virt.add_cluster") }}
+          </n-button>
+        </n-space>
         <n-data-table :columns="clusterCols" :data="clusters" :loading="loading" :bordered="false" />
       </n-tab-pane>
       <n-tab-pane name="vms">
@@ -283,9 +318,14 @@ onMounted(() => { void refresh(); });
     </n-tabs>
 
     <!-- 新增叢集 -->
-    <n-modal v-model:show="showCluster" preset="card" :title="t('virt.add_cluster')" style="width: 420px">
+    <n-modal v-model:show="showCluster" preset="card"
+             :title="editingClusterId ? t('common.edit') : t('virt.add_cluster')" style="width: 420px">
       <n-form>
         <n-form-item :label="t('common.name')"><n-input v-model:value="clusterForm.name" /></n-form-item>
+        <n-form-item :label="t('cols.unit')">
+          <n-select v-model:value="clusterForm.customer_id" :options="customerOptions"
+                    :placeholder="t('common.not_specified')" clearable filterable />
+        </n-form-item>
         <n-form-item :label="t('sections.description')">
           <n-input v-model:value="clusterForm.description" type="textarea" :rows="2" />
         </n-form-item>

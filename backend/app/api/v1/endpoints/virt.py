@@ -32,12 +32,21 @@ class ClusterRead(StrictModel):
     type: str
     is_standalone: bool = False
     description: str | None
+    customer_id: uuid.UUID | None = None       # 所屬單位
+    customer_name: str | None = None            # 單位名稱（清單顯示用）
 
 
 class ClusterWrite(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=128)]
     type: str = "proxmox"
     description: Annotated[str | None, Field(max_length=1024)] = None
+    customer_id: uuid.UUID | None = None
+
+
+class ClusterUpdate(StrictModel):
+    name: Annotated[str | None, Field(min_length=1, max_length=128)] = None
+    description: Annotated[str | None, Field(max_length=1024)] = None
+    customer_id: uuid.UUID | None = None
 
 
 class VMRead(StrictModel):
@@ -128,9 +137,20 @@ async def list_clusters(
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
     total = int(await session.scalar(select(func.count()).select_from(VirtCluster)) or 0)
+    cust_names: dict[Any, str] = {}
+    cust_ids = [r.customer_id for r in rows if r.customer_id]
+    if cust_ids:
+        from app.models.customer import Customer
+        cust_names = dict((await session.execute(  # type: ignore[arg-type]
+            select(Customer.id, Customer.name).where(Customer.id.in_(cust_ids))
+        )).all())
+    items = []
+    for r in rows:
+        m = ClusterRead.model_validate(r)
+        m.customer_name = cust_names.get(r.customer_id) if r.customer_id else None
+        items.append(m)
     return Paginated[ClusterRead](
-        items=[ClusterRead.model_validate(r) for r in rows],
-        total=total, page=page, page_size=page_size,
+        items=items, total=total, page=page, page_size=page_size,
     )
 
 
@@ -153,6 +173,32 @@ async def create_cluster(
         actor_user_agent=request.headers.get("user-agent"),
         object_type="virt_cluster", object_id=str(obj.id), action="create",
         diff=payload.model_dump(mode="json"),
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    await session.refresh(obj)
+    return ClusterRead.model_validate(obj)
+
+
+@router.patch("/clusters/{cluster_id}", response_model=ClusterRead,
+              dependencies=[Depends(require_admin)])
+async def update_cluster(
+    cluster_id: uuid.UUID, payload: ClusterUpdate, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ClusterRead:
+    obj = await session.get(VirtCluster, cluster_id)
+    if obj is None:
+        raise HTTPException(404, detail="Cluster not found")
+    changes = payload.model_dump(exclude_unset=True)
+    for k, v in changes.items():
+        setattr(obj, k, v)
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="virt_cluster", object_id=str(obj.id), action="update",
+        diff=payload.model_dump(mode="json", exclude_unset=True),
         request_id=getattr(request.state, "request_id", None),
     )
     await session.commit()

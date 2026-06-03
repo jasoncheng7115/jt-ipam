@@ -328,8 +328,12 @@ export const Virt = {
       undefined, { timeout: 60_000 });
     return data;
   },
-  createCluster: async (p: { name: string; type?: string; description?: string }) => {
+  createCluster: async (p: { name: string; type?: string; description?: string; customer_id?: string | null }) => {
     const { data } = await apiClient.post<VirtCluster>("/api/v1/virt/clusters", p);
+    return data;
+  },
+  updateCluster: async (id: string, p: { name?: string; description?: string; customer_id?: string | null }) => {
+    const { data } = await apiClient.patch<VirtCluster>(`/api/v1/virt/clusters/${id}`, p);
     return data;
   },
   createProxmox: async (p: ProxmoxWrite) => {
