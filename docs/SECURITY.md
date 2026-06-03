@@ -19,7 +19,7 @@
 
 ## 〇、總則
 
-1. **Security by Design**：安全是第一次寫的時候就要做對，不是事後補丁。
+1. **Security by Design**：安全是第一次寫的時候就要做對，不是事後修補。
 2. **Defense in Depth**：每一層（網路、應用、資料、人員）都要有防線，任何一層被突破不導致整體淪陷。
 3. **Least Privilege**：使用者、容器、服務帳號、API Token 一律最小權限；deny-by-default。
 4. **Fail Closed**：認證失敗、授權失敗、設定缺失、例外發生時，預設**拒絕**而非放行（A10 新類別的核心）。
