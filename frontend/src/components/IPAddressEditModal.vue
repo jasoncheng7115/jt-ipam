@@ -411,8 +411,30 @@ async function remove() {
       :aria-modal="inline ? undefined : 'true'"
     >
       <template #header-extra>
-        <n-tag v-if="isCreate" type="info" size="small">{{ t("common.create") }}</n-tag>
-        <n-tag v-else :type="stateType" size="small">{{ labelState(props.address?.state) }}</n-tag>
+        <n-space align="center" :size="8" :wrap-item="false">
+          <n-tag v-if="isCreate" type="info" size="small">{{ t("common.create") }}</n-tag>
+          <n-tag v-else :type="stateType" size="small">{{ labelState(props.address?.state) }}</n-tag>
+          <!-- inline(頁面)模式：操作鈕放上面，比照裝置詳情頁 -->
+          <template v-if="inline && !isCreate">
+            <n-button v-if="!editMode" type="primary" size="small" @click="editMode = true">
+              <template #icon><n-icon><EditIcon /></n-icon></template>{{ t("common.edit") }}
+            </n-button>
+            <template v-else>
+              <n-popconfirm @positive-click="remove">
+                <template #trigger>
+                  <n-button type="error" ghost size="small" :loading="deleting">
+                    <template #icon><n-icon><DeleteIcon /></n-icon></template>{{ t("common.delete") }}
+                  </n-button>
+                </template>
+                {{ t("common.confirm_delete") }}
+              </n-popconfirm>
+              <n-button size="small" @click="close">{{ t("common.cancel") }}</n-button>
+              <n-button type="primary" size="small" :loading="saving" @click="save">
+                <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
+              </n-button>
+            </template>
+          </template>
+        </n-space>
       </template>
 
       <div v-if="props.address || isCreate">
@@ -616,9 +638,9 @@ async function remove() {
         </n-form>
       </div>
 
-      <template #footer>
+      <template v-if="!inline" #footer>
         <n-space justify="space-between">
-          <n-popconfirm v-if="!isCreate" @positive-click="remove">
+          <n-popconfirm v-if="!isCreate && (!inline || editMode)" @positive-click="remove">
             <template #trigger>
               <n-button type="error" ghost size="small" :loading="deleting" :disabled="!props.address">
                 <template #icon><n-icon><DeleteIcon /></n-icon></template>
@@ -629,7 +651,7 @@ async function remove() {
           </n-popconfirm>
           <span v-else></span>
           <n-space>
-            <n-button @click="close">
+            <n-button v-if="!inline || editMode || isCreate" @click="close">
               <template #icon><n-icon><CancelIcon /></n-icon></template>
               {{ t("common.cancel") }}
             </n-button>

@@ -165,7 +165,8 @@ const cols = computed<DataTableColumns<DevicePort>>(() => [
       ];
       if (props.admin) {
         acts.push(
-          h(NButton, { size: "tiny", quaternary: true, title: t("ports.connect"), onClick: () => openConnect(r) }, () => t("ports.connect")),
+          h(NButton, { size: "tiny", quaternary: true, type: "primary", title: t("ports.connect"), onClick: () => openConnect(r) },
+            { icon: () => h(NIcon, null, () => h(PhysicalIcon)) }),
           h(NButton, { size: "tiny", quaternary: true, onClick: () => openEdit(r) }, { icon: () => h(NIcon, null, () => h(EditIcon)) }),
           h(NPopconfirm, { onPositiveClick: () => del(r.id) }, {
             trigger: () => h(NButton, { size: "tiny", quaternary: true, type: "error" }, { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
