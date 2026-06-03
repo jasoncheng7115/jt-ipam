@@ -55,9 +55,17 @@ const rulePrefs = useColumnPrefs("opnsense_rules",
 const rulePicker = [
   { key: "enabled", label: t("cols.enabled") }, { key: "sequence", label: t("cols.order") },
   { key: "action", label: t("cols.action") }, { key: "interface", label: t("cols.iface") },
-  { key: "direction", label: t("cols.direction") }, { key: "protocol", label: "Proto" },
-  { key: "source_net", label: "Source" }, { key: "destination_net", label: "Destination" },
+  { key: "direction", label: t("cols.direction") }, { key: "protocol", label: t("cols.proto") },
+  { key: "source_net", label: t("cols.source") }, { key: "destination_net", label: t("cols.destination") },
   { key: "description", label: t("cols.description") },
+];
+const aliasPrefs = useColumnPrefs("opnsense_aliases",
+  ["name", "alias_type", "enabled", "member_count", "content", "description"],
+  ["name", "alias_type", "enabled", "member_count", "content", "description"]);
+const aliasPicker = [
+  { key: "name", label: t("common.name") }, { key: "alias_type", label: t("cols.type") },
+  { key: "enabled", label: t("cols.enabled") }, { key: "member_count", label: t("firewall_admin.members") },
+  { key: "content", label: t("firewall_admin.content") }, { key: "description", label: t("common.description") },
 ];
 
 const msg = useMessage();
@@ -70,17 +78,62 @@ const rules = ref<OPNsenseRule[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: ruleFilterQ, filtered: rulesFiltered } = useTableQuickFilter(rules);
 const rulesLoading = ref(false);
+// 規則的來源/目的若是別名名稱，點擊可跳到「別名」分頁看成員內容
+const ruleAliasNames = ref<Set<string>>(new Set());
+// 動作 / 介面 / 方向 下拉篩選
+const fAction = ref<string | null>(null);
+const fIface = ref<string | null>(null);
+const fDir = ref<string | null>(null);
+function distinctOpts(getter: (r: OPNsenseRule) => string | null | undefined) {
+  const vals = new Set<string>();
+  for (const r of rules.value) { const v = getter(r); if (v) vals.add(v); }
+  return [...vals].sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+}
+const actionOpts = computed(() => distinctOpts((r) => r.action));
+const ifaceOpts = computed(() => distinctOpts((r) => r.interface));
+const dirOpts = computed(() => distinctOpts((r) => r.direction));
+const rulesView = computed(() => rulesFiltered.value.filter((r) =>
+  (!fAction.value || r.action === fAction.value) &&
+  (!fIface.value || r.interface === fIface.value) &&
+  (!fDir.value || r.direction === fDir.value)));
 async function loadRules() {
   if (!rulesFw.value) { rules.value = []; return; }
   rulesLoading.value = true;
+  fAction.value = null; fIface.value = null; fDir.value = null;
   try {
     const res = await listFirewallRules(rulesFw.value, 1);
     rules.value = res.items;
+    // 順便撈該防火牆的別名名稱集合，供來源/目的判斷是否可點
+    try {
+      const al = await listFirewallAliases(rulesFw.value);
+      ruleAliasNames.value = new Set(al.map((a) => a.name));
+    } catch { ruleAliasNames.value = new Set(); }
   } catch (e: any) {
     msg.error(e?.response?.data?.detail ?? t("errors.network"));
   } finally {
     rulesLoading.value = false;
   }
+}
+function gotoAlias(name: string) {
+  tab.value = "aliases";
+  if (rulesFw.value) aliasesFw.value = rulesFw.value;
+  aliasFilterQ.value = name;
+  void loadAliases();
+}
+// 來源/目的 cell：是別名就 render 成可點 tag（比照 NAT 頁），否則純文字
+function netCell(net: string | null, port: string | number | null) {
+  const portSuffix = port ? ":" + port : "";
+  if (net && ruleAliasNames.value.has(net)) {
+    return h(NTag, {
+      size: "small", type: "info", bordered: false,
+      style: "cursor: pointer; max-width: 100%; vertical-align: middle",
+      title: `@${net} — ${t("nat.alias_goto")}`,
+      onClick: () => gotoAlias(net),
+    }, { default: () => h("span", {
+      style: "display:inline-block; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom",
+    }, `@${net}${portSuffix}`) });
+  }
+  return `${net ?? "*"}${portSuffix}`;
 }
 // Aliases tab（從 OPNsense 拉回的 alias 定義）
 const aliasesFw = ref<string | null>(null);
@@ -98,7 +151,7 @@ async function loadAliases() {
     aliasesLoading.value = false;
   }
 }
-const aliasCols = computed<DataTableColumns<OPNsenseSyncedAlias>>(() => autoSort([
+const allAliasCols = computed<DataTableColumns<OPNsenseSyncedAlias>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
   { title: t("cols.type"), key: "alias_type", width: 110, render: (a) => a.alias_type ?? "—" },
   { title: t("cols.enabled"), key: "enabled", width: 70,
@@ -138,9 +191,9 @@ const allRuleCols = computed<DataTableColumns<OPNsenseRule>>(() => autoSort([
   { title: t("cols.direction"), key: "direction", width: 60, render: (r) => r.direction ?? "—" },
   { title: t("cols.proto"), key: "protocol", width: 70, render: (r) => r.protocol ?? "—" },
   { title: t("cols.source"), key: "source_net", minWidth: 140, ellipsis: { tooltip: true },
-    render: (r) => `${r.source_net ?? "*"}${r.source_port ? ":" + r.source_port : ""}` },
+    render: (r) => netCell(r.source_net, r.source_port) },
   { title: t("cols.destination"), key: "destination_net", minWidth: 140, ellipsis: { tooltip: true },
-    render: (r) => `${r.destination_net ?? "*"}${r.destination_port ? ":" + r.destination_port : ""}` },
+    render: (r) => netCell(r.destination_net, r.destination_port) },
   { title: t("cols.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
 ]));
 const mappings = ref<OPNsenseAliasMapping[]>([]);
@@ -391,6 +444,8 @@ const mapCols = computed<DataTableColumns<OPNsenseAliasMapping>>(() =>
   allMapCols.value.filter((c: any) => mapPrefs.visibleKeys.value.includes(c.key)));
 const ruleCols = computed<DataTableColumns<OPNsenseRule>>(() =>
   allRuleCols.value.filter((c: any) => rulePrefs.visibleKeys.value.includes(c.key)));
+const aliasCols = computed<DataTableColumns<OPNsenseSyncedAlias>>(() =>
+  allAliasCols.value.filter((c: any) => aliasPrefs.visibleKeys.value.includes(c.key)));
 
 onMounted(() => {
   // 預設分頁：管理區從 firewalls 起、進階區從 rules 起
@@ -490,13 +545,19 @@ onMounted(() => {
             {{ t("firewall_admin.rules_count", { n: rules.length }) }}
           </span>
           <n-input v-model:value="ruleFilterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
+          <n-select v-model:value="fAction" :options="actionOpts" clearable
+                    :placeholder="t('cols.action')" style="width: 120px" />
+          <n-select v-model:value="fIface" :options="ifaceOpts" clearable
+                    :placeholder="t('cols.iface')" style="width: 120px" />
+          <n-select v-model:value="fDir" :options="dirOpts" clearable
+                    :placeholder="t('cols.direction')" style="width: 110px" />
           <ColumnPicker :all="rulePicker" :visible="rulePrefs.visibleKeys.value"
                         @update:visible="rulePrefs.setVisible" @reset="rulePrefs.reset" />
-          <ExportButton :columns="ruleCols" :rows="rules" filename="firewall-rules" :title="t('firewall_admin.rules')" />
+          <ExportButton :columns="ruleCols" :rows="rulesView" filename="firewall-rules" :title="t('firewall_admin.rules')" />
         </n-space>
         <n-data-table
           v-if="rulesFw"
-          :columns="ruleCols" :data="rulesFiltered" :loading="rulesLoading"
+          :columns="ruleCols" :data="rulesView" :loading="rulesLoading"
           :bordered="false" size="small" :scroll-x="910"
           :pagination="{ pageSize: 100, showSizePicker: true, pageSizes: [50, 100, 200, 500] }"
         />
@@ -526,7 +587,9 @@ onMounted(() => {
             {{ t("common.total_n", { n: aliases.length }) }}
           </span>
           <n-input v-model:value="aliasFilterQ" :placeholder="t('common.filter')" clearable style="width: 160px" />
-          <ExportButton :columns="aliasCols" :rows="aliases" filename="firewall-aliases" :title="t('firewall_admin.aliases')" />
+          <ColumnPicker :all="aliasPicker" :visible="aliasPrefs.visibleKeys.value"
+                        @update:visible="aliasPrefs.setVisible" @reset="aliasPrefs.reset" />
+          <ExportButton :columns="aliasCols" :rows="aliasesFiltered" filename="firewall-aliases" :title="t('firewall_admin.aliases')" />
         </n-space>
         <n-data-table
           v-if="aliasesFw"

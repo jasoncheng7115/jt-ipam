@@ -3,7 +3,7 @@ import { computed, h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NSpace, NButton, NIcon, NDataTable, NModal, NForm, NFormItem, NInput,
-  NSelect, NPopconfirm, NTag, useMessage, type DataTableColumns,
+  NSelect, NPopconfirm, NTag, NTooltip, useMessage, type DataTableColumns,
 } from "naive-ui";
 import { Physical, type DevicePort, type PortTrace } from "@/api/phase3";
 import { listDevices } from "@/api/basic";
@@ -15,7 +15,10 @@ const msg = useMessage();
 
 const ports = ref<DevicePort[]>([]);
 const loading = ref(false);
-const PORT_TYPES = ["network", "front", "rear", "console", "power"];
+const PORT_TYPES = ["network", "bridge", "bond", "vlan", "front", "rear", "console", "power"];
+const TYPE_TAG: Record<string, "info" | "success" | "warning" | "error" | "default"> = {
+  network: "info", bridge: "warning", bond: "success", vlan: "default",
+};
 const typeOpts = computed(() => PORT_TYPES.map((v) => ({ label: t("ports.type_" + v), value: v })));
 
 async function refresh() {
@@ -176,13 +179,18 @@ function escapeXml(s: string): string {
 
 const cols = computed<DataTableColumns<DevicePort>>(() => [
   { title: t("ports.col_name"), key: "name", minWidth: 120 },
-  { title: t("ports.col_type"), key: "type", width: 90, render: (r) => h(NTag, { size: "small", type: "info", bordered: false }, () => t("ports.type_" + r.type)) },
-  { title: t("ports.col_link"), key: "link", minWidth: 150, ellipsis: { tooltip: true },
+  { title: t("ports.col_type"), key: "type", width: 90, render: (r) => h(NTag, { size: "small", type: TYPE_TAG[r.type] ?? "info", bordered: false }, () => t("ports.type_" + r.type)) },
+  { title: t("ports.col_link"), key: "link", minWidth: 150,
     render: (r) => r.link
-      ? h(NTag, { size: "small", type: "success", bordered: false }, () => "→ " + r.link)
+      // 純文字 tooltip：避免把綠色 tag 放進深色 tooltip 造成淺色主題配色錯
+      ? h(NTooltip, null, {
+          trigger: () => h(NTag, { size: "small", type: "success", bordered: false, style: "max-width:100%" },
+            () => h("span", { style: "display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" }, "→ " + r.link)),
+          default: () => "→ " + r.link,
+        })
       : "—" },
-  { title: t("ports.col_macs"), key: "macs", minWidth: 150, ellipsis: { tooltip: true },
-    render: (r) => (r.macs && r.macs.length) ? r.macs.join(", ") : "—" },
+  { title: t("ports.col_mac"), key: "mac_address", minWidth: 140, ellipsis: { tooltip: true },
+    render: (r) => r.mac_address || "—" },
   { title: t("ports.col_peer"), key: "peer_port_id", width: 100, render: (r) => peerName(r.peer_port_id) },
   { title: t("common.description"), key: "description", minWidth: 110, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   {

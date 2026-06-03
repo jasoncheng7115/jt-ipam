@@ -1607,6 +1607,9 @@
     "import_none": "沒有新的連接埠可匯入",
     "import_no_source": "此裝置尚未連結 LibreNMS，無來源可匯入",
     "col_link": "連線到",
-    "col_macs": "MAC / ARP"
+    "type_bridge": "橋接",
+    "type_bond": "聚合",
+    "type_vlan": "VLAN",
+    "col_mac": "MAC"
   }
 }

@@ -1607,6 +1607,9 @@
     "import_none": "No new ports to import",
     "import_no_source": "No linked LibreNMS source for this device",
     "col_link": "Connected to",
-    "col_macs": "MAC / ARP"
+    "type_bridge": "Bridge",
+    "type_bond": "Bond",
+    "type_vlan": "VLAN",
+    "col_mac": "MAC"
   }
 }

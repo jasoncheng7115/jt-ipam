@@ -753,31 +753,48 @@ async def sync_device_ports(session: AsyncSession, instance: LibreNMSInstance) -
         try:
             pdata = await _api_get(
                 instance,
-                f"/api/v0/devices/{d.legacy_device_id}/ports?columns=ifName,ifType",
+                f"/api/v0/devices/{d.legacy_device_id}/ports?columns=ifName,ifType,ifPhysAddress",
                 timeout=20.0,
             )
         except LibreNMSError as exc:
             logging.getLogger(__name__).debug(
                 "librenms ports fetch failed for %s: %s", d.legacy_device_id, exc)
             continue
-        names = {
-            (p.get("ifName") or "").strip()
-            for p in (pdata.get("ports") or [])
-        }
-        names = {n for n in names if n and n.lower() not in ("null", "unrouted vlan 1")}
-        if not names:
+        # ifName → 此埠自身的實體 MAC（ifPhysAddress），正規化成小寫冒號格式
+        name_mac: dict[str, str | None] = {}
+        for p in (pdata.get("ports") or []):
+            nm = (p.get("ifName") or "").strip()
+            if not nm or nm.lower() in ("null", "unrouted vlan 1"):
+                continue
+            name_mac[nm] = _norm_mac(p.get("ifPhysAddress"))
+        if not name_mac:
             continue
         existing = {
-            p.name for p in (await session.execute(
+            p.name: p for p in (await session.execute(
                 select(DevicePort).where(DevicePort.device_id == d.jt_ipam_device_id)
             )).scalars().all()
         }
-        for n in sorted(names):
+        for n in sorted(name_mac):
+            mac = name_mac[n]
             if n in existing:
+                # 回填 / 更新埠自身 MAC（不動其他使用者編輯的欄位）
+                if mac and existing[n].mac_address != mac:
+                    existing[n].mac_address = mac
                 continue
-            session.add(DevicePort(device_id=d.jt_ipam_device_id, name=n, type="network"))
+            session.add(DevicePort(
+                device_id=d.jt_ipam_device_id, name=n, type="network", mac_address=mac))
             created += 1
     return created
+
+
+def _norm_mac(raw: object) -> str | None:
+    """LibreNMS ifPhysAddress 多為無分隔 12 hex（如 bc24112508a0）→ 標準冒號小寫格式。"""
+    if not raw:
+        return None
+    s = str(raw).strip().lower().replace("-", "").replace(":", "").replace(".", "")
+    if len(s) != 12 or any(c not in "0123456789abcdef" for c in s):
+        return None
+    return ":".join(s[i:i + 2] for i in range(0, 12, 2))
 
 
 # ─────────────────── 主入口 ───────────────────

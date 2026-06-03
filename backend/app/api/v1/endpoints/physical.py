@@ -179,7 +179,7 @@ class DevicePortRead(StrictModel):
     position: int | None
     description: str | None
     link: str | None = None   # 對端標籤（已接纜線時）：例「switch-003 · eth1/0/24」
-    macs: list[str] = []      # 此埠對應到的 MAC(/IP)（交換器 FDB 學到的）
+    mac_address: str | None = None   # 此埠自身的實體 MAC（ifPhysAddress）
 
 
 class DevicePortWrite(StrictModel):
@@ -242,32 +242,7 @@ async def list_device_ports(
         if label and t.object_id in by_id:
             by_id[t.object_id].link = label
 
-    # ── MAC / ARP（交換器 FDB：依 port_name 對應）──
-    lns_ids = list((await session.execute(
-        select(LibreNMSDevice.id).where(LibreNMSDevice.jt_ipam_device_id == device_id)
-    )).scalars().all())
-    if lns_ids:
-        from app.models.librenms import ARPEntry
-        arp_rows = (await session.execute(
-            select(ARPEntry.mac, ARPEntry.ip).where(ARPEntry.device_id.in_(lns_ids))
-        )).all()
-        mac2ip = {str(m).lower(): str(ip).split("/")[0] for m, ip in arp_rows if m}
-        fdb_rows = (await session.execute(
-            select(FDBEntry.port_name, FDBEntry.mac).where(
-                FDBEntry.device_id.in_(lns_ids), FDBEntry.port_name.is_not(None)
-            )
-        )).all()
-        per_port: dict[str, list[str]] = {}
-        for pn, mac in fdb_rows:
-            if not pn or not mac:
-                continue
-            m = str(mac).lower()
-            lbl = f"{m} ({mac2ip[m]})" if m in mac2ip else m
-            per_port.setdefault(pn, [])
-            if lbl not in per_port[pn]:
-                per_port[pn].append(lbl)
-        for o in out:
-            o.macs = per_port.get(o.name, [])[:6]
+    # 埠自身 MAC（mac_address）已由 model_validate 直接帶出，不再用 FDB/ARP
     return out
 
 
@@ -308,6 +283,7 @@ async def import_device_ports(
     )).scalars().all())
 
     names: set[str] = set()
+    name_mac: dict[str, str | None] = {}
     sources: set[str] = set()
 
     # 1) LibreNMS 介面清單（ifName）— 對 server / PVE 主機 / switch 都有效
@@ -316,15 +292,16 @@ async def import_device_ports(
         if inst is None:
             continue
         try:
-            from app.services.librenms import _api_get
+            from app.services.librenms import _api_get, _norm_mac
             pdata = await _api_get(
-                inst, f"/api/v0/devices/{d.legacy_device_id}/ports?columns=ifName,ifType",
+                inst, f"/api/v0/devices/{d.legacy_device_id}/ports?columns=ifName,ifType,ifPhysAddress",
                 timeout=20.0,
             )
             for p in pdata.get("ports") or []:
                 nm = (p.get("ifName") or "").strip()
                 if nm and nm.lower() not in ("null", "unrouted vlan 1"):
                     names.add(nm)
+                    name_mac[nm] = _norm_mac(p.get("ifPhysAddress"))
                     sources.add("librenms")
         except Exception as exc:
             # LibreNMS 不可達/回應異常：略過此來源，改用 FDB

@@ -362,7 +362,7 @@ export interface VPNTunnel { id: string; name: string; type: string; status: str
 export interface DevicePort {
   id: string; device_id: string; name: string; type: string;
   peer_port_id: string | null; position: number | null; description: string | null;
-  link?: string | null; macs?: string[];
+  link?: string | null; mac_address?: string | null;
 }
 export interface TraceNode {
   port_id?: string; port_name?: string; port_type?: string;

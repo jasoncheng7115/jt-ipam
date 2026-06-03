@@ -284,24 +284,63 @@ async def _sync_node_ports(
     if dev_id is None:
         return 0
 
-    existing = {p.name for p in (await session.execute(
+    existing = {p.name: p for p in (await session.execute(
         select(DevicePort).where(DevicePort.device_id == dev_id)
     )).scalars().all()}
     created = 0
     for itf in host_ifaces:
         name = (itf.get("iface") or "").strip()
         itype = (itf.get("type") or "").lower()
-        if not name or name in existing:
+        if not name:
             continue
         if not any(k in itype for k in _NODE_IFACE_TYPES):
             continue   # loopback / alias / unknown 不建
-        session.add(DevicePort(
-            device_id=dev_id, name=name, type="network",
-            description=f"proxmox {itf.get('type') or ''}".strip(),
-        ))
-        existing.add(name)
+        ptype = _pve_port_type(itype)
+        desc = _pve_port_desc(itf)
+        cur = existing.get(name)
+        if cur is not None:
+            # 回填 / 更新 bridge·bond 的類型與對應關係（這些是基礎設施，非手動建立）
+            if cur.type != ptype:
+                cur.type = ptype
+            if desc and cur.description != desc:
+                cur.description = desc
+            continue
+        port = DevicePort(
+            device_id=dev_id, name=name, type=ptype,
+            description=desc or f"proxmox {itf.get('type') or ''}".strip(),
+        )
+        session.add(port)
+        existing[name] = port   # 同次若再遇同名（理論上不會）走更新分支
         created += 1
     return created
+
+
+def _pve_port_type(itype: str) -> str:
+    """PVE 介面 type → device_ports.type。"""
+    t = itype.lower()
+    if "bridge" in t:
+        return "bridge"
+    if "bond" in t:
+        return "bond"
+    if "vlan" in t:
+        return "vlan"
+    return "network"
+
+
+def _pve_port_desc(itf: dict[str, Any]) -> str | None:
+    """bridge → 對應的 bridge_ports（bond/NIC）；bond → 其 slaves（成員 NIC）。"""
+    t = (itf.get("type") or "").lower()
+    if "bridge" in t:
+        bp = (itf.get("bridge_ports") or "").strip()
+        members = [m for m in bp.split() if m and m.lower() != "none"]
+        if members:
+            return "橋接 → " + ", ".join(members)
+    elif "bond" in t:
+        sl = (itf.get("slaves") or itf.get("bond_slaves") or "").strip()
+        members = [m for m in sl.split() if m]
+        if members:
+            return "聚合 → " + ", ".join(members)
+    return None
 
 
 async def _upsert_iface(
