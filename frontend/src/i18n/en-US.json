@@ -65,7 +65,8 @@
     "import": "RIPE / TWNIC Import",
     "system_settings": "System Settings",
     "version": "Version Info",
-    "firewall_admin": "OPNsense connections"
+    "firewall_admin": "OPNsense connections",
+    "virt_admin": "Proxmox connections"
   },
   "topbar": {
     "search": "Search…",
@@ -987,7 +988,7 @@
     "version_hint": "OPNsense 24.1+ recommended. Basic sync (DHCP/ARP/rules/NAT) works on most versions; VPN sync needs the os-wireguard plugin (WireGuard) and the newer swanctl connections API for IPsec (~24.x+). Use a read-only API account.",
     "rules": "Firewall rules",
     "mappings_hint": "This tab manages jt-ipam → OPNsense alias mappings (push IPAM objects, e.g. a subnet's IPs, into an OPNsense alias). Click \"Create mapping\"; it's empty until you add one.",
-    "rules_hint": "Only rules created via OPNsense's \"Automation → Filter\" plugin can be synced; classic \"Firewall → Rules\" are not exposed by the OPNsense API, so they can't appear here (empty is normal).",
+    "rules_hint": "Only rules created via OPNsense's \"Automation → Filter\" plugin can be synced; classic \"Firewall → Rules\" are not exposed by the OPNsense API, so they can't appear here (empty is normal). OPNsense 26.1+ provides a tool to migrate legacy rules into automation filter rules, which can then be synced.",
     "pick_firewall": "Pick a firewall",
     "pick_firewall_to_view": "Pick a firewall to view rules",
     "rules_count": "{n} rules",
@@ -1198,7 +1199,8 @@
       "paused": "Paused",
       "suspended": "Suspended",
       "unknown": "Unknown"
-    }
+    },
+    "proxmox_admin_title": "Proxmox connections"
   },
   "physical": {
     "cabling": "Cabling",

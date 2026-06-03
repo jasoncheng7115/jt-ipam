@@ -65,7 +65,8 @@
     "import": "RIPE/TWNIC",
     "system_settings": "系統設定",
     "version": "版本資訊",
-    "firewall_admin": "OPNsense 連線"
+    "firewall_admin": "OPNsense 連線",
+    "virt_admin": "Proxmox 連線"
   },
   "topbar": {
     "search": "搜尋…",
@@ -987,7 +988,7 @@
     "version_hint": "建議 OPNsense 24.1 以上。基本同步 (DHCP/ARP/規則/NAT) 多數版本可用；VPN 同步需安裝 os-wireguard 外掛 (WireGuard),IPsec 需新版 swanctl connections API (約 24.x 起)。API 帳號請給唯讀權限。",
     "rules": "防火牆規則",
     "mappings_hint": "此頁管理「jt-ipam → OPNsense」的 別名對應：把 IPAM 物件（如某網段的 IP）推送成 OPNsense 別名。按「新增 mapping」建立；尚未建立時這裡是空的。",
-    "rules_hint": "僅能同步 OPNsense「自動化 → 篩選規則」外掛所建立的規則；傳統「防火牆 → 規則」OPNsense API 不提供，故無法在此顯示（空白屬正常）。",
+    "rules_hint": "僅能同步 OPNsense「自動化 → 篩選規則」外掛所建立的規則；傳統「防火牆 → 規則」OPNsense API 不提供，故無法在此顯示（空白屬正常）。OPNsense 26.1 起有提供舊規則移轉工具，可把傳統規則轉成自動化篩選規則後再同步。",
     "pick_firewall": "選防火牆",
     "pick_firewall_to_view": "選一個防火牆檢視規則",
     "rules_count": "{n} 條規則",
@@ -1198,7 +1199,8 @@
     "standalone": "獨立節點",
     "clustered": "叢集",
     "cluster_auto_ph": "留空：同步時自動依 PVE 叢集名稱建立",
-    "help_path": "路徑 /"
+    "help_path": "路徑 /",
+    "proxmox_admin_title": "Proxmox 連線"
   },
   "physical": {
     "cabling": "佈線",

@@ -14,8 +14,12 @@ import {
 import { Virt, type ProxmoxInstance } from "@/api/phase3";
 import { autoSort } from "@/composables/useTableSort";
 import { useCustomers } from "@/composables/useCustomers";
+import { useRoute } from "vue-router";
 
 const { t } = useI18n();
+const route = useRoute();
+// 管理區（virt_admin）：只放 Proxmox 連線；功能/進階區（virt）：叢集 + VM
+const adminMode = computed(() => route.name === "virt_admin");
 const { options: customerOptions, ensureLoaded: ensureCustomerOptsLoaded } = useCustomers();
 
 // VM 狀態翻譯（running/stopped/paused/suspended…）；沒對到就原樣顯示
@@ -269,7 +273,11 @@ const proxmoxCols = computed<DataTableColumns<ProxmoxInstance>>(() => autoSort([
     ]),
   },
 ]));
-onMounted(() => { void refresh(); void ensureCustomerOptsLoaded(); });
+onMounted(() => {
+  tab.value = adminMode.value ? "proxmox" : "clusters";
+  void refresh();
+  void ensureCustomerOptsLoaded();
+});
 </script>
 
 <template>
@@ -277,7 +285,7 @@ onMounted(() => { void refresh(); void ensureCustomerOptsLoaded(); });
     <template #header>
       <n-space align="center" :wrap-item="false">
         <n-icon :size="22"><VirtualizationIcon /></n-icon>
-        <span>{{ t("nav.virtualization") }}</span>
+        <span>{{ adminMode ? t("virt.proxmox_admin_title") : t("nav.virtualization") }}</span>
       </n-space>
     </template>
     <n-space style="margin-bottom: 12px">
@@ -291,7 +299,7 @@ onMounted(() => { void refresh(); void ensureCustomerOptsLoaded(); });
       </n-button>
     </n-space>
     <n-tabs v-model:value="tab" type="line">
-      <n-tab-pane name="clusters">
+      <n-tab-pane v-if="!adminMode" name="clusters">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><AdvancedIcon /></n-icon>{{ `${t('virt.clusters')} (${clusters.length})` }}</span>
         </template>
@@ -303,13 +311,13 @@ onMounted(() => { void refresh(); void ensureCustomerOptsLoaded(); });
         </n-space>
         <n-data-table :columns="clusterCols" :data="clusters" :loading="loading" :bordered="false" />
       </n-tab-pane>
-      <n-tab-pane name="vms">
+      <n-tab-pane v-if="!adminMode" name="vms">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><VirtualizationIcon /></n-icon>{{ `${t('virt.vms')} (${vms.length})` }}</span>
         </template>
         <n-data-table :columns="vmCols" :data="vms" :loading="loading" :bordered="false" />
       </n-tab-pane>
-      <n-tab-pane name="proxmox">
+      <n-tab-pane v-if="adminMode" name="proxmox">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><DevicesIcon /></n-icon>{{ `${t('virt.proxmox')} (${proxmox.length})` }}</span>
         </template>
