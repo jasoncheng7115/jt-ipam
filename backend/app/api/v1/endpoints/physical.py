@@ -18,6 +18,7 @@ from app.models.device import Device
 from app.models.physical import (
     Cable,
     CableTermination,
+    DevicePort,
     PowerFeed,
     PowerOutlet,
     PowerPanel,
@@ -162,6 +163,193 @@ async def trace_cable(
             for t in sorted(terms, key=lambda x: x.side)
         ],
     }
+
+
+# ─────────────────── Device ports + Cable Trace ───────────────────
+
+
+class DevicePortRead(StrictModel):
+    id: uuid.UUID
+    device_id: uuid.UUID
+    name: str
+    type: str
+    peer_port_id: uuid.UUID | None
+    position: int | None
+    description: str | None
+
+
+class DevicePortWrite(StrictModel):
+    device_id: uuid.UUID
+    name: Annotated[str, Field(min_length=1, max_length=64)]
+    type: str = "network"
+    peer_port_id: uuid.UUID | None = None
+    position: int | None = None
+    description: Annotated[str | None, Field(max_length=1024)] = None
+
+
+class DevicePortUpdate(StrictModel):
+    name: Annotated[str | None, Field(min_length=1, max_length=64)] = None
+    type: str | None = None
+    peer_port_id: uuid.UUID | None = None
+    position: int | None = None
+    description: Annotated[str | None, Field(max_length=1024)] = None
+
+
+@router.get("/device-ports", response_model=list[DevicePortRead])
+async def list_device_ports(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    device_id: uuid.UUID = Query(...),
+) -> list[DevicePortRead]:
+    rows = list((await session.execute(
+        select(DevicePort).where(DevicePort.device_id == device_id)
+        .order_by(DevicePort.position, DevicePort.name)
+    )).scalars().all())
+    return [DevicePortRead.model_validate(r) for r in rows]
+
+
+@router.post("/device-ports", response_model=DevicePortRead, status_code=201,
+             dependencies=[Depends(require_admin)])
+async def create_device_port(
+    payload: DevicePortWrite,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DevicePortRead:
+    obj = DevicePort(**payload.model_dump())
+    session.add(obj)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Port name already exists on this device") from exc
+    await _audit(session, user=user, request=request, object_type="device_port",
+                 object_id=str(obj.id), action="create", diff={"name": obj.name})
+    await session.commit()
+    await session.refresh(obj)
+    return DevicePortRead.model_validate(obj)
+
+
+@router.patch("/device-ports/{port_id}", response_model=DevicePortRead,
+              dependencies=[Depends(require_admin)])
+async def update_device_port(
+    port_id: uuid.UUID,
+    payload: DevicePortUpdate,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DevicePortRead:
+    obj = await session.get(DevicePort, port_id)
+    if obj is None:
+        raise HTTPException(404, detail="Port not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Port name already exists on this device") from exc
+    # front↔rear pass-through 雙向綁定：設定 peer 時，對方也指回自己
+    if payload.peer_port_id is not None:
+        peer = await session.get(DevicePort, payload.peer_port_id)
+        if peer is not None and peer.peer_port_id != obj.id:
+            peer.peer_port_id = obj.id
+    await _audit(session, user=user, request=request, object_type="device_port",
+                 object_id=str(obj.id), action="update", diff=payload.model_dump(exclude_unset=True))
+    await session.commit()
+    await session.refresh(obj)
+    return DevicePortRead.model_validate(obj)
+
+
+@router.delete("/device-ports/{port_id}", status_code=204,
+               dependencies=[Depends(require_admin)])
+async def delete_device_port(
+    port_id: uuid.UUID,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    obj = await session.get(DevicePort, port_id)
+    if obj is None:
+        raise HTTPException(404, detail="Port not found")
+    await _audit(session, user=user, request=request, object_type="device_port",
+                 object_id=str(obj.id), action="delete", diff={"name": obj.name})
+    await session.delete(obj)
+    await session.commit()
+
+
+@router.get("/ports/{port_id}/trace")
+async def trace_port(
+    port_id: uuid.UUID,
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:  # type: ignore[type-arg]
+    """從某連接埠做多跳 cable trace：沿纜線 → 對端埠 →（若為 front/rear pass-through）穿透 → 續走。"""
+    start = await session.get(DevicePort, port_id)
+    if start is None:
+        raise HTTPException(404, detail="Port not found")
+
+    dev_names: dict[uuid.UUID, str] = {}
+
+    async def _port_node(p: DevicePort) -> dict[str, Any]:
+        if p.device_id not in dev_names:
+            d = await session.get(Device, p.device_id)
+            dev_names[p.device_id] = d.name if d else str(p.device_id)[:8]
+        return {"port_id": str(p.id), "port_name": p.name, "port_type": p.type,
+                "device_id": str(p.device_id), "device_name": dev_names[p.device_id]}
+
+    async def _term_for_port(pid: uuid.UUID) -> CableTermination | None:
+        return (await session.execute(
+            select(CableTermination).where(
+                CableTermination.object_type == "device_port",
+                CableTermination.object_id == pid,
+            ).limit(1)
+        )).scalar_one_or_none()
+
+    hops: list[dict[str, Any]] = []
+    visited: set[uuid.UUID] = set()
+    current = start
+    nodes = [await _port_node(current)]
+
+    while current is not None and current.id not in visited:
+        visited.add(current.id)
+        term = await _term_for_port(current.id)
+        if term is None:
+            break
+        cable = await session.get(Cable, term.cable_id)
+        other = (await session.execute(
+            select(CableTermination).where(
+                CableTermination.cable_id == term.cable_id,
+                CableTermination.id != term.id,
+            ).limit(1)
+        )).scalar_one_or_none()
+        hop: dict[str, Any] = {
+            "cable_id": str(cable.id) if cable else None,
+            "cable_label": cable.label if cable else None,
+            "cable_type": cable.type if cable else None,
+            "cable_color": cable.color if cable else None,
+            "to": None,
+        }
+        far_port: DevicePort | None = None
+        if other is not None:
+            if other.object_type == "device_port":
+                far_port = await session.get(DevicePort, other.object_id)
+                hop["to"] = await _port_node(far_port) if far_port else None
+            else:
+                hop["to"] = {"object_type": other.object_type,
+                             "object_id": str(other.object_id),
+                             "port_name": other.port_label}
+        hops.append(hop)
+        if far_port is not None:
+            nodes.append(hop["to"])
+            # 跳接面板穿透：到達 front/rear 且有對應 peer → 從 peer 續走
+            if far_port.peer_port_id and far_port.peer_port_id not in visited:
+                peer = await session.get(DevicePort, far_port.peer_port_id)
+                if peer is not None:
+                    nodes.append(await _port_node(peer))
+                    current = peer
+                    continue
+        break
+
+    return {"start": nodes[0], "nodes": nodes, "hops": hops}
 
 
 # ─────────────────── Power ───────────────────

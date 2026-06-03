@@ -359,10 +359,51 @@ export interface PowerFeed { id: string; name: string; panel_id: string; }
 export interface PowerOutlet { id: string; name: string; feed_id: string; }
 export interface VPNTunnel { id: string; name: string; type: string; status: string; }
 
+export interface DevicePort {
+  id: string; device_id: string; name: string; type: string;
+  peer_port_id: string | null; position: number | null; description: string | null;
+}
+export interface TraceNode {
+  port_id?: string; port_name?: string; port_type?: string;
+  device_id?: string; device_name?: string;
+  object_type?: string; object_id?: string;
+}
+export interface TraceHop {
+  cable_id: string | null; cable_label: string | null; cable_type: string | null;
+  cable_color: string | null; to: TraceNode | null;
+}
+export interface PortTrace { start: TraceNode; nodes: TraceNode[]; hops: TraceHop[]; }
+
 export const Physical = {
   cables: () => getList<Cable>("/api/v1/cables"),
   panels: () => getList<PowerPanel>("/api/v1/power-panels"),
   feeds: () => getList<PowerFeed>("/api/v1/power-feeds"),
   outlets: () => getList<PowerOutlet>("/api/v1/power-outlets"),
   vpns: () => getList<VPNTunnel>("/api/v1/vpn-tunnels"),
+  async ports(deviceId: string): Promise<DevicePort[]> {
+    const { data } = await apiClient.get<DevicePort[]>("/api/v1/device-ports", { params: { device_id: deviceId } });
+    return data;
+  },
+  async createPort(p: Partial<DevicePort> & { device_id: string; name: string }): Promise<DevicePort> {
+    const { data } = await apiClient.post<DevicePort>("/api/v1/device-ports", p);
+    return data;
+  },
+  async updatePort(id: string, p: Partial<DevicePort>): Promise<DevicePort> {
+    const { data } = await apiClient.patch<DevicePort>(`/api/v1/device-ports/${id}`, p);
+    return data;
+  },
+  async deletePort(id: string): Promise<void> { await apiClient.delete(`/api/v1/device-ports/${id}`); },
+  async tracePort(id: string): Promise<PortTrace> {
+    const { data } = await apiClient.get<PortTrace>(`/api/v1/ports/${id}/trace`);
+    return data;
+  },
+  // 連線：建一條 cable + 兩端 termination（都接到 device_port）
+  async connectPorts(aPortId: string, bPortId: string, opts: { type?: string; color?: string; label?: string; length_m?: number } = {}): Promise<void> {
+    const { data: cable } = await apiClient.post<Cable>("/api/v1/cables", {
+      type: opts.type ?? null, color: opts.color ?? null, label: opts.label ?? null,
+      length_m: opts.length_m ?? null, status: "connected",
+    });
+    await apiClient.post("/api/v1/cable-terminations", { cable_id: cable.id, side: "A", object_type: "device_port", object_id: aPortId });
+    await apiClient.post("/api/v1/cable-terminations", { cable_id: cable.id, side: "B", object_type: "device_port", object_id: bPortId });
+  },
 };

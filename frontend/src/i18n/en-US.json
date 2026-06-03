@@ -146,7 +146,8 @@
     "export": "Export",
     "pin": "Pin / unpin",
     "load_more": "Load more",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "select": "Select"
   },
   "cols": {
     "name": "Name",
@@ -1567,5 +1568,36 @@
     "state_done_partial": "Updated {updated}, {failed} failed",
     "notify": "Notify admins",
     "notify_done": "Notified {admins} admin(s) about {n} stale IPs"
+  },
+  "ports": {
+    "title": "Ports / Cabling",
+    "add": "Add port",
+    "edit": "Edit port",
+    "empty": "No ports yet",
+    "col_name": "Name",
+    "col_type": "Type",
+    "col_peer": "Pass-through",
+    "name_required": "Name is required",
+    "type_network": "Network",
+    "type_front": "Front",
+    "type_rear": "Rear",
+    "type_console": "Console",
+    "type_power": "Power",
+    "peer_hint": "Patch-panel pass-through (front↔rear)",
+    "peer_none": "(none)",
+    "connect": "Connect",
+    "connect_title": "Create cable connection",
+    "from": "From port",
+    "target_device": "Target device",
+    "target_port": "Target port",
+    "target_port_ph": "Pick a device first",
+    "pick_target": "Please pick a target port",
+    "connected": "Connection created",
+    "cable_type": "Cable type",
+    "cable_color": "Color",
+    "trace": "Cable trace",
+    "trace_title": "Cable trace: {p}",
+    "not_connected": "This port is not cabled",
+    "download_svg": "Download SVG"
   }
 }

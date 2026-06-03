@@ -41,6 +41,7 @@ from app.models.permission import Permission
 from app.models.physical import (
     Cable,
     CableTermination,
+    DevicePort,
     PowerFeed,
     PowerOutlet,
     PowerPanel,
@@ -85,6 +86,7 @@ __all__ = [
     "DNSServer",
     "DNSZone",
     "Device",
+    "DevicePort",
     "DeviceVLAN",
     "EncryptedSecret",
     "FDBEntry",

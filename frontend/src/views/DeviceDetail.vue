@@ -15,6 +15,7 @@ import { listLocations, listRacks, getDeviceVlans, getDeviceLibrenms, type Devic
 import { getDeviceRelations, type RelationNode } from "@/api/relations";
 import RelationChain from "@/components/RelationChain.vue";
 import RackDiagram from "@/components/RackDiagram.vue";
+import DevicePortsPanel from "@/components/DevicePortsPanel.vue";
 import { getRackDiagram } from "@/api/racks";
 type RackDiagramData = Awaited<ReturnType<typeof getRackDiagram>>;
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
@@ -25,8 +26,12 @@ import { fmtDateTime } from "@/utils/datetime";
 import { useCustomers } from "@/composables/useCustomers";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import { useAuthStore } from "@/stores/auth";
+import { storeToRefs } from "pinia";
 const { t } = useI18n();
 
+const { me } = storeToRefs(useAuthStore());
+const isAdmin = computed(() => !!me.value?.is_admin);
 const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 const { visibleKeys: ipVisibleKeys, setVisible: setIpVisible, reset: resetIpVisible } = useColumnPrefs(
   "device_detail_ips",
@@ -262,6 +267,8 @@ onMounted(() => {
       <n-card v-if="device && relations.length > 1" :title="t('relations.title')" size="small">
         <relation-chain :nodes="relations" :current-id="device.id" />
       </n-card>
+
+      <DevicePortsPanel v-if="device" :device-id="device.id" :device-name="device.name" :admin="isAdmin" />
 
       <n-card v-if="device" :title="`${t('addresses.ip_list_title')}(${addresses.length})`">
         <template #header-extra>

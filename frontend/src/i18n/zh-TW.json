@@ -146,7 +146,8 @@
     "export": "匯出",
     "pin": "釘選/取消釘選",
     "load_more": "載入更多",
-    "confirm": "確定"
+    "confirm": "確定",
+    "select": "選擇"
   },
   "cols": {
     "name": "名稱",
@@ -1567,5 +1568,36 @@
     "state_done_partial": "更新 {updated} 個，{failed} 個失敗",
     "notify": "提醒管理者",
     "notify_done": "已就 {n} 個失聯 IP 通知 {admins} 位管理者"
+  },
+  "ports": {
+    "title": "連接埠 / 佈線",
+    "add": "新增埠",
+    "edit": "編輯埠",
+    "empty": "尚無連接埠",
+    "col_name": "名稱",
+    "col_type": "類型",
+    "col_peer": "穿透對應",
+    "name_required": "請輸入名稱",
+    "type_network": "網路",
+    "type_front": "前埠",
+    "type_rear": "後埠",
+    "type_console": "Console",
+    "type_power": "電源",
+    "peer_hint": "跳接面板穿透對應（front↔rear）",
+    "peer_none": "（無）",
+    "connect": "連線",
+    "connect_title": "建立纜線連線",
+    "from": "來源埠",
+    "target_device": "目標裝置",
+    "target_port": "目標埠",
+    "target_port_ph": "先選裝置",
+    "pick_target": "請選擇目標埠",
+    "connected": "已建立連線",
+    "cable_type": "纜線類型",
+    "cable_color": "顏色",
+    "trace": "纜線追蹤",
+    "trace_title": "纜線追蹤：{p}",
+    "not_connected": "此埠尚未接任何纜線",
+    "download_svg": "下載 SVG"
   }
 }

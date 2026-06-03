@@ -29,6 +29,34 @@ from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 # ─────────────────── Cabling ───────────────────
 
 
+class DevicePort(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """裝置上的連接埠 / 介面；front/rear 可用 peer_port_id 互指做跳接面板 pass-through。"""
+
+    __tablename__ = "device_ports"
+
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    # network / front / rear / console / power
+    type: Mapped[str] = mapped_column(String(16), default="network", nullable=False, server_default="network")
+    # front↔rear pass-through 對應（跳接面板穿透）
+    peer_port_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("device_ports.id", ondelete="SET NULL"),
+    )
+    position: Mapped[int | None] = mapped_column(Integer)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("device_id", "name", name="device_port_unique_name"),
+    )
+
+
+
 class Cable(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "cables"
 
