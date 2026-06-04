@@ -137,7 +137,47 @@ async def chat(
         "model": result.get("model"),
         "elapsed_ms": result.get("elapsed_ms"),
         "conversation_id": str(conv.id),
+        "pending_actions": result.get("pending_actions", []),
     }
+
+
+class ConfirmRequest(StrictModel):
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    conversation_id: str | None = None
+
+
+@router.post("/chat/confirm")
+async def chat_confirm(
+    payload: ConfirmRequest,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """執行使用者在 AI 對話中按下「確認」的異動動作（白名單工具；權限仍由工具本身把關）。"""
+    await limit_per_ip(request, name="ai")
+    from app.mcp.tools import MUTATING_TOOLS, TOOLS, IPAMToolError, summarize_action
+    if payload.tool not in MUTATING_TOOLS or payload.tool not in TOOLS:
+        raise HTTPException(status_code=400, detail="not a confirmable action")
+    try:
+        result = await TOOLS[payload.tool]["fn"](session, user=user, **payload.args)
+    except IPAMToolError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TypeError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=f"bad arguments: {exc}") from exc
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="ai", object_id=None, action="ai_tool_exec",
+        diff={"tool": payload.tool, "summary": summarize_action(payload.tool, payload.args)},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return {"ok": True, "tool": payload.tool,
+            "title": summarize_action(payload.tool, payload.args), "result": result}
 
 
 @router.post("/chat/stream")

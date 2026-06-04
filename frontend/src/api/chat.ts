@@ -28,13 +28,23 @@ export async function chat(
   return data;
 }
 
+// AI 想執行的「異動動作」（須使用者確認）
+export interface PendingAction { tool: string; args: Record<string, unknown>; title: string; }
+
 // SSE 串流事件 (對齊後端 ai_service.chat_stream)
 export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "tool"; name: string }
   | { type: "tool_round" }
-  | { type: "done"; answer: string; trace_messages: ChatMessage[]; model?: string | null; elapsed_ms?: number | null; conversation_id?: string }
+  | { type: "pending_action"; actions: PendingAction[] }
+  | { type: "done"; answer: string; trace_messages: ChatMessage[]; model?: string | null; elapsed_ms?: number | null; conversation_id?: string; pending_actions?: PendingAction[] }
   | { type: "error"; detail: string };
+
+// 使用者按下「確認」→ 真正執行該異動動作
+export async function confirmAction(tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; tool: string; title: string; result: unknown }> {
+  const { data } = await apiClient.post("/api/v1/ai/chat/confirm", { tool, args }, { timeout: AI_CHAT_TIMEOUT_MS });
+  return data;
+}
 
 /**
  * SSE 串流版 chat：逐 token 收最終答案。用 fetch(EventSource 不支援 POST /

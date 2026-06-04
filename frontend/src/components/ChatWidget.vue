@@ -20,12 +20,12 @@ import {
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
-  chatStream, listMyConversations, getConversation, deleteConversation, getModelInfo,
-  type ChatMessage, type ChatPageContext, type ConversationSummary, type ModelInfo,
+  chatStream, confirmAction, listMyConversations, getConversation, deleteConversation, getModelInfo,
+  type ChatMessage, type ChatPageContext, type ConversationSummary, type ModelInfo, type PendingAction,
 } from "@/api/chat";
 import { fmtRelative, fmtDateTime } from "@/utils/datetime";
 import { BubbleStar } from "@iconoir/vue";
-import { CancelIcon, SendIcon, ChatHistoryIcon, ToolsIcon, RefreshIcon } from "@/icons";
+import { CancelIcon, SendIcon, ChatHistoryIcon, ToolsIcon, RefreshIcon, WarnIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import { renderMarkdown } from "@/utils/markdown";
 
@@ -49,6 +49,8 @@ const pageContext = computed<ChatPageContext>(() => {
 type ChatRef = { type: string; id: string; label: string };
 type UiMessage = ChatMessage & {
   model?: string | null; elapsedMs?: number | null; ts?: string | null; refs?: ChatRef[];
+  pendingActions?: PendingAction[];   // AI 想執行的異動，待使用者確認
+  actionDone?: string;                // 確認後的結果摘要（已執行）
 };
 
 // 從工具呼叫結果（trace）擷取被提到的物件 → 答案下方給可點連結
@@ -173,6 +175,17 @@ async function send() {
           toolStatus.value = t("chat.tool_running", { name: ev.name });
         } else if (ev.type === "tool_round") {
           partial.value = "";   // 該輪非最終答案，清掉暫存
+        } else if (ev.type === "pending_action") {
+          // AI 想做異動 → 不自動執行，掛在訊息上等使用者確認
+          messages.value.push({
+            role: "assistant",
+            content: ev.actions.length ? t("chat.confirm_intro") : "",
+            pendingActions: ev.actions,
+            ts: new Date().toISOString(),
+          });
+          partial.value = "";
+          toolStatus.value = "";
+          void scroll();
         } else if (ev.type === "done") {
           messages.value.push({
             role: "assistant",
@@ -203,6 +216,31 @@ async function send() {
     toolStatus.value = "";
     await scroll();
   }
+}
+
+const confirming = ref(false);
+async function confirmPending(m: UiMessage, a: PendingAction) {
+  if (confirming.value) return;
+  confirming.value = true;
+  try {
+    const r = await confirmAction(a.tool, a.args);
+    m.pendingActions = [];                       // 收掉確認卡
+    m.actionDone = r.title || a.title;
+    messages.value.push({
+      role: "assistant",
+      content: t("chat.confirm_done", { what: r.title || a.title }),
+      ts: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? t("chat.confirm_fail"));
+  } finally {
+    confirming.value = false;
+    await scroll();
+  }
+}
+function cancelPending(m: UiMessage) {
+  m.pendingActions = [];
+  m.actionDone = t("chat.confirm_cancelled");
 }
 
 async function scroll() {
@@ -335,6 +373,23 @@ async function removeConversation(id: string) {
           <pre v-if="m.role === 'user'">{{ m.content }}</pre>
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div v-else class="md" v-html="renderMarkdown(m.content)"></div>
+          <!-- 異動確認卡：AI 想新增/修改/刪除，需使用者按確認 -->
+          <div v-if="m.pendingActions && m.pendingActions.length" class="confirm-card">
+            <div v-for="(a, ai) in m.pendingActions" :key="ai" class="confirm-row">
+              <n-icon :size="15" class="confirm-ico"><WarnIcon /></n-icon>
+              <span class="confirm-title">{{ a.title }}</span>
+            </div>
+            <div class="confirm-btns">
+              <n-button size="small" type="primary" :loading="confirming"
+                        @click="confirmPending(m, m.pendingActions[0])">
+                {{ t("chat.confirm_do") }}
+              </n-button>
+              <n-button size="small" quaternary :disabled="confirming" @click="cancelPending(m)">
+                {{ t("chat.confirm_cancel") }}
+              </n-button>
+            </div>
+          </div>
+          <div v-if="m.actionDone" class="confirm-done">✓ {{ m.actionDone }}</div>
           <div v-if="m.role === 'assistant' && m.refs && m.refs.length" class="msg-refs">
             <span class="msg-refs__label">{{ t("chat.related") }}</span>
             <n-tag v-for="r in m.refs" :key="r.type + r.id" size="small" type="info"
@@ -503,6 +558,19 @@ async function removeConversation(id: string) {
   opacity: 0.55;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+/* 異動確認卡 */
+.confirm-card {
+  margin-top: 8px;
+  border: 1px solid #f0a020;
+  background: rgba(240, 160, 32, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.confirm-row { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 2px 0; }
+.confirm-ico { color: #f0a020; flex: 0 0 auto; }
+.confirm-title { font-weight: 600; }
+.confirm-btns { display: flex; gap: 8px; margin-top: 8px; }
+.confirm-done { margin-top: 6px; font-size: 12px; color: #18a058; font-weight: 600; }
 /* AI 回應下方的相關物件可點連結 */
 .msg-refs {
   margin-top: 8px;

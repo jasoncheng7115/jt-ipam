@@ -294,6 +294,12 @@ async def chat(
         if not tool_calls:
             return {"answer": msg.get("content") or "", "messages": convo, **_meta()}
 
+        # 異動類工具不直接執行 → 回傳待確認動作，等使用者按「確認」
+        pending = _pending_mutations(tool_calls)
+        if pending:
+            return {"answer": msg.get("content") or "", "messages": convo,
+                    "pending_actions": pending, **_meta()}
+
         convo.extend(await _run_tool_calls(session, user, tool_calls))
 
     # 用完 max_iterations 還在叫工具 → 最後不給工具再叫一次，逼它用現有資訊作答
@@ -402,6 +408,26 @@ def _build_chat_context(
     ]
     convo.extend(messages)
     return ollama_tools, convo
+
+
+def _pending_mutations(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """挑出 tool_calls 中會異動資料的，回傳 {tool,args,title} 清單給前端確認。"""
+    from app.mcp.tools import MUTATING_TOOLS, summarize_action
+
+    pending: list[dict[str, Any]] = []
+    for call in tool_calls:
+        fn = call.get("function") or {}
+        name = fn.get("name")
+        if name not in MUTATING_TOOLS:
+            continue
+        args = fn.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        pending.append({"tool": name, "args": args, "title": summarize_action(name, args)})
+    return pending
 
 
 async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -521,6 +547,12 @@ async def chat_stream(
 
         if not tool_calls:
             yield {"type": "done", "answer": full_content, "trace_messages": convo, **_meta()}
+            return
+
+        # 異動類工具：不直接執行，回傳待確認動作給前端，等使用者按「確認」
+        pending = _pending_mutations(tool_calls)
+        if pending:
+            yield {"type": "pending_action", "actions": pending}
             return
 
         # 這輪是 tool round：剛吐的 token（若有，多半是 thinking）不是最終答案，叫前端清掉

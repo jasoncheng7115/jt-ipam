@@ -1849,3 +1849,34 @@ TOOLS: dict[str, dict[str, Any]] = {
             "load_w": {"type": "number"}, "pdu_a": {"type": "number"}}},
     },
 }
+
+
+# ─────────────────── AI 對話：異動類工具需使用者確認 ───────────────────
+# 這些工具會新增 / 修改 / 刪除資料；AI 對話中不直接執行，先回前端請使用者按「確認」。
+MUTATING_TOOLS: frozenset[str] = frozenset({
+    "allocate_ip", "update_ip", "create_subnet", "create_device",
+    "approve_ip_request", "reject_ip_request",
+})
+
+
+def summarize_action(name: str, args: dict[str, Any]) -> str:
+    """給前端確認卡用的人類可讀摘要（繁中）。"""
+    a = args or {}
+    if name == "allocate_ip":
+        base = f"配發 IP {a.get('requested_ip') or '（自動取第一個空位）'}"
+        if a.get("hostname"):
+            base += f"，主機名稱「{a['hostname']}」"
+        if a.get("owner"):
+            base += f"，擁有者「{a['owner']}」"
+        return base
+    if name == "update_ip":
+        return f"修改 IP {a.get('ip') or a.get('ip_address_id') or ''} 的資料"
+    if name == "create_subnet":
+        return f"建立子網路 {a.get('cidr') or ''}"
+    if name == "create_device":
+        return f"建立裝置「{a.get('name') or ''}」"
+    if name == "approve_ip_request":
+        return "核准一筆 IP 申請"
+    if name == "reject_ip_request":
+        return "駁回一筆 IP 申請"
+    return f"執行 {name}"
