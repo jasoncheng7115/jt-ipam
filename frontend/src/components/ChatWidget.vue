@@ -474,9 +474,10 @@ async function removeConversation(id: string) {
 .chat-seg :deep(.seg-btn + .seg-btn) {
   border-left: 1px solid var(--n-border-color, rgba(128, 128, 128, 0.28));
 }
-/* 視窗夠寬：icon + 文字；視窗被壓窄（手機）→ 只留 icon，標題列才不會折行。
-   標籤藏起來時 icon 自動置中（padding 已對稱）。 */
-@container (max-width: 430px) {
+/* 此 widget 寬度固定 ≤480px，動作鈕一律只留 icon（保留 tooltip 說明），
+   避免「回到對話」等較長標籤（英文更長）把「本地 Ollama」標籤擠到重疊。
+   分段外框 + 分隔線仍讓它明顯是一組可按的按鈕。 */
+@container (max-width: 520px) {
   .chat-act-label { display: none; }
   .chat-seg :deep(.seg-btn) { padding: 0 9px; }
 }
