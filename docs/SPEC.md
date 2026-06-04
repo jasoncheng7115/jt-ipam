@@ -2,7 +2,7 @@
 
 > 版本：v0.3（完整整合版）
 > 作者：Jason Tools Co., Ltd.（節省工具箱）
-> 定位：可自架、以整合為核心的現代化 IPAM 系統，深度整合多家 DNS Server、LibreNMS、OPNsense 與本地 AI；提供 phpIPAM 相容 API 與平滑遷移路徑（並非建構於 phpIPAM 之上）
+> 定位：可自架、以整合為核心的現代化 IPAM 系統，深度整合多家 DNS Server、LibreNMS、OPNsense 與本地 AI；提供 phpIPAM 相容 API 與無痛遷移路徑（並非建構於 phpIPAM 之上）
 
 ---
 

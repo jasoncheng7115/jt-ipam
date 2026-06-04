@@ -154,7 +154,7 @@
   - 對外整合呼叫（DNS server / LibreNMS / Webhook）強制 TLS 1.2+，建議 1.3；驗證憑證鏈，**不接受 `verify=False`**（OPNsense/Wazuh 有 `verify_tls` 旗標可關，但 prod 不應關）。
 - **Cookie**：`Secure`、`HttpOnly`、`SameSite=Lax`（敏感操作 token 用 `Strict`）。
 - **JWT**：HS512 用於 short-lived access token；refresh token 不放 LocalStorage，用 HttpOnly cookie。
-- **金鑰輪替**：`SECRET_KEY` / `ENCRYPTION_KEY` 支援多版本（kid），可平滑輪替。
+- **金鑰輪替**：`SECRET_KEY` / `ENCRYPTION_KEY` 支援多版本（kid），可無縫輪替。
 
 ### 4.3 測試
 - 單元測試：寫入 SNMP community 後，DB 欄位應為密文，且重啟後可正確解密。
