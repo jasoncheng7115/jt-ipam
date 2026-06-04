@@ -1,0 +1,15 @@
+# systemd drop-in：讓 jt-ipam-backend.service 在 direct TLS 模式下能綁 443
+#
+# 安裝（一次性）：
+#   sudo systemctl edit jt-ipam-backend
+# 然後把下列內容貼進去（systemd 會存到 /etc/systemd/system/jt-ipam-backend.service.d/override.conf）
+#
+# 重啟：
+#   sudo systemctl daemon-reload && sudo systemctl restart jt-ipam-backend
+#
+# 安全考量（OWASP A05）：
+#   * AmbientCapabilities 只給 CAP_NET_BIND_SERVICE — 仍受 SystemCallFilter 等 sandbox 限制
+#   * 仍維持 NoNewPrivileges / ProtectSystem=strict / 等所有 hardening
+[Service]
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE

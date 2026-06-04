@@ -1,0 +1,14 @@
+[Unit]
+Description=jt-ipam GeoIP mmdb scheduled refresh (MaxMind)
+After=network-online.target jt-ipam-backend.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jtipam
+Group=jtipam
+WorkingDirectory=/opt/jt-ipam/backend
+EnvironmentFile=/etc/jt-ipam/backend.env
+ExecStart=/opt/jt-ipam/backend/.venv/bin/python /opt/jt-ipam/scripts/geoip_refresh.py
+StandardOutput=journal
+StandardError=journal

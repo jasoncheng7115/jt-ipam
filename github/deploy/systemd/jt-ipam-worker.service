@@ -1,0 +1,51 @@
+# =============================================================================
+# jt-ipam Celery worker（Phase 2+：DNS / LibreNMS 排程）
+#
+# Phase 1 暫無 worker；此檔保留為將來啟用模板。啟用前確保 Celery
+# beat schedule 已寫好（app.celery_app）。
+# =============================================================================
+
+[Unit]
+Description=jt-ipam Celery worker
+Documentation=https://github.com/jasontools/jt-ipam
+After=network-online.target postgresql.service redis-server.service
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=exec
+User=jtipam
+Group=jtipam
+WorkingDirectory=/opt/jt-ipam/backend
+EnvironmentFile=/etc/jt-ipam/backend.env
+ExecStart=/opt/jt-ipam/backend/.venv/bin/celery -A app.celery_app worker \
+    --loglevel=info \
+    --concurrency=4
+Restart=on-failure
+RestartSec=5s
+
+# ── Sandbox（同 backend）──
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @debug
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0027
+
+ReadWritePaths=/var/log/jt-ipam /var/lib/jt-ipam
+
+[Install]
+WantedBy=multi-user.target

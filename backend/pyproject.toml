@@ -28,6 +28,7 @@ dependencies = [
     # ── Security (A02 / A07) ──
     "argon2-cffi>=23.1",          # argon2id 密碼雜湊
     "cryptography>=43.0",          # AES-GCM、TLS、簽章
+    "defusedxml>=0.7",             # 安全 XML 解析（OPNsense config.xml；擋 XXE）
     "pyjwt[crypto]>=2.10",         # JWT
     "pyotp>=2.9",                  # TOTP MFA
     "python-multipart>=0.0.20",    # 表單
@@ -42,6 +43,7 @@ dependencies = [
     "pyrad>=2.4",                  # Radius 認證
     "dnspython>=2.6",              # BIND 9 AXFR + nsupdate (TSIG)
     "pywinrm>=0.5",                # Windows DNS（WinRM + PowerShell）
+    "geoip2>=4.8",                 # GeoIP：MaxMind GeoLite2/GeoIP2 mmdb 本地查詢（含 maxminddb reader）
 
     # ── SSO（Phase 3）──
     "authlib>=1.3",                # OIDC / OAuth2
@@ -66,6 +68,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
+    "pytest-github-actions-annotate-failures>=0.2",  # CI 失敗轉 GH annotation（公開 API 可讀）
     "httpx>=0.27",
     "ruff>=0.8",
     "mypy>=1.13",
@@ -106,11 +109,32 @@ select = [
 ignore = [
     "S101",  # assert in tests OK
     "E501",  # line length 由 formatter 處理
+    # 本專案大量使用繁中全形標點於 docstring / 註解 / 字串 —— 屬刻意，不是錯字
+    "RUF001", "RUF002", "RUF003",  # ambiguous-unicode（全形標點誤判）
+    "B008",   # FastAPI 慣例：Depends()/Query() 放在 default argument
+    "ASYNC109",  # 對外請求刻意帶 timeout 參數（safe_request 約定）
+    "N818",   # 既有例外命名（SubnetOverlap / OPNsenseError…），不強制 Error 後綴
+    # 既有風格 / 框架慣例（刻意，不視為錯誤）：
+    "E701", "E702",  # 單行 if x: y / a; b（本專案大量使用，屬風格）
+    "RUF012",  # ORM/Pydantic model 的可變預設值（Mapped[list] 等）
+    "S110",    # try/except/pass：best-effort 同步刻意吞錯（皆有註解說明）
+    "C416",    # 解析式風格
+    # 命名：刻意沿用外部欄位 / SQLAlchemy model 名 / SNMP sysObjectID 等大小寫
+    "N803", "N806", "N811", "N814", "N815",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106"]
 "alembic/**" = ["E402"]
+# 模型匯總模組：import 各 model 是為了註冊到 metadata（非未使用）
+"app/models/__init__.py" = ["F401"]
+# 這些檔有刻意的 late import（避免循環匯入 / 條件載入）
+"app/api/phpipam/endpoints/addresses.py" = ["E402"]
+"app/api/phpipam/endpoints/subnets.py" = ["E402"]
+"app/api/v1/endpoints/auth.py" = ["E402"]
+"app/api/v1/endpoints/migration.py" = ["E402"]
+"app/api/v1/endpoints/notifications.py" = ["E402"]
+"app/api/v1/endpoints/system_settings.py" = ["E402"]
 
 # ─────────────────────────────────────────────────────────
 # Mypy
@@ -126,6 +150,19 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["alembic.*"]
 ignore_errors = true
+
+# 第三方套件無型別 stub（py.typed）→ 不分析其匯入，避免 import-untyped 連鎖
+[[tool.mypy.overrides]]
+module = [
+    "pyrad.*", "onelogin.*", "ldap3.*", "pymysql.*",
+    "defusedxml.*", "winrm.*", "pywinrm.*",
+]
+ignore_missing_imports = true
+
+# strawberry GraphQL 的 field/resolver 裝飾器無型別 → 不報 untyped-decorator
+[[tool.mypy.overrides]]
+module = ["app.graphql.*"]
+disallow_untyped_decorators = false
 
 # ─────────────────────────────────────────────────────────
 # Pytest

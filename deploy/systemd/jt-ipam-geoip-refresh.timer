@@ -1,0 +1,14 @@
+[Unit]
+Description=jt-ipam GeoIP mmdb scheduled refresh
+Requires=jt-ipam-geoip-refresh.service
+
+[Timer]
+# Fires daily; the script itself decides whether an update is due based on the
+# configured frequency (daily / twice-weekly / weekly / monthly) + last update time.
+# MaxMind publishes GeoLite2 twice a week (Tue/Fri), so daily checks waste nothing.
+OnCalendar=*-*-* 04:15:00
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

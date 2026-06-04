@@ -1,14 +1,14 @@
-# jt-ipam 新世代 IPAM 系統規格書
+# jt-ipam IPAM 系統規格書
 
 > 版本：v0.3（完整整合版）
 > 作者：Jason Tools Co., Ltd.（節省工具箱）
-> 定位：以 phpIPAM 操作邏輯為核心，重新打造的現代化 IPAM 系統，深度整合多家 DNS Server、LibreNMS 與本地 AI
+> 定位：可自架、以整合為核心的現代化 IPAM 系統，深度整合多家 DNS Server、LibreNMS、OPNsense 與本地 AI；提供 phpIPAM 相容 API 與無痛遷移路徑（並非建構於 phpIPAM 之上）
 
 ---
 
 ## 〇、設計主軸
 
-**主軸：以 phpIPAM 的使用習慣與術語為準**，NetBox 的功能僅作為「補強」加入，不取代 phpIPAM 既有的操作邏輯。
+**主軸：自成一格的現代化 IPAM**；操作體驗「參考」phpIPAM 熟悉的術語與習慣以降低遷移門檻，並吸收 NetBox 的優點，但本系統並非建構於 phpIPAM 之上，也不受其架構限制。
 
 | 維度 | 採用方 | 說明 |
 |------|--------|------|
@@ -29,7 +29,7 @@
 ## 一、產品定位
 
 ### 1.1 核心定位
-- **完整覆蓋 phpIPAM 全部功能**，phpIPAM 老用戶零學習成本
+- **完整覆蓋 phpIPAM 全部功能**，phpIPAM 老使用者零學習成本
 - **採用現代技術堆疊**，解決 phpIPAM 效能、UI、API 的歷史包袱
 - **補強 phpIPAM 缺少的進階功能**（取自 NetBox 設計，但維持簡潔）
 - **深度整合多家 DNS Server**：OPNsense Unbound、Windows DNS、BIND 9、PowerDNS
@@ -39,7 +39,7 @@
 - **符合台灣資安稽核需求**：繁中介面、民國紀年、SHA-256 異動稽核
 
 ### 1.2 設計哲學
-1. **phpIPAM 用戶體驗優先**
+1. **phpIPAM 使用者體驗優先**
 2. **進階功能可關閉**（NetBox 級模組預設關閉）
 3. **API 一等公民**（phpIPAM API 完整相容，舊腳本零改動）
 4. **不綁專屬技術**（開源元件、AGPL 授權）
@@ -97,7 +97,7 @@ jt-ipam/
 │   ├── sync/            # 設備清單雙向同步
 │   ├── arp/             # ARP table 抓取
 │   ├── fdb/             # FDB / MAC table 抓取
-│   ├── status/          # 即時在線狀態互補
+│   ├── status/          # 即時上線狀態互補
 │   └── auto_add/        # 自動加入監控
 │
 ├── ── 進階模組（選用，預設關閉） ──
@@ -151,8 +151,8 @@ jt-ipam/
 - 屬性：IP、hostname、描述、State、MAC、Owner、Switch+Port、Exclude from ping、自訂欄位、PTR ignore、Note
 - **新增屬性（v0.3 整合來源）**：
   - `discovery_source`（資料來源：manual / scanner / librenms / dns / proxmox / opnsense）
-  - `last_seen_scanner`（自家掃描最後在線時間）
-  - `last_seen_librenms`（LibreNMS 最後在線時間）
+  - `last_seen_scanner`（自家掃描最後上線時間）
+  - `last_seen_librenms`（LibreNMS 最後上線時間）
   - `last_seen_dns`（DNS 最後解析時間）
   - `effective_status`（綜合狀態，見 §6.4）
 - 變更紀錄（誰、何時、改了什麼）
@@ -258,7 +258,7 @@ DNSRecord
 每個 Subnet 可指定：
 - 正解 Zone（多個，例：`jason.tools`、`internal.jason.tools`）
 - 反解 Zone（自動依 CIDR 推算，例：`168.192.in-addr.arpa`）
-- DNS Server（可選多台，主從）
+- DNS Server（選用多台，主從）
 - Auto DNS 開關
 - TTL 預設值
 
@@ -309,7 +309,7 @@ LibreNMS 已經在做 SNMP 監控、ARP table 抓取、FDB 抓取，這些資料
 | `GET /api/v0/resources/ip/arp/{ip}` | **依 IP 查 ARP**（重點） |
 | `GET /api/v0/devices/{id}/fdb` | **取得裝置 FDB / MAC table**（重點） |
 | `GET /api/v0/resources/fdb/{mac}` | **依 MAC 反查在哪台 switch 哪個 port**（重點） |
-| `GET /api/v0/devices/{id}/availability` | 在線狀態與可用率 |
+| `GET /api/v0/devices/{id}/availability` | 上線狀態與可用率 |
 | `GET /api/v0/alerts` | 取得告警 |
 
 ### 6.3 雙向同步：Devices
@@ -318,13 +318,13 @@ LibreNMS 已經在做 SNMP 監控、ARP table 抓取、FDB 抓取，這些資料
 - 排程任務（預設 5 分鐘）拉取裝置清單
 - 比對 IPAM 內 Devices：
   - LibreNMS 有、IPAM 沒有 → 在「未匹配清單」顯示，可一鍵匯入或忽略
-  - 兩邊都有 → 同步在線狀態、SNMP 資訊（型號、OS、序號、uptime）
+  - 兩邊都有 → 同步上線狀態、SNMP 資訊（型號、OS、序號、uptime）
   - IPAM 有、LibreNMS 沒有 → 在 IPAM 該 Device 顯示「未受監控」標籤，可一鍵加入監控（見 §6.5）
 
 #### 6.3.2 同步欄位
 - 主機名、IP、SNMP sysDescr / sysObjectID、廠牌、型號、OS、版本、序號、Uptime、地點
 
-### 6.4 在線狀態互補（重點功能）
+### 6.4 上線狀態互補（重點功能）
 
 #### 6.4.1 問題情境
 phpIPAM 自家掃描有限制：
@@ -354,9 +354,9 @@ phpIPAM 自家掃描有限制：
 #### 6.4.3 IP 詳細頁狀態區塊
 
 ```
-狀態：● 在線（綜合判定）
-  自家掃描：● 在線    最後回應：2026-05-06 09:32:11
-  LibreNMS：● 在線    最後輪詢：2026-05-06 09:33:45
+狀態：● 上線（綜合判定）
+  自家掃描：● 上線    最後回應：2026-05-06 09:32:11
+  LibreNMS：● 上線    最後輪詢：2026-05-06 09:33:45
   資料來源：scanner + librenms
 ```
 
@@ -365,7 +365,7 @@ phpIPAM 自家掃描有限制：
 #### 6.5.1 流程
 1. 自家 Scanner 發現新 IP（之前沒看過的）
 2. 嘗試 SNMP 探測（v1 / v2c / v3，使用設定中的 community / 認證資料庫）
-3. 若 SNMP 探測成功 → 在 IP 旁顯示「✅ SNMP 可達」徽章與「加入 LibreNMS」按鈕
+3. 若 SNMP 探測成功 → 在 IP 旁顯示「 SNMP 可達」徽章與「加入 LibreNMS」按鈕
 4. 使用者點擊或啟用「自動加入」規則時，呼叫 `POST /api/v0/devices` 加入監控
 5. **以單一 IP 為單位決定要不要加入**，不是全網一刀切
 
@@ -488,7 +488,7 @@ Switch + Port
 可在 IPAM 內：
 - 設定多台 LibreNMS 實例（多站）
 - 設定 API URL + Token
-- 設定每個整合項的開關（裝置同步 / ARP / FDB / 在線狀態 / 自動加入）
+- 設定每個整合項的開關（裝置同步 / ARP / FDB / 上線狀態 / 自動加入）
 - 設定同步頻率
 - 顯示連線狀態與最後同步時間
 - 同步失敗的錯誤紀錄
@@ -599,7 +599,7 @@ Switch + Port
 - PDF 報表固定淺色（列印友善）
 
 ### 9.4 使用者偏好（統一儲存）
-- 語言、主題、時區、紀年、每頁筆數、預設 Section、Dashboard 卡片配置
+- 語言、主題、時區、紀年、每頁筆數、預設 Section、Dashboard 卡片設定
 - 儲存於 `user_preferences` 表
 
 ---
@@ -609,13 +609,13 @@ Switch + Port
 ### 10.1 phpIPAM API 相容層（重要）
 - **完整對應 phpIPAM v1.7 API endpoint**
 - 舊腳本零改動可遷移
-- 路徑前綴 `/api/phpipam/`
+- 路徑首碼 `/api/phpipam/`
 - 同樣的 token 機制
 
 ### 10.2 現代 REST API
 - OpenAPI 3.1 自動文件（Swagger UI + Redoc）
 - 完整 CRUD、過濾、排序、分頁、欄位選擇、Bulk
-- 路徑前綴 `/api/v1/`
+- 路徑首碼 `/api/v1/`
 - API Token 限流
 
 ### 10.3 GraphQL API
@@ -717,71 +717,71 @@ Switch + Port
 
 ## 十三、開發路線圖（v0.3 落地狀態）
 
-### Phase 1 ✅：phpIPAM 等價 + 升級
-- ✅ Section / Subnet / IP Address 三層核心
-- ✅ VLAN / VRF / NAT
-- ✅ 自家 Subnet 掃描（ICMP；SNMP/ARP/Nmap Phase 2 Celery 排程版）
-- ✅ Devices / Racks / Locations / IP Requests（含 timeline 狀態機）
-- ✅ 認證（本機 + LDAP/AD/Radius）+ argon2id + TOTP + 帳號鎖定 + API Token
-- ✅ phpIPAM API 相容層（讀寫）
-- ✅ phpIPAM 資料**同步**工具（多次匯入、衝突策略、平行使用）
-- ✅ PowerDNS 整合
-- ✅ 繁中/英文雙語、深淺主題
-- ✅ **systemd + nginx + apt 部署**（Docker 已不採用，改 Proxmox LXC / 裸機）
-- ✅ **OWASP Top 10:2025 baseline 全面落地**（含 A10 Mishandling of Exceptional Conditions）
-- ✅ **強制 SSL（nginx 反代 / uvicorn 自簽 雙模式）**
-- ✅ Subnet 視覺方塊圖、Rack U 位視覺化、IP 指示儀表板
-- ✅ Tools（IP/CIDR 計算機、EUI-64）
-- ✅ Custom Fields、CSV 匯入/匯出（dry-run、idempotent）
-- ✅ RIPE / TWNIC whois 匯入
-- ✅ 通知中心（站內 + Webhook + SMTP）
-- ✅ 全文搜尋 + 自動偵測查詢類型
+### Phase 1 ：phpIPAM 等價 + 升級
+-  Section / Subnet / IP Address 三層核心
+-  VLAN / VRF / NAT
+-  自家 Subnet 掃描（ICMP；SNMP/ARP/Nmap Phase 2 Celery 排程版）
+-  Devices / Racks / Locations / IP Requests（含 timeline 狀態機）
+-  認證（本機 + LDAP/AD/Radius）+ argon2id + TOTP + 帳號鎖定 + API Token
+-  phpIPAM API 相容層（讀寫）
+-  phpIPAM 資料**同步**工具（多次匯入、衝突策略、平行使用）
+-  PowerDNS 整合
+-  繁中/英文雙語、深淺主題
+-  **systemd + nginx + apt 部署**（Docker 已不採用，改 Proxmox LXC / 裸機）
+-  **OWASP Top 10:2025 baseline 全面落地**（含 A10 Mishandling of Exceptional Conditions）
+-  **強制 SSL（nginx 反代 / uvicorn 自簽 雙模式）**
+-  Subnet 視覺方塊圖、Rack U 位視覺化、IP 指示儀表板
+-  Tools（IP/CIDR 計算機、EUI-64）
+-  Custom Fields、CSV 匯入/匯出（dry-run、idempotent）
+-  RIPE / TWNIC whois 匯入
+-  通知中心（站內 + Webhook + SMTP）
+-  全文搜尋 + 自動偵測查詢類型
 
-### Phase 2 ✅：DNS 多家整合 + LibreNMS 深度整合 + AI 語意搜尋
-- ✅ BIND 9（AXFR + nsupdate TSIG）
-- ✅ OPNsense Unbound（REST host override）
-- ✅ Windows DNS（WinRM + PowerShell）
-- ✅ PowerDNS（v4 HTTP API）
-- ✅ DNS 雙向同步、不一致偵測報表
-- ✅ LibreNMS 裝置雙向同步
-- ✅ LibreNMS ARP table 抓取（自動補 IP 的 MAC）
-- ✅ LibreNMS FDB / MAC table 抓取
-- ✅ 在線狀態互補（effective_status §6.4.2 真值表）
-- ✅ 自動加入 LibreNMS 監控
-- ✅ IP → MAC → Switch Port 自動推導 trace
-- ✅ 異常偵測（IP 衝突 / MAC 漂移 / 鬼 IP / 未授權 IP）
-- ✅ SHA-256 異動鏈、Graylog 外送
-- ✅ 現代 REST API + GraphQL（Strawberry，read-only）
-- ✅ AI 語意搜尋（pgvector + Ollama embedding）
+### Phase 2 ：DNS 多家整合 + LibreNMS 深度整合 + AI 語意搜尋
+-  BIND 9（AXFR + nsupdate TSIG）
+-  OPNsense Unbound（REST host override）
+-  Windows DNS（WinRM + PowerShell）
+-  PowerDNS（v4 HTTP API）
+-  DNS 雙向同步、不一致偵測報表
+-  LibreNMS 裝置雙向同步
+-  LibreNMS ARP table 抓取（自動補 IP 的 MAC）
+-  LibreNMS FDB / MAC table 抓取
+-  上線狀態互補（effective_status §6.4.2 真值表）
+-  自動加入 LibreNMS 監控
+-  IP → MAC → Switch Port 自動推導 trace
+-  異常偵測（IP 衝突 / MAC 漂移 / 鬼 IP / 未授權 IP）
+-  SHA-256 異動鏈、Graylog 外送
+-  現代 REST API + GraphQL（Strawberry，read-only）
+-  AI 語意搜尋（pgvector + Ollama embedding）
 
-### Phase 3 ✅：進階模組 + 整合 + 拓樸 + SSO
-- ✅ Tenancy（TenantGroup / Tenant）
-- ✅ Contacts（Group / Role / Contact / 多型 Assignment）
-- ✅ Circuits（Provider / Type / Circuit）
-- ✅ Cabling（Cable + 多型 Termination）
-- ✅ Power（Panel → Feed → Outlet）
-- ✅ Wireless（SSID + Link）
-- ✅ VPN / L2VPN（IPsec/WG/L2TP/VxLAN/VPLS/EVPN）
-- ✅ Virtualization（Cluster / VM / Interface）+ Proxmox VE 同步
-- ✅ ASN
-- ✅ 拓樸視覺化（Cytoscape.js + cose-bilkent）
-- ✅ OIDC SSO（discovery + state/nonce + auto-provision）
-- ✅ SAML 2.0 SSO（python3-saml；metadata/ACS/SLO；assertion 簽章預設 on）
-- ✅ OPNsense 防火牆 alias 同步（雙向；selector by section/subnet/tag/custom_field）
-- ✅ Wazuh agent inventory 同步 + missing-agent 偵測（給 SOC 的漏裝清單）
+### Phase 3 ：進階模組 + 整合 + 拓樸 + SSO
+-  Tenancy（TenantGroup / Tenant）
+-  Contacts（Group / Role / Contact / 多型 Assignment）
+-  Circuits（Provider / Type / Circuit）
+-  Cabling（Cable + 多型 Termination）
+-  Power（Panel → Feed → Outlet）
+-  Wireless（SSID + Link）
+-  VPN / L2VPN（IPsec/WG/L2TP/VxLAN/VPLS/EVPN）
+-  Virtualization（Cluster / VM / Interface）+ Proxmox VE 同步
+-  ASN
+-  拓樸視覺化（Cytoscape.js + cose-bilkent）
+-  OIDC SSO（discovery + state/nonce + auto-provision）
+-  SAML 2.0 SSO（python3-saml；metadata/ACS/SLO；assertion 簽章預設 on）
+-  OPNsense 防火牆 alias 同步（雙向；selector by section/subnet/tag/custom_field）
+-  Wazuh agent inventory 同步 + missing-agent 偵測（給 SOC 的漏裝清單）
 
-### Phase 4 ✅（縮減版）：AI / Plugin
-- ✅ MCP Server（暴露 IPAM 工具給本地 LLM；JSON-RPC 2.0 子集）
-- ✅ 本地 LLM 自然語言查詢（Ollama chat + tool use；UI 浮動視窗）
-- ✅ Plugin 機制（importlib.metadata entry_points + admin 列表 + 文件）
+### Phase 4 （縮減版）：AI / Plugin
+-  MCP Server（暴露 IPAM 工具給本地 LLM；JSON-RPC 2.0 子集）
+-  本地 LLM 自然語言查詢（Ollama chat + tool use；UI 浮動視窗）
+-  Plugin 機制（importlib.metadata entry_points + admin 列表 + 文件）
 
 ### Out of scope（本專案明確不做）
-- ❌ HA 部署（PG streaming + Redis Sentinel + 多副本 backend）
-- ❌ Ansible Collection（jasontools.jt-ipam）
-- ❌ Terraform Provider
-- ❌ Zimbra 聯絡人同步
-- ❌ Odoo ERP 同步
-- ❌ Docker / Helm Chart / Kubernetes 容器化部署
+-  HA 部署（PG streaming + Redis Sentinel + 多副本 backend）
+-  Ansible Collection（jasontools.jt-ipam）
+-  Terraform Provider
+-  Zimbra 聯絡人同步
+-  Odoo ERP 同步
+-  Docker / Helm Chart / Kubernetes 容器化部署
 
 ---
 
@@ -837,7 +837,7 @@ Switch + Port
 | LibreNMS | 裝置雙向同步 | 2 |
 | LibreNMS | ARP table 抓取 | 2 |
 | LibreNMS | FDB / MAC table 抓取 | 2 |
-| LibreNMS | 在線狀態互補（effective_status） | 2 |
+| LibreNMS | 上線狀態互補（effective_status） | 2 |
 | LibreNMS | 自動加入監控（個別決定） | 2 |
 | LibreNMS | IP→MAC→Switch Port 自動推導 | 2 |
 | LibreNMS | MAC 漂移、鬼 IP 異常偵測 | 2 |
@@ -878,7 +878,7 @@ Switch + Port
    - 裝置雙向同步
    - ARP table 抓取（自動補 IP 的 MAC）
    - FDB table 抓取（自動定位 IP 接在哪個 Switch Port）
-   - 在線狀態互補（自家測不到時用 LibreNMS 結果）
+   - 上線狀態互補（自家測不到時用 LibreNMS 結果）
    - 自動加入監控（以單一裝置為單位個別決定）
 6. 異常偵測：IP 衝突、MAC 漂移、鬼 IP、未授權設備
 7. **資安內建**：對齊 OWASP Top 10:2025

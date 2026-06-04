@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>jt-ipam — 可自架的整合型 IPAM</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<meta name="description" content="jt-ipam：可自架、以整合為核心的 IP 位址管理系統，整合 DNS / LibreNMS / OPNsense / Wazuh / Proxmox / Ollama LLM，並可從 phpIPAM 匯入資料、無痛遷移。systemd 部署、強制 HTTPS、OWASP Top 10:2025。" />
+<style>
+  :root{
+    --green:#18a058; --green-h:#36ad6a; --green-d:#0c7a43;
+    --teal:#14b8a6; --cyan:#22d3ee;
+    --ink:#0f172a; --body:#334155; --muted:#64748b;
+    --bg:#eef3ee; --card:#ffffff; --line:#e2e8e4;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--body);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--green-d);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h1,h2,h3{color:var(--ink);line-height:1.25;letter-spacing:.2px}
+  .en{display:none}
+  body.lang-en .zh{display:none}
+  body.lang-en .en{display:initial}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:saturate(1.4) blur(8px);
+    border-bottom:1px solid var(--line)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--ink);font-size:18px}
+  .brand .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--cyan));
+    display:inline-block;box-shadow:0 2px 8px rgba(24,160,88,.4)}
+  .nav-links{display:flex;gap:16px;margin-left:auto;flex-wrap:wrap;align-items:center}
+  .nav-links a{color:var(--body);font-size:14px;font-weight:500}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 18px;border-radius:10px;
+    font-weight:600;font-size:15px;line-height:1.3;font-family:inherit;border:1px solid transparent;
+    cursor:pointer;transition:.15s;box-sizing:border-box;vertical-align:middle}
+  .btn-primary{background:var(--green);color:#fff;box-shadow:0 4px 14px rgba(24,160,88,.32)}
+  .btn-primary:hover{background:var(--green-h);text-decoration:none}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--green);text-decoration:none}
+  .btn-sm{padding:6px 12px;font-size:13px}
+  /* hero */
+  .hero{background:
+      radial-gradient(1100px 560px at 50% -14%,rgba(34,211,238,.12),transparent 60%),
+      radial-gradient(820px 520px at 100% 0%,rgba(24,160,88,.13),transparent 55%),
+      radial-gradient(760px 520px at 0% 8%,rgba(99,102,241,.10),transparent 55%),
+      radial-gradient(720px 520px at 88% 100%,rgba(236,72,153,.07),transparent 55%);
+    padding:96px 0 66px;border-bottom:1px solid var(--line);text-align:center}
+  .hero h1{font-size:clamp(34px,5.6vw,56px);margin:0 auto 22px;max-width:13em;
+    line-height:1.14;letter-spacing:-0.5px}
+  .hero .lead{font-size:clamp(15.5px,1.9vw,18.5px);color:var(--muted);max-width:600px;margin:0 auto;line-height:1.85}
+  .hero-points{list-style:none;padding:0;margin:30px auto 0;max-width:860px;display:flex;
+    flex-wrap:wrap;justify-content:center;gap:10px}
+  .hero-points li{display:inline-flex;align-items:center;gap:10px;background:#fff;
+    border:1px solid var(--line);border-radius:999px;padding:8px 17px 8px 9px;font-size:14.5px;
+    color:var(--ink);line-height:1.4;box-shadow:0 2px 10px rgba(15,23,42,.06)}
+  /* 綠色圓形打勾徽章，乾淨有質感、不用花花綠綠的底色 */
+  .hero-points li svg{flex:0 0 auto;width:23px;height:23px;padding:4px;box-sizing:border-box;
+    color:#fff;background:linear-gradient(135deg,var(--green),var(--green-h));border-radius:50%;
+    box-shadow:0 2px 6px rgba(24,160,88,.35)}
+  .hero-points b{color:var(--ink);font-weight:700}
+  .hero .cta{display:flex;gap:12px;margin-top:38px;flex-wrap:wrap;justify-content:center}
+  .pills{display:flex;gap:9px;flex-wrap:wrap;margin-top:36px;justify-content:center;max-width:720px;margin-left:auto;margin-right:auto}
+  .pill{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:6px 14px;font-size:12.5px;color:var(--body);font-weight:600;
+    box-shadow:0 1px 2px rgba(15,23,42,.04);transition:.15s}
+  .pill:hover{border-color:var(--green);box-shadow:0 3px 10px rgba(24,160,88,.14);transform:translateY(-1px)}
+  .pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+  /* 點色彩輪替：綠為主、其它點綴，整列不會單一色 */
+  .pill:nth-child(6n+1)::before{background:#18a058}
+  .pill:nth-child(6n+2)::before{background:#6366f1}
+  .pill:nth-child(6n+3)::before{background:#f59e0b}
+  .pill:nth-child(6n+4)::before{background:#0ea5e9}
+  .pill:nth-child(6n+5)::before{background:#ec4899}
+  .pill:nth-child(6n+6)::before{background:#10b981}
+  section{padding:60px 0}
+  section.alt{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .sec-head{max-width:720px;margin:0 auto 34px;text-align:center}
+  .sec-head h2{font-size:clamp(24px,3.5vw,32px);margin:0 0 10px}
+  .sec-head p{margin:0;color:var(--muted)}
+  .grid{display:grid;gap:18px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:820px){.g3,.g2{grid-template-columns:1fr}.nav-links a:not(.btn){display:none}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;
+    box-shadow:0 2px 10px rgba(15,23,42,.04);transition:.18s}
+  .card:hover{box-shadow:0 8px 24px rgba(15,23,42,.09);transform:translateY(-2px)}
+  .card h3{font-size:18px;margin:0 0 8px;display:flex;align-items:center;gap:9px}
+  .card p{margin:0;font-size:14.5px;color:var(--body)}
+  /* 物件關係圖 */
+  .model-wrap{max-width:900px;margin:6px auto 0}
+  .model-svg{width:100%;height:auto;display:block}
+  .model-cap{text-align:center;font-size:13px;color:var(--muted);margin:14px auto 0;max-width:760px}
+  /* 多單位 / MSP 強調帶 */
+  .callout-sec{background:linear-gradient(135deg,#0c7a43,#18a058,#36ad6a)}
+  .callout{display:flex;align-items:center;gap:26px}
+  .callout .ci{flex:0 0 auto;width:58px;height:58px;border-radius:15px;background:rgba(255,255,255,.16);
+    display:grid;place-items:center;color:#fff}
+  .callout h3{color:#fff;margin:0 0 6px;font-size:clamp(20px,3vw,27px);letter-spacing:.3px}
+  .callout p{margin:0;color:rgba(255,255,255,.92);font-size:16px;line-height:1.7;max-width:780px}
+  @media(max-width:820px){.callout{flex-direction:column;text-align:center}}
+  .ic{width:34px;height:34px;border-radius:9px;display:inline-grid;place-items:center;font-size:18px;
+    background:rgba(24,160,88,.12);flex:0 0 auto}
+  .badge{width:34px;height:34px;border-radius:9px;display:inline-grid;place-items:center;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,var(--green),var(--teal));flex:0 0 auto}
+  /* hero 大圖 + 畫面導覽 */
+  .hero-shot{margin:34px auto 0;max-width:980px}
+  .shot-ph{
+    aspect-ratio:16/9;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    text-align:center;font-size:14px;color:#0d7a40;gap:6px;flex-direction:column;
+    background:linear-gradient(135deg,rgba(24,160,88,0.10),rgba(54,173,106,0.06));
+    border:2px dashed rgba(24,160,88,0.45);box-shadow:0 8px 30px rgba(24,160,88,0.12);
+  }
+  .shot-ph-hero{aspect-ratio:16/8}
+  /* 實際擷圖（已去瀏覽器框）*/
+  .shot{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line);
+    box-shadow:0 6px 22px rgba(15,23,42,0.12)}
+  .shot-hero{margin:0 auto;box-shadow:0 18px 50px rgba(15,23,42,0.18);cursor:zoom-in}
+  .screen-row{
+    display:flex;align-items:center;gap:34px;margin:0 0 78px;
+  }
+  .screen-row:last-child{margin-bottom:0}
+  .screen-row > .shot-ph,.screen-row > .shot{flex:1 1 56%;min-width:0;box-shadow:0 6px 22px rgba(0,0,0,0.10)}
+  .screen-row:nth-child(even){flex-direction:row-reverse}
+  .screen-txt{flex:1 1 40%;min-width:0}
+  .screen-txt .num{
+    display:inline-block;font-size:13px;font-weight:800;color:#18a058;
+    background:rgba(24,160,88,0.12);border-radius:8px;padding:2px 9px;margin-bottom:8px;letter-spacing:1px;
+  }
+  .screen-txt h3{margin:0 0 10px;font-size:25px}
+  .screen-txt p{margin:0;color:var(--body);line-height:1.7}
+  @media(max-width:820px){.screen-row,.screen-row:nth-child(even){flex-direction:column}.screen-row > .shot-ph,.screen-row > .shot{flex-basis:auto;width:100%}}
+  /* 畫面導覽：深綠色帶 + 淺色字，白底擷圖更跳 */
+  #screens{background:linear-gradient(180deg,#1d4a38,#143527);border-top:1px solid #0e2a1f;border-bottom:1px solid #0e2a1f}
+  .eyebrow{display:inline-block;font-size:13px;font-weight:700;letter-spacing:2px;
+    color:var(--green-d);text-transform:uppercase;margin-bottom:10px}
+  #screens .eyebrow{color:#6ee7a8}
+  #screens .sec-head h2{color:#fff}
+  #screens .sec-head p{color:rgba(255,255,255,0.62)}
+  #screens .screen-txt h3{color:#fff}
+  #screens .screen-txt p{color:rgba(255,255,255,0.82)}
+  #screens .num{background:rgba(110,231,168,0.18);color:#aaf0c8}
+  #screens .shot{box-shadow:0 16px 44px rgba(0,0,0,0.42);cursor:zoom-in;border-color:rgba(255,255,255,0.10)}
+  /* 點圖放大(lightbox) */
+  #lightbox{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(8,14,10,0.88);cursor:zoom-out;backdrop-filter:blur(2px)}
+  #lightbox.on{display:flex}
+  #lightbox img{max-width:96vw;max-height:92vh;border-radius:10px;box-shadow:0 24px 70px rgba(0,0,0,0.6)}
+  .hub-wrap{margin:0 0 26px}
+  .hub-svg{width:100%;max-width:760px;height:auto;display:block;margin:0 auto}
+  .hub-node text{paint-order:stroke}
+  .hub-cap{text-align:center;font-size:13px;opacity:.7;margin:6px 0 0}
+  .integrations{display:flex;flex-wrap:wrap;gap:10px}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);
+    border-radius:10px;padding:9px 14px;font-weight:600;color:var(--ink);font-size:14px}
+  .chip i{width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block}
+  pre{position:relative;background:#0f1825;color:#e8f0fb;border-radius:12px;padding:18px 20px;overflow:auto;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.6}
+  pre .c{color:#7585a0}
+  pre .g{color:#34d399}
+  .copy-btn{position:absolute;top:9px;right:9px;background:rgba(255,255,255,.10);color:#cbd5e1;
+    border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:4px 11px;font-size:12px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',sans-serif;cursor:pointer;transition:.15s}
+  .copy-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+  .copy-btn.ok{color:#34d399;border-color:#34d399;background:rgba(52,211,153,.12)}
+  footer{background:#0a1019;color:#aab8cc;padding:40px 0;font-size:14px}
+  footer a{color:#67e8f9}
+  .foot-in{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+  .disclaimer{font-size:13px;color:var(--muted);background:#fff;border:1px dashed var(--line);
+    border-radius:12px;padding:16px 20px}
+  /* 卡片 icon / badge 配色輪替：綠為主體，輔以多色，避免整頁只有綠+白 */
+  .grid .card .ic{color:var(--green);background:rgba(24,160,88,.12)}
+  .grid .card:nth-child(6n+2) .ic{color:#6366f1;background:rgba(99,102,241,.13)}
+  .grid .card:nth-child(6n+3) .ic{color:#f59e0b;background:rgba(245,158,11,.15)}
+  .grid .card:nth-child(6n+4) .ic{color:#0ea5e9;background:rgba(14,165,233,.13)}
+  .grid .card:nth-child(6n+5) .ic{color:#ec4899;background:rgba(236,72,153,.13)}
+  .grid .card:nth-child(6n+6) .ic{color:#14b8a6;background:rgba(20,184,166,.15)}
+  .grid .card:nth-child(6n+2) .badge{background:linear-gradient(135deg,#6366f1,#818cf8)}
+  .grid .card:nth-child(6n+3) .badge{background:linear-gradient(135deg,#f59e0b,#fbbf24)}
+  .grid .card:nth-child(6n+4) .badge{background:linear-gradient(135deg,#0ea5e9,#38bdf8)}
+  .grid .card:nth-child(6n+5) .badge{background:linear-gradient(135deg,#ec4899,#f472b6)}
+  .grid .card:nth-child(6n+6) .badge{background:linear-gradient(135deg,#14b8a6,#2dd4bf)}
+  /* 整合 chip 圓點輪替配色 */
+  .integrations .chip:nth-child(5n+1) i{background:#18a058}
+  .integrations .chip:nth-child(5n+2) i{background:#6366f1}
+  .integrations .chip:nth-child(5n+3) i{background:#f59e0b}
+  .integrations .chip:nth-child(5n+4) i{background:#0ea5e9}
+  .integrations .chip:nth-child(5n+5) i{background:#ec4899}
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap nav-in">
+    <span class="brand">
+      <svg class="brand-mark" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="#18a058"/>
+        <g stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.9">
+          <line x1="18" y1="18" x2="32" y2="32"/><line x1="46" y1="18" x2="32" y2="32"/>
+          <line x1="18" y1="46" x2="32" y2="32"/><line x1="46" y1="46" x2="32" y2="32"/>
+        </g>
+        <g fill="#fff"><circle cx="18" cy="18" r="5"/><circle cx="46" cy="18" r="5"/>
+          <circle cx="18" cy="46" r="5"/><circle cx="46" cy="46" r="5"/></g>
+        <circle cx="32" cy="32" r="8" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#18a058"/>
+      </svg>
+      jt-ipam
+    </span>
+    <div class="nav-links">
+      <a href="#features"><span class="zh">特色</span><span class="en">Features</span></a>
+      <a href="#integrations"><span class="zh">整合</span><span class="en">Integrations</span></a>
+      <a href="#screens"><span class="zh">畫面</span><span class="en">Screenshots</span></a>
+      <a href="#enterprise"><span class="zh">企業管理</span><span class="en">Enterprise</span></a>
+      <a href="#ai">AI</a>
+      <a href="#install"><span class="zh">安裝</span><span class="en">Install</span></a>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/jasoncheng7115/jt-ipam" target="_blank" rel="noopener">GitHub</a>
+      <button class="btn btn-ghost btn-sm" id="langBtn" type="button">EN / 中</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>
+      <span class="zh">別再用試算表管 IP 了</span>
+      <span class="en">Stop tracking your IPs in spreadsheets</span>
+    </h1>
+    <p class="lead">
+      <span class="zh">團隊共用一份 Excel 登錄公司 IP，最後總是拿錯版本、蓋掉別人剛改的內容…… 這種痛苦，您肯定經歷過。</span>
+      <span class="en">A shared Excel file for company IPs always ends in wrong versions and overwritten edits — you've surely been there.</span>
+    </p>
+    <ul class="hero-points">
+      <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><span class="zh"><b>權限控管、稽核軌跡、自動同步</b>：用一套系統取代試算表</span><span class="en"><b>Permissions, an audit trail and auto-sync</b> — one system replaces the spreadsheet</span></span></li>
+      <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><span class="zh">整合 <b>DNS、LibreNMS、OPNsense、Proxmox</b> 等既有系統</span><span class="en">Integrates your existing <b>DNS, LibreNMS, OPNsense, Proxmox</b></span></span></li>
+      <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span><span class="zh">IP 與網路狀態<b>集中在同一處</b></span><span class="en">IP and network state, <b>all in one place</b></span></span></li>
+    </ul>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install"><span class="zh">一行指令安裝</span><span class="en">Install in one line</span></a>
+      <a class="btn btn-ghost" href="https://github.com/jasoncheng7115/jt-ipam" target="_blank" rel="noopener"><span class="zh">前往 GitHub 專案</span><span class="en">Go to GitHub project</span></a>
+    </div>
+    <!-- hero 大圖(建議放「儀表板」整頁截圖)-->
+    <div class="hero-shot">
+      <img class="shot shot-hero" src="shots/dashboard.png" loading="lazy"
+           alt="jt-ipam 儀表板 / Dashboard" />
+    </div>
+    <div class="pills">
+      <span class="pill"><span class="zh">整合多套開源軟體</span><span class="en">Integrates many OSS tools</span></span>
+      <span class="pill"><span class="zh">phpIPAM 資料匯入</span><span class="en">phpIPAM data import</span></span>
+      <span class="pill"><span class="zh">標準套件建置</span><span class="en">Standard package install</span></span>
+      <span class="pill"><span class="zh">強制 HTTPS</span><span class="en">HTTPS enforced</span></span>
+      <span class="pill"><span class="zh">遵循資安規範</span><span class="en">Follows security standards</span></span>
+      <span class="pill"><span class="zh">雙因素認證</span><span class="en">Two-factor auth</span></span>
+      <span class="pill">SSO</span>
+      <span class="pill"><span class="zh">整合 AD / LDAP</span><span class="en">AD / LDAP integration</span></span>
+      <span class="pill"><span class="zh">深色 / 淺色雙主題</span><span class="en">Dark / light themes</span></span>
+      <span class="pill"><span class="zh">多語言介面</span><span class="en">Multilingual UI</span></span>
+    </div>
+  </div>
+</header>
+
+<section class="callout-sec">
+  <div class="wrap callout">
+    <span class="ci"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V6l7-3v18"/><path d="M19 21V10l-7-4"/><path d="M8 9h.01M8 13h.01M8 17h.01M15 13h.01M15 17h.01"/></svg></span>
+    <div>
+      <h3><span class="zh">管多家公司 / 客戶？一套後台全管完</span><span class="en">Managing many companies or clients? Run them all from one back office</span></h3>
+      <p><span class="zh">不論是集團、分公司、管理單位、客戶還是不同站點，都能把各自的 IP、子網路、裝置與機房收進同一套系統，依歸屬隔離並做物件層級授權。MSP、系統整合商、集團 IT 一個畫面就管完所有單位，不必每家各開一份試算表、各裝一套工具。</span><span class="en">Whether it's groups, subsidiaries, business units, clients or separate sites, keep each one's IPs, subnets, devices and rooms in a single system — isolated by ownership with object-level access control. MSPs, integrators and group IT manage every tenant from one screen, instead of a spreadsheet (and a tool) per client.</span></p>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2><span class="zh">核心功能</span><span class="en">Core features</span></h2>
+      <p><span class="zh">方便的搜尋、清楚的物件關係、現代的操作體驗。</span><span class="en">Convenient search, clear object relationships, a modern UX.</span></p>
+    </div>
+    <div class="grid g3">
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="zh">區段 / 子網路 / IP</span><span class="en">Sections / Subnets / IPs</span></h3><p><span class="zh">階層式管理、使用率視覺化、重疊網段偵測、CSV 匯入與通用表格匯出。</span><span class="en">Hierarchical management, usage visualization, overlap detection, CSV import & universal table export.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.6 8.4 11 16M16.4 8.4 13 16M8 7h8"/></svg></span><span class="zh">IP 拓樸圖</span><span class="en">IP topology</span></h3><p><span class="zh">整合多種系統資料自動推測 裝置↔子網路 鄰接，畫出實體 / 無線 / VPN / L3 連線。</span><span class="en">Multi-signal device↔subnet adjacency, drawing physical / wireless / VPN / L3 links.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg></span><span class="zh">裝置 / 機櫃 / 機房</span><span class="en">Devices / Racks / Rooms</span></h3><p><span class="zh">機櫃 U 位示意圖 (含半 U、前後雙面)、機房平面圖拖拉定位、世界地圖標記、SVG/PNG/draw.io 匯出；裝置明細直接標出本機在機櫃的位置。</span><span class="en">Rack U-diagrams (half-U &amp; front/rear), floor-plan drag placement, world map, SVG/PNG/draw.io export; device page highlights its own rack position.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="zh">全域搜尋</span><span class="en">Global search</span></h3><p><span class="zh">主機名稱 / IP / CIDR / MAC 一處搜尋，OUI 廠商比對每月自動更新。</span><span class="en">Search hostname / IP / CIDR / MAC in one place; monthly OUI vendor refresh.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h6a2 2 0 0 1 2 2v2M8 18h6a2 2 0 0 0 2-2v-2"/></svg></span><span class="zh">NAT / VLAN / VRF</span><span class="en">NAT / VLAN / VRF</span></h3><p><span class="zh">對齊 OPNsense 的 NAT 規則、電路頻寬、VLAN/VRF 與客戶/單位歸屬。</span><span class="en">OPNsense-aligned NAT, circuit bandwidth, VLAN/VRF and customer/tenant ownership.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="zh">IP 異動記錄</span><span class="en">IP change log</span></h3><p><span class="zh">主機名稱多來源優先序、逐欄人為編輯記錄、上線/離線判定、失聯 IP 篩選與批次回收。</span><span class="en">Multi-source hostname precedence, per-field edit log, liveness classification, stale-IP filtering &amp; bulk reclaim.</span></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="model" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2><span class="zh">物件關係</span><span class="en">Object model</span></h2>
+      <p><span class="zh">不是一堆各自獨立的清單：每個物件都有明確的上下層與關聯。</span><span class="en">Not a pile of disconnected lists — every object has a clear hierarchy and links.</span></p>
+    </div>
+    <div class="model-wrap">
+      <svg class="model-svg" viewBox="0 0 1196 116" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',sans-serif" role="img" aria-label="jt-ipam object model">
+        <defs>
+          <filter id="nsh" x="-20%" y="-30%" width="140%" height="180%">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#1e293b" flood-opacity="0.13"/>
+          </filter>
+        </defs>
+        <!-- 機房→機櫃→裝置→虛擬化→IP→子網路→區段（同儀表板關係列）；節點間 chevron 箭頭 -->
+        <g fill="#aab6c4">
+          <path d="M172 51 L184 58 L172 65 Z"/>
+          <path d="M340 51 L352 58 L340 65 Z"/>
+          <path d="M508 51 L520 58 L508 65 Z"/>
+          <path d="M676 51 L688 58 L676 65 Z"/>
+          <path d="M844 51 L856 58 L844 65 Z"/>
+          <path d="M1012 51 L1024 58 L1012 65 Z"/>
+        </g>
+        <g font-size="15" font-weight="700" text-anchor="middle">
+          <g transform="translate(20,24)"><rect width="146" height="68" rx="16" fill="#eef6fc" stroke="#0369a1" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#0369a1"/><text x="80" y="40" fill="#0369a1" class="zh">機房 / 地點</text><text x="80" y="40" fill="#0369a1" class="en">Room / Site</text></g>
+          <g transform="translate(188,24)"><rect width="146" height="68" rx="16" fill="#f2eefd" stroke="#6d28d9" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#6d28d9"/><text x="80" y="40" fill="#6d28d9" class="zh">機櫃</text><text x="80" y="40" fill="#6d28d9" class="en">Rack</text></g>
+          <g transform="translate(356,24)"><rect width="146" height="68" rx="16" fill="#eef0fe" stroke="#4338ca" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#4338ca"/><text x="80" y="40" fill="#4338ca" class="zh">裝置</text><text x="80" y="40" fill="#4338ca" class="en">Device</text></g>
+          <g transform="translate(524,24)"><rect width="146" height="68" rx="16" fill="#fdeef5" stroke="#be185d" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#be185d"/><text x="80" y="40" fill="#be185d" class="zh">虛擬化 (VM)</text><text x="80" y="40" fill="#be185d" class="en">Virtualization</text></g>
+          <g transform="translate(692,24)"><rect width="146" height="68" rx="16" fill="#eaf7f0" stroke="#0c7a43" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#0c7a43"/><text x="80" y="40" fill="#0c7a43" class="zh">IP 位址</text><text x="80" y="40" fill="#0c7a43" class="en">IP address</text></g>
+          <g transform="translate(860,24)"><rect width="146" height="68" rx="16" fill="#fef6e9" stroke="#b45309" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#b45309"/><text x="80" y="40" fill="#b45309" class="zh">子網路</text><text x="80" y="40" fill="#b45309" class="en">Subnet</text></g>
+          <g transform="translate(1028,24)"><rect width="146" height="68" rx="16" fill="#fdeeee" stroke="#c0392b" stroke-opacity="0.35" filter="url(#nsh)"/><circle cx="22" cy="34" r="4" fill="#c0392b"/><text x="80" y="40" fill="#c0392b" class="zh">區段</text><text x="80" y="40" fill="#c0392b" class="en">Section</text></g>
+        </g>
+      </svg>
+      <p class="model-cap"><span class="zh">這條鏈不是裝飾：每一層都能往下鑽、彼此互相關聯，而且全部可再歸屬到單位 / 客戶。</span><span class="en">This chain isn't decorative: every level drills down, links to the others, and can be owned by a tenant / client.</span></p>
+      <div class="grid g3" style="margin-top:30px">
+        <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="zh">邏輯定址</span><span class="en">Logical addressing</span></h3><p><span class="zh">區段 → 子網路 → IP 位址。一層層收斂，每個位址都知道屬於哪個網段、哪個區段，使用率與閒置一目了然。</span><span class="en">Section → Subnet → IP address. Each IP knows which subnet and section it belongs to, with utilization and free space at a glance.</span></p></div>
+        <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg></span><span class="zh">實體資產</span><span class="en">Physical assets</span></h3><p><span class="zh">機房 / 地點 → 機櫃 → 裝置。對應真實機房平面與機櫃 U 位，一台裝置在哪個機房、哪座機櫃、第幾 U 都查得到。</span><span class="en">Room / Site → Rack → Device. Mirrors the real floor plan and U positions — find which room, rack and U slot any device occupies.</span></p></div>
+        <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h6a2 2 0 0 1 2 2v2M8 18h6a2 2 0 0 0 2-2v-2"/></svg></span><span class="zh">關聯與歸屬</span><span class="en">Links &amp; ownership</span></h3><p><span class="zh">一個 IP 指派給一台裝置、虛擬化的 VM 對應裝置並佔用 IP；點任一節點即可深入，全部還能再歸屬到單位 / 客戶做隔離與授權。</span><span class="en">An IP maps to a device, VMs map to devices and consume IPs; click any node to drill in, and everything can be owned by a tenant / client for isolation and access control.</span></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="integrations" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2><span class="zh">原生整合多套開源軟體</span><span class="en">Integrates many open-source tools</span></h2>
+      <p><span class="zh">核心價值就是「整合」：把你既有的多套開源網路與安全軟體串成一個檢視中樞：集中檢視、單向 pull、不改動來源。並支援從 phpIPAM 匯入既有資料、無痛遷移。</span><span class="en">Integration is the core value: tie your existing open-source network & security tools into one hub — centralized, pull-only, non-invasive. Plus data import & smooth migration from phpIPAM.</span></p>
+    </div>
+    <div class="hub-wrap">
+      <svg class="hub-svg" viewBox="0 0 900 520" role="img"
+           aria-label="jt-ipam integration hub diagram" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="hubg" cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stop-color="#18a058"/><stop offset="100%" stop-color="#0d7a40"/>
+          </radialGradient>
+        </defs>
+        <!-- spokes -->
+        <g stroke-width="2" fill="none" opacity="0.5">
+          <line x1="450" y1="260" x2="450" y2="70"  stroke="#0ea5e9"/>
+          <line x1="450" y1="260" x2="724" y2="142" stroke="#f59e0b"/>
+          <line x1="450" y1="260" x2="791" y2="302" stroke="#8b5cf6"/>
+          <line x1="450" y1="260" x2="602" y2="431" stroke="#ef4444"/>
+          <line x1="450" y1="260" x2="298" y2="431" stroke="#14b8a6"/>
+          <line x1="450" y1="260" x2="109" y2="302" stroke="#f43f5e"/>
+          <line x1="450" y1="260" x2="176" y2="142" stroke="#6366f1"/>
+        </g>
+        <!-- spoke nodes(單行標籤，避免在窄螢幕被截斷；完整清單見下方 chips)-->
+        <g class="hub-node" font-size="15" font-weight="600" text-anchor="middle">
+          <g transform="translate(450,70)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#0ea5e9"/><text y="5" fill="#fff">LibreNMS</text></g>
+          <g transform="translate(724,142)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#f59e0b"/><text y="5" fill="#fff">OPNsense</text></g>
+          <g transform="translate(791,302)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#8b5cf6"/><text y="5" fill="#fff">Proxmox VE</text></g>
+          <g transform="translate(602,431)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#ef4444"/><text y="5" fill="#fff">Ollama LLM</text></g>
+          <g transform="translate(298,431)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#14b8a6"/><text y="5" fill="#fff">Wazuh</text></g>
+          <g transform="translate(109,302)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#f43f5e"/><text y="5" fill="#fff">phpIPAM</text></g>
+          <g transform="translate(176,142)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#6366f1"/><text y="5" fill="#fff">DNS</text></g>
+        </g>
+        <!-- hub -->
+        <circle cx="450" cy="260" r="62" fill="url(#hubg)"/>
+        <text x="450" y="254" text-anchor="middle" fill="#fff" font-size="20" font-weight="800">jt-ipam</text>
+        <text x="450" y="276" text-anchor="middle" fill="#cfeede" font-size="11">IPAM hub</text>
+        <text x="450" y="291" text-anchor="middle" fill="#cfeede" font-size="10">pull-only · on-prem</text>
+      </svg>
+      <p class="hub-cap"><span class="zh">所有整合皆為單向 pull、不改動來源；資料集中在自家機房。</span><span class="en">All integrations are pull-only and non-invasive; data stays centralized on-prem.</span></p>
+    </div>
+    <div class="integrations">
+      <span class="chip"><i></i>phpIPAM<span class="zh">(資料匯入 / 遷移)</span><span class="en"> (data import / migration)</span></span>
+      <span class="chip"><i></i>PowerDNS</span>
+      <span class="chip"><i></i>BIND9</span>
+      <span class="chip"><i></i>Unbound</span>
+      <span class="chip"><i></i>Windows DNS</span>
+      <span class="chip"><i></i>Univention UCS</span>
+      <span class="chip"><i></i>LibreNMS</span>
+      <span class="chip"><i></i>OPNsense</span>
+      <span class="chip"><i></i>Wazuh</span>
+      <span class="chip"><i></i>Proxmox VE</span>
+      <span class="chip"><i></i>Ollama</span>
+      <span class="chip"><i></i>RIPE</span>
+      <span class="chip"><i></i>TWNIC</span>
+      <span class="chip"><i></i>MaxMind GeoIP</span>
+      <span class="chip"><i></i>Graylog<span class="zh">(DSV 對照表)</span><span class="en"> (DSV lookup)</span></span>
+    </div>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow"><span class="zh">實際畫面</span><span class="en">Screenshots</span></span>
+      <h2><span class="zh">畫面導覽</span><span class="en">See it in action</span></h2>
+      <p><span class="zh">實際操作畫面 + 說明。</span><span class="en">Real screens with explanations.</span></p>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/subnet.png" loading="lazy" alt="子網路 / IP 管理" />
+      <div class="screen-txt">
+        <span class="num">01</span>
+        <h3><span class="zh">子網路 / IP 管理</span><span class="en">Subnets / IP management</span></h3>
+        <p><span class="zh">從區段、子網路到單一 IP 的階層式管理，一眼掌握每個網段的使用率與閒置區間。最上方的「IP 指示計」用紅 / 綠 / 灰方格即時呈現整個網段每個位址的上線、離線、未知狀態，哪裡破洞、哪裡還空著一目了然。另支援 DHCP 範圍標示、重疊網段偵測、失聯 IP 篩選與批次回收；可從 CSV 匯入，任何表格也能匯出成 CSV / Excel / ODS / Markdown，再也不用在試算表裡手動對位。</span><span class="en">Hierarchical management from sections to subnets down to each IP, with utilization and free-range gaps at a glance. The “IP indicator” grid at the top shows every address's online / offline / unknown state in red / green / grey in real time — gaps and free slots are obvious. Plus DHCP-range marking, overlap detection, stale-IP filtering and bulk reclaim; import from CSV and export any table to CSV / Excel / ODS / Markdown — no more manual bookkeeping in a spreadsheet.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/ip-detail.png" loading="lazy" alt="IP 明細" />
+      <div class="screen-txt">
+        <span class="num">02</span>
+        <h3><span class="zh">IP 明細</span><span class="en">IP detail</span></h3>
+        <p><span class="zh">每個 IP 都有一份完整檔案：主機名稱依多來源優先序自動決定（掃描代理 / LibreNMS / DNS / 手動），並帶出 MAC 廠商、交換器埠位、所屬裝置與相關 NAT。下方還有「區段→子網路→IP→裝置」上下層關係圖，以及逐欄的人為異動記錄：誰在何時改了哪個欄位一清二楚，責任歸屬不再靠記憶。</span><span class="en">Every IP gets a full record: the hostname is resolved by multi-source precedence (scan agent / LibreNMS / DNS / manual), alongside MAC vendor, switch port, owning device and related NAT. Below it sits a section→subnet→IP→device hierarchy graph and a per-field change log — exactly who changed which field and when, no guesswork.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/topology.png" loading="lazy" alt="IP 拓樸圖" />
+      <div class="screen-txt">
+        <span class="num">03</span>
+        <h3><span class="zh">IP 拓樸圖</span><span class="en">IP topology</span></h3>
+        <p><span class="zh">整合掃描代理、LibreNMS、OPNsense、Proxmox 等多種系統的資料，自動推測 裝置↔子網路 的鄰接關係，並把實體佈線、無線、站對站 VPN 與 L3 連線分別以不同線型畫出。可依子網路篩選、自由縮放，整張圖再匯出成 PNG / SVG / draw.io 放進維運文件。</span><span class="en">It combines data from the scan agent, LibreNMS, OPNsense and Proxmox to infer device↔subnet adjacency, drawing physical, wireless, site-to-site VPN and L3 links each with its own line style. Filter by subnet, zoom freely, and export the whole graph to PNG / SVG / draw.io for your runbooks.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/rack.png" loading="lazy" alt="機櫃 U 位圖" />
+      <div class="screen-txt">
+        <span class="num">04</span>
+        <h3><span class="zh">機房平面圖 / 機櫃</span><span class="en">Floor plan & racks</span></h3>
+        <p><span class="zh">上傳機房平面底圖後，直接拖拉定位每一座機櫃（可旋轉、依實際 U 數標示、自動貼齊），對應真實機房配置；下方則是每座機櫃的 U 位示意圖，支援半 U、前後雙面，裝置依類型自動上色，一眼看出哪幾格還空著。機櫃圖可匯出 draw.io / PNG / SVG，裝置清單另可匯出 CSV / Excel / ODS。</span><span class="en">Upload a floor-plan background and drag-place each rack (rotatable, U-aware, snap-to-grid) to mirror the real room; below it, each rack's U-diagram with half-U, front/rear and type-based colors makes empty slots obvious. Export diagrams as draw.io / PNG / SVG and the device list as CSV / Excel / ODS.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/floorplan.png" loading="lazy" alt="機房 / 地點 與世界地圖" />
+      <div class="screen-txt">
+        <span class="num">05</span>
+        <h3><span class="zh">機房 / 地點 與地圖</span><span class="en">Sites &amp; map</span></h3>
+        <p><span class="zh">集中管理所有機房 / 地點：記錄地址與經緯度，並在世界地圖上標出各站點位置；清單同時顯示每個地點的機櫃數與裝置數，多站點的盤點與導覽一目了然。</span><span class="en">Manage all rooms / sites in one place: record addresses and coordinates and pin every site on a world map; the list also shows rack and device counts per location, so multi-site inventory is clear at a glance.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/device-ports.png" loading="lazy" alt="裝置明細 / 連接埠" />
+      <div class="screen-txt">
+        <span class="num">06</span>
+        <h3><span class="zh">裝置 / 連接埠</span><span class="en">Devices / Ports</span></h3>
+        <p><span class="zh">裝置明細把所在機櫃位置、規格與連接埠清單整合在同一頁；每個連接埠顯示自身實體 MAC、連線對端與跳接穿透對應，欄位皆可排序。連接埠會在 LibreNMS / OPNsense / Proxmox 同步時自動帶入，不必手動一筆筆建立，新裝置上線即有完整介面清單。</span><span class="en">Device detail brings rack position, specs and a sortable port list onto one page — each port shows its own MAC, connected peer and pass-through mapping. Ports are auto-populated on LibreNMS / OPNsense / Proxmox sync, so you never build them by hand; a new device arrives with its full interface list.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/cable-trace.png" loading="lazy" alt="纜線多跳追蹤" />
+      <div class="screen-txt">
+        <span class="num">07</span>
+        <h3><span class="zh">連線路徑追蹤</span><span class="en">Connection path trace</span></h3>
+        <p><span class="zh">替連接埠建立纜線連線後，系統自動畫出端對端的連線路徑圖，一段段標出沿途經過哪台裝置、哪個埠，並能穿透跳接面板與橋接 NIC 繼續追下去。整條路徑可下載成 SVG / PNG / draw.io，無論是交接維運、畫網路文件或排查斷線都省事。</span><span class="en">Once ports are cabled, jt-ipam draws the end-to-end connection path hop by hop — through patch panels and bridge NICs — showing each device and port along the way. Export the whole path to SVG / PNG / draw.io, handy for handover, documentation or tracing a broken link.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/ai-findip.png" loading="lazy" alt="本地 AI 智慧助理" />
+      <div class="screen-txt">
+        <span class="num">08</span>
+        <h3><span class="zh">本地 AI 智慧助理</span><span class="en">Local AI assistant</span></h3>
+        <p><span class="zh">用自然語言就能查 IP、子網路、裝置：「列出 192.168.1.0/24 的使用率」「找一段三個連續 IP」之類的問題直接問。它透過 jt-ipam 內建的 MCP 直接讀你的即時資料，搭配語意搜尋（embedding + pgvector）與異常偵測，全程在自家機房的 Ollama 上推論，資料完全不外流。</span><span class="en">Query IPs, subnets and devices in plain language — “show utilization for 192.168.1.0/24”, “find three consecutive free IPs”, and so on. It reads your live data through jt-ipam's built-in MCP, with semantic search (embeddings + pgvector) and anomaly detection, all inferred on a local Ollama — your data never leaves the network.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/ai-rack.png" loading="lazy" alt="本地 AI — 機櫃 / IP 問答" />
+      <div class="screen-txt">
+        <span class="num">09</span>
+        <h3><span class="zh">AI 也懂你的機房</span><span class="en">AI that knows your infra</span></h3>
+        <p><span class="zh">AI 真的看得懂你的基礎設施：問「R1 機櫃還剩幾 U」「這段子網路幫我找三個連續 IP」「192.168.1.87 被誰占用」，它會直接讀實際資料回答，省去自己翻表對照。全部跑在本地 Ollama，實測搭配 gemma4:26b 效果良好，回應快又準。</span><span class="en">The assistant genuinely understands your infrastructure: ask “how many U are left in rack R1”, “find three consecutive free IPs here” or “who's using 192.168.1.87”, and it answers from real data instead of making you dig through tables. It all runs on local Ollama — gemma4:26b works well in our testing, fast and accurate.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/tools-cidr.png" loading="lazy" alt="工具 — 子網路 / CIDR 規劃" />
+      <div class="screen-txt">
+        <span class="num">10</span>
+        <h3><span class="zh">實用工具</span><span class="en">Tools</span></h3>
+        <p><span class="zh">內建一站式的網路規劃小工具：子網路切割 / CIDR 計算、IP 範圍展開、OUI 廠商查詢等，規劃網段或查 MAC 廠商時不必再開好幾個線上計算器、在分頁間切來切去。</span><span class="en">A one-stop set of network-planning utilities: subnet splitting / CIDR math, IP-range expansion, OUI vendor lookup and more — plan segments or look up a MAC vendor without juggling separate online calculators across tabs.</span></p>
+      </div>
+    </div>
+
+    <div class="screen-row">
+      <img class="shot" src="shots/hostname-arp-sort.png" loading="lazy" alt="主機名稱 / ARP 來源優先順序" />
+      <div class="screen-txt">
+        <span class="num">11</span>
+        <h3><span class="zh">主機名稱 / ARP 來源優先順序</span><span class="en">Source precedence</span></h3>
+        <p><span class="zh">同一個 IP 或裝置，可能同時被掃描代理、DNS、LibreNMS、OPNsense、Proxmox、Wazuh、AdGuard 回報不同的值，到底以誰為準？<b>主機名稱、ARP / MAC、裝置名稱、裝置型號</b>各自都有一份來源優先順序，用拖拉排序自訂、可個別停用；系統據此自動解析出最可信的結果，不再每次同步互相蓋來蓋去。</span><span class="en">The same IP or device may be reported with different values by the scan agent, DNS, LibreNMS, OPNsense, Proxmox, Wazuh and AdGuard — which one wins? <b>Hostname, ARP / MAC, device name and device model</b> each have their own source-precedence list you reorder by drag (and can disable individually); jt-ipam resolves the most trustworthy value accordingly, so syncs stop overwriting one another.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="enterprise">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2><span class="zh">企業級管理</span><span class="en">Enterprise management</span></h2>
+      <p><span class="zh">安全是從第一天就要做到的需求，不是事後才修補。</span><span class="en">Security is a day-one requirement, not an afterthought.</span></p>
+    </div>
+    <div class="grid g3">
+      <div class="card"><h3><span class="badge">A</span><span class="zh">身分驗證</span><span class="en">Authentication</span></h3><p><span class="zh">argon2id 雜湊密碼、TOTP 兩階段、JWT(access 15 分 / refresh 14 天)、帳號鎖定。</span><span class="en">argon2id hashing, TOTP MFA, JWT (15-min access / 14-day refresh), account lockout.</span></p></div>
+      <div class="card"><h3><span class="badge">B</span>R B A C</h3><p><span class="zh">幾個內建預設角色，加上物件層級授權 (單位 / 區段 / 子網路 / 裝置…) 與階層繼承。</span><span class="en">A few built-in preset roles plus object-level grants (tenant / section / subnet / device…) with hierarchy inheritance.</span></p></div>
+      <div class="card"><h3><span class="badge">C</span><span class="zh">稽核串鏈</span><span class="en">Audit chain</span></h3><p><span class="zh">所有變更逐筆雜湊串接，可驗證是否被竄改；明細含變更前後對照。</span><span class="en">Every change is hash-chained and verifiable against tampering; diffs show before/after.</span></p></div>
+      <div class="card"><h3><span class="badge">D</span><span class="zh">資安遵循</span><span class="en">Security by design</span></h3><p><span class="zh">對齊 OWASP Top 10:2025，每個模組與 PR 都過心智檢查；嚴格 CSP、安全標頭、伺服器端授權。</span><span class="en">Aligned with OWASP Top 10:2025 — every module and PR passes the checklist; strict CSP, security headers, server-side authz.</span></p></div>
+      <div class="card"><h3><span class="badge">E</span><span class="zh">完全自架</span><span class="en">Fully self-hosted</span></h3><p><span class="zh">不用 Docker、不依賴雲端；systemd + apt 直接跑在虛擬機與容器。</span><span class="en">No Docker, no cloud; runs on VMs and containers via systemd + apt.</span></p></div>
+      <div class="card"><h3><span class="badge">F</span><span class="zh">排程拉取</span><span class="en">Scheduled pull</span></h3><p><span class="zh">phpIPAM 走 SSH tunnel 匯入；OPNsense / LibreNMS / Wazuh 定時排程拉取，單向、不改動來源。</span><span class="en">phpIPAM import over SSH tunnel; OPNsense / LibreNMS / Wazuh pulled on a schedule — one-way, non-invasive.</span></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="ai" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2><span class="zh">本地 AI 加值</span><span class="en">Local AI value</span></h2>
+      <p><span class="zh">走自架 Ollama，資料不外流。問答、摘要、異常偵測都在自家機房完成。</span><span class="en">Powered by self-hosted Ollama — data never leaves your network. Q&A, summaries and anomaly detection, all on-prem.</span></p>
+    </div>
+    <div class="grid g3">
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"/></svg></span><span class="zh">智慧助理</span><span class="en">Smart assistant</span></h3><p><span class="zh">用自然語言查 IP / 子網路 / 裝置，透過 jt-ipam 內建的 MCP 工具直接讀取你的 IPAM 資料。</span><span class="en">Ask about IPs / subnets / devices in natural language; jt-ipam's built-in MCP tools read your live IPAM data.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M7 15l3-4 3 2 5-7"/></svg></span><span class="zh">異常偵測</span><span class="en">Anomaly detection</span></h3><p><span class="zh">標記異常使用模式與失聯 IP，協助提前發現問題。</span><span class="en">Flags unusual usage patterns and unreachable IPs to surface issues early.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg></span><span class="zh">語意搜尋</span><span class="en">Semantic search</span></h3><p><span class="zh">以 embedding 向量 (Ollama 嵌入模型 + pgvector) 找相關物件，不只關鍵字比對；要用哪個模型由你自選。</span><span class="en">Vector search over embeddings (your chosen Ollama model + pgvector) finds related objects, beyond keyword matching.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><span class="zh">MCP 伺服器</span><span class="en">MCP server</span></h3><p><span class="zh">內建 MCP 伺服器 (stdio 與 Streamable HTTP)，讓外部 LLM 客戶端也能直接操作 IPAM。</span><span class="en">Built-in MCP server (stdio &amp; Streamable HTTP) lets external LLM clients drive the IPAM too.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="zh">對話歷程</span><span class="en">Chat history</span></h3><p><span class="zh">助理對話自動持久化，可回溯、管理與稽核歷次問答。</span><span class="en">Assistant conversations are persisted — review, manage and audit past Q&amp;A.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 2h-5l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5L3 11a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 2.5h5l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg></span><span class="zh">全域 LLM 設定</span><span class="en">Global LLM settings</span></h3><p><span class="zh">自由切換 chat / embedding 模型，直接列出 Ollama 已安裝標籤，全域一處設定。</span><span class="en">Switch chat / embedding models freely, list installed Ollama tags, configured in one place.</span></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2><span class="zh">部署</span><span class="en">Deployment</span></h2>
+      <p><span class="zh">systemd 管理、強制 HTTPS (nginx 反代或 uvicorn 自簽)。</span><span class="en">Managed by systemd, HTTPS enforced (nginx reverse proxy or self-signed uvicorn).</span></p>
+    </div>
+    <h3 style="margin:20px 0 8px"><span class="zh">安裝 (全新)</span><span class="en">Install (fresh)</span></h3>
+    <pre><span class="c"># <span class="zh">一行完成：自動 clone 到 /opt/jt-ipam 並安裝 (不必先手動 git)</span><span class="en">One line: auto-clones to /opt/jt-ipam &amp; installs (no manual git)</span></span>
+curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts/bootstrap.sh | sudo <span class="g">bash</span></pre>
+
+    <h3 style="margin:22px 0 8px"><span class="zh">升級</span><span class="en">Upgrade</span></h3>
+    <pre><span class="c"># <span class="zh">腳本內含 git pull，直接跑即可</span><span class="en">The script runs git pull itself — just run it</span></span>
+sudo <span class="g">bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade</span></pre>
+
+    <h3 style="margin:22px 0 8px"><span class="zh">移除</span><span class="en">Uninstall</span></h3>
+    <pre>sudo <span class="g">./scripts/jt-ipam.sh uninstall</span></pre>
+    <p style="margin-top:20px" class="disclaimer">
+      <span class="zh"><strong>需求：</strong>Debian/Ubuntu 系即可。安裝腳本會自動裝好 PostgreSQL 16、Python 3.11+、Node 20+、nginx 等相依並產生金鑰。完整步驟與環境變數請見 GitHub 上的 README 與 <code>scripts/</code>。</span>
+      <span class="en"><strong>Requirements:</strong> Debian/Ubuntu. The install script auto-installs PostgreSQL 16, Python 3.11+, Node 20+, nginx and generates keys for you. See the README and <code>scripts/</code> on GitHub for full steps and env vars.</span>
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <div>
+      <strong style="color:#e8f0fb">jt-ipam</strong> · <span class="zh">可自架的整合型 IPAM</span><span class="en">self-hosted, integration-focused IPAM</span><br>
+      <span style="opacity:.7">Apache-2.0 · © Jason Cheng</span>
+    </div>
+    <div>
+      <a href="https://github.com/jasoncheng7115/jt-ipam" target="_blank" rel="noopener">GitHub</a> ·
+      <a href="https://github.com/jasoncheng7115/jt-ipam/issues" target="_blank" rel="noopener">Issues</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    var btn = document.getElementById('langBtn');
+    var KEY = 'jtipam-doc-lang';
+    if (localStorage.getItem(KEY) === 'en') document.body.classList.add('lang-en');
+    // 按鈕顯示「要切換過去」的語言：中文版顯示 English、英文版顯示 繁體中文
+    function setBtn(){ btn.textContent = document.body.classList.contains('lang-en') ? '繁體中文' : 'English'; }
+    setBtn();
+    btn.addEventListener('click', function(){
+      document.body.classList.toggle('lang-en');
+      localStorage.setItem(KEY, document.body.classList.contains('lang-en') ? 'en' : 'zh');
+      setBtn();
+    });
+  })();
+  // 畫面導覽：點擊擷圖放大
+  (function(){
+    var lb = document.getElementById('lightbox');
+    var lbImg = document.getElementById('lightbox-img');
+    if (!lb) return;
+    document.querySelectorAll('#screens .shot, .hero-shot .shot').forEach(function(img){
+      img.addEventListener('click', function(){
+        lbImg.src = img.getAttribute('src');
+        lbImg.alt = img.getAttribute('alt') || '';
+        lb.classList.add('on');
+      });
+    });
+    function close(){ lb.classList.remove('on'); lbImg.src=''; }
+    lb.addEventListener('click', close);
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+  })();
+  // 指令區塊：複製按鈕（只複製指令本身，去掉註解）
+  (function(){
+    var en = function(){ return document.body.classList.contains('lang-en'); };
+    document.querySelectorAll('pre').forEach(function(pre){
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'copy-btn';
+      var setLabel = function(){ btn.textContent = en() ? 'Copy' : '複製'; };
+      setLabel();
+      btn.addEventListener('click', function(){
+        var clone = pre.cloneNode(true);
+        clone.querySelectorAll('.c, .copy-btn').forEach(function(n){ n.remove(); });
+        var cmd = clone.textContent.replace(/\n{2,}/g, '\n').trim();
+        navigator.clipboard.writeText(cmd).then(function(){
+          btn.textContent = en() ? 'Copied' : '已複製'; btn.classList.add('ok');
+          setTimeout(function(){ setLabel(); btn.classList.remove('ok'); }, 1500);
+        });
+      });
+      pre.appendChild(btn);
+    });
+  })();
+</script>
+<div id="lightbox"><img id="lightbox-img" alt="" /></div>
+</body>
+</html>

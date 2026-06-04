@@ -19,7 +19,7 @@
 
 ## 〇、總則
 
-1. **Security by Design**：安全是第一次寫的時候就要做對，不是事後補丁。
+1. **Security by Design**：安全是第一次寫的時候就要做對，不是事後修補。
 2. **Defense in Depth**：每一層（網路、應用、資料、人員）都要有防線，任何一層被突破不導致整體淪陷。
 3. **Least Privilege**：使用者、容器、服務帳號、API Token 一律最小權限；deny-by-default。
 4. **Fail Closed**：認證失敗、授權失敗、設定缺失、例外發生時，預設**拒絕**而非放行（A10 新類別的核心）。
@@ -88,7 +88,7 @@
   - `LockPersonality=true`、`MemoryDenyWriteExecute=true`
   - `SystemCallArchitectures=native`、`SystemCallFilter=@system-service` 並排除 `@privileged @resources @obsolete @debug`
   - `LimitNOFILE=65536` / `TasksMax=1024`
-  - 驗證：`systemd-analyze security jt-ipam-backend`（目標分數 ≤ 3.5；目前實測 1.3 🙂）
+  - 驗證：`systemd-analyze security jt-ipam-backend`（目標分數 ≤ 3.5；目前實測 1.3 ）
 - **預設帳密**：首次啟動強制 admin 改密碼；安裝程式產生隨機密碼而非寫死。
 - **健康檢查端點**：`/healthz`（liveness）只回 200，不洩漏內部資訊。
 
@@ -154,7 +154,7 @@
   - 對外整合呼叫（DNS server / LibreNMS / Webhook）強制 TLS 1.2+，建議 1.3；驗證憑證鏈，**不接受 `verify=False`**（OPNsense/Wazuh 有 `verify_tls` 旗標可關，但 prod 不應關）。
 - **Cookie**：`Secure`、`HttpOnly`、`SameSite=Lax`（敏感操作 token 用 `Strict`）。
 - **JWT**：HS512 用於 short-lived access token；refresh token 不放 LocalStorage，用 HttpOnly cookie。
-- **金鑰輪替**：`SECRET_KEY` / `ENCRYPTION_KEY` 支援多版本（kid），可平滑輪替。
+- **金鑰輪替**：`SECRET_KEY` / `ENCRYPTION_KEY` 支援多版本（kid），可無縫輪替。
 
 ### 4.3 測試
 - 單元測試：寫入 SNMP community 後，DB 欄位應為密文，且重啟後可正確解密。
@@ -237,7 +237,7 @@
 
 ### 7.2 設計
 - **密碼政策**：最少 12 字、阻擋 HIBP 已知洩漏（haveibeenpwned k-anon API）；禁止常見字典詞。
-- **TOTP MFA**：可選但管理員可強制；使用 `pyotp`，secret 加密存。
+- **TOTP MFA**：選用但管理員可強制；使用 `pyotp`，secret 加密存。
 - **帳號鎖定**：失敗 5 次鎖 15 分鐘；同 IP 對多帳號失敗 20 次封 1 小時（防 stuffing）。Admin 可透過 `/users/{id}` PATCH `unlock=true` 解鎖。
 - **Anti-enumeration**：找不到 user 也要走 dummy argon2 verify、回 401，避免從 timing / status 區分。
 - **Session**：

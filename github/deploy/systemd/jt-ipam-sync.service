@@ -1,0 +1,62 @@
+# =============================================================================
+# jt-ipam periodic sync service（oneshot；由 jt-ipam-sync.timer 觸發）
+#
+# 跑所有 enabled 的 OPNsense / Wazuh / LibreNMS 實例的 sync。
+# 已過 sync_interval_seconds 才會真的跑（避免短時間重複）。
+#
+# 安裝：
+#   sudo cp deploy/systemd/jt-ipam-sync.service /etc/systemd/system/
+#   sudo cp deploy/systemd/jt-ipam-sync.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jt-ipam-sync.timer
+#
+# 即時跑一次：sudo systemctl start jt-ipam-sync.service
+# 看執行紀錄：journalctl -u jt-ipam-sync -n 100 -f
+# =============================================================================
+
+[Unit]
+Description=jt-ipam periodic sync (OPNsense / Wazuh / LibreNMS)
+Documentation=https://github.com/jasontools/jt-ipam
+After=network-online.target postgresql.service redis-server.service jt-ipam-backend.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=jtipam
+Group=jtipam
+WorkingDirectory=/opt/jt-ipam/backend
+EnvironmentFile=/etc/jt-ipam/backend.env
+ExecStart=/opt/jt-ipam/backend/.venv/bin/python /opt/jt-ipam/scripts/jt-ipam-sync.py
+TimeoutStartSec=600
+
+# ── Sandbox（同 backend；只要能寫 /var/log/jt-ipam）──
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @debug
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0027
+
+ReadWritePaths=/var/log/jt-ipam /var/lib/jt-ipam
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jt-ipam-sync

@@ -1,0 +1,89 @@
+# =============================================================================
+# jt-ipam backend (FastAPI / uvicorn)
+#
+# 安裝路徑：/etc/systemd/system/jt-ipam-backend.service
+# 使用方式：
+#   sudo cp deploy/systemd/jt-ipam-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jt-ipam-backend
+#
+# OWASP A05 — sandbox：NoNewPrivileges、ProtectSystem、PrivateTmp、
+# 只可寫 /var/log/jt-ipam，其餘 read-only。
+#
+# TLS（A02，強制）：依 /etc/jt-ipam/backend.env 的 BACKEND_TLS_MODE：
+#   * nginx：後端綁 127.0.0.1:8000，nginx 終結 HTTPS（預設）
+#   * direct：uvicorn 直接吃自簽憑證，預設綁 0.0.0.0:8443
+#
+# 若 direct 模式想用 443（< 1024 特權 port），覆蓋如下：
+#   sudo systemctl edit jt-ipam-backend
+# 然後加入：
+#   [Service]
+#   AmbientCapabilities=CAP_NET_BIND_SERVICE
+#   CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# =============================================================================
+
+[Unit]
+Description=jt-ipam backend (FastAPI / uvicorn)
+Documentation=https://github.com/jasontools/jt-ipam
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=exec
+User=jtipam
+Group=jtipam
+WorkingDirectory=/opt/jt-ipam/backend
+EnvironmentFile=/etc/jt-ipam/backend.env
+# wrapper 依 BACKEND_TLS_MODE 決定是否啟用 uvicorn 的 --ssl-* 旗標
+ExecStart=/opt/jt-ipam/scripts/run-backend.sh
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5s
+
+# ── Sandbox / hardening (A05) ──────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @debug
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0027
+
+# ── Writable paths ──
+ReadWritePaths=/var/log/jt-ipam /var/lib/jt-ipam
+StateDirectory=jt-ipam
+LogsDirectory=jt-ipam
+
+# ── Resource limits (A04) ──
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=1024
+
+# ── Logging ──
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jt-ipam-backend
+
+[Install]
+WantedBy=multi-user.target

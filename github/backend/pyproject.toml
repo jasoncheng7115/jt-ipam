@@ -1,0 +1,198 @@
+[project]
+name = "jt-ipam-backend"
+version = "0.3.0"
+description = "jt-ipam — 新世代 IPAM 系統後端"
+authors = [
+    {name = "Jason Tools Co., Ltd.", email = "support@example.com"},
+]
+license = {text = "AGPL-3.0-or-later"}
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+
+dependencies = [
+    # ── Web framework ──
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.32",
+    "starlette>=0.41",
+
+    # ── Validation ──
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "email-validator>=2.2",
+
+    # ── Database ──
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+
+    # ── Security (A02 / A07) ──
+    "argon2-cffi>=23.1",          # argon2id 密碼雜湊
+    "cryptography>=43.0",          # AES-GCM、TLS、簽章
+    "defusedxml>=0.7",             # 安全 XML 解析（OPNsense config.xml；擋 XXE）
+    "pyjwt[crypto]>=2.10",         # JWT
+    "pyotp>=2.9",                  # TOTP MFA
+    "python-multipart>=0.0.20",    # 表單
+
+    # ── Network / IP ──
+    "httpx[http2]>=0.27",          # 統一 async HTTP client（A10 SSRF 包裝）
+
+    # ── 外部系統連線 ──
+    "pymysql>=1.1",                # phpIPAM 遷移工具：直連舊 MySQL
+    "asyncssh>=2.18",              # phpIPAM 遷移工具：SSH tunnel（MySQL 通常只 listen 127.0.0.1）
+    "ldap3>=2.9",                  # AD/LDAP 認證
+    "pyrad>=2.4",                  # Radius 認證
+    "dnspython>=2.6",              # BIND 9 AXFR + nsupdate (TSIG)
+    "pywinrm>=0.5",                # Windows DNS（WinRM + PowerShell）
+    "geoip2>=4.8",                 # GeoIP：MaxMind GeoLite2/GeoIP2 mmdb 本地查詢（含 maxminddb reader）
+
+    # ── SSO（Phase 3）──
+    "authlib>=1.3",                # OIDC / OAuth2
+    "python3-saml>=1.16",          # SAML 2.0
+
+    # ── GraphQL & AI ──
+    "strawberry-graphql[fastapi]>=0.247",   # Phase 2 GraphQL
+    "pgvector>=0.3",                        # Phase 2 語意搜尋向量欄位
+    "mcp>=1.6",                             # Phase 4 Model Context Protocol
+
+    # ── Caching / Queue ──
+    "redis[hiredis]>=5.2",
+    "celery>=5.4",
+
+    # ── Observability ──
+    "structlog>=24.4",             # 結構化日誌（A09）
+    "python-json-logger>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pytest-github-actions-annotate-failures>=0.2",  # CI 失敗轉 GH annotation（公開 API 可讀）
+    "httpx>=0.27",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "bandit[toml]>=1.8",           # SAST
+    "pip-audit>=2.7",              # CVE 掃描
+    "types-redis",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ─────────────────────────────────────────────────────────
+# Ruff
+# ─────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "C4",       # comprehensions
+    "UP",       # pyupgrade
+    "N",        # pep8-naming
+    "S",        # bandit (security)
+    "RUF",
+    "ASYNC",
+    "PT",
+]
+ignore = [
+    "S101",  # assert in tests OK
+    "E501",  # line length 由 formatter 處理
+    # 本專案大量使用繁中全形標點於 docstring / 註解 / 字串 —— 屬刻意，不是錯字
+    "RUF001", "RUF002", "RUF003",  # ambiguous-unicode（全形標點誤判）
+    "B008",   # FastAPI 慣例：Depends()/Query() 放在 default argument
+    "ASYNC109",  # 對外請求刻意帶 timeout 參數（safe_request 約定）
+    "N818",   # 既有例外命名（SubnetOverlap / OPNsenseError…），不強制 Error 後綴
+    # 既有風格 / 框架慣例（刻意，不視為錯誤）：
+    "E701", "E702",  # 單行 if x: y / a; b（本專案大量使用，屬風格）
+    "RUF012",  # ORM/Pydantic model 的可變預設值（Mapped[list] 等）
+    "S110",    # try/except/pass：best-effort 同步刻意吞錯（皆有註解說明）
+    "C416",    # 解析式風格
+    # 命名：刻意沿用外部欄位 / SQLAlchemy model 名 / SNMP sysObjectID 等大小寫
+    "N803", "N806", "N811", "N814", "N815",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"alembic/**" = ["E402"]
+# 模型匯總模組：import 各 model 是為了註冊到 metadata（非未使用）
+"app/models/__init__.py" = ["F401"]
+# 這些檔有刻意的 late import（避免循環匯入 / 條件載入）
+"app/api/phpipam/endpoints/addresses.py" = ["E402"]
+"app/api/phpipam/endpoints/subnets.py" = ["E402"]
+"app/api/v1/endpoints/auth.py" = ["E402"]
+"app/api/v1/endpoints/migration.py" = ["E402"]
+"app/api/v1/endpoints/notifications.py" = ["E402"]
+"app/api/v1/endpoints/system_settings.py" = ["E402"]
+
+# ─────────────────────────────────────────────────────────
+# Mypy
+# ─────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_errors = true
+
+# 第三方套件無型別 stub（py.typed）→ 不分析其匯入，避免 import-untyped 連鎖
+[[tool.mypy.overrides]]
+module = [
+    "pyrad.*", "onelogin.*", "ldap3.*", "pymysql.*",
+    "defusedxml.*", "winrm.*", "pywinrm.*",
+]
+ignore_missing_imports = true
+
+# strawberry GraphQL 的 field/resolver 裝飾器無型別 → 不報 untyped-decorator
+[[tool.mypy.overrides]]
+module = ["app.graphql.*"]
+disallow_untyped_decorators = false
+
+# ─────────────────────────────────────────────────────────
+# Pytest
+# ─────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+    # 第三方依賴的 DeprecationWarning 不阻擋測試
+    "ignore::DeprecationWarning:pyasn1",
+    "ignore::DeprecationWarning:ldap3",
+    "ignore::DeprecationWarning:alembic",
+    "ignore::DeprecationWarning:starlette",
+    "ignore::DeprecationWarning:asyncio",
+    # anyio 在 Python 3.11+ 用 Task.cancel("msg") 觸發 DeprecationWarning
+    # 若把 warning → error，CancelScope 取消傳遞失敗，整個 ASGI 測試會 hang
+    "ignore::DeprecationWarning:anyio",
+    "ignore::DeprecationWarning",
+    # asyncpg/redis 的 connection __del__ 會在 GC 時噴 ResourceWarning，與測試無關
+    "ignore::ResourceWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+
+# ─────────────────────────────────────────────────────────
+# Bandit (SAST)
+# ─────────────────────────────────────────────────────────
+[tool.bandit]
+exclude_dirs = ["tests", "alembic/versions"]
+skips = ["B101"]

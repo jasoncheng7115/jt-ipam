@@ -22,7 +22,7 @@ from app.models.dns import DNSRecord, DNSServer, DNSZone
 from app.models.subnet import Subnet
 from app.services.dns import DNSAdapterError, get_adapter
 from app.services.dns.base import DNSRecordOp
-
+from app.services.hostname import apply_observation
 
 # ─────────────────── 反解 zone 計算 ───────────────────
 
@@ -178,6 +178,10 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
         return summary
 
     try:
+        # 收集每個 IP 從 DNS 看到的所有正解名稱，最後只套用一個「穩定」的，
+        # 避免同一 IP 有多筆 A 記錄（如 meet3 與 meet3-turn）時每次 sync 挑到不同
+        # 名稱 → hostname 反覆跳動、洗版異動記錄。
+        dns_ip_names: dict[str, set[str]] = {}
         for zinfo in zones_remote:
             summary["pulled_zones"] += 1
             zone = (
@@ -217,6 +221,11 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
                 key = (op.name, op.type, op.value)
                 seen.add(key)
                 summary["pulled_records"] += 1
+
+                # 正解 A/AAAA → 先收集名稱，迴圈跑完再挑穩定的一個套用（見下方）
+                if zone.type == "forward" and op.type in ("A", "AAAA") and op.value and op.name:
+                    dns_ip_names.setdefault(op.value, set()).add(op.name)
+
                 rec = local_keys.get(key)
                 if rec is None:
                     # 全新從 DNS 拉回的紀錄
@@ -244,6 +253,15 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
                     summary["ipam_only"] += 1
 
             zone.last_sync_at = datetime.now(UTC)
+
+        # 每個 IP 只套用一個穩定的 DNS 名稱（字母序最小），避免多筆 A 記錄造成跳動
+        for ip_val, names in dns_ip_names.items():
+            ipa = (await session.execute(
+                select(IPAddress).where(IPAddress.ip == ip_val)
+            )).scalars().first()
+            if ipa is not None and names:
+                await apply_observation(session, ip=ipa, source="dns", hostname=sorted(names)[0])
+                summary["hostname_obs"] = summary.get("hostname_obs", 0) + 1
 
         server.last_sync_at = datetime.now(UTC)
         server.last_error = None
