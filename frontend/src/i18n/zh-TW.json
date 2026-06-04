@@ -1451,7 +1451,7 @@
       "align_center": "置中",
       "align_right": "靠右",
       "ldap_title": "外部認證 — LDAP / AD",
-      "ldap_enable": "啟用 LDAP / AD 認證（找不到本地帳號時改用 LDAP，成功自動建立帳號）",
+      "ldap_enable": "啟用 LDAP / AD 認證（登入頁可選擇「LDAP」領域登入；首次成功登入會自動建立帳號）",
       "ldap_server": "伺服器位址",
       "ldap_port": "連接埠",
       "ldap_tls": "傳輸加密",

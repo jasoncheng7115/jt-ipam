@@ -1451,7 +1451,7 @@
       "align_center": "Center",
       "align_right": "Right",
       "ldap_title": "External auth — LDAP / AD",
-      "ldap_enable": "Enable LDAP / AD auth (used when no local account matches; account auto-created on success)",
+      "ldap_enable": "Enable LDAP / AD auth (pick the \"LDAP\" realm on the login page; account auto-created on first successful login)",
       "ldap_server": "Server host",
       "ldap_port": "Port",
       "ldap_tls": "Transport security",

@@ -43,6 +43,14 @@ class IPAMToolError(Exception):
     pass
 
 
+def _as_uuid(value: str, field: str = "id") -> uuid.UUID:
+    """把 LLM 給的字串轉 UUID；格式不對就回優雅錯誤（避免 ValueError 變成 tool failed）。"""
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError) as exc:
+        raise IPAMToolError(f"invalid {field}: {value!r}") from exc
+
+
 # ─────────────────── 唯讀工具 ───────────────────
 
 
@@ -90,7 +98,7 @@ async def find_free_ip(
     """找指定 subnet 的第一個空閒 IP。可給 cidr 或 subnet_id。"""
     subnet: Subnet | None = None
     if subnet_id:
-        subnet = await session.get(Subnet, uuid.UUID(subnet_id))
+        subnet = await session.get(Subnet, _as_uuid(subnet_id, "subnet_id"))
     elif subnet_cidr:
         # 透過 cidr 直接查
         rows = (
@@ -123,7 +131,7 @@ async def _resolve_subnet(
 ) -> Subnet:
     subnet: Subnet | None = None
     if subnet_id:
-        subnet = await session.get(Subnet, uuid.UUID(subnet_id))
+        subnet = await session.get(Subnet, _as_uuid(subnet_id, "subnet_id"))
     elif subnet_cidr:
         rows = (await session.execute(
             text("SELECT id::text AS id FROM subnets WHERE cidr = CAST(:c AS cidr) LIMIT 1"),
@@ -180,7 +188,7 @@ async def list_subnets(
         limit = 200
     stmt = select(Subnet)
     if section_id:
-        stmt = stmt.where(Subnet.section_id == uuid.UUID(section_id))
+        stmt = stmt.where(Subnet.section_id == _as_uuid(section_id, "section_id"))
     stmt = stmt.order_by(Subnet.cidr).limit(limit)
     rows = list((await session.execute(stmt)).scalars().all())
     visible = set(await filter_visible(
@@ -209,7 +217,7 @@ async def list_subnets(
 async def get_subnet_usage(
     session: AsyncSession, *, user: User, subnet_id: str,
 ) -> dict[str, Any]:
-    s = await session.get(Subnet, uuid.UUID(subnet_id))
+    s = await session.get(Subnet, _as_uuid(subnet_id, "subnet_id"))
     if s is None:
         raise IPAMToolError("subnet not found")
     visible = set(await filter_visible(
@@ -429,7 +437,7 @@ async def get_device(
     """裝置詳情：基本資料 + IP 清單 + （透過 LibreNMS）VLAN 與 switch port。"""
     dev: Device | None = None
     if device_id:
-        dev = await session.get(Device, uuid.UUID(device_id))
+        dev = await session.get(Device, _as_uuid(device_id, "device_id"))
     elif name:
         dev = (await session.execute(
             select(Device).where(Device.name.ilike(name)).limit(1)
@@ -889,8 +897,12 @@ async def list_firewall_rules(
     from app.models.firewall_rule import OPNsenseRule
     fw_id = None
     if firewall_id:
-        fw_id = uuid.UUID(firewall_id)
-    elif firewall_name:
+        try:
+            fw_id = uuid.UUID(firewall_id)
+        except (ValueError, TypeError):
+            # LLM 常把防火牆「名稱」塞進 firewall_id 欄位 → 退而當名稱查
+            firewall_name = firewall_name or firewall_id
+    if fw_id is None and firewall_name:
         fw = (await session.execute(
             select(OPNsenseFirewall).where(OPNsenseFirewall.name == firewall_name)
         )).scalars().first()
@@ -1018,7 +1030,7 @@ async def list_arp(
 
 
 async def list_fdb(
-    session: AsyncSession, *, user: User, mac: str | None = None, limit: int = 100,
+    session: AsyncSession, *, user: User, mac: str | None = None, limit: int = 50,
 ) -> dict[str, Any]:
     """交換器 FDB 紀錄（MAC↔埠）。"""
     stmt = select(FDBEntry)
@@ -1047,7 +1059,7 @@ async def get_customer_summary(
     """單一客戶/單位的掛載統計：sections / subnets / devices / IPs。"""
     cust: Customer | None = None
     if customer_id:
-        cust = await session.get(Customer, uuid.UUID(customer_id))
+        cust = await session.get(Customer, _as_uuid(customer_id, "customer_id"))
     elif name:
         cust = (await session.execute(
             select(Customer).where(Customer.name == name)
@@ -1134,7 +1146,7 @@ async def create_subnet(
         raise IPAMToolError(f"Invalid CIDR: {exc}") from exc
     sec: Section | None = None
     if section_id:
-        sec = await session.get(Section, uuid.UUID(section_id))
+        sec = await session.get(Section, _as_uuid(section_id, "section_id"))
     elif section_name:
         sec = (await session.execute(select(Section).where(Section.name == section_name))).scalars().first()
     if sec is None:
@@ -1165,7 +1177,7 @@ async def approve_ip_request(session: AsyncSession, *, user: User, request_id: s
         raise IPAMToolError("approve_ip_request requires admin")
     from app.models.ip_request import IPRequest
     from app.services.ip_request import approve_request
-    req = await session.get(IPRequest, uuid.UUID(request_id))
+    req = await session.get(IPRequest, _as_uuid(request_id, "request_id"))
     if req is None:
         raise IPAMToolError("request not found")
     sub = await session.get(Subnet, req.subnet_id)
@@ -1187,7 +1199,7 @@ async def reject_ip_request(
         raise IPAMToolError("reject_ip_request requires admin")
     from app.models.ip_request import IPRequest
     from app.services.ip_request import reject_request
-    req = await session.get(IPRequest, uuid.UUID(request_id))
+    req = await session.get(IPRequest, _as_uuid(request_id, "request_id"))
     if req is None:
         raise IPAMToolError("request not found")
     try:

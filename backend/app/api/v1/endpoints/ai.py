@@ -58,7 +58,7 @@ class ChatContext(StrictModel):
 
 class ChatRequest(StrictModel):
     messages: Annotated[list[ChatMessage], Field(min_length=1, max_length=20)]
-    max_iterations: Annotated[int, Field(ge=1, le=8)] = 4
+    max_iterations: Annotated[int, Field(ge=1, le=8)] = 6
     context: ChatContext | None = None
     conversation_id: str | None = None
 

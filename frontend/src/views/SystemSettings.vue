@@ -450,7 +450,9 @@ onMounted(() => {
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
             <n-input v-model:value="ldapTestUser" :placeholder="t('settings.system.ldap_authtest_user')" style="flex:1; min-width:140px" />
             <n-input v-model:value="ldapTestPw" type="password" show-password-on="click" :placeholder="t('settings.system.ldap_authtest_pw')" style="flex:1; min-width:140px" @keyup.enter="doTestLdapAuth" />
-            <n-button :loading="ldapAuthTesting" @click="doTestLdapAuth">{{ t("settings.system.ldap_authtest_btn") }}</n-button>
+            <n-button :loading="ldapAuthTesting" @click="doTestLdapAuth">
+              <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("settings.system.ldap_authtest_btn") }}
+            </n-button>
           </div>
           <div class="hint" style="margin-top:4px">{{ t("settings.system.ldap_authtest_hint") }}</div>
         </div>
@@ -504,8 +506,10 @@ onMounted(() => {
 .ss-wrap { display: flex; flex-direction: column; gap: 24px; max-width: 780px; }
 .ss-group { border: 1px solid var(--n-border-color, rgba(127,127,127,.18)); border-radius: 14px;
   padding: 20px 22px 22px; background: rgba(127,127,127,0.028); box-shadow: 0 1px 3px rgba(15,23,42,.05); }
-.ss-h { margin: 0 0 18px; font-size: 16px; font-weight: 700; padding-left: 12px; line-height: 1.25;
+.ss-h { margin: 0; font-size: 16px; font-weight: 700; padding-left: 12px; line-height: 1.25;
   border-left: 4px solid #18a058; }
+/* 統一卡片內每個區塊的垂直間距，避免欄位標題緊貼上一個元素 */
+.ss-group > * + * { margin-top: 16px; }
 .ss-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 640px) { .ss-grid { grid-template-columns: 1fr; } }
 .fld label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 5px; }

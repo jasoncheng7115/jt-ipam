@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import select, text
+from sqlalchemy import String, cast, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.address import IPAddress
@@ -160,7 +160,7 @@ async def _search_mac(
         (
             await session.execute(
                 select(IPAddress)
-                .where(IPAddress.mac.cast(text("text")).ilike(f"%{cleaned}%"))
+                .where(cast(IPAddress.mac, String).ilike(f"%{cleaned}%"))
                 .limit(limit)
             )
         ).scalars().all()

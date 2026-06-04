@@ -505,7 +505,8 @@ onMounted(() => { void load(); void loadPins(); });
 .hbar-fill { height: 100%; border-radius: 6px; transition: width .3s; }
 .hbar-val { flex: 0 0 auto; min-width: 40px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.75; }
 .chart-legend { display: flex; gap: 14px; font-size: 12px; opacity: 0.7; margin-bottom: 8px; flex-wrap: wrap; }
-.chart-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.chart-legend span { display: inline-flex; align-items: center; }
+.chart-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; flex: none; }
 .trend-wrap { position: relative; }
 .trend-svg { width: 100%; height: 90px; display: block; }
 .trend-tip {
