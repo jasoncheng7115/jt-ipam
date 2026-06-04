@@ -35,6 +35,17 @@ function devLabel(dev: any): string {
 }
 
 // 共用：產生機櫃 SVG 字串 + 尺寸
+// 半 U（左/右）裝置在匯出時要各佔半寬，否則左右兩台會疊在一起
+function partGeom(dev: any): { x: number; w: number; cx: number; half: boolean } {
+  const { colW, gutter } = GEO;
+  const side = dev.rack_side ?? "full";
+  if (side === "left")
+    return { x: gutter + 2, w: colW / 2 - 3, cx: gutter + colW / 4, half: true };
+  if (side === "right")
+    return { x: gutter + colW / 2 + 1, w: colW / 2 - 3, cx: gutter + (colW * 3) / 4, half: true };
+  return { x: gutter + 2, w: colW - 4, cx: gutter + colW / 2, half: false };
+}
+
 function buildSvg(): { svg: string; W: number; H: number } | null {
   const d = props.diagram;
   if (!d) return null;
@@ -59,14 +70,16 @@ function buildSvg(): { svg: string; W: number; H: number } | null {
     const uTop = dev.u_position + dev.u_size - 1;
     const yTop = top + (U - uTop) * rowH;
     const hgt = dev.u_size * rowH;
-    p.push(`<rect x="${gutter + 2}" y="${yTop + 1}" width="${colW - 4}" height="${hgt - 2}" rx="3" fill="${colorFor(dev.type)}" stroke="rgba(0,0,0,0.3)"/>`);
+    const g = partGeom(dev);
+    p.push(`<rect x="${g.x}" y="${yTop + 1}" width="${g.w}" height="${hgt - 2}" rx="3" fill="${colorFor(dev.type)}" stroke="rgba(0,0,0,0.3)"/>`);
     const a = nameAlign.value;
-    const tx = a === "center" ? gutter + colW / 2 : a === "right" ? gutter + colW - 10 : gutter + 10;
-    const anchor = a === "center" ? "middle" : a === "right" ? "end" : "start";
+    // 半 U 太窄，一律置中；全寬才依名稱對齊偏好
+    const tx = g.half ? g.cx : a === "center" ? gutter + colW / 2 : a === "right" ? gutter + colW - 10 : gutter + 10;
+    const anchor = g.half ? "middle" : a === "center" ? "middle" : a === "right" ? "end" : "start";
     p.push(`<text x="${tx}" y="${yTop + hgt / 2 + 4}" text-anchor="${anchor}" font-size="11" font-weight="bold" fill="#ffffff">${esc(devLabel(dev))}</text>`);
     // 安裝於機櫃後側 → 右上角標一個 R 角標（前側為預設，不標）
     if (dev.rack_face === "rear") {
-      const rx = gutter + colW - 2;
+      const rx = g.x + g.w;
       p.push(`<path d="M${rx - 14} ${yTop + 1} L${rx} ${yTop + 1} L${rx} ${yTop + 15} Z" fill="rgba(0,0,0,0.55)"/>`);
       p.push(`<text x="${rx - 2}" y="${yTop + 11}" text-anchor="end" font-size="9" font-weight="bold" fill="#ffffff">R</text>`);
     }
@@ -134,7 +147,9 @@ function exportDrawio() {
     const yTop = top + (U - uTop) * rowH;
     const hgt = dev.u_size * rowH;
     const fill = colorFor(dev.type);
-    cells.push(`<mxCell id="dev${n++}" value="${esc(devLabel(dev))}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=#000000;fontColor=#ffffff;fontStyle=1;align=${nameAlign.value};spacingLeft=6;spacingRight=6;" vertex="1" parent="1"><mxGeometry x="${gutter + 2}" y="${yTop + 1}" width="${colW - 4}" height="${hgt - 2}" as="geometry"/></mxCell>`);
+    const g = partGeom(dev);
+    const align = g.half ? "center" : nameAlign.value;
+    cells.push(`<mxCell id="dev${n++}" value="${esc(devLabel(dev))}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=#000000;fontColor=#ffffff;fontStyle=1;align=${align};spacingLeft=6;spacingRight=6;" vertex="1" parent="1"><mxGeometry x="${g.x}" y="${yTop + 1}" width="${g.w}" height="${hgt - 2}" as="geometry"/></mxCell>`);
   }
   const xml =
     `<mxfile host="jt-ipam"><diagram name="${esc(d.name)}">` +

@@ -87,7 +87,7 @@ function openCreate(kind: Resource) {
     case "tenant":        form.value = { name: "", tenant_group_id: null, description: "" }; break;
     case "tenant_group":  form.value = { name: "", description: "" }; break;
     case "asn":           form.value = { number: 65000, rir: "", description: "", tenant_id: null }; break;
-    case "provider":      form.value = { name: "", account: "", description: "" }; break;
+    case "provider":      form.value = { name: "", account_number: "", description: "" }; break;
     case "circuit":       form.value = { cid: "", provider_id: null, type_id: null, status: "active", up_kbps: null, down_kbps: null, commit_rate_kbps: null, monthly_fee_cents: null, install_date: null, contract_end_date: null, description: "" }; break;
     case "contact_group": form.value = { name: "", description: "" }; break;
     case "contact":       form.value = { name: "", email: "", phone: "", group_id: null, description: "" }; break;
@@ -173,7 +173,7 @@ const asnCols = computed<DataTableColumns<any>>(() => autoSort([
 ]));
 const providerCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
-  { title: t("circuits.account"), key: "account", width: 160, ellipsis: { tooltip: true }, render: (r) => r.account ?? "—" },
+  { title: t("circuits.account"), key: "account_number", width: 160, ellipsis: { tooltip: true }, render: (r) => r.account_number ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("providers", r.id) },
 ]));
@@ -371,7 +371,7 @@ onMounted(() => { void loadAll(); });
             <n-input v-model:value="form.name" placeholder="HiNet / TFN / NTT …" />
           </n-form-item>
           <n-form-item :label="t('circuits.account')">
-            <n-input v-model:value="form.account" :placeholder="t('advanced.account_ph')" />
+            <n-input v-model:value="form.account_number" :placeholder="t('advanced.account_ph')" />
           </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
