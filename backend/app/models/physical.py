@@ -165,6 +165,35 @@ class PowerOutlet(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text)
 
 
+class DevicePowerPort(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """裝置側電源埠（PSU / 電源輸入），可接到某個 PDU 插座（power_outlets）。
+
+    NetBox PowerPort 風：一台裝置可有多個電源埠（雙電源 PSU1/PSU2），各自接到不同
+    插座（A/B 迴路）做電源備援；outlet_id 為空＝尚未接線。
+    """
+
+    __tablename__ = "device_power_ports"
+
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)   # 例：PSU1 / PSU2
+    outlet_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("power_outlets.id", ondelete="SET NULL"),
+        index=True,
+    )
+    max_watts: Mapped[int | None] = mapped_column(Integer)
+    description: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("device_id", "name", name="device_power_port_unique_name"),
+    )
+
+
 # ─────────────────── VPN ───────────────────
 
 

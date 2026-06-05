@@ -21,6 +21,7 @@ from app.models.physical import (
     Cable,
     CableTermination,
     DevicePort,
+    DevicePowerPort,
     PowerFeed,
     PowerOutlet,
     PowerPanel,
@@ -804,6 +805,110 @@ async def update_power_outlet(oid: uuid.UUID, payload: PowerOutletWrite, user: C
 async def delete_power_outlet(oid: uuid.UUID, user: CurrentUser, request: Request,
                               session: Annotated[AsyncSession, Depends(get_session)]) -> None:
     await _power_delete(session, PowerOutlet, oid, "power_outlet", user, request)
+
+
+# ─────────────────── 裝置電源埠（PSU → 插座） ───────────────────
+class DevicePowerPortRead(StrictModel):
+    id: uuid.UUID
+    device_id: uuid.UUID
+    name: str
+    outlet_id: uuid.UUID | None
+    outlet_label: str | None = None
+    max_watts: int | None
+    description: str | None
+
+
+class DevicePowerPortWrite(StrictModel):
+    device_id: uuid.UUID
+    name: Annotated[str, Field(min_length=1, max_length=64)]
+    outlet_id: uuid.UUID | None = None
+    max_watts: Annotated[int | None, Field(ge=0, le=100_000)] = None
+    description: Annotated[str | None, Field(max_length=1024)] = None
+
+
+class DevicePowerPortPatch(StrictModel):
+    name: Annotated[str | None, Field(min_length=1, max_length=64)] = None
+    outlet_id: uuid.UUID | None = None
+    max_watts: Annotated[int | None, Field(ge=0, le=100_000)] = None
+    description: Annotated[str | None, Field(max_length=1024)] = None
+
+
+async def _power_port_out(session: AsyncSession, obj: DevicePowerPort) -> DevicePowerPortRead:
+    out = DevicePowerPortRead.model_validate(obj)
+    if obj.outlet_id:
+        outlet = await session.get(PowerOutlet, obj.outlet_id)
+        if outlet is not None:
+            out.outlet_label = outlet.label
+    return out
+
+
+@router.get("/device-power-ports", response_model=list[DevicePowerPortRead])
+async def list_device_power_ports(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    device_id: uuid.UUID = Query(...),
+) -> list[DevicePowerPortRead]:
+    rows = list((await session.execute(
+        select(DevicePowerPort).where(DevicePowerPort.device_id == device_id)
+        .order_by(DevicePowerPort.name)
+    )).scalars().all())
+    return [await _power_port_out(session, r) for r in rows]
+
+
+@router.post("/device-power-ports", response_model=DevicePowerPortRead, status_code=201,
+             dependencies=[Depends(require_admin)])
+async def create_device_power_port(
+    payload: DevicePowerPortWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DevicePowerPortRead:
+    obj = DevicePowerPort(**payload.model_dump())
+    session.add(obj)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Power port name already exists on this device") from exc
+    await _audit(session, user=user, request=request, object_type="device_power_port",
+                 object_id=str(obj.id), action="create", diff=payload.model_dump(mode="json"))
+    await session.commit()
+    await session.refresh(obj)
+    return await _power_port_out(session, obj)
+
+
+@router.patch("/device-power-ports/{pid}", response_model=DevicePowerPortRead,
+              dependencies=[Depends(require_admin)])
+async def update_device_power_port(
+    pid: uuid.UUID, payload: DevicePowerPortPatch, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DevicePowerPortRead:
+    obj = await session.get(DevicePowerPort, pid)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Power port name conflict") from exc
+    await _audit(session, user=user, request=request, object_type="device_power_port",
+                 object_id=str(obj.id), action="update",
+                 diff=payload.model_dump(mode="json", exclude_unset=True))
+    await session.commit()
+    await session.refresh(obj)
+    return await _power_port_out(session, obj)
+
+
+@router.delete("/device-power-ports/{pid}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_device_power_port(
+    pid: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    obj = await session.get(DevicePowerPort, pid)
+    if obj is None:
+        return
+    await session.delete(obj)
+    await _audit(session, user=user, request=request, object_type="device_power_port",
+                 object_id=str(pid), action="delete", diff=None)
+    await session.commit()
 
 
 # ─────────────────── VPN ───────────────────

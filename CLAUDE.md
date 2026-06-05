@@ -15,7 +15,7 @@
 - **Frontend**: Vue 3 + TypeScript + Vite + Naive UI + Pinia + vue-i18n
 - **Auth**: argon2id + TOTP + JWT（access 15 min / refresh 14 天）
 - **LLM**: Ollama（本地），預設 chat=gpt-oss / embedding=qwen3-embedding；走 `/api/v1/system/llm` 全域設定
-- **OWASP Top 10:2025 是硬性需求** — 每個模組與 PR 都要過心智檢查
+- **OWASP Top 10:2025 是硬性需求** — 每個模組與 PR 都要過逐項自我檢核
 
 ## 權限模型（RBAC）— 硬性需求，新功能/異動一律遵守
 

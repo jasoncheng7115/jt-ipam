@@ -1717,6 +1717,15 @@
     "notify": "提醒管理者",
     "notify_done": "已就 {n} 個失聯 IP 通知 {admins} 位管理者"
   },
+  "power_ports": {
+    "title": "電源埠",
+    "add": "新增電源埠",
+    "name": "名稱",
+    "outlet": "連接插座",
+    "watts": "瓦數",
+    "unconnected": "未接線",
+    "empty": "尚無電源埠"
+  },
   "ports": {
     "title": "連接埠 / 佈線",
     "add": "新增連接埠",

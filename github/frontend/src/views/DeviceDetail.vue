@@ -16,6 +16,7 @@ import { getDeviceRelations, type RelationNode } from "@/api/relations";
 import RelationChain from "@/components/RelationChain.vue";
 import RackDiagram from "@/components/RackDiagram.vue";
 import DevicePortsPanel from "@/components/DevicePortsPanel.vue";
+import DevicePowerPortsPanel from "@/components/DevicePowerPortsPanel.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 import { getRackDiagram } from "@/api/racks";
 type RackDiagramData = Awaited<ReturnType<typeof getRackDiagram>>;
@@ -281,6 +282,8 @@ onMounted(() => {
       </n-card>
 
       <DevicePortsPanel v-if="device" :device-id="device.id" :device-name="device.name" :admin="isAdmin" />
+
+      <DevicePowerPortsPanel v-if="device" :device-id="device.id" :device-name="device.name" :admin="isAdmin" />
 
       <n-card v-if="device" :title="() => cardHead(AddressesIcon, `${t('addresses.ip_list_title')} (${addresses.length})`)">
         <template #header-extra>

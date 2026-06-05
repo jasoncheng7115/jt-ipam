@@ -1719,6 +1719,15 @@
     "notify": "Notify admins",
     "notify_done": "Notified {admins} admin(s) about {n} stale IPs"
   },
+  "power_ports": {
+    "title": "Power ports",
+    "add": "Add power port",
+    "name": "Name",
+    "outlet": "Connected outlet",
+    "watts": "Watts",
+    "unconnected": "Not connected",
+    "empty": "No power ports yet"
+  },
   "ports": {
     "title": "Ports / Cabling",
     "add": "Add port",

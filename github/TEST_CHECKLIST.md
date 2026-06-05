@@ -34,7 +34,7 @@
 - [ ] `GET /api/v1/subnets`、`/addresses`、`/devices`、`/locations`、`/racks` 200
 - [ ] 這次動到的端點：手動打一次成功路徑 + 一個失敗路徑（驗證 4xx 正確）
 
-## 5. OWASP Top 10:2025 心智檢查（這次動到的模組）
+## 5. OWASP Top 10:2025 逐項自我檢核（這次動到的模組）
 
 - [ ] A01 權限：新端點有沒有正確 require_admin / 物件層級授權？
 - [ ] A03 注入 / 輸入驗證：Pydantic StrictModel、檔案上傳驗 magic bytes + 限大小 + 禁危險類型（如 SVG）
