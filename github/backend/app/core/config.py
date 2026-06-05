@@ -186,7 +186,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_embedding_model: str = "qwen3-embedding:8b"
     ollama_chat_model: str = "gpt-oss:120b"
-    ollama_timeout: float = 30.0
+    ollama_timeout: float = 90.0  # 大型模型 + 工具結果上下文時 30s 太短會 ReadTimeout
     embedding_dim: int = 768
 
     # ── Frontend defaults ──

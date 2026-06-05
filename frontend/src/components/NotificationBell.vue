@@ -13,9 +13,12 @@ import {
 } from "naive-ui";
 import { listNotifications, markAllRead, markRead, type Notification } from "@/api/notifications";
 import { BellIcon } from "@/icons";
+import { fmtDateTime, fmtRelative } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
+const router = useRouter();
 
 const items = ref<Notification[]>([]);
 const unread = ref(0);
@@ -48,6 +51,10 @@ async function clearAll() {
   await refresh();
 }
 
+function goAll() {
+  void router.push({ name: "notifications" });
+}
+
 onMounted(() => {
   void refresh();
   timer = window.setInterval(refresh, 60_000);
@@ -65,7 +72,8 @@ onUnmounted(() => {
                 style="display: flex; align-items: center;">
         <n-badge :value="unread" :max="99" :show="unread > 0" :offset="[2, -2]"
                  style="display: flex; align-items: center;">
-          <n-icon :size="20" style="vertical-align: middle;"><BellIcon /></n-icon>
+          <n-icon :size="20" :class="{ 'bell-active': unread > 0 }"
+                  style="vertical-align: middle;"><BellIcon /></n-icon>
         </n-badge>
       </n-button>
     </template>
@@ -85,11 +93,14 @@ onUnmounted(() => {
           <n-space vertical :size="2">
             <strong>{{ n.title }}</strong>
             <n-text v-if="n.body" depth="3" style="font-size: 12px">{{ n.body }}</n-text>
-            <n-text depth="3" style="font-size: 11px">{{ n.created_at }}</n-text>
+            <n-text depth="3" style="font-size: 11px" :title="fmtDateTime(n.created_at)">{{ fmtRelative(n.created_at) }}</n-text>
           </n-space>
         </n-list-item>
       </n-list>
       <n-empty v-else size="small" :description="t('notifications.empty')" />
+      <div style="text-align: center; border-top: 1px solid var(--n-divider-color); padding-top: 6px">
+        <n-button text size="small" @click="goAll">{{ t("notifications.view_all") }}</n-button>
+      </div>
     </n-space>
   </n-popover>
 </template>
@@ -97,5 +108,18 @@ onUnmounted(() => {
 <style scoped>
 .unread {
   background: rgba(64, 128, 255, 0.06);
+}
+/* 有未讀時鈴鐺本身也變色（不只紅色數字） */
+.bell-active {
+  color: #f0a020;
+  animation: bell-pulse 1.6s ease-in-out infinite;
+}
+@keyframes bell-pulse {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(-12deg); }
+  20% { transform: rotate(10deg); }
+  30% { transform: rotate(-6deg); }
+  40% { transform: rotate(4deg); }
+  50% { transform: rotate(0); }
 }
 </style>

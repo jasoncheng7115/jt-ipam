@@ -105,6 +105,44 @@ def require_admin(user: CurrentUser) -> User:
     return user
 
 
+async def forbid_zero_visibility(
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """全域基礎設施類端點（NAT / 防火牆 / 進階 / 實體）讀取門檻：
+    非管理員且對所有物件類型皆無可見範圍（零權限帳號）→ 403。
+    有任一可見範圍（含唯讀檢視者的 wildcard）或管理員則放行。"""
+    if user.is_admin:
+        return
+    from app.services.permission import visible_ids
+    for ot in ("subnet", "device", "customer", "section", "rack", "location"):
+        v = await visible_ids(session, user=user, object_type=ot)
+        if v is None or v:
+            return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No visible resources")
+
+
+async def require_global_read(
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """全域基礎設施（VLAN / VRF / NAT / 防火牆 / DNS / 虛擬化 / 站對站 VPN / 佈線…）
+    這些不屬於 7 種可逐物件授權的類型，無法依物件範圍過濾。
+    僅「管理員」或「具萬用(全部)讀取權限者（如唯讀檢視者）」可讀；
+    只被指派特定物件（部門範圍）的帳號 → 403，不得窺見全域資料。"""
+    if user.is_admin:
+        return
+    from app.services.permission import visible_ids
+    for ot in ("subnet", "device", "customer", "section", "rack", "location"):
+        v = await visible_ids(session, user=user, object_type=ot)
+        if v is None:  # None = 萬用授權（全部可見）
+            return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Global resource requires full visibility",
+    )
+
+
 def require_object_perm(
     object_type: ObjectType,
     required: PermLevel,

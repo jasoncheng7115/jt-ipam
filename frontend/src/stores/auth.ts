@@ -34,10 +34,11 @@ export const useAuthStore = defineStore("auth", () => {
     localStorage.removeItem(STORAGE_KEY_REFRESH);
   }
 
-  async function login(username: string, password: string): Promise<TokenResponse> {
+  async function login(username: string, password: string, realm = "local"): Promise<TokenResponse> {
     const { data } = await apiClient.post<TokenResponse>("/api/v1/auth/login", {
       username,
       password,
+      realm,
     });
     if (data.mfa_required && data.mfa_token) {
       mfaToken.value = data.mfa_token;

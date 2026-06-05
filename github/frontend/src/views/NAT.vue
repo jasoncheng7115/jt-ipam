@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
+const _authBtn = useAuthStore();
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -345,7 +347,7 @@ onMounted(() => { void refresh(); void loadOpts(); });
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
       </n-button>
-      <n-button type="primary" @click="openCreate">
+      <n-button type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openCreate">
         <template #icon><n-icon><PlusIcon /></n-icon></template>
         {{ t("common.create") }}
       </n-button>

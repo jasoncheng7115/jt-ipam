@@ -632,6 +632,7 @@ async def sync_nat_rules(
         _ip_cache[key] = str(row) if row else None
         return _ip_cache[key]
 
+    nat_ifmap = await _iface_name_map(fw)   # opt2→WAN2 等介面顯示名
     seen_uuids: set[str] = set()
     inserted = updated = 0
     errors: list[str] = []
@@ -694,14 +695,19 @@ async def sync_nat_rules(
         # port 對應：對 port_forward —
         #   src_port = 外部 port (destination.port / destination_port)
         #   dst_port = 內部 port (target_port / local-port)
-        src_port = _port(r.get("source_port") or r.get("srcport")
-                         or r.get("destination_port"))
-        dst_port = _port(r.get("target_port") or r.get("destination_port")
-                         if default_type != "port_forward"
-                         else r.get("target_port"))
+        # searchRule 各版本 key 名不一：redirect 目的埠可能叫 target_port / local_port / local-port
+        ext_port_raw = r.get("destination_port") or r.get("dstport") or r.get("dst_port")
+        redir_port_raw = (r.get("target_port") or r.get("local_port")
+                          or r.get("local-port") or r.get("localport"))
+        src_port = _port(r.get("source_port") or r.get("srcport") or ext_port_raw)
+        dst_port = _port(redir_port_raw or ext_port_raw)
         if default_type == "port_forward":
-            src_port = _port(r.get("destination_port"))
-            dst_port = _port(r.get("target_port"))
+            src_port = _port(ext_port_raw)
+            dst_port = _port(redir_port_raw)
+            # 反向代理等「外部=內部」port-forward，legacy config 有時只存 local-port；
+            # 外部埠沒抓到時退用 redirect 埠，來源埠才不會空白。
+            if src_port is None and dst_port is not None:
+                src_port = dst_port
 
         # 目的 IP（port_forward 的 target = 內部 IP）
         dst_ip_id = await _resolve_ip_id(r.get("target"))
@@ -733,10 +739,10 @@ async def sync_nat_rules(
                 protocol=proto,
                 src_port=src_port,
                 dst_port=dst_port,
-                src_interface=(r.get("interface") or None),
+                src_interface=_resolve_iface(r.get("interface"), nat_ifmap),
                 dst_ip_id=dst_ip_id,
                 device_id=device_id,
-                description=(r.get("description") or None),
+                description=(r.get("description") or r.get("descr") or None),
                 source_origin=origin,
                 external_id=ruuid,
                 **extra,
@@ -749,10 +755,10 @@ async def sync_nat_rules(
             existing.protocol = proto
             existing.src_port = src_port
             existing.dst_port = dst_port
-            existing.src_interface = r.get("interface") or None
+            existing.src_interface = _resolve_iface(r.get("interface"), nat_ifmap)
             existing.dst_ip_id = dst_ip_id  # type: ignore[assignment]
             existing.device_id = device_id
-            existing.description = r.get("description") or None
+            existing.description = r.get("description") or r.get("descr") or None
             for _k, _v in extra.items():
                 setattr(existing, _k, _v)
             updated += 1

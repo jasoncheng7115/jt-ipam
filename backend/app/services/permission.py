@@ -150,6 +150,20 @@ async def get_object_permission(
     return best  # type: ignore[return-value]
 
 
+async def has_any_write(session: AsyncSession, *, user: User) -> bool:
+    """使用者（或其群組）是否擁有任一 write/admin 授權。
+    前端用來決定是否顯示/啟用「新增 / 編輯 / 刪除」等異動按鈕（純唯讀帳號 → False）。"""
+    if user.is_admin:
+        return True
+    conds = _principal_conds(user, await _user_group_ids(session, user.id))
+    row = (await session.execute(
+        select(Permission.id)
+        .where(or_(*conds), Permission.level.in_(("write", "admin")))
+        .limit(1)
+    )).first()
+    return row is not None
+
+
 async def visible_ids(
     session: AsyncSession, *, user: User, object_type: ObjectType, required: PermLevel = "read",
 ) -> set[uuid.UUID] | None:

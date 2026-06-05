@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
+const _authBtn = useAuthStore();
 import { computed, h, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -40,6 +42,7 @@ import { useCustomers } from "@/composables/useCustomers";
 import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 const { t } = useI18n();
 
@@ -133,7 +136,7 @@ const ipColumnPickerItems = [
   { key: "stale_days", label: t("stale.col_stale") },
   { key: "note", label: t("cols.note") },
 ];
-import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon } from "@/icons";
+import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";
@@ -156,7 +159,8 @@ const addresses = ref<IPAddress[]>([]);
 const loading = ref(false);
 
 // ── DHCP 發放範圍：標示落在 pool 內的 IP（多段都涵蓋）──
-const dhcpRanges = ref<[number, number][]>([]);
+interface DhcpRangeInfo { a: number; b: number; server: string; source: string; start: string; end: string; }
+const dhcpRanges = ref<DhcpRangeInfo[]>([]);
 function ipv4ToInt(ip: string): number | null {
   const m = ip.trim().split(".");
   if (m.length !== 4) return null;
@@ -171,19 +175,29 @@ function ipv4ToInt(ip: string): number | null {
 async function loadDhcpRanges() {
   try {
     const rows = await listDhcpRanges();
-    const out: [number, number][] = [];
+    const out: DhcpRangeInfo[] = [];
     for (const r of rows) {
       const a = ipv4ToInt(r.start_ip), b = ipv4ToInt(r.end_ip);
-      if (a != null && b != null) out.push([Math.min(a, b), Math.max(a, b)]);
+      if (a != null && b != null) {
+        out.push({
+          a: Math.min(a, b), b: Math.max(a, b),
+          server: r.firewall_name || "—",
+          source: (r.source || "").toUpperCase(),
+          start: r.start_ip, end: r.end_ip,
+        });
+      }
     }
     dhcpRanges.value = out;
   } catch { dhcpRanges.value = []; }
 }
-function isDhcpIp(ip: string | null | undefined): boolean {
-  if (!ip) return false;
+function dhcpInfoForIp(ip: string | null | undefined): DhcpRangeInfo | null {
+  if (!ip) return null;
   const n = ipv4ToInt(String(ip).split("/")[0]);
-  if (n == null) return false;
-  return dhcpRanges.value.some(([a, b]) => n >= a && n <= b);
+  if (n == null) return null;
+  return dhcpRanges.value.find((r) => n >= r.a && n <= r.b) ?? null;
+}
+function isDhcpIp(ip: string | null | undefined): boolean {
+  return dhcpInfoForIp(ip) != null;
 }
 
 const section = ref<Section | null>(null);
@@ -373,9 +387,22 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
   { title: t("common.status"), key: "state", width: 100,
     render: (r) => (r as any).__gap ? "" : stateTag(r.state) },
   { title: "DHCP", key: "dhcp", width: 80,
-    render: (r) => (r as any).__gap || !isDhcpIp(r.ip)
-      ? ""
-      : h(NTag, { size: "tiny", type: "warning", bordered: false }, { default: () => "DHCP" }) },
+    render: (r) => {
+      if ((r as any).__gap) return "";
+      const info = dhcpInfoForIp(r.ip);
+      if (!info) return "";
+      return h(NTooltip, { delay: 0 }, {
+        trigger: () => h(NTag, { size: "tiny", type: "warning", bordered: false }, { default: () => "DHCP" }),
+        default: () => h("div", { style: "max-width:260px;line-height:1.5" }, [
+          h("div", t("addresses.dhcp_pool_hint")),
+          h("div", { style: "margin-top:4px" }, [
+            h("strong", `${t("addresses.dhcp_server")}：`),
+            `${info.server}${info.source ? ` (${info.source})` : ""}`,
+          ]),
+          h("div", `${t("addresses.dhcp_range")}：${info.start} – ${info.end}`),
+        ]),
+      });
+    } },
   { title: t("addresses.mac"), key: "mac", width: 150, render: (r) => r.mac ?? "" },
   { title: t("cols.vendor"), key: "mac_vendor", width: 140,
     ellipsis: { tooltip: true }, render: (r) => r.mac_vendor ?? "—" },
@@ -759,16 +786,20 @@ onMounted(() => {
         </template>
         <template #header-extra>
           <n-space align="center">
-            <n-button v-if="subnet" type="primary" size="small" @click="onAddAddress">
+            <n-button v-if="subnet" type="primary" size="small" :disabled="_authBtn.me?.can_edit === false" @click="onAddAddress">
               <template #icon><n-icon><PlusIcon /></n-icon></template>
               {{ t("subnet_detail.add_address") }}
             </n-button>
             <n-button size="small" :type="staleFilterOn ? 'warning' : 'default'"
                       @click="staleFilterOn = !staleFilterOn">
+              <template #icon><n-icon><MissingIcon /></n-icon></template>
               {{ t("stale.filter_label") }}
             </n-button>
             <ColumnPicker :all="ipColumnPickerItems" :visible="ipVisibleKeys"
                           @update:visible="setIpVisible" @reset="resetIpVisible" />
+            <ExportButton v-if="subnet" size="small" :columns="ipColumns" :rows="addresses"
+                          :filename="`ip-${subnet.cidr.replace('/', '_')}`"
+                          :title="`${t('addresses.ip_list_title')} ${subnet.cidr}`" />
             <n-button @click="load(subnet.id)" :loading="loading">
               <template #icon><n-icon><RefreshIcon /></n-icon></template>
               {{ t("common.refresh") }}

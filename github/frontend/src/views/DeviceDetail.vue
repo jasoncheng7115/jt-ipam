@@ -158,23 +158,25 @@ function liveDot(r: IPAddress) {
 
 const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
   { title: "", key: "live", width: 28, render: (r) => liveDot(r) },
-  { title: t("addresses.ip"), key: "ip", width: 140 },
-  { title: t("addresses.hostname"), key: "hostname", minWidth: 140,
+  { title: t("addresses.ip"), key: "ip", width: 130 },
+  // 固定寬度 + ellipsis：不再吃掉多餘寬度（短主機名稱不留大片空白，長的省略號）
+  { title: t("addresses.hostname"), key: "hostname", width: 130,
     ellipsis: { tooltip: true }, render: (r) => r.hostname ?? "" },
-  { title: t("common.status"), key: "state", width: 100, render: (r) => stateTag(r.state) },
-  { title: t("addresses.mac"), key: "mac", width: 150, render: (r) => r.mac ?? "" },
-  { title: t("cols.vendor"), key: "mac_vendor", width: 140,
+  { title: t("common.status"), key: "state", width: 92, render: (r) => stateTag(r.state) },
+  { title: t("addresses.mac"), key: "mac", width: 138, render: (r) => r.mac ?? "" },
+  { title: t("cols.vendor"), key: "mac_vendor", width: 110,
     ellipsis: { tooltip: true }, render: (r) => r.mac_vendor ?? "—" },
-  { title: t("addresses.switch_port"), key: "switch_port", minWidth: 180,
+  // 多餘寬度交給交換器位置 / 說明這兩個內容較長的欄吸收
+  { title: t("addresses.switch_port"), key: "switch_port", minWidth: 140,
     ellipsis: { tooltip: false },
     render: (r) => !r.switch_port ? ""
       : h(NTooltip, null, {
           trigger: () => h(SwitchPortLabel, { value: r.switch_port, dim: r.switch_port_confident === false }),
           default: () => r.switch_port_confident === false
             ? t("addresses.switch_port_uncertain") : r.switch_port }) },
-  { title: t("common.description"), key: "description", minWidth: 140,
+  { title: t("common.description"), key: "description", minWidth: 110,
     ellipsis: { tooltip: true }, render: (r) => r.description ?? "" },
-  { title: t("addresses.last_seen"), key: "last_seen", width: 170, render: (r) => lastSeen(r) },
+  { title: t("addresses.last_seen"), key: "last_seen", width: 158, render: (r) => lastSeen(r) },
 ]));
 
 const ipColumns = computed<DataTableColumns<IPAddress>>(() =>
@@ -297,7 +299,7 @@ onMounted(() => {
           :pagination="{ pageSize: 50, showSizePicker: true, pageSizes: [25, 50, 100] }"
           :bordered="false"
           size="small"
-          :scroll-x="1120"
+          :scroll-x="1020"
           :row-props="(row: IPAddress) => ({
             style: 'cursor: pointer',
             onClick: () => openRow(row),

@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.virt import (
@@ -23,7 +23,7 @@ from app.models.virt import (
 from app.schemas.base import Paginated, StrictModel
 from app.services import proxmox as proxmox_service
 
-router = APIRouter(prefix="/virt", tags=["virtualization"])
+router = APIRouter(prefix="/virt", tags=["virtualization"], dependencies=[Depends(require_global_read)])
 
 
 class ClusterRead(StrictModel):

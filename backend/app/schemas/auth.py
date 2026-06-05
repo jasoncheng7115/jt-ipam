@@ -12,6 +12,7 @@ from app.schemas.base import StrictModel
 class LoginRequest(StrictModel):
     username: Annotated[str, Field(min_length=1, max_length=128)]
     password: Annotated[str, Field(min_length=1, max_length=256)]
+    realm: Annotated[str, Field(max_length=32)] = "local"
 
 
 class TokenResponse(StrictModel):

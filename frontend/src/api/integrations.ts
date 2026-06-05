@@ -302,6 +302,7 @@ export async function syncFirewall(id: string): Promise<unknown> {
 export interface DhcpPoolRange {
   id: string; firewall_id: string; subnet_cidr: string;
   start_ip: string; end_ip: string; family: number; source: string;
+  firewall_name?: string | null;
 }
 // 所有 DHCP 發放範圍（IP 清單用來標示 DHCP 動態區）。需 admin；非 admin 取不到時回空。
 export async function listDhcpRanges(): Promise<DhcpPoolRange[]> {

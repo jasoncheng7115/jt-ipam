@@ -7,6 +7,7 @@
     "title": "Sign in to jt-ipam",
     "username": "Username or Email",
     "password": "Password",
+    "realm": "Realm",
     "submit": "Sign in",
     "failed": "Login failed; please check your credentials",
     "mfa_prompt": "Enter the 6-digit code from your authenticator",
@@ -66,9 +67,10 @@
     "system_settings": "System Settings",
     "version": "Version Info",
     "firewall_admin": "OPNsense connections",
-    "virt_admin": "Proxmox connections",
+    "virt_admin": "Proxmox VE connections",
     "oui_admin": "MAC Vendors (OUI)",
-    "system_admin": "System administrator"
+    "system_admin": "System administrator",
+    "system_logs": "System logs"
   },
   "topbar": {
     "search": "Search…",
@@ -106,6 +108,7 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "refresh": "Refresh",
+    "add": "Add",
     "ok": "OK",
     "fail": "Failed",
     "name": "Name",
@@ -218,6 +221,7 @@
     "manual": "Manual",
     "member_count": "Members",
     "username": "Username",
+    "username_external": "External account (managed by its realm)",
     "diff": "Diff",
     "failed_login": "Failed logins",
     "model": "Model",
@@ -422,9 +426,15 @@
     "placeholder": "e.g. list usage of 192.168.1.0/24; find a free IP in 10.0.0.0/24",
     "footer": "Enter to send · Shift+Enter for newline · stays local, never sent externally",
     "tool_running": "Running tool: {name}…",
+    "confirm_intro": "This action changes data — please confirm before it runs:",
+    "confirm_do": "Confirm",
+    "confirm_cancel": "Cancel",
+    "confirm_done": "Done: {what}",
+    "confirm_fail": "Action failed",
+    "confirm_cancelled": "Cancelled",
     "foot_send": "to send",
     "foot_newline": "newline",
-    "foot_local": "chats stay local, never sent externally",
+    "foot_local": "AI responses may be wrong — please verify",
     "assistant": "AI assistant",
     "related": "Related"
   },
@@ -484,7 +494,9 @@
   "notifications": {
     "title": "Notifications",
     "mark_all_read": "Mark all read",
-    "empty": "No notifications"
+    "empty": "No notifications",
+    "view_all": "View all",
+    "history_title": "Notification history"
   },
   "vlans": {
     "device_count": "Devices",
@@ -577,7 +589,7 @@
       "snmp": "LibreNMS (sysName)"
     },
     "model_title": "Device model source order",
-    "model_subtitle": "When multiple sources (LibreNMS hardware / Proxmox / OPNsense) provide a device model, higher = preferred; manual is highest and can't be disabled. Drag to reorder."
+    "model_subtitle": "When multiple sources (LibreNMS hardware / Proxmox VE / OPNsense) provide a device model, higher = preferred; manual is highest and can't be disabled. Drag to reorder."
   },
   "addresses": {
     "search_placeholder": "Search all fields (IP / hostname / MAC / description / owner / switch location / note)",
@@ -588,6 +600,9 @@
     "hostname": "Hostname",
     "mac": "MAC",
     "owner": "Owner",
+    "dhcp_pool_hint": "This IP falls within a DHCP server's dynamic lease pool.",
+    "dhcp_server": "DHCP server",
+    "dhcp_range": "Pool range",
     "switch_port": "Switch location",
     "switch_port_uncertain": "Low confidence: learned via an uplink/trunk (multiple MACs on that port), not a direct access port. LibreNMS did not flag it confident.",
     "note": "Note",
@@ -684,6 +699,9 @@
     "active": "active",
     "reserved": "reserved",
     "dhcp": "dhcp",
+    "dhcp_pool_hint": "This IP falls within a DHCP server's dynamic lease pool.",
+    "dhcp_server": "DHCP server",
+    "dhcp_range": "Pool range",
     "offline": "offline",
     "free": "free",
     "online": "online",
@@ -1131,7 +1149,8 @@
     "mac_drifts": "MAC drifts",
     "ghost_ips": "Ghost IPs",
     "unauthorized": "Unauthorized IPs",
-    "raw_report": "Raw report"
+    "raw_report": "Raw report",
+    "none_found": "No anomalies found"
   },
   "webhooks": {
     "events_label": "events (* = all)",
@@ -1150,11 +1169,11 @@
     "contacts": "Contacts",
     "contact_groups": "Contact Groups",
     "wireless": "Wireless",
-    "create_tenant": "New Tenant",
-    "create_tenant_group": "New Tenant Group",
+    "create_tenant": "New tenant",
+    "create_tenant_group": "New tenant group",
     "create_asn": "New ASN",
     "create_provider": "New Provider",
-    "create_circuit": "New Circuit",
+    "create_circuit": "Add circuit",
     "create_contact_group": "New Contact Group",
     "create_contact": "New Contact",
     "create_ssid": "New SSID",
@@ -1177,7 +1196,12 @@
     "commit_kbps": "Commit (kbps)",
     "monthly_fee": "Monthly fee (cents)",
     "install_date": "Install date",
-    "contract_end": "Contract end"
+    "contract_end": "Contract end",
+    "status_active": "Active",
+    "status_planned": "Planned",
+    "status_provisioning": "Provisioning",
+    "status_offline": "Offline",
+    "status_decommissioned": "Decommissioned"
   },
   "contacts": {
     "group": "Group"
@@ -1185,7 +1209,7 @@
   "virt": {
     "clusters": "Clusters",
     "vms": "VMs",
-    "proxmox": "Proxmox Connections",
+    "proxmox": "Proxmox VE Connections",
     "cluster": "Cluster",
     "type": "Type",
     "node": "Node",
@@ -1193,7 +1217,7 @@
     "bridge": "Bridge",
     "last_sync": "Last sync",
     "add_cluster": "Add cluster",
-    "add_proxmox": "Add Proxmox connection",
+    "add_proxmox": "Add Proxmox VE connection",
     "pick_cluster": "Select a cluster",
     "auth_username": "Username",
     "token_id": "API Token ID",
@@ -1201,7 +1225,7 @@
     "interval": "Sync interval (s)",
     "token_hint": "Create an API Token under Datacenter → Permissions → API Tokens, and grant read-only privileges.",
     "help_title": "How to get an API Token",
-    "help_step1": "In Proxmox, create a Token under Datacenter → Permissions → API Tokens (tip: uncheck \"Privilege Separation\" for simplicity).",
+    "help_step1": "In Proxmox VE, create a Token under Datacenter → Permissions → API Tokens (tip: uncheck \"Privilege Separation\" for simplicity).",
     "help_step2": "Under Datacenter → Permissions → Add → API Token Permission, assign the token as:",
     "help_step3": "Fill the Token ID and Secret above back into this form.",
     "test_ok": "Connection test succeeded",
@@ -1209,7 +1233,7 @@
     "err_need_cluster": "Please select a cluster first (create one in the Clusters tab if none exist)",
     "err_token_secret": "Token Secret must be at least 8 characters",
     "multinode_hint": "You can add multiple node connections per cluster. On sync the system auto-selects a healthy node to pull the whole cluster, failing over to another node if one is down.",
-    "edit_proxmox": "Edit Proxmox connection",
+    "edit_proxmox": "Edit Proxmox VE connection",
     "clone": "Clone",
     "api_url_primary": "API URL (primary node)",
     "extra_urls": "Other node API URLs (failover)",
@@ -1228,7 +1252,7 @@
       "suspended": "Suspended",
       "unknown": "Unknown"
     },
-    "proxmox_admin_title": "Proxmox connections"
+    "proxmox_admin_title": "Proxmox VE connections"
   },
   "physical": {
     "cabling": "Cabling",
@@ -1238,7 +1262,29 @@
     "outlets": "Outlets",
     "vpn_peer": "Peer",
     "pair_reliable": "pubkey pair",
-    "pair_besteffort": "endpoint match (best-effort)"
+    "pair_besteffort": "endpoint match (best-effort)",
+    "a_end": "A end (device / port)",
+    "b_end": "B end (device / port)",
+    "add_cable": "Add cable",
+    "a_device": "A-end device",
+    "a_port": "A-end port",
+    "b_device": "B-end device",
+    "b_port": "B-end port",
+    "pick_device": "Select device",
+    "pick_port": "Select port",
+    "pick_both_ports": "Select a port on both ends",
+    "same_port": "Both ends can't be the same port",
+    "cable_label": "Label",
+    "need_name": "Enter a name",
+    "need_panel": "Select a panel",
+    "edit_cable": "Edit cable",
+    "cable_color": "Color",
+    "cable_length_m": "Length (m)",
+    "cable_filter_ph": "Filter: type / label / ends / desc",
+    "cable_filter_device": "Filter by device",
+    "cable_status_connected": "Connected",
+    "cable_status_planned": "Planned",
+    "cable_status_decommissioned": "Decommissioned"
   },
   "migration": {
     "title": "phpIPAM migration",
@@ -1427,12 +1473,57 @@
       "align_left": "Left",
       "align_center": "Center",
       "align_right": "Right",
+      "ldap_title": "External auth — LDAP / AD",
+      "ldap_enable": "Enable LDAP / AD auth (pick the \"LDAP / AD\" realm on the login page; account auto-created on first successful login)",
+      "ldap_server": "Server host",
+      "ldap_port": "Port",
+      "ldap_tls": "Transport security",
+      "ldap_tls_none": "No encryption (not recommended)",
+      "ldap_bind_dn": "Bind DN (service account)",
+      "ldap_bind_pw": "Bind password",
+      "ldap_pw_set": "Set (leave blank to keep)",
+      "ldap_pw_unset": "Not set",
+      "ldap_pw_clear": "Clear",
+      "ldap_search_base": "Search base",
+      "ldap_user_filter": "User filter",
+      "ldap_user_filter_hint": "AD: (sAMAccountName={username}); OpenLDAP often (uid={username}). {username} is substituted with the login name.",
+      "ldap_attr_email": "Email attribute",
+      "ldap_attr_name": "Display-name attribute",
+      "ldap_attr_groups": "Groups attribute",
+      "ldap_admin_groups": "Admin groups (one DN per line)",
+      "ldap_admin_groups_hint": "Users in these groups get admin rights automatically on login.",
+      "ldap_default_role": "Default role for auto-created accounts",
+      "ldap_no_default_role": "(none — sees nothing until granted)",
+      "ldap_default_role_hint": "Non-admin LDAP accounts auto-created on first login join this role (group) for an initial visibility scope; leave empty to require manual assignment.",
+      "ldap_test": "Test connection",
+      "ldap_test_ok": "Connected",
+      "ldap_test_fail": "Connection failed",
+      "ldap_hint": "Settings are stored in the database with the bind password encrypted (AES-GCM); changes apply immediately, no restart. Users log in with their AD credentials in the normal login form.",
+      "ldap_authtest": "Test with credentials (full auth flow)",
+      "ldap_authtest_user": "Test username",
+      "ldap_authtest_pw": "Test password",
+      "ldap_authtest_btn": "Test auth",
+      "ldap_authtest_need": "Enter test username and password",
+      "ldap_authtest_hint": "Runs the real flow (admin bind → find user by filter → bind as that user); on success shows the resolved DN and admin flag, to diagnose filter/credentials.",
+      "af_title": "Forward audit to Graylog",
+      "af_enable": "Forward audit events (sent live on login / data changes)",
+      "af_host": "Graylog host",
+      "af_port": "Port",
+      "af_protocol": "Protocol",
+      "af_format": "Format",
+      "af_test": "Send test",
+      "af_test_ok": "Sent",
+      "af_test_fail": "Send failed",
+      "af_need_host": "Enter a host first",
+      "af_hint": "Best-effort; failures never affect the app. GELF default port 12201; syslog often 514. GELF over TCP is NULL-delimited, over UDP sends raw JSON (fine for small events; prefer TCP at volume).",
       "graylog_title": "Graylog DSV lookup",
       "graylog_enable": "Enable the DSV lookup endpoint (for Graylog to poll)",
       "graylog_path": "Path name",
       "graylog_format": "Format",
       "graylog_regen": "Regenerate token",
-      "graylog_url": "Lookup URL (for Graylog)",
+      "graylog_url": "Lookup URL (HTTPS, for Graylog)",
+      "graylog_url_http": "Lookup URL (plain HTTP, for Graylog)",
+      "graylog_url_http_hint": "Served on dedicated port 8088, unencrypted; the token is exposed on the wire — trusted LAN only. To disable, remove the 8088 server block in the nginx config.",
       "graylog_copy": "Copy",
       "graylog_hint": "In Graylog, add a “DSV File from HTTP” data adapter and paste the URL above; pick separator , or Tab per format, key column = 1, value column = 2 (key = IP, value = hostname / FQDN). Regenerate the token any time to revoke access."
     }
@@ -1442,7 +1533,9 @@
     "unauthorized": "Unauthorized",
     "not_found": "Not found",
     "server": "Server error",
-    "session_expired": "Your session has expired. Please sign in again."
+    "session_expired": "Your session has expired. Please sign in again.",
+    "admin_required": "Administrator privileges are required for this action",
+    "no_visible_resources": "You have no accessible resources yet; please ask an administrator to grant access"
   },
   "adguard_admin": {
     "api_user": "API user",
@@ -1494,7 +1587,11 @@
     "reload_list": "Reload list",
     "timeout_sec": "Timeout (s)",
     "chat_model": "Chat model",
-    "embedding_model": "Embedding model"
+    "embedding_model": "Embedding model",
+    "tools_title": "jt-ipam MCP tools",
+    "tools_intro": "The AI assistant and external MCP clients can call these {n} tools ({m} of which change data and require confirmation). Read-only tools answer instantly; mutating ones pause in the AI chat for you to confirm.",
+    "tools_mutating": "Mutating",
+    "tools_readonly": "Read-only"
   },
   "rack_diagram": {
     "empty": "No devices in this rack",
@@ -1623,5 +1720,11 @@
     "type_vlan": "VLAN",
     "col_mac": "MAC",
     "internal_link": "Internal"
+  },
+  "system_logs": {
+    "title": "System logs",
+    "lines": "lines",
+    "download": "Download",
+    "empty": "(no logs)"
   }
 }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,22 @@ from app.services.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+@router.get("/realms")
+async def list_realms(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """登入頁可選的領域（本機一律有；LDAP/AD 啟用時才列出）。"""
+    from app.services.system_config import get_ldap_config
+    realms: list[dict[str, str]] = [{"value": "local", "label": "本機"}]
+    try:
+        cfg = await get_ldap_config(session)
+        if cfg.enabled:
+            realms.append({"value": "ldap", "label": "LDAP / AD"})
+    except Exception:
+        pass
+    return {"realms": realms}
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
@@ -46,6 +62,7 @@ async def login(
             session,
             username=payload.username,
             password=payload.password,
+            realm=payload.realm,
             actor_ip=request.client.host if request.client else None,
             actor_user_agent=request.headers.get("user-agent"),
             request_id=getattr(request.state, "request_id", None),
@@ -237,8 +254,32 @@ async def logout(_user: CurrentUser) -> None:
 
 
 @router.get("/me", response_model=UserMe)
-async def me(user: CurrentUser) -> UserMe:
-    return UserMe.model_validate(user)
+async def me(
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> UserMe:
+    out = UserMe.model_validate(user)
+    # has_visibility：任一類型有可見範圍即 True（零權限→False）
+    # has_global_read：管理員或任一類型有「萬用」授權（visible_ids 回 None）→ True
+    if user.is_admin:
+        out.has_visibility = True
+        out.has_global_read = True
+        out.can_edit = True
+    else:
+        from app.services.permission import has_any_write, visible_ids
+        has_vis = False
+        has_global = False
+        for ot in ("subnet", "device", "customer", "section", "rack", "location"):
+            v = await visible_ids(session, user=user, object_type=ot)
+            if v is None:
+                has_global = True
+                has_vis = True
+            elif v:
+                has_vis = True
+        out.has_visibility = has_vis
+        out.has_global_read = has_global
+        out.can_edit = await has_any_write(session, user=user)
+    return out
 
 
 # ─────────────────── LDAP admin test ───────────────────
@@ -246,10 +287,14 @@ from app.api.v1.dependencies import require_admin as _require_admin
 
 
 @router.get("/ldap/test", dependencies=[Depends(_require_admin)])
-async def ldap_test() -> dict[str, object]:
-    """從伺服器以設定的 bind DN 連線 LDAP，驗證設定是否正確。"""
+async def ldap_test(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object]:
+    """從伺服器以目前設定（DB 覆蓋 env）連線 LDAP，驗證設定是否正確。"""
+    from app.services.system_config import get_ldap_config
+    cfg = await get_ldap_config(session)
     try:
-        return await ldap_auth.test_connection()
+        return await ldap_auth.test_connection(cfg)
     except ldap_auth.LDAPNotConfigured as exc:
         raise HTTPException(503, detail=str(exc)) from exc
     except ldap_auth.LDAPAuthError as exc:

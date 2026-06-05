@@ -182,10 +182,10 @@ async def run_detection(
         ).scalars().all()
 
         for category, items in (
-            ("IP conflicts", report.ip_conflicts),
-            ("MAC drifts", report.mac_drifts),
-            ("Ghost IPs", report.ghost_ips),
-            ("Unauthorized IPs", report.unauthorized_ips),
+            ("IP 衝突", report.ip_conflicts),
+            ("MAC 變動", report.mac_drifts),
+            ("失聯 IP", report.ghost_ips),
+            ("未授權 IP", report.unauthorized_ips),
         ):
             if not items:
                 continue
@@ -194,8 +194,8 @@ async def run_detection(
                     session,
                     user_id=admin.id,
                     severity="warning",
-                    title=f"{category}: {len(items)} new finding(s)",
-                    body="See /anomalies for details.",
+                    title=f"{category}：新增 {len(items)} 筆",
+                    body="詳見「異常偵測」頁面。",
                     link="/anomalies",
                     object_type="anomaly",
                 )

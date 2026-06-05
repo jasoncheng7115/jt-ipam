@@ -29,7 +29,7 @@ from app.models.audit import AuditLog
 from app.models.section import Section
 from app.models.subnet import Subnet
 from app.schemas.base import StrictModel
-from app.services.permission import filter_visible
+from app.services.permission import filter_visible, visible_ids
 from app.services.subnet import host_count
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -136,6 +136,13 @@ async def overview(
     )
     visible_subnets = [s for s in all_subnets if s.id in subnet_visible]
     visible_subnet_ids = {s.id for s in visible_subnets}
+
+    # ── 各物件類型可見範圍（None = 萬用/全部；set = 限定）。儀表板所有全域統計都要依此縮放，
+    #     避免只被指派單一子網路的帳號看到全機構的裝置/機櫃/單位/稽核等彙總。──
+    dev_vis = await visible_ids(session, user=user, object_type="device")
+    rack_vis = await visible_ids(session, user=user, object_type="rack")
+    loc_vis = await visible_ids(session, user=user, object_type="location")
+    cust_vis = await visible_ids(session, user=user, object_type="customer")
 
     # ── 計算 capacity / used / per-subnet usage ──
     total_capacity = 0
@@ -253,30 +260,44 @@ async def overview(
         ))
     section_heat.sort(key=lambda x: x.used_pct, reverse=True)
 
-    # ── audit 24h ──
+    # ── audit 24h（稽核屬全域安全記錄，僅管理員可見彙總）──
     cutoff = datetime.now(UTC) - timedelta(hours=24)
-    audit_24h = int(
-        await session.scalar(
-            select(func.count()).select_from(AuditLog).where(AuditLog.ts >= cutoff)
+    audit_24h = 0
+    if user.is_admin:
+        audit_24h = int(
+            await session.scalar(
+                select(func.count()).select_from(AuditLog).where(AuditLog.ts >= cutoff)
+            )
+            or 0
         )
-        or 0
-    )
 
-    # ── 關係鏈各層總數（裝置 / 機櫃 / 機房 / 虛擬機）──
+    # ── 關係鏈各層總數（依可見範圍縮放；None=全部）──
     from app.models.device import Device
     from app.models.location import Location, Rack
     from app.models.virt import VirtualMachine
-    devices_n = int(await session.scalar(select(func.count()).select_from(Device)) or 0)
-    racks_n = int(await session.scalar(select(func.count()).select_from(Rack)) or 0)
-    locations_n = int(await session.scalar(select(func.count()).select_from(Location)) or 0)
-    vms_n = int(await session.scalar(select(func.count()).select_from(VirtualMachine)) or 0)
 
-    # ── 裝置類型分布 ──
-    dtype_rows = (
-        await session.execute(
-            select(Device.type, func.count()).group_by(Device.type)
-        )
-    ).all()
+    async def _scoped_count(model: type, vis: set[uuid.UUID] | None) -> int:
+        if vis is None:
+            return int(await session.scalar(select(func.count()).select_from(model)) or 0)
+        return len(vis)
+    devices_n = await _scoped_count(Device, dev_vis)
+    racks_n = await _scoped_count(Rack, rack_vis)
+    locations_n = await _scoped_count(Location, loc_vis)
+    # VM 無逐物件授權，掛在單位下；非萬用單位權限者只計自己單位的 VM
+    if cust_vis is None:
+        vms_n = int(await session.scalar(select(func.count()).select_from(VirtualMachine)) or 0)
+    elif cust_vis:
+        vms_n = int(await session.scalar(
+            select(func.count()).select_from(VirtualMachine)
+            .where(VirtualMachine.customer_id.in_(cust_vis))) or 0)
+    else:
+        vms_n = 0
+
+    # ── 裝置類型分布（依可見裝置範圍）──
+    dtype_stmt = select(Device.type, func.count()).group_by(Device.type)
+    if dev_vis is not None:
+        dtype_stmt = dtype_stmt.where(Device.id.in_(dev_vis)) if dev_vis else dtype_stmt.where(False)
+    dtype_rows = (await session.execute(dtype_stmt)).all()
     device_types = sorted(
         [TypeCount(type=str(t or "other"), count=int(c)) for t, c in dtype_rows],
         key=lambda x: x.count, reverse=True,
@@ -293,6 +314,9 @@ async def overview(
         select(Device.customer_id, func.count()).where(Device.customer_id.is_not(None))
         .group_by(Device.customer_id))).all()}
     cust_ids = set(sub_by_cust) | set(ip_by_cust) | set(dev_by_cust)
+    if cust_vis is not None:  # 非萬用單位權限 → 只留自己可見的單位
+        allowed_cust = {str(x) for x in cust_vis}
+        cust_ids &= allowed_cust
     customer_resources = sorted(
         [CustomerResource(
             customer_id=cid,
@@ -306,22 +330,33 @@ async def overview(
 
     # ── 近 14 日 稽核 / IP 異動 趨勢 ──
     from app.models.ip_change_log import IPChangeLog
-    day = func.date_trunc("day", AuditLog.ts)
-    audit_by_day = {str(r[0].date()): int(r[1]) for r in (await session.execute(
-        select(day, func.count()).where(AuditLog.ts >= datetime.now(UTC) - timedelta(days=14))
-        .group_by(day))).all()}
+    # 稽核趨勢僅管理員可見；IP 異動趨勢依可見子網路縮放
+    audit_by_day: dict[str, int] = {}
+    if user.is_admin:
+        day = func.date_trunc("day", AuditLog.ts)
+        audit_by_day = {str(r[0].date()): int(r[1]) for r in (await session.execute(
+            select(day, func.count()).where(AuditLog.ts >= datetime.now(UTC) - timedelta(days=14))
+            .group_by(day))).all()}
     day2 = func.date_trunc("day", IPChangeLog.created_at)
+    ipc_stmt = (select(day2, func.count())
+                .where(IPChangeLog.created_at >= datetime.now(UTC) - timedelta(days=14)))
+    if visible_subnet_ids:
+        ipc_stmt = ipc_stmt.where(IPChangeLog.subnet_id.in_(visible_subnet_ids))
+    else:
+        ipc_stmt = ipc_stmt.where(False)
     ipc_by_day = {str(r[0].date()): int(r[1]) for r in (await session.execute(
-        select(day2, func.count()).where(IPChangeLog.created_at >= datetime.now(UTC) - timedelta(days=14))
-        .group_by(day2))).all()}
+        ipc_stmt.group_by(day2))).all()}
     today = datetime.now(UTC).date()
     activity_trend = []
     for i in range(13, -1, -1):
         d = (today - timedelta(days=i)).isoformat()
         activity_trend.append(TrendPoint(day=d, audit=audit_by_day.get(d, 0), ip_changes=ipc_by_day.get(d, 0)))
 
-    # ── 機櫃 U 使用率 ──
-    rack_rows = (await session.execute(select(Rack.id, Rack.name, Rack.u_height))).all()
+    # ── 機櫃 U 使用率（依可見機櫃範圍）──
+    rack_stmt = select(Rack.id, Rack.name, Rack.u_height)
+    if rack_vis is not None:
+        rack_stmt = rack_stmt.where(Rack.id.in_(rack_vis)) if rack_vis else rack_stmt.where(False)
+    rack_rows = (await session.execute(rack_stmt)).all()
     # 半 U（左/右兩台同列）只算一列 → 以實際佔用的 U 列數計，避免 sum(u_size) 重複累加
     dev_rows = (await session.execute(
         select(Device.rack_id, Device.u_position, Device.u_size)

@@ -108,8 +108,10 @@ async def put_graylog_dsv_ep(
         session, actor_user_id=str(user.id),
         actor_ip=request.client.host if request.client else None,
         actor_user_agent=request.headers.get("user-agent"),
-        object_type="system_setting", object_id="graylog_dsv", action="update",
-        diff={"enabled": out["enabled"], "fmt": out["fmt"], "path": out["path"]},
+        object_type="system_setting", object_id=None, action="update",
+        diff={"setting": "graylog_dsv", "enabled": out["enabled"], "fmt": out["fmt"],
+              "path": out["path"]},
+        request_id=getattr(request.state, "request_id", None),
     )
     await session.commit()
     return out

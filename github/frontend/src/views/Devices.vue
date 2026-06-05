@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
+const _authBtn = useAuthStore();
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -419,7 +421,7 @@ onMounted(async () => {
                     @update:visible="setVisible" @reset="reset" />
       <ExportButton :columns="cols" :rows="rows" :fetch-all="fetchAllForExport"
                     filename="devices" :title="t('nav.devices')" />
-      <n-button type="primary" @click="openCreate">
+      <n-button type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openCreate">
         <template #icon><n-icon><PlusIcon /></n-icon></template>
         {{ t("common.create") }}
       </n-button>

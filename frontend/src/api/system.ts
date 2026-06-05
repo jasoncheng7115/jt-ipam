@@ -12,6 +12,50 @@ export async function putGraylogDsv(p: {
   return data;
 }
 
+// ── 外部認證 / LDAP（AD） ──
+export interface LdapConfig {
+  enabled: boolean; server: string | null; port: number;
+  use_ssl: boolean; use_starttls: boolean;
+  bind_dn: string | null; password_set: boolean;
+  search_base: string | null; user_filter: string;
+  attr_email: string; attr_display_name: string; attr_member_of: string;
+  admin_groups: string[];
+  default_group_id: string | null;
+}
+export type LdapPatch = Omit<LdapConfig, "password_set"> & { bind_password?: string | null };
+
+export async function getLdap(): Promise<LdapConfig> {
+  const { data } = await apiClient.get<LdapConfig>("/api/v1/system/ldap");
+  return data;
+}
+export async function putLdap(p: LdapPatch): Promise<LdapConfig> {
+  const { data } = await apiClient.put<LdapConfig>("/api/v1/system/ldap", p);
+  return data;
+}
+export async function testLdap(): Promise<{ bound: boolean; server: string; port: number; tls: string; who_am_i?: string }> {
+  const { data } = await apiClient.post("/api/v1/system/ldap/test", {});
+  return data;
+}
+export async function testLdapAuth(username: string, password: string): Promise<{ ok: boolean; dn: string; username: string; display_name: string | null; email: string | null; is_admin: boolean }> {
+  const { data } = await apiClient.post("/api/v1/system/ldap/test-auth", { username, password });
+  return data;
+}
+
+// ── 稽核轉送到 Graylog ──
+export interface AuditForward { enabled: boolean; host: string | null; port: number; protocol: "tcp" | "udp"; fmt: "gelf" | "syslog" | "cef"; }
+export async function getAuditForward(): Promise<AuditForward> {
+  const { data } = await apiClient.get<AuditForward>("/api/v1/system/audit-forward");
+  return data;
+}
+export async function putAuditForward(p: AuditForward): Promise<AuditForward> {
+  const { data } = await apiClient.put<AuditForward>("/api/v1/system/audit-forward", p);
+  return data;
+}
+export async function testAuditForward(p: AuditForward): Promise<{ ok: boolean; sent_to: string; fmt: string }> {
+  const { data } = await apiClient.post("/api/v1/system/audit-forward/test", p);
+  return data;
+}
+
 export interface LLMConfig {
   enabled: boolean;
   url: string;

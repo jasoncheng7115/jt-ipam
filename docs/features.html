@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>jt-ipam — 功能地圖 / Feature map</title>
+<meta name="description" content="jt-ipam 全功能地圖（樹狀）。Full feature map of jt-ipam." />
+<style>
+  :root{
+    --green:#18a058; --green-h:#36ad6a; --cyan:#22d3ee;
+    --ink:#0f172a; --body:#334155; --muted:#64748b;
+    --bg:#eef3ee; --card:#ffffff; --line:#e2e8e4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;
+    color:var(--body);background:var(--bg);line-height:1.7}
+  a{color:inherit;text-decoration:none}
+  .en{display:none}
+  body.lang-en .zh{display:none}
+  body.lang-en .en{display:initial}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  /* ── 與首頁一致的頂列 ── */
+  nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:saturate(1.4) blur(8px);
+    border-bottom:1px solid var(--line)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--ink);font-size:18px}
+  .nav-links{display:flex;gap:16px;margin-left:auto;flex-wrap:wrap;align-items:center}
+  .nav-links a{color:var(--body);font-size:14px;font-weight:500}
+  .nav-links a:hover{color:var(--green)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 18px;border-radius:10px;
+    font-weight:600;font-size:15px;line-height:1.3;border:1px solid transparent;cursor:pointer;font-family:inherit}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--green)}
+  .btn-sm{padding:6px 12px;font-size:13px}
+  @media(max-width:820px){.nav-links a:not(.btn){display:none}}
+  /* ── 內容 ── */
+  h1{font-size:clamp(26px,4vw,36px);color:var(--ink);margin:30px 0 6px}
+  .sub{color:var(--muted);font-size:14.5px;margin:0 0 24px}
+  .tree{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 26px 26px;
+    box-shadow:0 1px 3px rgba(15,23,42,.05)}
+  .grp{font-weight:800;color:var(--ink);font-size:16.5px;margin:22px 0 6px;display:flex;align-items:center;gap:9px}
+  .grp:first-child{margin-top:6px}
+  .grp .ic{width:22px;height:22px;color:var(--green);flex:none}
+  /* 樹狀分支連線 */
+  ul.branch{list-style:none;margin:0;padding-left:30px}
+  ul.branch > li{position:relative;padding:3px 0 3px 20px;font-size:14.5px}
+  ul.branch > li::before{content:"";position:absolute;left:0;top:-4px;bottom:0;width:2px;background:var(--line)}
+  ul.branch > li:last-child::before{height:20px;bottom:auto}
+  ul.branch > li::after{content:"";position:absolute;left:0;top:16px;width:14px;height:2px;background:var(--line)}
+  ul.branch > li .leaf::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+    background:var(--green);margin-right:8px;vertical-align:middle;opacity:.7}
+  footer{margin:30px 0 80px;font-size:12.5px;color:var(--muted);text-align:center}
+  footer a{color:var(--green)}
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap nav-in">
+    <span class="brand">
+      <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="#18a058"/>
+        <g stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.9">
+          <line x1="18" y1="18" x2="32" y2="32"/><line x1="46" y1="18" x2="32" y2="32"/>
+          <line x1="18" y1="46" x2="32" y2="32"/><line x1="46" y1="46" x2="32" y2="32"/>
+        </g>
+        <g fill="#fff"><circle cx="18" cy="18" r="5"/><circle cx="46" cy="18" r="5"/>
+          <circle cx="18" cy="46" r="5"/><circle cx="46" cy="46" r="5"/></g>
+        <circle cx="32" cy="32" r="8" fill="#fff"/><circle cx="32" cy="32" r="3.5" fill="#18a058"/>
+      </svg>
+      jt-ipam
+    </span>
+    <div class="nav-links">
+      <a href="index.html#features"><span class="zh">特色</span><span class="en">Features</span></a>
+      <a href="index.html#integrations"><span class="zh">整合</span><span class="en">Integrations</span></a>
+      <a href="index.html#screens"><span class="zh">畫面</span><span class="en">Screenshots</span></a>
+      <a href="index.html#ai">AI</a>
+      <a href="index.html#install"><span class="zh">安裝</span><span class="en">Install</span></a>
+      <a class="btn btn-ghost btn-sm" href="index.html"><span class="zh">回首頁</span><span class="en">Home</span></a>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/jasoncheng7115/jt-ipam" target="_blank" rel="noopener">GitHub</a>
+      <button class="btn btn-ghost btn-sm" id="langBtn" type="button">English</button>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <h1><span class="zh">功能地圖</span><span class="en">Feature map</span></h1>
+  <p class="sub"><span class="zh">jt-ipam 全功能樹狀總覽（每次改版同步更新）。</span><span class="en">A tree overview of everything jt-ipam does (kept in sync each release).</span></p>
+
+  <div class="tree">
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/></svg><span class="zh">IPAM 核心</span><span class="en">Core IPAM</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">區段 → 子網路 → IP 位址（階層管理、上下層繼承）</span><span class="en">Section → Subnet → IP (hierarchy &amp; inheritance)</span></span></li>
+      <li><span class="leaf"><span class="zh">使用率與 IP 指示計（上線/離線/未知 即時方格）</span><span class="en">Utilization &amp; live IP indicator grid</span></span></li>
+      <li><span class="leaf"><span class="zh">DHCP 範圍標示、重疊網段偵測</span><span class="en">DHCP-range marking, overlap detection</span></span></li>
+      <li><span class="leaf"><span class="zh">失聯 IP 篩選與批次回收、子網路歸檔（連帶隱藏 IP）</span><span class="en">Stale-IP filter &amp; bulk reclaim, subnet archive (hides its IPs)</span></span></li>
+      <li><span class="leaf"><span class="zh">IP 異動記錄、主機名稱多源優先序</span><span class="en">IP change log, multi-source hostname precedence</span></span></li>
+      <li><span class="leaf"><span class="zh">VLAN / VLAN Domain、VRF</span><span class="en">VLAN / VLAN Domain, VRF</span></span></li>
+      <li><span class="leaf"><span class="zh">CSV 匯入；匯出 CSV / Markdown / PDF / Excel / ODS、欄位選擇</span><span class="en">CSV import; export CSV / Markdown / PDF / Excel / ODS, column picker</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16M4 13h16"/></svg><span class="zh">實體資產</span><span class="en">Physical assets</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">機房 / 地點：平面圖（拖拉定位/旋轉）、世界地圖、機櫃與裝置數</span><span class="en">Rooms / sites: floor plan (drag/rotate), world map, rack &amp; device counts</span></span></li>
+      <li><span class="leaf"><span class="zh">機櫃：U 位圖、半 U、正面/背面切換、多格式匯出（SVG/PNG/drawio）</span><span class="en">Racks: U map, half-U, front/rear toggle, export (SVG/PNG/drawio)</span></span></li>
+      <li><span class="leaf"><span class="zh">裝置：連接埠、纜線多跳追蹤（Cable Trace）、佈線管理</span><span class="en">Devices: ports, multi-hop cable trace, cabling</span></span></li>
+      <li><span class="leaf"><span class="zh">電力：配電盤 → 饋線 → 插座、電力試算</span><span class="en">Power: panel → feed → outlet, power calculator</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg><span class="zh">虛擬化</span><span class="en">Virtualization</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">Proxmox VE：叢集 / 節點 / VM、網路介面（bridge/bond/NIC）對應與追蹤</span><span class="en">Proxmox VE: clusters / nodes / VMs, NIC (bridge/bond) mapping &amp; trace</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg><span class="zh">整合（單向拉取）</span><span class="en">Integrations (pull-only)</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">DNS、AdGuard、LibreNMS、Wazuh</span><span class="en">DNS, AdGuard, LibreNMS, Wazuh</span></span></li>
+      <li><span class="leaf"><span class="zh">OPNsense：防火牆規則 / 別名 / NAT、DHCP / ARP / OpenVPN</span><span class="en">OPNsense: firewall rules / aliases / NAT, DHCP / ARP / OpenVPN</span></span></li>
+      <li><span class="leaf"><span class="zh">Graylog：記錄補主機名稱（Lookup Table）、稽核事件轉送（syslog/CEF/GELF）</span><span class="en">Graylog: log enrichment, audit forwarding (syslog/CEF/GELF)</span></span></li>
+      <li><span class="leaf"><span class="zh">phpIPAM 遷移（SSH tunnel 匯入）</span><span class="en">phpIPAM migration (import over SSH tunnel)</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3M9 18h6a3 3 0 0 0 3-3"/></svg><span class="zh">拓樸與工具</span><span class="en">Topology &amp; tools</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">網路拓樸圖（L3 推導、VPN 端點、篩選）</span><span class="en">Network topology (L3 inference, VPN endpoints, filters)</span></span></li>
+      <li><span class="leaf"><span class="zh">網路工具：CIDR 計算/切割/聚合、遮罩、EUI-64、MAC 格式、DNS 解析、郵件 DNS、GeoIP</span><span class="en">Net tools: CIDR calc/split/aggregate, netmask, EUI-64, MAC format, DNS lookup, mail DNS, GeoIP</span></span></li>
+      <li><span class="leaf"><span class="zh">站對站 VPN（WireGuard 公鑰配對 / IPsec 端點比對）</span><span class="en">Site-to-site VPN (WireGuard key pairing / IPsec match)</span></span></li>
+      <li><span class="leaf"><span class="zh">OUI 廠商查詢（每月更新）</span><span class="en">OUI vendor lookup (monthly refresh)</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg><span class="zh">AI 助理</span><span class="en">AI assistant</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">本地 Ollama 自然語言查詢（資料不外送）、MCP server 供外部 LLM</span><span class="en">Local Ollama NL queries (no data leaves), MCP server for external LLMs</span></span></li>
+      <li><span class="leaf"><span class="zh">語意搜尋（embedding + pgvector）、異常偵測、AI 異動前確認</span><span class="en">Semantic search (embedding + pgvector), anomaly detection, confirm-before-mutate</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.4 7.5 8 9 4.6-1.5 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg><span class="zh">安全與管理</span><span class="en">Security &amp; admin</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">物件級 RBAC（7 類物件、階層繼承、內建角色、多單位/客戶隔離）</span><span class="en">Object-level RBAC (7 types, inheritance, built-in roles, multi-tenant isolation)</span></span></li>
+      <li><span class="leaf"><span class="zh">認證：argon2id + TOTP + JWT、API Token、LDAP/AD、SSO（OIDC/SAML）</span><span class="en">Auth: argon2id + TOTP + JWT, API tokens, LDAP/AD, SSO (OIDC/SAML)</span></span></li>
+      <li><span class="leaf"><span class="zh">稽核記錄（SHA-256 鏈）、系統記錄（systemd journal）、通知中心</span><span class="en">Audit log (SHA-256 chain), system logs (systemd journal), notifications</span></span></li>
+      <li><span class="leaf"><span class="zh">語系/時間偏好、表格欄位與釘選（跟著帳號存）</span><span class="en">Locale/time prefs, per-account table columns &amp; pins</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2M5.5 7 2 12l3.5 5M18.5 7 22 12l-3.5 5"/></svg><span class="zh">部署</span><span class="en">Deployment</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">systemd + apt（Proxmox LXC / 裸機）、預設強制 HTTPS、一行安裝/升級/移除腳本</span><span class="en">systemd + apt (LXC / bare metal), HTTPS enforced, one-line install/upgrade/uninstall</span></span></li>
+    </ul>
+  </div>
+
+  <footer>
+    <span class="zh">完整原始碼與文件見 </span><span class="en">Full source &amp; docs at </span>
+    <a href="https://github.com/jasoncheng7115/jt-ipam" target="_blank" rel="noopener">GitHub</a>
+  </footer>
+</div>
+
+<script>
+  (function(){
+    var btn=document.getElementById('langBtn');
+    var KEY='jtipam-doc-lang';
+    if(localStorage.getItem(KEY)==='en') document.body.classList.add('lang-en');
+    function setBtn(){ btn.textContent=document.body.classList.contains('lang-en')?'繁體中文':'English'; }
+    setBtn();
+    btn.addEventListener('click',function(){
+      document.body.classList.toggle('lang-en');
+      localStorage.setItem(KEY, document.body.classList.contains('lang-en')?'en':'zh');
+      setBtn();
+    });
+  })();
+</script>
+</body>
+</html>

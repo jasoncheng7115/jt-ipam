@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useFloatingHScroll } from "@/composables/useFloatingHScroll";
@@ -53,6 +53,11 @@ useFloatingHScroll();
 const auth = useAuthStore();
 const { theme, locale } = storeToRefs(ui);
 const { me } = storeToRefs(auth);
+// 右上以「帳號@領域」呈現：本機帳號補 @local；外部帳號的 username 已是 jason@ldap 形式
+const accountLabel = computed(() => {
+  const u = me.value?.username || "";
+  return u.includes("@") ? u : `${u}@local`;
+});
 
 // ── 子網路導覽 tree（在子網路詳情頁時，左側選單把子網路展開、依客戶分組）──
 const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
@@ -83,7 +88,9 @@ const subnetTreeChildren = computed<MenuOption[] | undefined>(() => {
     const cid = s.customer_id || "__none__";
     if (!groups.has(cid)) {
       groups.set(cid, {
-        label: s.customer_id ? customerLabelFor(s.customer_id) : t("nav.subnet_no_customer"),
+        label: s.customer_id
+          ? (s.customer_name || customerLabelFor(s.customer_id))
+          : t("nav.subnet_no_customer"),
         items: [],
       });
     }
@@ -195,10 +202,23 @@ const menuOptions = computed<MenuOption[]>(() => {
           { label: () => "LLM / AI",             key: "llm_settings",   icon: renderIcon(SettingsIcon) },
           { label: () => t("nav.system_settings"), key: "system_settings", icon: renderIcon(SettingsIcon) },
           { label: () => t("nav.version"),       key: "version",        icon: renderIcon(AdminIcon) },
+          { label: () => t("nav.system_logs"),   key: "system_logs",    icon: renderIcon(AuditIcon) },
           { label: () => t("nav.chat_history"),  key: "chat_history",   icon: renderIcon(ChatHistoryIcon) },
         ],
       },
     );
+  }
+  // 零權限非管理員：後端對 nat/firewall/dns/librenms/virt/實體 等已 403，
+  // 其餘資料頁也只會是空的 → 選單只留儀表板/工具/作業，避免點了就出錯。
+  if (!me.value?.is_admin && me.value?.has_visibility === false) {
+    const allowed = new Set(["dashboard", "tools"]);
+    return base.filter((o) => allowed.has(o.key as string));
+  }
+  // 非管理員且無「全域讀取」（只被指派特定物件）→ 隱藏全域基礎設施選單，
+  // 後端對這些端點也會 403（VLAN/VRF/NAT/防火牆/DNS/虛擬化/站對站 VPN…）。
+  if (!me.value?.is_admin && me.value?.has_global_read === false) {
+    const hide = new Set(["vlans", "vrfs", "nat", "phase3"]);
+    return base.filter((o) => !hide.has(o.key as string));
   }
   return base;
 });
@@ -258,11 +278,27 @@ watch(winW, (w, prev) => {
   if (w < NARROW_PX && prev >= NARROW_PX) siderCollapsed.value = true;
   else if (w >= NARROW_PX && prev < NARROW_PX) siderCollapsed.value = false;
 });
+// 選單往上捲時，在固定的 logo 欄下方加陰影，與捲動內容分隔
+const menuScrolled = ref(false);
+let siderScrollEl: HTMLElement | null = null;
+function onSiderScroll() {
+  if (siderScrollEl) menuScrolled.value = siderScrollEl.scrollTop > 2;
+}
 onMounted(() => {
   window.addEventListener("resize", onResize);
   if (winW.value < NARROW_PX) siderCollapsed.value = true;
+  void nextTick(() => {
+    siderScrollEl = document.querySelector(".app-sider .n-layout-sider-scroll-container");
+    if (siderScrollEl) {
+      siderScrollEl.addEventListener("scroll", onSiderScroll, { passive: true });
+      onSiderScroll();
+    }
+  });
 });
-onBeforeUnmount(() => window.removeEventListener("resize", onResize));
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", onResize);
+  if (siderScrollEl) siderScrollEl.removeEventListener("scroll", onSiderScroll);
+});
 
 // ── 左側選單可拖動改變寬度 ──
 const SIDER_MIN = 180;
@@ -309,7 +345,7 @@ function startDrag(e: MouseEvent) {
       @update:collapsed="(v) => { siderCollapsed = v; }"
     >
       <div v-if="!siderCollapsed" class="sider-resizer" @mousedown="startDrag"></div>
-      <div class="brand" :class="{ 'brand-collapsed': siderCollapsed }">
+      <div class="brand" :class="{ 'brand-collapsed': siderCollapsed, 'brand-scrolled': menuScrolled }">
         <!-- 收折：只顯示方塊 icon；展開：方塊 + jt-ipam wordmark(currentColor 跟主題色) -->
         <svg v-if="siderCollapsed"
              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" class="brand-logo" aria-label="jt-ipam">
@@ -396,7 +432,7 @@ function startDrag(e: MouseEvent) {
               @select="handleUserMenu"
             >
               <n-button text style="display: flex; gap: 6px; align-items: center">
-                <span>{{ me.username }}</span>
+                <span>{{ accountLabel }}</span>
                 <n-tooltip v-if="me.is_admin" :delay="0">
                   <template #trigger>
                     <n-icon :size="15" :component="AdminIcon" style="color: #18a058" />
@@ -426,6 +462,11 @@ function startDrag(e: MouseEvent) {
   top: 0;
   z-index: 3;
   background: var(--n-color, #fff);
+  transition: box-shadow 0.18s ease;
+}
+/* 選單往上捲到 logo 欄下方時，加陰影做出層次分隔 */
+.brand-scrolled {
+  box-shadow: 0 6px 12px -6px rgba(0, 0, 0, 0.28);
 }
 .brand-collapsed {
   padding: 14px 0;

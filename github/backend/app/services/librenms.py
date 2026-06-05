@@ -443,6 +443,18 @@ async def sync_fdb(
     seen = inserted = updated = 0
     now = datetime.now(UTC)
 
+    # LibreNMS FDB 的 vlan_id 是內部 row id，不是 dot1q VLAN 號。
+    # /api/v0/resources/vlans 會給 vlan_id + vlan_vlan（真正 VLAN 號）→ 建全域對照。
+    vlanmap: dict[int, int] = {}
+    try:
+        vdata = await _api_get(instance, "/api/v0/resources/vlans", timeout=30.0)
+        for v in vdata.get("vlans") or []:
+            vid, vnum = v.get("vlan_id"), v.get("vlan_vlan")
+            if vid is not None and vnum is not None:
+                vlanmap[int(vid)] = int(vnum)
+    except (LibreNMSError, ValueError, TypeError):
+        vlanmap = {}
+
     for d in devices:
         # LibreNMS fdb 只有 port_id（數字）→ 先抓該裝置的 ports 建 port_id→ifName 對照
         portmap: dict[int, str] = {}
@@ -470,9 +482,14 @@ async def sync_fdb(
             mac = mac.lower()
             vlan = entry.get("vlan_id")
             try:
-                vlan_int = int(vlan) if vlan is not None else None
+                raw_vid = int(vlan) if vlan is not None else None
             except (ValueError, TypeError):
-                vlan_int = None
+                raw_vid = None
+            # 用對照表還原真正 VLAN 號；對不到就存 None（不存誤導的 row id）
+            vlan_int = vlanmap.get(raw_vid) if raw_vid is not None else None
+            if vlan_int is None and not vlanmap and raw_vid is not None:
+                # 完全沒有 vlan 對照（API 不支援）時，退回原值以免整段沒資料
+                vlan_int = raw_vid
             port_name = entry.get("ifName") or entry.get("port_name")
             if not port_name and entry.get("port_id") is not None:
                 try:

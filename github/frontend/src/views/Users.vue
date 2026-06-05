@@ -90,7 +90,7 @@ const newPasswordStrength = computed(() => {
 const showEdit = ref(false);
 const editing = ref<User | null>(null);
 const editForm = ref({
-  email: "", display_name: "", password: "",
+  username: "", email: "", display_name: "", password: "",
 });
 
 const providerOptions = [
@@ -169,6 +169,7 @@ async function submitCreate() {
 function openEdit(u: User) {
   editing.value = u;
   editForm.value = {
+    username: u.username,
     email: u.email,
     display_name: u.display_name ?? "",
     password: "",
@@ -182,6 +183,11 @@ async function submitEdit() {
       email: editForm.value.email,
       display_name: editForm.value.display_name || undefined,
     };
+    // 帳號名只有本機帳號可改
+    if (editing.value.auth_provider === "local" && editForm.value.username
+        && editForm.value.username !== editing.value.username) {
+      payload.username = editForm.value.username;
+    }
     if (editForm.value.password) payload.password = editForm.value.password;
     await updateUser(editing.value.id, payload);
     showEdit.value = false;
@@ -378,6 +384,11 @@ onMounted(() => { void refresh(); });
         </n-space>
       </template>
       <n-form>
+        <n-form-item :label="t('users.username')">
+          <n-input v-model:value="editForm.username"
+                   :disabled="editing?.auth_provider !== 'local'"
+                   :placeholder="editing?.auth_provider !== 'local' ? t('cols.username_external') : ''" />
+        </n-form-item>
         <n-form-item :label="t('users.email')">
           <n-input v-model:value="editForm.email" />
         </n-form-item>

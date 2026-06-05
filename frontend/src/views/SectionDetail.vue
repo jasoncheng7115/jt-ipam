@@ -4,17 +4,20 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NSpace, NIcon, NButton, NDescriptions, NDescriptionsItem,
-  NProgress, NDataTable, NSpin,
+  NProgress, NDataTable, NSpin, NModal, NForm, NFormItem, NInput, NSelect,
+  NCheckbox, NInputNumber,
   useMessage, type DataTableColumns,
 } from "naive-ui";
-import { SectionsIcon, SubnetsIcon, RefreshIcon } from "@/icons";
+import { SectionsIcon, SubnetsIcon, RefreshIcon, EditIcon, SaveIcon, CancelIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { apiClient } from "@/api/client";
 import { listSubnets, getSubnetUsage } from "@/api/subnets";
+import { updateSection } from "@/api/sections";
 import type { Section, Subnet, SubnetUsage } from "@/types";
 import { autoSort } from "@/composables/useTableSort";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useCustomers } from "@/composables/useCustomers";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import { computed } from "vue";
 const { t } = useI18n();
@@ -39,6 +42,51 @@ const section = ref<Section | null>(null);
 const subnets = ref<Subnet[]>([]);
 const usageMap = ref<Record<string, SubnetUsage>>({});
 const loading = ref(false);
+
+const { options: customerOptions, ensureLoaded: ensureCustomerOptsLoaded } = useCustomers();
+const showEdit = ref(false);
+const saving = ref(false);
+const form = ref({
+  name: "",
+  description: "" as string | null,
+  strict_mode: false,
+  display_order: 0 as number | null,
+  customer_id: null as string | null,
+});
+
+function openEdit() {
+  if (!section.value) return;
+  void ensureCustomerOptsLoaded();
+  form.value = {
+    name: section.value.name,
+    description: section.value.description ?? "",
+    strict_mode: section.value.strict_mode,
+    display_order: section.value.display_order,
+    customer_id: section.value.customer_id ?? null,
+  };
+  showEdit.value = true;
+}
+
+async function saveEdit() {
+  if (!section.value) return;
+  saving.value = true;
+  try {
+    await updateSection(section.value.id, {
+      name: form.value.name,
+      description: form.value.description || null,
+      strict_mode: form.value.strict_mode,
+      display_order: form.value.display_order ?? 0,
+      customer_id: form.value.customer_id ?? null,
+    });
+    showEdit.value = false;
+    msg.success(t("common.saved"));
+    await load(section.value.id);
+  } catch {
+    msg.error(t("errors.network"));
+  } finally {
+    saving.value = false;
+  }
+}
 
 async function load(id: string) {
   loading.value = true;
@@ -113,16 +161,22 @@ onMounted(() => {
           </n-space>
         </template>
         <template #header-extra>
-          <n-button @click="router.push({ name: 'sections' })" size="small">
-            <template #icon><n-icon><ArrowLeftIcon /></n-icon></template>
-            {{ t("common.back") }}
-          </n-button>
+          <n-space :size="8">
+            <n-button type="primary" size="small" @click="openEdit">
+              <template #icon><n-icon><EditIcon /></n-icon></template>
+              {{ t("common.edit") }}
+            </n-button>
+            <n-button @click="router.push({ name: 'sections' })" size="small">
+              <template #icon><n-icon><ArrowLeftIcon /></n-icon></template>
+              {{ t("common.back") }}
+            </n-button>
+          </n-space>
         </template>
         <n-descriptions bordered :column="2" size="small">
           <n-descriptions-item :label="t('common.name')">{{ section.name }}</n-descriptions-item>
           <n-descriptions-item :label="t('common.subnet_count')">{{ section.subnet_count ?? 0 }}</n-descriptions-item>
           <n-descriptions-item :label="t('sections.strict_mode')">{{ section.strict_mode ? "✓" : "—" }}</n-descriptions-item>
-          <n-descriptions-item label="display_order">{{ section.display_order }}</n-descriptions-item>
+          <n-descriptions-item :label="t('cols.display_order')">{{ section.display_order }}</n-descriptions-item>
           <n-descriptions-item :label="t('common.description')" :span="2">
             {{ section.description ?? "—" }}
           </n-descriptions-item>
@@ -168,5 +222,39 @@ onMounted(() => {
         </n-data-table>
       </n-card>
     </n-space>
+
+    <n-modal v-model:show="showEdit" preset="card" style="width: 520px" :title="t('common.edit')">
+      <n-form label-placement="top">
+        <n-form-item :label="t('common.name')">
+          <n-input v-model:value="form.name" />
+        </n-form-item>
+        <n-form-item :label="t('common.description')">
+          <n-input v-model:value="form.description" type="textarea" :autosize="{ minRows: 2 }" />
+        </n-form-item>
+        <n-form-item :label="t('nav.customers')">
+          <n-select v-model:value="form.customer_id" :options="customerOptions" clearable filterable />
+        </n-form-item>
+        <n-space :size="24">
+          <n-form-item :label="t('cols.display_order')">
+            <n-input-number v-model:value="form.display_order" :min="0" style="width: 140px" />
+          </n-form-item>
+          <n-form-item :label="t('sections.strict_mode')">
+            <n-checkbox v-model:checked="form.strict_mode" />
+          </n-form-item>
+        </n-space>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button size="small" @click="showEdit = false">
+            <template #icon><n-icon><CancelIcon /></n-icon></template>
+            {{ t("common.cancel") }}
+          </n-button>
+          <n-button type="primary" size="small" :loading="saving" @click="saveEdit">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>
+            {{ t("common.save") }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-spin>
 </template>

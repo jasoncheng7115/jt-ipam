@@ -11,7 +11,7 @@
 import { computed, ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { NCard, NEmpty, NAlert, NSpace, NTooltip, NButton, NIcon, NDropdown } from "naive-ui";
+import { NCard, NEmpty, NAlert, NSpace, NTooltip, NButton, NButtonGroup, NIcon, NDropdown } from "naive-ui";
 import type { RackDiagram } from "@/api/racks";
 import { rackTypeColor as colorFor } from "@/utils/rackColors";
 import { exportTable, type ExportColumn } from "@/utils/tableExport";
@@ -30,11 +30,22 @@ const GEO = { rowH: 24, colW: 260, gutter: 32, pad: 12, headerH: 30 };
 const esc = (s: unknown) => String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] as string));
 
 function devLabel(dev: any): string {
-  // 機櫃示意圖只標裝置名稱 + 類型，不標 IP
-  return `${dev.name} · ${dev.type}`;
+  // 機櫃示意圖（含匯出）只標裝置名稱，與畫面一致；不加類型 / IP
+  return dev.name;
 }
 
 // 共用：產生機櫃 SVG 字串 + 尺寸
+// 半 U（左/右）裝置在匯出時要各佔半寬，否則左右兩台會疊在一起
+function partGeom(dev: any): { x: number; w: number; cx: number; half: boolean } {
+  const { colW, gutter } = GEO;
+  const side = dev.rack_side ?? "full";
+  if (side === "left")
+    return { x: gutter + 2, w: colW / 2 - 3, cx: gutter + colW / 4, half: true };
+  if (side === "right")
+    return { x: gutter + colW / 2 + 1, w: colW / 2 - 3, cx: gutter + (colW * 3) / 4, half: true };
+  return { x: gutter + 2, w: colW - 4, cx: gutter + colW / 2, half: false };
+}
+
 function buildSvg(): { svg: string; W: number; H: number } | null {
   const d = props.diagram;
   if (!d) return null;
@@ -59,14 +70,16 @@ function buildSvg(): { svg: string; W: number; H: number } | null {
     const uTop = dev.u_position + dev.u_size - 1;
     const yTop = top + (U - uTop) * rowH;
     const hgt = dev.u_size * rowH;
-    p.push(`<rect x="${gutter + 2}" y="${yTop + 1}" width="${colW - 4}" height="${hgt - 2}" rx="3" fill="${colorFor(dev.type)}" stroke="rgba(0,0,0,0.3)"/>`);
+    const g = partGeom(dev);
+    p.push(`<rect x="${g.x}" y="${yTop + 1}" width="${g.w}" height="${hgt - 2}" rx="3" fill="${colorFor(dev.type)}" stroke="rgba(0,0,0,0.3)"/>`);
     const a = nameAlign.value;
-    const tx = a === "center" ? gutter + colW / 2 : a === "right" ? gutter + colW - 10 : gutter + 10;
-    const anchor = a === "center" ? "middle" : a === "right" ? "end" : "start";
+    // 半 U 太窄，一律置中；全寬才依名稱對齊偏好
+    const tx = g.half ? g.cx : a === "center" ? gutter + colW / 2 : a === "right" ? gutter + colW - 10 : gutter + 10;
+    const anchor = g.half ? "middle" : a === "center" ? "middle" : a === "right" ? "end" : "start";
     p.push(`<text x="${tx}" y="${yTop + hgt / 2 + 4}" text-anchor="${anchor}" font-size="11" font-weight="bold" fill="#ffffff">${esc(devLabel(dev))}</text>`);
     // 安裝於機櫃後側 → 右上角標一個 R 角標（前側為預設，不標）
     if (dev.rack_face === "rear") {
-      const rx = gutter + colW - 2;
+      const rx = g.x + g.w;
       p.push(`<path d="M${rx - 14} ${yTop + 1} L${rx} ${yTop + 1} L${rx} ${yTop + 15} Z" fill="rgba(0,0,0,0.55)"/>`);
       p.push(`<text x="${rx - 2}" y="${yTop + 11}" text-anchor="end" font-size="9" font-weight="bold" fill="#ffffff">R</text>`);
     }
@@ -134,7 +147,9 @@ function exportDrawio() {
     const yTop = top + (U - uTop) * rowH;
     const hgt = dev.u_size * rowH;
     const fill = colorFor(dev.type);
-    cells.push(`<mxCell id="dev${n++}" value="${esc(devLabel(dev))}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=#000000;fontColor=#ffffff;fontStyle=1;align=${nameAlign.value};spacingLeft=6;spacingRight=6;" vertex="1" parent="1"><mxGeometry x="${gutter + 2}" y="${yTop + 1}" width="${colW - 4}" height="${hgt - 2}" as="geometry"/></mxCell>`);
+    const g = partGeom(dev);
+    const align = g.half ? "center" : nameAlign.value;
+    cells.push(`<mxCell id="dev${n++}" value="${esc(devLabel(dev))}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=#000000;fontColor=#ffffff;fontStyle=1;align=${align};spacingLeft=6;spacingRight=6;" vertex="1" parent="1"><mxGeometry x="${g.x}" y="${yTop + 1}" width="${g.w}" height="${hgt - 2}" as="geometry"/></mxCell>`);
   }
   const xml =
     `<mxfile host="jt-ipam"><diagram name="${esc(d.name)}">` +
@@ -192,6 +207,8 @@ interface Props {
   bare?: boolean;               // 去掉卡片外框與標題（嵌入用）
 }
 const props = withDefaults(defineProps<Props>(), { showLegend: true, editable: false, floorAlignTo: 0, highlightId: null, compact: false, bare: false });
+const faceView = ref<"front" | "rear">("front");   // 機櫃正面 / 背面切換
+const hasRear = computed(() => (props.diagram?.devices || []).some((d: any) => d.rack_face === "rear"));
 const U_PX = 28;   // 每個 U 列高度（與 .u-row / .u-num-out 一致）
 // 落地對齊：比該排最高櫃矮幾 U，就在頂端補幾 U 的空白
 const floorPad = computed(() => {
@@ -255,6 +272,8 @@ const cells = computed<Cell[]>(() => {
     primary_ip: d.primary_ip,
   });
   for (const d of props.diagram.devices) {
+    // 只顯示目前檢視面（正/背）的裝置；未標面者視為正面
+    if (((d.rack_face ?? "front") as string) !== faceView.value) continue;
     const side = (d.rack_side ?? "full") as "full" | "left" | "right";
     for (let u = d.u_position; u < d.u_position + d.u_size; u++) {
       if (!map[u]) continue;
@@ -291,12 +310,22 @@ const cells = computed<Cell[]>(() => {
   <n-card v-if="diagram" class="rack-diagram-card" :class="{ 'rd-compact': compact, 'rd-bare': bare }"
           :bordered="!bare" :title="bare ? undefined : `${t('nav.racks')}: ${diagram.name} (${diagram.u_height}U)`">
     <template #header-extra>
-      <n-dropdown trigger="click" :options="exportOptions" @select="onExport">
-        <n-button size="tiny" quaternary :title="t('rack_diagram.export_svg_hint')">
-          <template #icon><n-icon><ExportIcon /></n-icon></template>
-          {{ t("common.export") }}
-        </n-button>
-      </n-dropdown>
+      <n-space :size="8" align="center">
+        <n-button-group size="tiny">
+          <n-button :type="faceView === 'front' ? 'primary' : 'default'" @click="faceView = 'front'">
+            {{ t("racks.face_front") }}
+          </n-button>
+          <n-button :type="faceView === 'rear' ? 'primary' : 'default'" @click="faceView = 'rear'">
+            {{ t("racks.face_rear") }}<span v-if="hasRear" style="margin-left:3px">•</span>
+          </n-button>
+        </n-button-group>
+        <n-dropdown trigger="click" :options="exportOptions" @select="onExport">
+          <n-button size="tiny" quaternary :title="t('rack_diagram.export_svg_hint')">
+            <template #icon><n-icon><ExportIcon /></n-icon></template>
+            {{ t("common.export") }}
+          </n-button>
+        </n-dropdown>
+      </n-space>
     </template>
     <n-space vertical :size="12">
       <n-alert

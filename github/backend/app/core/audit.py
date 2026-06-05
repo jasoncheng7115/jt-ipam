@@ -137,6 +137,13 @@ async def append_audit(
     )
     session.add(entry)
 
+    # best-effort 轉送到 Graylog（syslog / CEF / GELF）；任何錯誤都不影響主交易
+    try:
+        from app.services.audit_forward import maybe_forward
+        await maybe_forward(session, record)
+    except Exception:
+        pass
+
 
 async def verify_chain(session: AsyncSession, *, limit: int | None = None) -> tuple[bool, int | None]:
     """驗證整條鏈；回傳 (是否完整, 第一個出錯的 audit id)。

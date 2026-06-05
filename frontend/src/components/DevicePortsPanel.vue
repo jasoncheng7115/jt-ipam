@@ -15,7 +15,8 @@ const msg = useMessage();
 
 const ports = ref<DevicePort[]>([]);
 const loading = ref(false);
-const PORT_TYPES = ["network", "bridge", "bond", "vlan", "front", "rear", "console", "power"];
+// 連接埠＝資料/理線/序列；電源不在此（改由電力模組：配電盤→饋線→插座→裝置）
+const PORT_TYPES = ["network", "bridge", "bond", "vlan", "front", "rear", "console"];
 const TYPE_TAG: Record<string, "info" | "success" | "warning" | "error" | "default"> = {
   network: "info", bridge: "warning", bond: "success", vlan: "default",
 };

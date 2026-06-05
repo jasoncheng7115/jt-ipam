@@ -28,6 +28,7 @@ from app.core.security import create_access_token, decode_access_token
 from app.services import oidc as oidc_service
 from app.services import saml as saml_service
 from app.services.auth import issue_access_token, issue_refresh_token
+from app.services.system_config import get_oidc_config
 
 router = APIRouter(prefix="/auth", tags=["sso"])
 
@@ -49,14 +50,18 @@ def _decode_state_token(token: str) -> dict[str, Any]:
 
 
 @router.get("/oidc/login")
-async def oidc_login(request: Request) -> Any:
+async def oidc_login(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Any:
     settings = get_settings()
-    if not settings.oidc_enabled:
+    cfg = await get_oidc_config(session)
+    if not cfg.enabled:
         raise HTTPException(503, detail="OIDC is disabled")
     try:
         state = oidc_service.make_state()
         nonce = oidc_service.make_nonce()
-        url = await oidc_service.build_auth_url(state, nonce)
+        url = await oidc_service.build_auth_url(cfg, state, nonce)
     except oidc_service.OIDCNotConfigured as exc:
         raise HTTPException(503, detail=str(exc)) from exc
     except oidc_service.OIDCError as exc:
@@ -82,7 +87,8 @@ async def oidc_callback(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
     settings = get_settings()
-    if not settings.oidc_enabled:
+    cfg = await get_oidc_config(session)
+    if not cfg.enabled:
         raise HTTPException(503, detail="OIDC is disabled")
 
     flow_token = request.cookies.get("jt_oidc_flow")
@@ -96,7 +102,7 @@ async def oidc_callback(
         raise HTTPException(400, detail="State mismatch")
 
     try:
-        token_data = await oidc_service.exchange_code(code)
+        token_data = await oidc_service.exchange_code(cfg, code)
     except oidc_service.OIDCError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
 
@@ -106,13 +112,13 @@ async def oidc_callback(
 
     # 用 userinfo 取代 id_token 解析（簡化；id_token 簽章驗證由 IdP 之後 phase 3.5 補）
     try:
-        claims = await oidc_service.fetch_userinfo(access_token)
+        claims = await oidc_service.fetch_userinfo(cfg, access_token)
     except oidc_service.OIDCError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
 
     try:
         user = await oidc_service.upsert_user_from_oidc(
-            session, claims,
+            session, cfg, claims,
             actor_ip=request.client.host if request.client else None,
         )
     except oidc_service.OIDCError as exc:
@@ -142,9 +148,12 @@ async def oidc_callback(
 
 
 @router.get("/oidc/test", dependencies=[Depends(require_admin)])
-async def oidc_test() -> dict[str, Any]:
+async def oidc_test(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    cfg = await get_oidc_config(session)
     try:
-        info = await oidc_service.discover()
+        info = await oidc_service.discover(cfg)
     except oidc_service.OIDCNotConfigured as exc:
         raise HTTPException(503, detail=str(exc)) from exc
     except oidc_service.OIDCError as exc:

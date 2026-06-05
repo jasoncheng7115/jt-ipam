@@ -84,14 +84,14 @@ const form = ref<Record<string, any>>({});
 function openCreate(kind: Resource) {
   createKind.value = kind;
   switch (kind) {
-    case "tenant":        form.value = { name: "", tenant_group_id: null, description: "" }; break;
+    case "tenant":        form.value = { name: "", group_id: null, description: "" }; break;
     case "tenant_group":  form.value = { name: "", description: "" }; break;
-    case "asn":           form.value = { number: 65000, rir: "", description: "", tenant_id: null }; break;
-    case "provider":      form.value = { name: "", account: "", description: "" }; break;
+    case "asn":           form.value = { asn: 65000, rir: "", description: "", tenant_id: null }; break;
+    case "provider":      form.value = { name: "", account_number: "", description: "" }; break;
     case "circuit":       form.value = { cid: "", provider_id: null, type_id: null, status: "active", up_kbps: null, down_kbps: null, commit_rate_kbps: null, monthly_fee_cents: null, install_date: null, contract_end_date: null, description: "" }; break;
     case "contact_group": form.value = { name: "", description: "" }; break;
     case "contact":       form.value = { name: "", email: "", phone: "", group_id: null, description: "" }; break;
-    case "ssid":          form.value = { name: "", description: "" }; break;
+    case "ssid":          form.value = { ssid: "", description: "" }; break;
   }
   showCreate.value = true;
 }
@@ -113,15 +113,21 @@ async function submit() {
   for (const [k, v] of Object.entries(form.value)) {
     payload[k] = v === "" ? null : v;
   }
-  if (!payload.name && createKind.value !== "asn" && createKind.value !== "circuit") {
+  const nameless = ["asn", "circuit", "ssid"];
+  if (!payload.name && !nameless.includes(createKind.value)) {
     msg.error(t("advanced.error_name_required"));
     return;
   }
-  if (createKind.value === "asn" && !payload.number) {
+  if (createKind.value === "ssid" && !payload.ssid) {
+    msg.error(t("advanced.error_name_required"));
+    return;
+  }
+  if (createKind.value === "asn" && !payload.asn) {
     msg.error(t("advanced.error_asn_number_required"));
     return;
   }
-  if (createKind.value === "circuit" && (!payload.cid || !payload.provider_id || !payload.type_id)) {
+  // 電路類型(type_id)非必填；只需 CID 與供應商
+  if (createKind.value === "circuit" && (!payload.cid || !payload.provider_id)) {
     msg.error(t("advanced.error_circuit_required"));
     return;
   }
@@ -139,6 +145,20 @@ const providerOpts = computed(() => providers.value.map((g) => ({ label: g.name,
 const circuitTypeOpts = computed(() => circuitTypes.value.map((g) => ({ label: g.name, value: g.id })));
 const contactGroupOpts = computed(() => contactGroups.value.map((g) => ({ label: g.name, value: g.id })));
 
+// 電路類型支援即時新增：若選到的是使用者打字輸入(非既有 id)，就先建類型再選回新 id
+async function onCircuitTypeSelect(val: string | null) {
+  if (!val) return;
+  if (circuitTypes.value.some((t) => t.id === val)) return;
+  try {
+    const created = await Advanced.createCircuitType(val);
+    circuitTypes.value.push(created);
+    form.value.type_id = created.id;
+  } catch {
+    form.value.type_id = null;
+    msg.error(t("errors.server"));
+  }
+}
+
 const delBtn = (resource: string, id: string) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
   h(NPopconfirm, {
     onPositiveClick: () => delResource(resource, id),
@@ -155,8 +175,8 @@ const delBtn = (resource: string, id: string) => h(NSpace, { size: 2, wrapItem: 
 
 const tenantCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
-  { title: t("advanced.tenant_group"), key: "tenant_group_id", width: 160, ellipsis: { tooltip: true },
-    render: (r) => tenantGroups.value.find((g) => g.id === r.tenant_group_id)?.name ?? "—" },
+  { title: t("advanced.tenant_group"), key: "group_id", width: 160, ellipsis: { tooltip: true },
+    render: (r) => tenantGroups.value.find((g) => g.id === r.group_id)?.name ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("tenants", r.id) },
 ]));
@@ -173,7 +193,7 @@ const asnCols = computed<DataTableColumns<any>>(() => autoSort([
 ]));
 const providerCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
-  { title: t("circuits.account"), key: "account", width: 160, ellipsis: { tooltip: true }, render: (r) => r.account ?? "—" },
+  { title: t("circuits.account"), key: "account_number", width: 160, ellipsis: { tooltip: true }, render: (r) => r.account_number ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("providers", r.id) },
 ]));
@@ -330,7 +350,7 @@ onMounted(() => { void loadAll(); });
             <n-input v-model:value="form.name" placeholder="ACME Corp" />
           </n-form-item>
           <n-form-item :label="t('advanced.tenant_group')">
-            <n-select v-model:value="form.tenant_group_id" :options="tenantGroupOpts" clearable
+            <n-select v-model:value="form.group_id" :options="tenantGroupOpts" clearable
                       :placeholder="t('advanced.tenant_group_placeholder')" />
           </n-form-item>
           <n-form-item :label="t('sections.description')">
@@ -351,7 +371,7 @@ onMounted(() => { void loadAll(); });
         <!-- ASN -->
         <template v-else-if="createKind === 'asn'">
           <n-form-item label="AS Number">
-            <n-input-number v-model:value="form.number" :min="1" :max="4294967295" />
+            <n-input-number v-model:value="form.asn" :min="1" :max="4294967295" />
           </n-form-item>
           <n-form-item label="RIR">
             <n-select v-model:value="form.rir" clearable
@@ -371,7 +391,7 @@ onMounted(() => { void loadAll(); });
             <n-input v-model:value="form.name" placeholder="HiNet / TFN / NTT …" />
           </n-form-item>
           <n-form-item :label="t('circuits.account')">
-            <n-input v-model:value="form.account" :placeholder="t('advanced.account_ph')" />
+            <n-input v-model:value="form.account_number" :placeholder="t('advanced.account_ph')" />
           </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
@@ -388,12 +408,13 @@ onMounted(() => { void loadAll(); });
                       :placeholder="t('circuits.provider_placeholder')" />
           </n-form-item>
           <n-form-item :label="t('circuits.type')">
-            <n-select v-model:value="form.type_id" :options="circuitTypeOpts" filterable
-                      :placeholder="t('circuits.type_placeholder')" />
+            <n-select v-model:value="form.type_id" :options="circuitTypeOpts" filterable tag clearable
+                      :placeholder="t('circuits.type_placeholder')"
+                      @update:value="onCircuitTypeSelect" />
           </n-form-item>
           <n-form-item :label="t('common.status')">
             <n-select v-model:value="form.status"
-                      :options="['active','planned','provisioning','offline','decommissioned'].map(v => ({label: v, value: v}))" />
+                      :options="['active','planned','provisioning','offline','decommissioned'].map(v => ({label: t('circuits.status_'+v), value: v}))" />
           </n-form-item>
           <div class="circuit-row">
             <n-form-item :label="t('circuits.down_kbps')" :show-feedback="false">
@@ -458,7 +479,7 @@ onMounted(() => { void loadAll(); });
         <!-- SSID -->
         <template v-else-if="createKind === 'ssid'">
           <n-form-item label="SSID">
-            <n-input v-model:value="form.name" placeholder="Corp-WiFi" />
+            <n-input v-model:value="form.ssid" placeholder="Corp-WiFi" />
           </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
@@ -484,6 +505,6 @@ onMounted(() => { void loadAll(); });
 /* 拆成獨立頁面時隱藏頁籤列（只顯示該模組內容） */
 .single-mode :deep(.n-tabs-nav) { display: none; }
 /* Circuit 表單兩欄：等寬、輸入框填滿欄寬、上緣對齊（取代會錯位的固定寬 n-space） */
-.circuit-row { display: flex; gap: 12px; }
+.circuit-row { display: flex; gap: 12px; margin-bottom: 14px; }
 .circuit-row > * { flex: 1 1 0; min-width: 0; }
 </style>

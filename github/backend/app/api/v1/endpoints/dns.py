@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.security import encrypt_secret
@@ -29,7 +29,7 @@ from app.schemas.dns import (
 from app.services.dns import DNSAdapterError, get_adapter
 from app.services.dns_sync import pull_server
 
-router = APIRouter(prefix="/dns", tags=["dns"])
+router = APIRouter(prefix="/dns", tags=["dns"], dependencies=[Depends(require_global_read)])
 
 _SECRET_FIELDS = ("api_key", "api_secret", "tsig_key", "password")
 

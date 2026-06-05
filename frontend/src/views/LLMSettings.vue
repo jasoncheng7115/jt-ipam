@@ -7,14 +7,15 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NSpace, NIcon, NAlert, NSwitch, NInput, NInputNumber, NSelect, NButton,
+  NCard, NSpace, NIcon, NAlert, NSwitch, NInput, NInputNumber, NSelect, NButton, NTag,
   useMessage,
 } from "naive-ui";
 import {
   getLLMConfig, patchLLMConfig, listOllamaModels,
   type LLMConfig, type LLMConfigPatch, type OllamaModel,
 } from "@/api/system";
-import { SettingsIcon, RefreshIcon } from "@/icons";
+import { listMcpTools, type McpTool } from "@/api/chat";
+import { SettingsIcon, RefreshIcon, ToolsIcon } from "@/icons";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -90,7 +91,15 @@ function patch(p: LLMConfigPatch) {
   }, 600);
 }
 
-onMounted(load);
+// MCP / AI 工具清單
+const mcpTools = ref<McpTool[]>([]);
+const mcpMutating = ref(0);
+async function loadTools() {
+  try { const r = await listMcpTools(); mcpTools.value = r.tools; mcpMutating.value = r.mutating_count; }
+  catch { /* ignore */ }
+}
+
+onMounted(() => { void load(); void loadTools(); });
 </script>
 
 <template>
@@ -160,6 +169,37 @@ onMounted(load);
     </n-space>
     <p v-else style="opacity: 0.7">{{ t("common.loading") }}</p>
   </n-card>
+
+  <n-card style="margin-top:16px">
+    <template #header>
+      <n-space align="center" :wrap-item="false">
+        <n-icon :size="20"><ToolsIcon /></n-icon>
+        <span>{{ t("llm_settings.tools_title") }}</span>
+      </n-space>
+    </template>
+    <p class="tools-cap">{{ t("llm_settings.tools_intro", { n: mcpTools.length, m: mcpMutating }) }}</p>
+    <div class="tool-list">
+      <div v-for="tool in mcpTools" :key="tool.name" class="tool-item">
+        <div class="tool-head">
+          <code class="tool-name">{{ tool.name }}</code>
+          <n-tag v-if="tool.mutating" size="tiny" type="warning" :bordered="false">
+            {{ t("llm_settings.tools_mutating") }}
+          </n-tag>
+          <n-tag v-else size="tiny" type="success" :bordered="false">
+            {{ t("llm_settings.tools_readonly") }}
+          </n-tag>
+        </div>
+        <div class="tool-desc">{{ tool.description }}</div>
+        <div v-if="tool.params.length" class="tool-params">
+          <span v-for="p in tool.params" :key="p.name" class="tool-param"
+                :title="p.description">
+            {{ p.name }}<span v-if="p.required" class="req">*</span>
+            <em>{{ p.type }}</em>
+          </span>
+        </div>
+      </div>
+    </div>
+  </n-card>
 </template>
 
 <style scoped>
@@ -169,4 +209,14 @@ label {
   margin-bottom: 4px;
   opacity: 0.8;
 }
+.tools-cap { margin: 0 0 12px; font-size: 13px; opacity: 0.7; }
+.tool-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.tool-item { border: 1px solid var(--n-border-color, #eee); border-radius: 8px; padding: 10px 12px; }
+.tool-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.tool-name { font-weight: 700; font-size: 13px; }
+.tool-desc { font-size: 12.5px; opacity: 0.85; line-height: 1.5; }
+.tool-params { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tool-param { font-size: 11px; background: rgba(128,128,128,0.1); border-radius: 5px; padding: 1px 6px; font-family: ui-monospace, monospace; }
+.tool-param .req { color: #d03050; margin-left: 1px; }
+.tool-param em { opacity: 0.55; font-style: normal; margin-left: 4px; }
 </style>

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.firewall import OPNsenseFirewall
@@ -21,7 +21,7 @@ from app.schemas.nat import NATCreate, NATRead, NATUpdate
 class _NATBulkDeletePayload(StrictModel):
     ids: list[uuid.UUID]
 
-router = APIRouter(prefix="/nat", tags=["nat"])
+router = APIRouter(prefix="/nat", tags=["nat"], dependencies=[Depends(require_global_read)])
 
 
 def _parse_origin(

@@ -10,6 +10,8 @@ export interface UserPreferences {
   table_columns: Record<string, string[]> | null;
   // Dashboard 常用子網路 UUID 清單
   pinned_subnet_ids: string[] | null;
+  // 通用釘選：{namespace: [id,...]}（機房 / 地點 / 機櫃…）
+  pinned: Record<string, string[]> | null;
 }
 
 export async function getPreferences(): Promise<UserPreferences> {

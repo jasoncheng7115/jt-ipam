@@ -191,6 +191,9 @@ async def build_topology(
             for d in (t.a_device_id, t.b_device_id)
         }
         missing = [d for d in pair_dev_ids if str(d) not in nodes]
+        # RBAC：只補「可見」的對接端點裝置，非管理員不得藉 VPN 看到無權裝置/子網路
+        if vis_dev is not None:
+            missing = [d for d in missing if d in vis_dev]
         if missing:
             extra = (await session.execute(select(Device).where(Device.id.in_(missing)))).scalars().all()
             for d in extra:  # type: ignore[assignment]

@@ -189,8 +189,10 @@ def cidr_to_range(cidr: str) -> dict[str, Any]:
     }
 
 
-def aggregate(cidrs: str) -> dict[str, Any]:
-    parts = [p for p in re.split(r"[,\s]+", cidrs.strip()) if p]
+def aggregate(cidrs: str | list[str] | tuple[str, ...]) -> dict[str, Any]:
+    # LLM 常把「多個 CIDR」傳成陣列而非逗號分隔字串 → 兩種都接受
+    raw = " ".join(str(c) for c in cidrs) if isinstance(cidrs, (list, tuple)) else str(cidrs)
+    parts = [p for p in re.split(r"[,\s]+", raw.strip()) if p]
     if not parts:
         raise NetToolError("未提供任何 CIDR")
     nets = [parse_net(p) for p in parts]

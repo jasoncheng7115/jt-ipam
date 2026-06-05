@@ -136,6 +136,8 @@ class UserPreference(Base):
     # 不再是個人偏好。
     # Dashboard 釘選的子網路 UUID 清單（顯示「常用子網路」卡片）
     pinned_subnet_ids: Mapped[list[str] | None] = mapped_column(JSONB)
+    # 通用釘選：{namespace: [id,...]}（機房 / 地點 / 機櫃等），跟著帳號存而非 localStorage
+    pinned: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     __table_args__ = (
         CheckConstraint("locale IN ('zh-TW','en-US')", name="locale_valid"),

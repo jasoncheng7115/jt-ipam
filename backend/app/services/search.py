@@ -17,10 +17,11 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import select, text
+from sqlalchemy import String, cast, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.address import IPAddress
+from app.models.subnet import Subnet
 from app.models.user import User
 from app.models.vlan import VLAN
 from app.services.permission import filter_visible
@@ -84,7 +85,7 @@ async def _search_ip_exact(
     rows = list(
         (
             await session.execute(
-                select(IPAddress).where(IPAddress.ip == ip).limit(limit)
+                select(IPAddress).where(IPAddress.ip == ip, IPAddress.subnet_id.in_(select(Subnet.id).where(Subnet.archived_at.is_(None)))).limit(limit)
             )
         ).scalars().all()
     )
@@ -123,9 +124,10 @@ async def _search_subnet_cidr(
                 ELSE 0.7
             END AS score
         FROM subnets
-        WHERE cidr = CAST(:q AS cidr)
+        WHERE (cidr = CAST(:q AS cidr)
            OR cidr >> CAST(:q AS cidr)
-           OR cidr << CAST(:q AS cidr)
+           OR cidr << CAST(:q AS cidr))
+          AND archived_at IS NULL
         ORDER BY score DESC, masklen(cidr)
         LIMIT :limit
         """
@@ -160,7 +162,8 @@ async def _search_mac(
         (
             await session.execute(
                 select(IPAddress)
-                .where(IPAddress.mac.cast(text("text")).ilike(f"%{cleaned}%"))
+                .where(cast(IPAddress.mac, String).ilike(f"%{cleaned}%"),
+                       IPAddress.subnet_id.in_(select(Subnet.id).where(Subnet.archived_at.is_(None))))
                 .limit(limit)
             )
         ).scalars().all()
@@ -211,27 +214,28 @@ async def _search_text_trgm(
 ) -> list[SearchHit]:
     """跨多表 trigram 搜尋 + 排序。"""
     qlike = f"%{q}%"
-    qprefix = f"{q}%"  # IP/CIDR 首碼匹配用
-    # 看起來像不完整的 IPv4（純數字 + 點，e.g. "192.168" / "10.1." / "172.16.1"）
-    looks_like_ip_prefix = bool(re.match(r"^\d+(\.\d+){0,3}\.?$", q))
-    # IP/CIDR/MAC 查詢時不要用 trigram 模糊比對（否則 .200 會誤中 .201/.208 這種相似字串）
-    fuzzy = not (looks_like_ip_prefix or _detect_query_kind(q) in ("ip", "cidr", "mac"))
+    # 看起來像「IP 片段」：只含數字與點且至少有一個點
+    #   e.g. "192.168"（首碼）/ ".1.189"（結尾）/ "1.189"（中段）/ "10.1."
+    looks_like_ip_fragment = bool(re.match(r"^[0-9.]*\.[0-9.]*$", q)) and any(ch.isdigit() for ch in q)
+    ipfrag = f"%{q}%"  # IP 片段一律走子字串比對（首碼/結尾/中段都能撞到）
+    # IP 片段 / IP / CIDR / MAC 查詢時不要用 trigram 模糊比對（否則 .200 會誤中 .201/.208）
+    fuzzy = not (looks_like_ip_fragment or _detect_query_kind(q) in ("ip", "cidr", "mac"))
     out: list[SearchHit] = []
 
-    # IP / CIDR 首碼匹配（user 打 "192.168" 應該找得到 192.168.* IP 與含此首碼的 subnet）
-    if looks_like_ip_prefix:
-        # subnets where host(cidr) starts with q  (e.g. "192.168" → "192.168.1.0")
+    # IP 片段比對（子字串）：打 "192.168" 找 192.168.*；打 ".1.189" 找 *.1.189
+    if looks_like_ip_fragment:
+        # subnets whose cidr text contains the fragment
         sub_pref_sql = text(
             """
             SELECT id, cidr::text AS cidr, description
               FROM subnets
-             WHERE host(cidr) LIKE :qprefix
+             WHERE host(cidr) LIKE :ipfrag OR cidr::text LIKE :ipfrag
              ORDER BY masklen(cidr)
              LIMIT :limit
             """
         )
         sub_pref_rows = (
-            await session.execute(sub_pref_sql, {"qprefix": qprefix, "limit": limit})
+            await session.execute(sub_pref_sql, {"ipfrag": ipfrag, "limit": limit})
         ).all()
         if sub_pref_rows:
             visible = set(
@@ -247,18 +251,18 @@ async def _search_text_trgm(
                         sublabel=r.description, score=0.9,
                     ))
 
-        # ip_addresses where host(ip) starts with q
+        # ip_addresses whose textual form contains the fragment
         ip_pref_sql = text(
             """
             SELECT a.id, host(a.ip) AS ip, a.hostname, a.subnet_id
               FROM ip_addresses a
-             WHERE host(a.ip) LIKE :qprefix
+             WHERE host(a.ip) LIKE :ipfrag
              ORDER BY a.ip
              LIMIT :limit
             """
         )
         ip_pref_rows = (
-            await session.execute(ip_pref_sql, {"qprefix": qprefix, "limit": limit})
+            await session.execute(ip_pref_sql, {"ipfrag": ipfrag, "limit": limit})
         ).all()
         if ip_pref_rows:
             visible_ip_subs = set(
@@ -313,8 +317,9 @@ async def _search_text_trgm(
         SELECT id, cidr::text AS cidr, description,
                COALESCE(similarity(description, :q), 0) AS score
           FROM subnets
-         WHERE description ILIKE :qlike
-            OR similarity(description, :q) > 0.2
+         WHERE (description ILIKE :qlike
+            OR similarity(description, :q) > 0.2)
+           AND archived_at IS NULL
          ORDER BY score DESC
          LIMIT :limit
         """
@@ -347,9 +352,10 @@ async def _search_text_trgm(
                  COALESCE(similarity(a.description, :q), 0)
                ) AS score
           FROM ip_addresses a
-         WHERE a.hostname ILIKE :qlike
+         WHERE (a.hostname ILIKE :qlike
             OR a.description ILIKE :qlike
-            OR similarity(a.hostname, :q) > 0.2
+            OR similarity(a.hostname, :q) > 0.2)
+           AND a.subnet_id IN (SELECT id FROM subnets WHERE archived_at IS NULL)
          ORDER BY score DESC
          LIMIT :limit
         """
@@ -617,6 +623,20 @@ async def search(
             best[key] = h
 
     final = sorted(best.values(), key=lambda h: h.score, reverse=True)
+
+    # RBAC：全域基礎設施類結果（VLAN / NAT / 防火牆 / 站對站 VPN / DNS / IP 申請）
+    # 只有管理員或具萬用讀取權限者可見；只被指派特定物件的帳號不得從搜尋窺見。
+    from app.services.permission import visible_ids as _vis
+    is_global = user.is_admin
+    if not is_global:
+        for ot in ("subnet", "device", "customer", "section", "rack", "location"):
+            if await _vis(session, user=user, object_type=ot) is None:
+                is_global = True
+                break
+    if not is_global:
+        _global_types = {"vlan", "nat", "firewall", "vpn", "dns_record", "ip_request"}
+        final = [h for h in final if h.type not in _global_types]
+
     return {
         "detected": kind,  # type: ignore[dict-item]
         "results": [h.as_dict() for h in final],

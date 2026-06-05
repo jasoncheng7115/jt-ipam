@@ -1,5 +1,22 @@
 import axios, { AxiosError } from "axios";
 import { triggerSessionExpired } from "@/utils/session";
+import { i18n } from "@/i18n";
+
+// 後端常見英文錯誤訊息 → 在地化（元件多半直接顯示 response.data.detail）
+const DETAIL_I18N: Record<string, string> = {
+  "Admin required": "errors.admin_required",
+  "No visible resources": "errors.no_visible_resources",
+  "Not found": "errors.not_found",
+  "Authentication required": "errors.session_expired",
+};
+
+function localizeDetail(error: AxiosError): void {
+  const data: any = error.response?.data;
+  const detail = data?.detail;
+  if (typeof detail !== "string") return;
+  const key = DETAIL_I18N[detail];
+  if (key) data.detail = (i18n.global as any).t(key);
+}
 
 /**
  * 統一的 API client。
@@ -87,6 +104,7 @@ apiClient.interceptors.response.use(
       // 反正畫面正要被導向登入頁。
       return new Promise(() => {});
     }
+    localizeDetail(error);
     return Promise.reject(error);
   },
 );

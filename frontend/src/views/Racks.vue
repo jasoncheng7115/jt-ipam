@@ -466,7 +466,8 @@ async function confirmPickDevice() {
     <n-card :title="t('racks.all_title')">
       <n-space style="margin-bottom: 8px" align="center">
         <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
-        <n-button type="primary" @click="openCreate">
+        <n-button type="primary" @click="openCreate" :disabled="!isAdmin"
+                  :title="isAdmin ? undefined : t('errors.admin_required')">
           <template #icon><n-icon><PlusIcon /></n-icon></template>
           {{ t("racks.add") }}
         </n-button>

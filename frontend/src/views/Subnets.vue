@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthStore } from "@/stores/auth";
+const _authBtn = useAuthStore();
 import { h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
@@ -291,8 +293,9 @@ const allColumns: DataTableColumns<Subnet> = [
     title: () => t("nav.customers"),
     key: "customer_id", width: 160,
     ellipsis: { tooltip: true },
-    render: (r) => links.customer(r.customer_id, customerLabelFor(r.customer_id)),
-    sorter: (a, b) => customerLabelFor(a.customer_id).localeCompare(customerLabelFor(b.customer_id)),
+    render: (r) => links.customer(r.customer_id, r.customer_name || customerLabelFor(r.customer_id)),
+    sorter: (a, b) => (a.customer_name || customerLabelFor(a.customer_id))
+      .localeCompare(b.customer_name || customerLabelFor(b.customer_id)),
   },
   {
     title: () => t("subnets.scan"), key: "scan_enabled", width: 70, align: "center",
@@ -484,7 +487,7 @@ onMounted(() => {
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
       </n-button>
-      <n-button v-if="!showArchived" type="primary" @click="openCreate">
+      <n-button v-if="!showArchived" type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openCreate">
         <template #icon><n-icon><PlusIcon /></n-icon></template>
         {{ t("common.create") }}
       </n-button>

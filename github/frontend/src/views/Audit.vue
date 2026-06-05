@@ -27,9 +27,9 @@ const { t } = useI18n();
 const router = useRouter();
 
 // 把 audit (object_type, object_id) → 可點連結
-function renderObjectLink(objectType: string | null, objectId: string | null) {
+function renderObjectLink(objectType: string | null, objectId: string | null, label?: string | null) {
   if (!objectId) return "—";
-  const short = objectId.slice(0, 8) + "…";
+  const short = label || objectId.slice(0, 8) + "…";
   const linkStyle = "color: var(--primary-color, #18a058); text-decoration: none; cursor: pointer;";
   const go = (name: string, params?: any, query?: any) =>
     h("a", {
@@ -127,7 +127,7 @@ const allColumns = computed<DataTableColumns<AuditLog>>(() => autoSort([
   },
   {
     title: t("audit.actor"), key: "actor", width: 130,
-    render: (r) => r.actor_user_id ? `${r.actor_user_id.slice(0, 8)}…` : "(system)",
+    render: (r) => r.actor_name || (r.actor_user_id ? `${r.actor_user_id.slice(0, 8)}…` : "(system)"),
   },
   { title: "IP", key: "actor_ip", width: 130, render: (r) => r.actor_ip ?? "—" },
   {
@@ -136,7 +136,7 @@ const allColumns = computed<DataTableColumns<AuditLog>>(() => autoSort([
   },
   {
     title: t("cols.target"), key: "object_link", width: 140,
-    render: (r) => renderObjectLink(r.object_type, r.object_id),
+    render: (r) => renderObjectLink(r.object_type, r.object_id, r.object_label),
   },
   {
     title: t("audit.action"), key: "action", width: 120,
@@ -288,8 +288,8 @@ onMounted(() => { void refresh(); });
         <table class="audit-meta">
           <tbody>
             <tr><th>{{ t("audit.ts") }}</th><td>{{ fmtDateTime(detailRow.ts) }}</td></tr>
-            <tr><th>{{ t("audit.actor") }}</th><td>{{ detailRow.actor_user_id ?? "(system)" }}<span v-if="detailRow.actor_ip"> · {{ detailRow.actor_ip }}</span></td></tr>
-            <tr><th>{{ t("audit.object_type") }}</th><td>{{ detailRow.object_type }} <span v-if="detailRow.object_id" style="opacity:.6">({{ detailRow.object_id }})</span></td></tr>
+            <tr><th>{{ t("audit.actor") }}</th><td>{{ detailRow.actor_name || detailRow.actor_user_id || "(system)" }}<span v-if="detailRow.actor_ip"> · {{ detailRow.actor_ip }}</span></td></tr>
+            <tr><th>{{ t("audit.object_type") }}</th><td>{{ detailRow.object_type }} <span v-if="detailRow.object_label">— {{ detailRow.object_label }}</span><span v-if="detailRow.object_id" style="opacity:.6"> ({{ detailRow.object_id }})</span></td></tr>
             <tr><th>{{ t("audit.action") }}</th><td>{{ detailRow.action }}</td></tr>
             <tr><th>{{ t("audit.this_hash") }}</th><td style="word-break:break-all; font-family:monospace; font-size:11px">{{ detailRow.this_hash_hex }}</td></tr>
           </tbody>

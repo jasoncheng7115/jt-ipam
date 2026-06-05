@@ -26,6 +26,8 @@ rsync -a \
   --exclude='.claude.json' \
   --exclude='CLAUDE.md' \
   --exclude='scripts/sync-to-github.sh' \
+  --exclude='ai_qa_table.md' \
+  --exclude='machine-room-6ping.png' \
   --exclude='**/__pycache__/' --exclude='*.pyc' --exclude='*.pyo' \
   --exclude='backend/.venv/' \
   --exclude='frontend/node_modules/' --exclude='frontend/dist/' \

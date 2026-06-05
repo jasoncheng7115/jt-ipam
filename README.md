@@ -20,6 +20,23 @@ Familiar to phpIPAM users so they are productive from day one, but built from sc
 
 Full spec in [`docs/SPEC.md`](docs/SPEC.md).
 
+## Graylog log enrichment (DSV lookup)
+
+jt-ipam generates a **live** IP → hostname / FQDN lookup table that Graylog's "DSV File from HTTP" data adapter can poll, so log events that only carry an IP get a human-readable name automatically.
+
+- Enable under **Admin → System Settings → Graylog DSV**: pick a path slug, output format (CSV / TSV), and generate an access token
+- Endpoint `GET /api/v1/lookup/<path>?token=<token>` is generated on each request straight from the database
+- **Fields provided**: two columns per row — column 1 = IP (key), column 2 = hostname or FQDN (value); only IPs that have a hostname are emitted
+- **Data format**: UTF-8 plain text. CSV is comma-separated with **every field wrapped in double quotes** (RFC 4180 escaping); TSV is tab-separated (unquoted). For example:
+
+  ```csv
+  "10.1.1.141","log1.example.com"
+  "10.1.1.145","mg-host"
+  ```
+
+- In Graylog's "DSV File from HTTP" adapter: set the URL above, separator to comma or tab per format, and **Key column = 1, Value column = 2**
+- The token is validated per request and can be regenerated anytime; the settings page shows a ready-to-copy full lookup URL
+
 ## Core entities
 
 `Section → Subnet → IPAddress`, plus `Device` / `Rack` / `Location`, `Customer` (managing unit), `VLAN` / `VRF`, `NAT`, OPNsense firewalls, and an IEEE OUI vendor table (monthly refresh).
@@ -56,9 +73,9 @@ Security is a day-one requirement; every module and PR is checked against **OWAS
 | Frontend | Vue 3 · TypeScript · Vite · Naive UI · Pinia · vue-i18n |
 | Auth | argon2id · TOTP · short-lived JWT + refresh |
 | AI | Ollama (local) · pgvector · MCP server |
-| Deploy | systemd + nginx + apt packages — **no containers** (Proxmox LXC / bare-metal friendly) |
+| Deploy | systemd + nginx + apt packages — **no containers** (Proxmox VE LXC / bare-metal friendly) |
 
-## Install (single host / Proxmox LXC)
+## Install (single host / Proxmox VE LXC)
 
 > Debian 12 / Ubuntu 22.04+, 2 vCPU / 4 GB RAM minimum. TLS is mandatory.
 
@@ -94,7 +111,7 @@ jt-ipam/
 
 - **Phase 1 (done)** — phpIPAM-equivalent features + improvements (Section/Subnet/IP/VLAN/VRF/NAT/Devices/Racks/Locations/IP-Requests, TOTP/API-Token/RBAC, phpIPAM import, CSV/RIPE/TWNIC, visual subnet grid, forced TLS)
 - **Phase 2 (done)** — multi-vendor DNS + deep LibreNMS integration (device/ARP/FDB/effective-status) + anomaly detection + SHA-256 audit chain + pgvector AI semantic search
-- **Phase 3 (done)** — Tenancy/Contacts/Cabling/Power/VPN/Virtualization + Proxmox sync + Cytoscape topology + OIDC/SAML SSO + OPNsense firewall sync + Wazuh agent inventory
+- **Phase 3 (done)** — Tenancy/Contacts/Cabling/Power/VPN/Virtualization + Proxmox VE sync + Cytoscape topology + OIDC/SAML SSO + OPNsense firewall sync + Wazuh agent inventory
 - **Phase 4 (done, scoped)** — MCP server + local-LLM natural language (Ollama) + plugin mechanism
 
 **Out of scope:** HA deployment, Ansible Collection, Terraform Provider, Zimbra/Odoo integration, Docker/Helm/K8s.

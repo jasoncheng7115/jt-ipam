@@ -17,6 +17,24 @@
 - **LLM**: Ollama（本地），預設 chat=gpt-oss / embedding=qwen3-embedding；走 `/api/v1/system/llm` 全域設定
 - **OWASP Top 10:2025 是硬性需求** — 每個模組與 PR 都要過心智檢查
 
+## 權限模型（RBAC）— 硬性需求，新功能/異動一律遵守
+
+物件層級授權：`Permission(object_type, object_id|NULL=萬用, principal user|group, level read|write|admin)`，7 種可授權物件：`customer / section / subnet / ip / device / rack / location`（含階層繼承）。`visible_ids(session, user, object_type)` 回 **None=全部可見（admin 或萬用授權）**、**set=限定**、**空 set=無**。
+
+**任何回傳資料的端點/工具/彙總都必須依此過濾，預設關閉（deny by default）。** 三種資料分類與對應作法：
+
+1. **可逐物件授權的資料**（subnet/ip/device/section/rack/location/customer 及其衍生）→ 用 `filter_visible` / `visible_ids` 過濾到使用者可見範圍。列表、詳情、搜尋、儀表板彙總、計數、趨勢全部都要套。
+2. **全域基礎設施資料**（VLAN / VRF / NAT / 防火牆 / DNS / LibreNMS / 虛擬化 / 站對站 VPN / 佈線 / 電力 / ASN / 電路 / 聯絡人…，無法逐物件授權）→ 掛 `require_global_read` dependency：**僅 admin 或具萬用讀取權限者（如唯讀檢視者）可見**；只被指派特定物件的部門帳號一律 403。
+3. **純管理資料**（稽核記錄、使用者/群組/權限/系統設定/整合設定）→ `require_admin`。
+
+**前端配合**：`GET /me` 提供 `has_visibility`（任一類型有範圍）與 `has_global_read`（admin 或任一萬用）。側邊選單、新增/編輯/刪除按鈕都要依能力顯示或反灰（後端仍是唯一真相，前端只是 UX）。零權限帳號只留儀表板/工具；無全域讀取者隱藏全域基礎設施選單。
+
+**檢查清單（每次新增端點/工具/儀表板卡片/搜尋結果類型都要過）**：
+- 這筆資料屬上面哪一類？有沒有套對應過濾？
+- 計數 / total / 趨勢 / 彙總有沒有也跟著縮放（別只過濾 rows 卻回全域 count）？
+- 新的搜尋結果型別有沒有納入可見性過濾或全域型別封鎖？
+- 不要假設「有 user 參數就安全」。相關：[[project_rbac_ai_topology_leak]]。
+
 ## 專案結構
 
 ```

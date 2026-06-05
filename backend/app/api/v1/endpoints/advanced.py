@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
@@ -16,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.advanced import (
@@ -34,10 +35,16 @@ from app.models.advanced import (
 )
 from app.schemas.base import Paginated, StrictModel
 
-router = APIRouter(tags=["advanced"])
+router = APIRouter(tags=["advanced"], dependencies=[Depends(require_global_read)])
 
 
 # ─────────────────── 共用 helper ───────────────────
+
+
+def _slugify(name: str) -> str:
+    """由顯示名稱產生 slug：小寫、非英數轉 -、去頭尾 -；空字串退回 'tenant'。"""
+    s = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return (s[:64] or "tenant")
 
 
 async def _audit(
@@ -117,7 +124,8 @@ class TenantRead(StrictModel):
 
 class TenantWrite(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=128)]
-    slug: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")]
+    # slug 可不填，後端會由 name 自動產生（小寫、非英數轉 -）
+    slug: Annotated[str | None, Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")] = None
     group_id: uuid.UUID | None = None
     description: Annotated[str | None, Field(max_length=1024)] = None
 
@@ -197,7 +205,10 @@ async def create_tenant(
     payload: TenantWrite, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TenantRead:
-    obj = Tenant(**payload.model_dump())
+    data = payload.model_dump()
+    if not data.get("slug"):
+        data["slug"] = _slugify(data["name"])
+    obj = Tenant(**data)
     session.add(obj)
     try:
         await session.flush()
@@ -513,6 +524,31 @@ async def list_circuit_types(
         items=[CircuitTypeRead.model_validate(r) for r in rows],
         total=total, page=page, page_size=page_size,
     )
+
+
+class CircuitTypeWrite(StrictModel):
+    name: Annotated[str, Field(min_length=1, max_length=64)]
+    description: Annotated[str | None, Field(max_length=1024)] = None
+
+
+@router.post("/circuit-types", response_model=CircuitTypeRead, status_code=201,
+             dependencies=[Depends(require_admin)])
+async def create_circuit_type(
+    payload: CircuitTypeWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CircuitTypeRead:
+    obj = CircuitType(**payload.model_dump())
+    session.add(obj)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Conflict") from exc
+    await _audit(session, user=user, request=request, object_type="circuit_type",
+                 object_id=str(obj.id), action="create",
+                 diff=payload.model_dump(mode="json"))
+    await session.commit()
+    await session.refresh(obj)
+    return CircuitTypeRead.model_validate(obj)
 
 
 @router.get("/contact-groups", response_model=Paginated[ContactGroupRead])

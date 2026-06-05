@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
       { path: "tasks", name: "tasks", component: () => import("@/views/Tasks.vue") },
       { path: "topology", name: "topology", component: () => import("@/views/Topology.vue") },
       { path: "settings", name: "settings", component: () => import("@/views/Settings.vue") },
+      { path: "notifications", name: "notifications", component: () => import("@/views/Notifications.vue") },
       // Admin
       { path: "audit", name: "audit", component: () => import("@/views/Audit.vue"), meta: { admin: true } },
       { path: "users", name: "users", component: () => import("@/views/Users.vue"), meta: { admin: true } },
@@ -52,6 +53,7 @@ const routes: RouteRecordRaw[] = [
       { path: "llm", name: "llm_settings", component: () => import("@/views/LLMSettings.vue"), meta: { admin: true } },
       { path: "system-settings", name: "system_settings", component: () => import("@/views/SystemSettings.vue"), meta: { admin: true } },
       { path: "version", name: "version", component: () => import("@/views/VersionInfo.vue"), meta: { admin: true } },
+      { path: "system-logs", name: "system_logs", component: () => import("@/views/SystemLogs.vue"), meta: { admin: true } },
       { path: "chat-history", name: "chat_history", component: () => import("@/views/ChatHistoryAdmin.vue"), meta: { admin: true } },
       { path: "my-chat-history", name: "my_chat_history", component: () => import("@/views/MyChatHistory.vue") },
       { path: "permissions", name: "permissions", component: () => import("@/views/Permissions.vue"), meta: { admin: true } },

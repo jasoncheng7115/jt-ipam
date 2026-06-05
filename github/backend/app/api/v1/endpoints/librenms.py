@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.librenms import (
@@ -24,7 +24,7 @@ from app.schemas.base import Paginated, StrictModel
 from app.services import librenms as svc
 from app.services.background_tasks import spawn_task
 
-router = APIRouter(prefix="/librenms", tags=["librenms"])
+router = APIRouter(prefix="/librenms", tags=["librenms"], dependencies=[Depends(require_global_read)])
 
 
 class LibreNMSInstanceCreate(StrictModel):

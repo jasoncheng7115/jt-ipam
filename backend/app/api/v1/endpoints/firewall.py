@@ -189,10 +189,15 @@ async def list_dhcp_ranges(
 ) -> list[dict[str, Any]]:
     """所有從 DHCP server 同步回來的發放範圍（給 IP 清單標示 DHCP 用）。"""
     from app.models.dhcp import DHCPPoolRange
+    from app.models.firewall import OPNsenseFirewall
     rows = (await session.execute(select(DHCPPoolRange))).scalars().all()
+    fw_names = dict(
+        (await session.execute(select(OPNsenseFirewall.id, OPNsenseFirewall.name))).all()
+    )
     return [{
         "id": str(r.id), "firewall_id": str(r.firewall_id), "subnet_cidr": r.subnet_cidr,
         "start_ip": r.start_ip, "end_ip": r.end_ip, "family": r.family, "source": r.source,
+        "firewall_name": fw_names.get(r.firewall_id),
     } for r in rows]
 
 

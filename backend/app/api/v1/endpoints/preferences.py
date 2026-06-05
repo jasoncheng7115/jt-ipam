@@ -24,6 +24,7 @@ def _defaults() -> UserPreferenceRead:
         page_size=50,
         table_columns=None,
         pinned_subnet_ids=None,
+        pinned=None,
     )
 
 

@@ -26,7 +26,6 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.safe_http import UnsafeOutboundURL, safe_request
 from app.models.user import User
 
@@ -64,18 +63,17 @@ class OIDCDiscovery:
 _discovery_cache: dict[str, OIDCDiscovery] = {}
 
 
-async def discover() -> OIDCDiscovery:
+async def discover(cfg: Any) -> OIDCDiscovery:
     """從 issuer 取得 .well-known/openid-configuration（cache 一次）。"""
-    settings = get_settings()
-    if not settings.oidc_enabled:
+    if not cfg.enabled:
         raise OIDCNotConfigured("OIDC is disabled")
-    if not settings.oidc_issuer:
+    if not cfg.issuer:
         raise OIDCNotConfigured("OIDC_ISSUER not set")
 
-    if settings.oidc_issuer in _discovery_cache:
-        return _discovery_cache[settings.oidc_issuer]
+    if cfg.issuer in _discovery_cache:
+        return _discovery_cache[cfg.issuer]
 
-    url = settings.oidc_issuer.rstrip("/") + "/.well-known/openid-configuration"
+    url = cfg.issuer.rstrip("/") + "/.well-known/openid-configuration"
     try:
         resp = await safe_request("GET", url, timeout=10.0)
     except UnsafeOutboundURL as exc:
@@ -85,7 +83,7 @@ async def discover() -> OIDCDiscovery:
     if resp.status_code != 200:
         raise OIDCError(f"OIDC discovery {resp.status_code}: {resp.text[:200]}")
     info = OIDCDiscovery.from_dict(resp.json())
-    _discovery_cache[settings.oidc_issuer] = info
+    _discovery_cache[cfg.issuer] = info
     return info
 
 
@@ -97,35 +95,32 @@ def make_nonce() -> str:
     return secrets.token_urlsafe(16)
 
 
-async def build_auth_url(state: str, nonce: str) -> str:
-    settings = get_settings()
-    info = await discover()
-    if not (settings.oidc_client_id and settings.oidc_redirect_uri):
+async def build_auth_url(cfg: Any, state: str, nonce: str) -> str:
+    info = await discover(cfg)
+    if not (cfg.client_id and cfg.redirect_uri):
         raise OIDCNotConfigured("OIDC client_id / redirect_uri not set")
     from urllib.parse import urlencode
     qs = urlencode({
         "response_type": "code",
-        "client_id": settings.oidc_client_id,
-        "redirect_uri": settings.oidc_redirect_uri,
-        "scope": settings.oidc_scope,
+        "client_id": cfg.client_id,
+        "redirect_uri": cfg.redirect_uri,
+        "scope": cfg.scope,
         "state": state,
         "nonce": nonce,
     })
     return f"{info.authorization_endpoint}?{qs}"
 
 
-async def exchange_code(code: str) -> dict[str, Any]:
-    settings = get_settings()
-    info = await discover()
-    if not (settings.oidc_client_id and settings.oidc_client_secret
-            and settings.oidc_redirect_uri):
+async def exchange_code(cfg: Any, code: str) -> dict[str, Any]:
+    info = await discover(cfg)
+    if not (cfg.client_id and cfg.client_secret and cfg.redirect_uri):
         raise OIDCNotConfigured("OIDC credentials not fully configured")
     body = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": settings.oidc_redirect_uri,
-        "client_id": settings.oidc_client_id,
-        "client_secret": settings.oidc_client_secret.get_secret_value(),
+        "redirect_uri": cfg.redirect_uri,
+        "client_id": cfg.client_id,
+        "client_secret": cfg.client_secret,
     }
     try:
         resp = await safe_request(
@@ -141,8 +136,8 @@ async def exchange_code(code: str) -> dict[str, Any]:
     return resp.json()  # type: ignore[no-any-return]
 
 
-async def fetch_userinfo(access_token: str) -> dict[str, Any]:
-    info = await discover()
+async def fetch_userinfo(cfg: Any, access_token: str) -> dict[str, Any]:
+    info = await discover(cfg)
     if not info.userinfo_endpoint:
         raise OIDCError("Provider does not expose userinfo endpoint")
     try:
@@ -162,30 +157,29 @@ async def fetch_userinfo(access_token: str) -> dict[str, Any]:
 
 
 async def upsert_user_from_oidc(
-    session: AsyncSession, claims: dict[str, Any], actor_ip: str | None,
+    session: AsyncSession, cfg: Any, claims: dict[str, Any], actor_ip: str | None,
 ) -> User:
-    settings = get_settings()
     sub = claims.get("sub")
     if not sub:
         raise OIDCError("OIDC userinfo missing sub")
 
     email = claims.get("email")
     username = (
-        claims.get(settings.oidc_username_claim)
+        claims.get(cfg.username_claim)
         or claims.get("preferred_username")
         or email
         or sub
     )
     display_name = claims.get("name") or claims.get("given_name") or username
 
-    groups_raw = claims.get(settings.oidc_groups_claim) or []
+    groups_raw = claims.get(cfg.groups_claim) or []
     if isinstance(groups_raw, str):
         groups: list[str] = [g.strip() for g in groups_raw.split(",") if g.strip()]
     elif isinstance(groups_raw, list):
         groups = [str(g) for g in groups_raw]
     else:
         groups = []
-    is_admin = any(g in settings.oidc_admin_groups for g in groups)
+    is_admin = any(g in cfg.admin_groups for g in groups)
 
     # 找：external_subject 比對；沒就 fallback 到 username
     user = (

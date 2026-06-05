@@ -19,7 +19,7 @@ from app.models.ip_change_log import CHANGE_SOURCES, EVENT_TYPES, IPChangeLog
 from app.models.user import User
 from app.schemas.base import Paginated
 from app.schemas.ip_change_log import IPChangeLogRead
-from app.services.permission import filter_visible
+from app.services.permission import visible_ids
 
 router = APIRouter(prefix="/ip-changes", tags=["ip-changes"])
 
@@ -41,7 +41,12 @@ async def list_ip_changes(
     stmt = select(IPChangeLog)
     count_stmt = select(func.count()).select_from(IPChangeLog)
 
+    # 依 subnet 可見性收斂（None=萬用/admin 看全部；set=只看可見子網；已刪子網的 NULL 只給 admin）
+    sub_vis = None if user.is_admin else await visible_ids(session, user=user, object_type="subnet")
+
     def _apply(s: Any) -> Any:
+        if sub_vis is not None:
+            s = s.where(IPChangeLog.subnet_id.in_(sub_vis)) if sub_vis else s.where(False)
         if ip_id is not None:
             s = s.where(IPChangeLog.ip_id == ip_id)
         if subnet_id is not None:
@@ -71,18 +76,8 @@ async def list_ip_changes(
 
     total = (await session.execute(count_stmt)).scalar_one()
 
-    # 非 admin：多撈一些再依 subnet 可見性過濾（subnet_id 為 NULL 的——已刪除子網——只給 admin）
-    fetch_limit = page_size if user.is_admin else page_size * 4
-    stmt = stmt.offset((page - 1) * page_size).limit(fetch_limit)
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     rows = list((await session.execute(stmt)).scalars().all())
-
-    if not user.is_admin:
-        candidate = list({r.subnet_id for r in rows if r.subnet_id is not None})
-        visible = set(await filter_visible(
-            session, user=user, object_type="subnet",
-            object_ids=candidate, required="read",
-        ))
-        rows = [r for r in rows if r.subnet_id in visible][:page_size]
 
     # 補 actor 帳號名
     actor_ids = list({r.actor_user_id for r in rows if r.actor_user_id is not None})

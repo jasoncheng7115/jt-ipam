@@ -16,10 +16,12 @@ export interface AuditLog {
   id: number;
   ts: string;
   actor_user_id: string | null;
+  actor_name: string | null;
   actor_ip: string | null;
   actor_user_agent: string | null;
   object_type: string;
   object_id: string | null;
+  object_label: string | null;
   action: string;
   diff: Record<string, unknown> | null;
   request_id: string | null;

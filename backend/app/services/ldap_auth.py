@@ -1,10 +1,10 @@
 """LDAP / AD 認證。
 
 phpIPAM 缺點：LDAP 設定散落、錯誤訊息不清、不支援 LDAPS+StartTLS 同時誤用。
-jt-ipam：env 統一設定 + 啟動時驗證 + test endpoint。
+jt-ipam：設定走 DB（管理區 UI）覆蓋 env；bind password 應用層加密；test endpoint。
 
 OWASP 對應：
-- A02：bind password 從 SecretStr 取；TLS 預設啟用；不接受 verify=False
+- A02：bind password 加密存 DB（AES-GCM）；TLS 預設啟用；不接受 verify=False
 - A03：username 透過 ldap3.utils.conv.escape_filter_chars 跳脫 LDAP filter
 - A07：認證失敗都回統一訊息；rate limit 沿用 /auth/login 的 auth bucket
 """
@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import ssl
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ldap3 import (
     ALL,
@@ -26,7 +26,8 @@ from ldap3 import (
 from ldap3.core.exceptions import LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from app.core.config import get_settings
+if TYPE_CHECKING:
+    from app.services.system_config import LdapConfig
 
 
 class LDAPAuthError(Exception):
@@ -51,61 +52,64 @@ class LDAPUserInfo:
     raw_attrs: dict[str, Any]
 
 
-def _build_server() -> Server:
-    s = get_settings()
-    if not s.ldap_enabled or not s.ldap_server:
+def _build_server(cfg: LdapConfig) -> Server:
+    if not cfg.enabled or not cfg.server:
         raise LDAPNotConfigured("LDAP not configured")
 
     tls = Tls(validate=ssl.CERT_REQUIRED, version=ssl.PROTOCOL_TLS_CLIENT)
     return Server(
-        host=s.ldap_server,
-        port=s.ldap_port,
-        use_ssl=s.ldap_use_ssl,
+        host=cfg.server,
+        port=cfg.port,
+        use_ssl=cfg.use_ssl,
         tls=tls,
         get_info=ALL,
-        connect_timeout=int(s.ldap_timeout),
+        connect_timeout=int(cfg.timeout),
     )
 
 
-def _bind_admin_sync() -> Connection:
-    s = get_settings()
-    server = _build_server()
+def _bind_admin_sync(cfg: LdapConfig) -> Connection:
+    server = _build_server(cfg)
     conn = Connection(
         server,
-        user=s.ldap_bind_dn,
-        password=s.ldap_bind_password.get_secret_value() if s.ldap_bind_password else None,
+        user=cfg.bind_dn,
+        password=cfg.bind_password,
         auto_bind=False,
-        receive_timeout=int(s.ldap_timeout),
+        receive_timeout=int(cfg.timeout),
         raise_exceptions=True,
     )
-    if s.ldap_use_starttls and not s.ldap_use_ssl:
-        if not conn.open():
-            raise LDAPAuthError("LDAP open failed")
-        if not conn.start_tls():
-            raise LDAPAuthError("LDAP StartTLS failed")
-    if not conn.bind():
+    try:
+        if cfg.use_starttls and not cfg.use_ssl:
+            conn.open()
+            conn.start_tls()
+        ok = conn.bind()
+    except LDAPException as exc:
+        # ldap3 在 raise_exceptions=True 時對 bind 失敗丟原生例外（含 AD 帳密錯誤）；轉成我們的型別
+        msg = str(exc)
+        if "invalidCredentials" in msg or "data 52e" in msg or "InvalidCredentials" in exc.__class__.__name__:
+            raise LDAPInvalidCredentials(f"bind rejected (帳號或密碼錯誤): {msg}") from exc
+        raise LDAPAuthError(f"LDAP bind failed: {exc.__class__.__name__}: {msg}") from exc
+    if not ok:
         raise LDAPAuthError(f"LDAP admin bind failed: {conn.last_error}")
     return conn
 
 
-def _authenticate_sync(username: str, password: str) -> LDAPUserInfo:
-    s = get_settings()
-    if not s.ldap_search_base:
-        raise LDAPNotConfigured("LDAP_SEARCH_BASE not set")
+def _authenticate_sync(cfg: LdapConfig, username: str, password: str) -> LDAPUserInfo:
+    if not cfg.search_base:
+        raise LDAPNotConfigured("LDAP search base not set")
 
     safe_username = escape_filter_chars(username)
-    user_filter = s.ldap_user_filter.format(username=safe_username)
+    user_filter = cfg.user_filter.format(username=safe_username)
 
     # 1. admin bind 找出使用者 DN + 屬性
-    conn = _bind_admin_sync()
+    conn = _bind_admin_sync(cfg)
     try:
         conn.search(
-            search_base=s.ldap_search_base,
+            search_base=cfg.search_base,
             search_filter=user_filter,
             search_scope=SUBTREE,
-            attributes=[s.ldap_attr_email, s.ldap_attr_display_name,
-                        s.ldap_attr_member_of, "cn"],
-            time_limit=int(s.ldap_timeout),
+            attributes=[cfg.attr_email, cfg.attr_display_name,
+                        cfg.attr_member_of, "cn"],
+            time_limit=int(cfg.timeout),
         )
         if not conn.entries:
             raise LDAPInvalidCredentials("user not found")
@@ -121,16 +125,16 @@ def _authenticate_sync(username: str, password: str) -> LDAPUserInfo:
             pass
 
     # 2. 用 user DN + 密碼 bind 驗證
-    server = _build_server()
+    server = _build_server(cfg)
     user_conn = Connection(
         server,
         user=user_dn,
         password=password,
         auto_bind=False,
-        receive_timeout=int(s.ldap_timeout),
+        receive_timeout=int(cfg.timeout),
         raise_exceptions=False,
     )
-    if s.ldap_use_starttls and not s.ldap_use_ssl:
+    if cfg.use_starttls and not cfg.use_ssl:
         if not user_conn.open() or not user_conn.start_tls():
             raise LDAPAuthError("LDAP user StartTLS failed")
     bound = user_conn.bind()
@@ -144,10 +148,10 @@ def _authenticate_sync(username: str, password: str) -> LDAPUserInfo:
             pass
 
     # 3. 解析屬性
-    email = (attrs.get(s.ldap_attr_email) or [None])[0]
-    display_name = (attrs.get(s.ldap_attr_display_name) or [None])[0]
-    groups = attrs.get(s.ldap_attr_member_of) or []
-    is_admin = any(g in s.ldap_admin_groups for g in groups)
+    email = (attrs.get(cfg.attr_email) or [None])[0]
+    display_name = (attrs.get(cfg.attr_display_name) or [None])[0]
+    groups = attrs.get(cfg.attr_member_of) or []
+    is_admin = any(g in cfg.admin_groups for g in groups)
 
     return LDAPUserInfo(
         dn=user_dn,
@@ -159,28 +163,26 @@ def _authenticate_sync(username: str, password: str) -> LDAPUserInfo:
     )
 
 
-async def authenticate(username: str, password: str) -> LDAPUserInfo:
+async def authenticate(cfg: LdapConfig, username: str, password: str) -> LDAPUserInfo:
     """非同步入口；ldap3 同步呼叫包進 thread executor。"""
-    settings = get_settings()
-    if not settings.ldap_enabled:
+    if not cfg.enabled:
         raise LDAPNotConfigured("LDAP is disabled")
-    return await asyncio.to_thread(_authenticate_sync, username, password)
+    return await asyncio.to_thread(_authenticate_sync, cfg, username, password)
 
 
-async def test_connection() -> dict[str, Any]:
+async def test_connection(cfg: LdapConfig) -> dict[str, Any]:
     """admin bind 測試 — 不需要任何使用者密碼。"""
-    settings = get_settings()
-    if not settings.ldap_enabled:
+    if not cfg.enabled:
         raise LDAPNotConfigured("LDAP is disabled")
 
     def _go() -> dict[str, Any]:
-        conn = _bind_admin_sync()
+        conn = _bind_admin_sync(cfg)
         try:
             return {
                 "bound": True,
-                "server": settings.ldap_server,
-                "port": settings.ldap_port,
-                "tls": "ssl" if settings.ldap_use_ssl else "starttls" if settings.ldap_use_starttls else "none",
+                "server": cfg.server,
+                "port": cfg.port,
+                "tls": "ssl" if cfg.use_ssl else "starttls" if cfg.use_starttls else "none",
                 "who_am_i": conn.extend.standard.who_am_i(),
             }
         finally:

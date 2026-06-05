@@ -58,7 +58,7 @@ class ChatContext(StrictModel):
 
 class ChatRequest(StrictModel):
     messages: Annotated[list[ChatMessage], Field(min_length=1, max_length=20)]
-    max_iterations: Annotated[int, Field(ge=1, le=8)] = 4
+    max_iterations: Annotated[int, Field(ge=1, le=8)] = 6
     context: ChatContext | None = None
     conversation_id: str | None = None
 
@@ -137,7 +137,47 @@ async def chat(
         "model": result.get("model"),
         "elapsed_ms": result.get("elapsed_ms"),
         "conversation_id": str(conv.id),
+        "pending_actions": result.get("pending_actions", []),
     }
+
+
+class ConfirmRequest(StrictModel):
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    conversation_id: str | None = None
+
+
+@router.post("/chat/confirm")
+async def chat_confirm(
+    payload: ConfirmRequest,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """執行使用者在 AI 對話中按下「確認」的異動動作（白名單工具；權限仍由工具本身把關）。"""
+    await limit_per_ip(request, name="ai")
+    from app.mcp.tools import MUTATING_TOOLS, TOOLS, IPAMToolError, summarize_action
+    if payload.tool not in MUTATING_TOOLS or payload.tool not in TOOLS:
+        raise HTTPException(status_code=400, detail="not a confirmable action")
+    try:
+        result = await TOOLS[payload.tool]["fn"](session, user=user, **payload.args)
+    except IPAMToolError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TypeError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail=f"bad arguments: {exc}") from exc
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="ai", object_id=None, action="ai_tool_exec",
+        diff={"tool": payload.tool, "summary": summarize_action(payload.tool, payload.args)},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return {"ok": True, "tool": payload.tool,
+            "title": summarize_action(payload.tool, payload.args), "result": result}
 
 
 @router.post("/chat/stream")
@@ -413,3 +453,26 @@ async def model_info(
         "quantization": det.get("quantization_level"),
         "context_length": ctx,
     }
+
+
+@router.get("/tools")
+async def list_mcp_tools(_user: CurrentUser) -> dict[str, Any]:
+    """列出 AI 助理 / MCP server 可用的工具（名稱、用途、參數、是否會異動資料）。"""
+    from app.mcp.tools import MUTATING_TOOLS, TOOLS
+    items = []
+    for name, meta in sorted(TOOLS.items()):
+        params = (meta.get("parameters") or {}).get("properties") or {}
+        required = set((meta.get("parameters") or {}).get("required") or [])
+        items.append({
+            "name": name,
+            "description": meta.get("description") or "",
+            "mutating": name in MUTATING_TOOLS,
+            "params": [
+                {"name": p, "type": (spec or {}).get("type", "string"),
+                 "required": p in required,
+                 "description": (spec or {}).get("description", "")}
+                for p, spec in params.items()
+            ],
+        })
+    return {"tools": items, "total": len(items),
+            "mutating_count": sum(1 for i in items if i["mutating"])}

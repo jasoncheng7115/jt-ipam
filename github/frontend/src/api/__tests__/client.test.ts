@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import axios from "axios";
 import { apiClient } from "@/api/client";
 
 describe("apiClient interceptors", () => {
@@ -43,18 +44,24 @@ describe("apiClient interceptors", () => {
     );
   });
 
-  it("401 response 會清空 token 並導向 login", async () => {
+  it("401 且 refresh 失敗 → 清空 token 並導向 login", async () => {
     localStorage.setItem("access_token", "expired");
     localStorage.setItem("refresh_token", "expired-r");
-    // mock window.location.assign
+    // refresh 端點失敗 → tryRefreshToken 回傳 null → 視為登入逾時
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("refresh failed"));
+    // mock window.location.assign（無註冊 session handler 時走硬導向後備）
     const assignMock = vi.fn();
     Object.defineProperty(window, "location", {
       value: { pathname: "/sections", search: "", assign: assignMock },
       writable: true,
+      configurable: true,
     });
     const resp = apiClient.interceptors.response as any;
     const errHandler = resp.handlers[0].rejected;
-    await expect(errHandler({ response: { status: 401 } })).rejects.toBeTruthy();
+    // 登入逾時 path 回傳「永不 resolve」的 promise（避免元件再彈錯），故不 await；
+    // 等 microtask/timer 後驗證副作用即可。
+    void errHandler({ response: { status: 401 }, config: { url: "/api/v1/sections" } });
+    await new Promise((r) => setTimeout(r, 50));
     expect(localStorage.getItem("access_token")).toBeNull();
     expect(localStorage.getItem("refresh_token")).toBeNull();
     expect(assignMock).toHaveBeenCalledWith(

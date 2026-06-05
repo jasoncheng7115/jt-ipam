@@ -65,6 +65,7 @@ class UserCreate(StrictModel):
 
 
 class UserUpdate(StrictModel):
+    username: str | None = None
     email: str | None = None
     display_name: str | None = None
     is_active: bool | None = None
@@ -172,6 +173,12 @@ async def update_user(
     data = payload.model_dump(exclude_unset=True)
     new_pwd = data.pop("password", None)
     unlock = data.pop("unlock", False)
+    new_username = data.pop("username", None)
+    if new_username is not None and new_username != user.username:
+        # 帳號名只允許本機帳號改（外部帳號的 username 由領域決定，例如 jason@ldap）
+        if user.auth_provider != "local":
+            raise HTTPException(400, detail="cannot rename external account")
+        user.username = new_username.strip()
     for k, v in data.items():
         setattr(user, k, v)
     if new_pwd is not None:
@@ -190,10 +197,14 @@ async def update_user(
         actor_user_agent=request.headers.get("user-agent"),
         object_type="user", object_id=str(user.id),
         action="update",
-        diff={**data, "password_changed": new_pwd is not None, "unlocked": unlock},
+        diff={**data, "username": new_username, "password_changed": new_pwd is not None, "unlocked": unlock},
         request_id=getattr(request.state, "request_id", None),
     )
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(409, detail="username or email already exists") from exc
     await session.refresh(user)
     return user
 

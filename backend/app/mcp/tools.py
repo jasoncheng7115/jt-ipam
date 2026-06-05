@@ -35,12 +35,20 @@ from app.services.address import (
     create_ip,
 )
 from app.services.oui import vendor_for_mac
-from app.services.permission import filter_visible
+from app.services.permission import filter_visible, visible_ids
 from app.services.subnet import find_first_free_address, find_free_addresses, get_usage
 
 
 class IPAMToolError(Exception):
     pass
+
+
+def _as_uuid(value: str, field: str = "id") -> uuid.UUID:
+    """把 LLM 給的字串轉 UUID；格式不對就回優雅錯誤（避免 ValueError 變成 tool failed）。"""
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError) as exc:
+        raise IPAMToolError(f"invalid {field}: {value!r}") from exc
 
 
 # ─────────────────── 唯讀工具 ───────────────────
@@ -90,7 +98,7 @@ async def find_free_ip(
     """找指定 subnet 的第一個空閒 IP。可給 cidr 或 subnet_id。"""
     subnet: Subnet | None = None
     if subnet_id:
-        subnet = await session.get(Subnet, uuid.UUID(subnet_id))
+        subnet = await session.get(Subnet, _as_uuid(subnet_id, "subnet_id"))
     elif subnet_cidr:
         # 透過 cidr 直接查
         rows = (
@@ -123,7 +131,7 @@ async def _resolve_subnet(
 ) -> Subnet:
     subnet: Subnet | None = None
     if subnet_id:
-        subnet = await session.get(Subnet, uuid.UUID(subnet_id))
+        subnet = await session.get(Subnet, _as_uuid(subnet_id, "subnet_id"))
     elif subnet_cidr:
         rows = (await session.execute(
             text("SELECT id::text AS id FROM subnets WHERE cidr = CAST(:c AS cidr) LIMIT 1"),
@@ -180,7 +188,7 @@ async def list_subnets(
         limit = 200
     stmt = select(Subnet)
     if section_id:
-        stmt = stmt.where(Subnet.section_id == uuid.UUID(section_id))
+        stmt = stmt.where(Subnet.section_id == _as_uuid(section_id, "section_id"))
     stmt = stmt.order_by(Subnet.cidr).limit(limit)
     rows = list((await session.execute(stmt)).scalars().all())
     visible = set(await filter_visible(
@@ -209,7 +217,7 @@ async def list_subnets(
 async def get_subnet_usage(
     session: AsyncSession, *, user: User, subnet_id: str,
 ) -> dict[str, Any]:
-    s = await session.get(Subnet, uuid.UUID(subnet_id))
+    s = await session.get(Subnet, _as_uuid(subnet_id, "subnet_id"))
     if s is None:
         raise IPAMToolError("subnet not found")
     visible = set(await filter_visible(
@@ -242,6 +250,17 @@ async def trace_mac(
             .order_by(FDBEntry.last_seen_at.desc()).limit(1)
         )
     ).scalar_one_or_none()
+    # RBAC：ARP 依其 IP 子網路可見性、FDB 依其 switch 裝置可見性遮蔽
+    vis_sub = await visible_ids(session, user=user, object_type="subnet")
+    vis_dev = await visible_ids(session, user=user, object_type="device")
+    if arp is not None and vis_sub is not None:
+        ip_sub = (await session.execute(
+            select(IPAddress.subnet_id).where(IPAddress.ip == arp.ip))).scalar_one_or_none()
+        if ip_sub is None or ip_sub not in vis_sub:
+            arp = None
+    if fdb is not None and vis_dev is not None and (
+            fdb.device_id is None or fdb.device_id not in vis_dev):
+        fdb = None
     return {
         "mac": mac,
         "arp": (
@@ -394,8 +413,11 @@ async def list_devices(
     if type:
         stmt = stmt.where(Device.type == type)
     rows = list((await session.execute(stmt.order_by(Device.name).limit(limit))).scalars().all())
+    vis = await visible_ids(session, user=user, object_type="device")
     out = []
     for d in rows:
+        if vis is not None and d.id not in vis:
+            continue
         ip_count = int(await session.scalar(
             select(func.count()).select_from(IPAddress).where(IPAddress.device_id == d.id)
         ) or 0)
@@ -415,13 +437,16 @@ async def get_device(
     """裝置詳情：基本資料 + IP 清單 + （透過 LibreNMS）VLAN 與 switch port。"""
     dev: Device | None = None
     if device_id:
-        dev = await session.get(Device, uuid.UUID(device_id))
+        dev = await session.get(Device, _as_uuid(device_id, "device_id"))
     elif name:
         dev = (await session.execute(
             select(Device).where(Device.name.ilike(name)).limit(1)
         )).scalar_one_or_none()
     if dev is None:
         raise IPAMToolError("device not found")
+    vis = await visible_ids(session, user=user, object_type="device")
+    if vis is not None and dev.id not in vis:
+        raise IPAMToolError("device not found")   # 不洩漏不可見裝置
     ips = list((await session.execute(
         select(IPAddress.ip, IPAddress.hostname, IPAddress.mac)
         .where(IPAddress.device_id == dev.id)
@@ -634,6 +659,9 @@ async def switch_port_for_ip(
     )).scalar_one_or_none()
     if ipa is None:
         raise IPAMToolError("IP not found")
+    vis = await visible_ids(session, user=user, object_type="subnet")
+    if vis is not None and (ipa.subnet_id is None or ipa.subnet_id not in vis):
+        raise IPAMToolError("IP not found")   # RBAC：不可見子網路的 IP
     if ipa.mac is None:
         return {"ip": ip, "mac": None, "locations": [], "note": "no MAC known for this IP"}
     mac = str(ipa.mac).lower()
@@ -675,9 +703,27 @@ async def allocate_ip(
     customer: str | None = None, mac: str | None = None,
 ) -> dict[str, Any]:
     """配發 IP（ADMIN）。可指定 requested_ip（哪個 IP）或留空取第一個空位；
-    可一併設定 hostname / owner / customer（用名稱比對）/ mac / description。"""
+    可一併設定 hostname / owner / customer（用名稱比對）/ mac / description。
+
+    若給了 requested_ip 但沒給 subnet_id / subnet_cidr，會自動找出「包含此 IP 的子網路」
+    （取最精確的一個）來配發，使用者不必先知道子網路。"""
     if not user.is_admin:
         raise IPAMToolError("allocate_ip requires admin")
+    # 只給 requested_ip 時，自動推導包含它的子網路（最長前綴優先）
+    if not subnet_id and not subnet_cidr and requested_ip:
+        row = (await session.execute(
+            text(
+                "SELECT id::text AS id FROM subnets "
+                "WHERE cidr >>= CAST(:ip AS inet) "
+                "ORDER BY masklen(cidr) DESC LIMIT 1"
+            ),
+            {"ip": requested_ip.split("/")[0]},
+        )).first()
+        if row is None:
+            raise IPAMToolError(
+                f"no subnet contains {requested_ip} — 請先建立包含此 IP 的子網路"
+            )
+        subnet_id = row.id
     subnet = await _resolve_subnet(
         session, user=user, subnet_id=subnet_id, subnet_cidr=subnet_cidr,
     )
@@ -748,6 +794,10 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
     obj = (await session.execute(select(IPAddress).where(IPAddress.ip == ip))).scalars().first()
     if obj is None:
         return {"found": False, "ip": ip}
+    # RBAC：IP 所屬子網路不可見 → 當作查無，不洩漏
+    vis = await visible_ids(session, user=user, object_type="subnet")
+    if vis is not None and (obj.subnet_id is None or obj.subnet_id not in vis):
+        return {"found": False, "ip": ip}
     sub = await session.get(Subnet, obj.subnet_id) if obj.subnet_id else None
     dev = await session.get(Device, obj.device_id) if obj.device_id else None
     cust = await session.get(Customer, obj.customer_id) if obj.customer_id else None
@@ -805,21 +855,30 @@ async def get_subnet_detail(
 async def list_subnet_ips(
     session: AsyncSession, *, user: User,
     subnet_id: str | None = None, subnet_cidr: str | None = None,
-    state: str | None = None, limit: int = 256,
+    state: str | None = None, limit: int = 256, offset: int = 0,
 ) -> dict[str, Any]:
     """列出某子網路內所有「已紀錄／已用」的 IP（選用 state 過濾）。
 
     回每筆 IP 的 hostname / state / mac / owner / 是否掛裝置。提供 subnet_id 或 subnet_cidr。
+    結果多時用 offset 分批：回傳含 has_more / next_offset，需要下一批就帶 next_offset 再呼叫。
     """
     sub = await _resolve_subnet(session, user=user, subnet_id=subnet_id, subnet_cidr=subnet_cidr)
-    stmt = select(IPAddress).where(IPAddress.subnet_id == sub.id)
+    lim = min(int(limit), 1000)
+    off = max(int(offset), 0)
+    base = select(IPAddress).where(IPAddress.subnet_id == sub.id)
     if state:
-        stmt = stmt.where(IPAddress.state == state)
-    stmt = stmt.order_by(IPAddress.ip).limit(min(int(limit), 1000))
-    rows = (await session.execute(stmt)).scalars().all()
+        base = base.where(IPAddress.state == state)
+    # 多取一筆判斷是否還有下一批
+    stmt = base.order_by(IPAddress.ip).offset(off).limit(lim + 1)
+    rows = list((await session.execute(stmt)).scalars().all())
+    has_more = len(rows) > lim
+    rows = rows[:lim]
     return {
         "subnet": str(sub.cidr),
         "count": len(rows),
+        "offset": off,
+        "has_more": has_more,
+        "next_offset": (off + lim) if has_more else None,
         "ips": [{
             "ip": r.ip, "hostname": r.hostname, "state": r.state,
             "mac": r.mac, "owner": r.owner,
@@ -847,8 +906,12 @@ async def list_firewall_rules(
     from app.models.firewall_rule import OPNsenseRule
     fw_id = None
     if firewall_id:
-        fw_id = uuid.UUID(firewall_id)
-    elif firewall_name:
+        try:
+            fw_id = uuid.UUID(firewall_id)
+        except (ValueError, TypeError):
+            # LLM 常把防火牆「名稱」塞進 firewall_id 欄位 → 退而當名稱查
+            firewall_name = firewall_name or firewall_id
+    if fw_id is None and firewall_name:
         fw = (await session.execute(
             select(OPNsenseFirewall).where(OPNsenseFirewall.name == firewall_name)
         )).scalars().first()
@@ -976,7 +1039,7 @@ async def list_arp(
 
 
 async def list_fdb(
-    session: AsyncSession, *, user: User, mac: str | None = None, limit: int = 100,
+    session: AsyncSession, *, user: User, mac: str | None = None, limit: int = 50,
 ) -> dict[str, Any]:
     """交換器 FDB 紀錄（MAC↔埠）。"""
     stmt = select(FDBEntry)
@@ -1005,7 +1068,7 @@ async def get_customer_summary(
     """單一客戶/單位的掛載統計：sections / subnets / devices / IPs。"""
     cust: Customer | None = None
     if customer_id:
-        cust = await session.get(Customer, uuid.UUID(customer_id))
+        cust = await session.get(Customer, _as_uuid(customer_id, "customer_id"))
     elif name:
         cust = (await session.execute(
             select(Customer).where(Customer.name == name)
@@ -1092,7 +1155,7 @@ async def create_subnet(
         raise IPAMToolError(f"Invalid CIDR: {exc}") from exc
     sec: Section | None = None
     if section_id:
-        sec = await session.get(Section, uuid.UUID(section_id))
+        sec = await session.get(Section, _as_uuid(section_id, "section_id"))
     elif section_name:
         sec = (await session.execute(select(Section).where(Section.name == section_name))).scalars().first()
     if sec is None:
@@ -1123,7 +1186,7 @@ async def approve_ip_request(session: AsyncSession, *, user: User, request_id: s
         raise IPAMToolError("approve_ip_request requires admin")
     from app.models.ip_request import IPRequest
     from app.services.ip_request import approve_request
-    req = await session.get(IPRequest, uuid.UUID(request_id))
+    req = await session.get(IPRequest, _as_uuid(request_id, "request_id"))
     if req is None:
         raise IPAMToolError("request not found")
     sub = await session.get(Subnet, req.subnet_id)
@@ -1145,7 +1208,7 @@ async def reject_ip_request(
         raise IPAMToolError("reject_ip_request requires admin")
     from app.models.ip_request import IPRequest
     from app.services.ip_request import reject_request
-    req = await session.get(IPRequest, uuid.UUID(request_id))
+    req = await session.get(IPRequest, _as_uuid(request_id, "request_id"))
     if req is None:
         raise IPAMToolError("request not found")
     try:
@@ -1595,11 +1658,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "list_subnet_ips": {
         "fn": list_subnet_ips,
-        "description": "List the registered/used IPs inside a subnet (ip, hostname, state, mac, owner, device). Provide subnet_id or subnet_cidr; optional state filter. Use this to enumerate which IPs are in use in a subnet.",
+        "description": "List the registered/used IPs inside a subnet (ip, hostname, state, mac, owner, device). Provide subnet_id or subnet_cidr; optional state filter. Returns has_more/next_offset — to fetch the next batch, call again with offset=next_offset.",
         "parameters": {"type": "object", "properties": {
             "subnet_id": {"type": "string"}, "subnet_cidr": {"type": "string"},
             "state": {"type": "string", "description": "optional filter e.g. active"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 1000}}},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "offset": {"type": "integer", "minimum": 0, "description": "skip N rows; use next_offset from a previous call for the next batch"}}},
     },
     "list_firewalls": {
         "fn": list_firewalls,
@@ -1831,3 +1895,55 @@ TOOLS: dict[str, dict[str, Any]] = {
             "load_w": {"type": "number"}, "pdu_a": {"type": "number"}}},
     },
 }
+
+
+# ─────────────────── AI 對話：異動類工具需使用者確認 ───────────────────
+# 這些工具會新增 / 修改 / 刪除資料；AI 對話中不直接執行，先回前端請使用者按「確認」。
+MUTATING_TOOLS: frozenset[str] = frozenset({
+    "allocate_ip", "update_ip", "create_subnet", "create_device",
+    "approve_ip_request", "reject_ip_request",
+})
+
+
+# 純計算 / 外部查詢類工具（不碰 IPAM 資料）→ 不受 RBAC 可見範圍限制
+UTILITY_TOOLS: frozenset[str] = frozenset({
+    "calc_ip_info", "calc_cidr_info", "calc_cidr_split", "calc_eui64",
+    "calc_ip_in_cidr", "calc_cidr_relation", "calc_range_to_cidr",
+    "calc_cidr_to_range", "calc_aggregate", "calc_netmask", "calc_mac_format",
+    "calc_fqdn", "dns_resolve", "dns_mail_check", "geoip_locate", "power_calc",
+    "oui_lookup", "oui_search",
+})
+
+
+async def has_no_visibility(session: AsyncSession, user: User) -> bool:
+    """非管理員且對所有物件類型都無可見範圍 → AI 對話不該回任何 IPAM 資料。"""
+    if getattr(user, "is_admin", False):
+        return False
+    for ot in ("subnet", "device", "customer", "section", "rack", "location"):
+        v = await visible_ids(session, user=user, object_type=ot)
+        if v is None or v:   # None=全部可見、或非空集合 → 有可見範圍
+            return False
+    return True
+
+
+def summarize_action(name: str, args: dict[str, Any]) -> str:
+    """給前端確認卡用的人類可讀摘要（繁中）。"""
+    a = args or {}
+    if name == "allocate_ip":
+        base = f"配發 IP {a.get('requested_ip') or '（自動取第一個空位）'}"
+        if a.get("hostname"):
+            base += f"，主機名稱「{a['hostname']}」"
+        if a.get("owner"):
+            base += f"，擁有者「{a['owner']}」"
+        return base
+    if name == "update_ip":
+        return f"修改 IP {a.get('ip') or a.get('ip_address_id') or ''} 的資料"
+    if name == "create_subnet":
+        return f"建立子網路 {a.get('cidr') or ''}"
+    if name == "create_device":
+        return f"建立裝置「{a.get('name') or ''}」"
+    if name == "approve_ip_request":
+        return "核准一筆 IP 申請"
+    if name == "reject_ip_request":
+        return "駁回一筆 IP 申請"
+    return f"執行 {name}"

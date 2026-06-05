@@ -32,6 +32,10 @@ class AIError(RuntimeError):
     pass
 
 
+# 單一工具結果回填上下文的字元上限（避免超大清單拖慢/逾時模型）
+_TOOL_RESULT_CAP = 12000
+
+
 async def embed(session: AsyncSession, text_in: str) -> list[float]:
     """呼叫 Ollama 的 embedding endpoint。設定取自 system_settings (DB)，fallback 到 env。"""
     from app.services.system_config import get_llm_config
@@ -294,6 +298,12 @@ async def chat(
         if not tool_calls:
             return {"answer": msg.get("content") or "", "messages": convo, **_meta()}
 
+        # 異動類工具不直接執行 → 回傳待確認動作，等使用者按「確認」
+        pending = _pending_mutations(tool_calls)
+        if pending:
+            return {"answer": msg.get("content") or _pending_prompt_text(pending),
+                    "messages": convo, "pending_actions": pending, **_meta()}
+
         convo.extend(await _run_tool_calls(session, user, tool_calls))
 
     # 用完 max_iterations 還在叫工具 → 最後不給工具再叫一次，逼它用現有資訊作答
@@ -304,7 +314,17 @@ async def chat(
 async def _force_final_answer(cfg: Any, convo: list[dict[str, Any]]) -> str:
     """max_iterations 用完時的收尾：不帶 tools 再呼叫一次，要 LLM 直接作答。"""
     url = f"{cfg.url.rstrip('/')}/api/chat"
-    body = {"model": cfg.chat_model, "messages": convo, "stream": False, "options": {"temperature": 0.2}}
+    # 明確指示：根據已取得的工具結果立刻作答，別再呼叫工具（否則模型常回空字串 → 落到 fallback）
+    nudge = {
+        "role": "user",
+        "content": (
+            "Based on the tool results already gathered above, give your best final "
+            "answer to my question now, in my language. Do NOT call any more tools. "
+            "If the data is incomplete, answer with what you have and say what is missing."
+        ),
+    }
+    body = {"model": cfg.chat_model, "messages": [*convo, nudge],
+            "stream": False, "options": {"temperature": 0.2}}
     try:
         resp = await safe_request(
             "POST", url, headers={"Content-Type": "application/json"},
@@ -395,6 +415,9 @@ def _build_chat_context(
                 "call find_free_ips with the right count/consecutive ONCE; report only "
                 "the IPs it returns, and if it returns fewer than requested, say so "
                 "instead of making up more. "
+                "Some list tools return has_more/next_offset; if a result is truncated "
+                "or the user asks for more, tell them there are more and, when they ask "
+                "for the next batch, call the SAME tool again with offset=next_offset. "
                 + _lang_instruction(locale)
                 + _page_context_line(page_context)
             ),
@@ -404,9 +427,41 @@ def _build_chat_context(
     return ollama_tools, convo
 
 
+def _pending_mutations(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """挑出 tool_calls 中會異動資料的，回傳 {tool,args,title} 清單給前端確認。"""
+    from app.mcp.tools import MUTATING_TOOLS, summarize_action
+
+    pending: list[dict[str, Any]] = []
+    for call in tool_calls:
+        fn = call.get("function") or {}
+        name = fn.get("name")
+        if name not in MUTATING_TOOLS:
+            continue
+        args = fn.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        pending.append({"tool": name, "args": args, "title": summarize_action(name, args)})
+    return pending
+
+
+def _pending_prompt_text(pending: list[dict[str, Any]]) -> str:
+    """模型回傳待確認動作卻沒給文字時，用動作標題組一句提示，避免空白回應。"""
+    titles = [str(p.get("title") or p.get("tool") or "") for p in pending if p]
+    titles = [t for t in titles if t]
+    if not titles:
+        return ""
+    return "我準備執行以下動作，請確認後再進行：\n" + "\n".join(f"• {t}" for t in titles)
+
+
 async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """執行 LLM 要求的 tool_calls，回傳要 append 進 convo 的 tool 訊息（含 name）。"""
-    from app.mcp.tools import TOOLS, IPAMToolError
+    from app.mcp.tools import TOOLS, UTILITY_TOOLS, IPAMToolError, has_no_visibility
+
+    # RBAC 防護：非管理員且完全沒有可見範圍 → 一律不回 IPAM 資料（純計算工具除外）
+    no_vis = await has_no_visibility(session, user)
 
     out: list[dict[str, Any]] = []
     for call in tool_calls:
@@ -420,6 +475,8 @@ async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dic
                 args = {}
         if name not in TOOLS:
             tool_result: Any = {"error": f"unknown tool {name!r}"}
+        elif no_vis and name not in UTILITY_TOOLS:
+            tool_result = {"error": "permission_denied: 你目前沒有可檢視的資源權限，請聯絡管理員指派。"}
         else:
             try:
                 tool_result = await TOOLS[name]["fn"](session, user=user, **args)
@@ -427,11 +484,11 @@ async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dic
                 tool_result = {"error": str(exc)}
             except Exception as exc:
                 tool_result = {"error": f"tool failed: {exc.__class__.__name__}"}
-        out.append({
-            "role": "tool",
-            "name": name,
-            "content": json.dumps(tool_result, ensure_ascii=False, default=str),
-        })
+        blob = json.dumps(tool_result, ensure_ascii=False, default=str)
+        # 防止單一工具回傳過大撐爆上下文 → 模型變慢甚至 ReadTimeout
+        if len(blob) > _TOOL_RESULT_CAP:
+            blob = blob[:_TOOL_RESULT_CAP] + " …[truncated; 結果過多，請縮小範圍或加篩選條件]"
+        out.append({"role": "tool", "name": name, "content": blob})
     return out
 
 
@@ -521,6 +578,12 @@ async def chat_stream(
 
         if not tool_calls:
             yield {"type": "done", "answer": full_content, "trace_messages": convo, **_meta()}
+            return
+
+        # 異動類工具：不直接執行，回傳待確認動作給前端，等使用者按「確認」
+        pending = _pending_mutations(tool_calls)
+        if pending:
+            yield {"type": "pending_action", "actions": pending}
             return
 
         # 這輪是 tool round：剛吐的 token（若有，多半是 thinking）不是最終答案，叫前端清掉

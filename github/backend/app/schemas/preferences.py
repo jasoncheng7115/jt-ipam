@@ -18,6 +18,7 @@ class UserPreferenceRead(StrictModel):
     page_size: int
     table_columns: dict[str, Any] | None = None
     pinned_subnet_ids: list[uuid.UUID] | None = None
+    pinned: dict[str, list[str]] | None = None
 
 
 class UserPreferenceUpdate(StrictModel):
@@ -28,3 +29,4 @@ class UserPreferenceUpdate(StrictModel):
     page_size: Annotated[int | None, Field(ge=10, le=500)] = None
     table_columns: dict[str, Any] | None = None
     pinned_subnet_ids: list[uuid.UUID] | None = None
+    pinned: dict[str, list[str]] | None = None

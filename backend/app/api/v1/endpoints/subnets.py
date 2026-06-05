@@ -72,7 +72,21 @@ async def list_subnets(
         required="read",
     )
     visible_set = set(visible_ids)
-    items = [SubnetRead.model_validate(r) for r in rows if r.id in visible_set]
+    vis_rows = [r for r in rows if r.id in visible_set]
+    # 批次帶出單位名稱：非管理員載不到 customers 清單，前端樹狀分組才不會只剩 UUID
+    cust_ids = {r.customer_id for r in vis_rows if r.customer_id}
+    cust_name: dict[uuid.UUID, str] = {}
+    if cust_ids:
+        from app.models.customer import Customer
+        cust_name = {c.id: c.name for c in (await session.execute(
+            select(Customer).where(Customer.id.in_(cust_ids))
+        )).scalars().all()}
+    items = []
+    for r in vis_rows:
+        item = SubnetRead.model_validate(r)
+        if r.customer_id:
+            item.customer_name = cust_name.get(r.customer_id)
+        items.append(item)
 
     total = int(await session.scalar(count_stmt) or 0)
     return Paginated[SubnetRead](items=items, total=total, page=page, page_size=page_size)
@@ -90,7 +104,12 @@ async def get_subnet(
     subnet = await session.get(Subnet, subnet_id)
     if subnet is None:
         raise HTTPException(status_code=404, detail="Subnet not found")
-    return SubnetRead.model_validate(subnet)
+    out = SubnetRead.model_validate(subnet)
+    if subnet.customer_id:
+        from app.models.customer import Customer
+        cust = await session.get(Customer, subnet.customer_id)
+        out.customer_name = cust.name if cust else None
+    return out
 
 
 @router.get(

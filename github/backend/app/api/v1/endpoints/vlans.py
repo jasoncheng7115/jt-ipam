@@ -13,7 +13,7 @@ from sqlalchemy import String, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.librenms import LibreNMSDevice
@@ -28,7 +28,7 @@ from app.schemas.vlan import (
     VLANUpdate,
 )
 
-router = APIRouter(tags=["vlans"])
+router = APIRouter(tags=["vlans"], dependencies=[Depends(require_global_read)])
 
 
 # ─────────────────── VLAN Domains ───────────────────

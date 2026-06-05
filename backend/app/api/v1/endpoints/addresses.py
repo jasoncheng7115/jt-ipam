@@ -117,6 +117,11 @@ async def list_addresses(
         # 跨 subnet 取 device 的 IP 清單；底下還會逐筆檢查 subnet 權限
         stmt = stmt.where(IPAddress.device_id == device_id)
         count_stmt = count_stmt.where(IPAddress.device_id == device_id)
+    if subnet_id is None:
+        # 全域/跨子網路清單：排除「已歸檔子網路」的 IP（直接檢視某子網路時不套用，供檢視/還原）
+        active_subnets = select(Subnet.id).where(Subnet.archived_at.is_(None))
+        stmt = stmt.where(IPAddress.subnet_id.in_(active_subnets))
+        count_stmt = count_stmt.where(IPAddress.subnet_id.in_(active_subnets))
 
     if q:
         if exact:

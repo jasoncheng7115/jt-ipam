@@ -98,6 +98,7 @@ class SubnetUpdate(StrictModel):
 class SubnetRead(SubnetBase):
     id: uuid.UUID
     master_subnet_id: uuid.UUID | None
+    customer_name: str | None = None  # 方便前端不必另查 customers（非管理員也能顯示單位名）
     archived_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

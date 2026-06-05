@@ -274,7 +274,7 @@ export async function ripeCommit(payload: { handle?: string; cidr?: string; sect
 export interface Tenant { id: string; name: string; tenant_group_id: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface TenantGroup { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface ASN { id: string; number: number; rir: string | null; description: string | null; tenant_id: string | null; created_at: string; updated_at: string; }
-export interface Provider { id: string; name: string; account: string | null; description: string | null; created_at: string; updated_at: string; }
+export interface Provider { id: string; name: string; asn: number | null; account_number: string | null; portal_url: string | null; noc_contact: string | null; description: string | null; }
 export interface CircuitType { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface Circuit { id: string; cid: string; provider_id: string; type_id: string; status: string; monthly_fee_cents: number | null; commit_rate_kbps: number | null; up_kbps: number | null; down_kbps: number | null; install_date: string | null; contract_end_date: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface ContactGroup { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
@@ -296,6 +296,8 @@ export const Advanced = {
   asns: () => getList<ASN>("/api/v1/asns"),
   providers: () => getList<Provider>("/api/v1/providers"),
   circuitTypes: () => getList<CircuitType>("/api/v1/circuit-types"),
+  createCircuitType: (name: string) =>
+    apiClient.post<CircuitType>("/api/v1/circuit-types", { name }).then((r) => r.data),
   circuits: () => getList<Circuit>("/api/v1/circuits"),
   contactGroups: () => getList<ContactGroup>("/api/v1/contact-groups"),
   contactRoles: () => getList<ContactRole>("/api/v1/contact-roles"),
@@ -402,6 +404,24 @@ export const Physical = {
     const { data } = await apiClient.get<PortTrace>(`/api/v1/ports/${id}/trace`);
     return data;
   },
+  async createPanel(p: { name: string; location_id?: string | null; description?: string | null }): Promise<PowerPanel> {
+    const { data } = await apiClient.post<PowerPanel>("/api/v1/power-panels", p);
+    return data;
+  },
+  async createFeed(p: { panel_id: string; name: string; description?: string | null }): Promise<PowerFeed> {
+    const { data } = await apiClient.post<PowerFeed>("/api/v1/power-feeds", p);
+    return data;
+  },
+  async createOutlet(p: { feed_id?: string | null; label: string; rack_id?: string | null; device_id?: string | null; description?: string | null }): Promise<PowerOutlet> {
+    const { data } = await apiClient.post<PowerOutlet>("/api/v1/power-outlets", p);
+    return data;
+  },
+  async updatePanel(id: string, p: Record<string, any>): Promise<void> { await apiClient.patch(`/api/v1/power-panels/${id}`, p); },
+  async deletePanel(id: string): Promise<void> { await apiClient.delete(`/api/v1/power-panels/${id}`); },
+  async updateFeed(id: string, p: Record<string, any>): Promise<void> { await apiClient.patch(`/api/v1/power-feeds/${id}`, p); },
+  async deleteFeed(id: string): Promise<void> { await apiClient.delete(`/api/v1/power-feeds/${id}`); },
+  async updateOutlet(id: string, p: Record<string, any>): Promise<void> { await apiClient.patch(`/api/v1/power-outlets/${id}`, p); },
+  async deleteOutlet(id: string): Promise<void> { await apiClient.delete(`/api/v1/power-outlets/${id}`); },
   // 連線：建一條 cable + 兩端 termination（都接到 device_port）
   async connectPorts(aPortId: string, bPortId: string, opts: { type?: string; color?: string; label?: string; length_m?: number } = {}): Promise<void> {
     const { data: cable } = await apiClient.post<Cable>("/api/v1/cables", {
@@ -410,5 +430,11 @@ export const Physical = {
     });
     await apiClient.post("/api/v1/cable-terminations", { cable_id: cable.id, side: "A", object_type: "device_port", object_id: aPortId });
     await apiClient.post("/api/v1/cable-terminations", { cable_id: cable.id, side: "B", object_type: "device_port", object_id: bPortId });
+  },
+  async updateCable(id: string, patch: { type?: string | null; label?: string | null; color?: string | null; length_m?: number | null; description?: string | null; status?: string }): Promise<void> {
+    await apiClient.patch(`/api/v1/cables/${id}`, patch);
+  },
+  async deleteCable(id: string): Promise<void> {
+    await apiClient.delete(`/api/v1/cables/${id}`);
   },
 };

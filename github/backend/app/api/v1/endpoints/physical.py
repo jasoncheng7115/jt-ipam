@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.device import Device
@@ -28,7 +28,7 @@ from app.models.physical import (
 )
 from app.schemas.base import Paginated, StrictModel
 
-router = APIRouter(tags=["physical"])
+router = APIRouter(tags=["physical"], dependencies=[Depends(require_global_read)])
 
 
 async def _audit(
@@ -57,6 +57,10 @@ class CableRead(StrictModel):
     length_m: float | None
     description: str | None
     status: str
+    a_end: str | None = None       # 「裝置 / 連接埠」可讀字串
+    b_end: str | None = None
+    a_device_id: uuid.UUID | None = None
+    b_device_id: uuid.UUID | None = None
 
 
 class CableWrite(StrictModel):
@@ -96,10 +100,51 @@ async def list_cables(
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
     total = int(await session.scalar(select(func.count()).select_from(Cable)) or 0)
-    return Paginated[CableRead](
-        items=[CableRead.model_validate(r) for r in rows],
-        total=total, page=page, page_size=page_size,
-    )
+
+    # 兩端「裝置 / 連接埠」解析：把各 cable 的 A/B termination 還原成可讀字串
+    cable_ids = [r.id for r in rows]
+    ends: dict[uuid.UUID, dict[str, Any]] = {cid: {} for cid in cable_ids}
+    if cable_ids:
+        terms = list((await session.execute(
+            select(CableTermination).where(CableTermination.cable_id.in_(cable_ids))
+        )).scalars().all())
+        # 預載相關 device_port → device 名稱
+        port_ids = [t.object_id for t in terms if t.object_type == "device_port"]
+        dev_ids = [t.object_id for t in terms if t.object_type == "device"]
+        ports: dict[uuid.UUID, DevicePort] = {}
+        if port_ids:
+            ports = {p.id: p for p in (await session.execute(
+                select(DevicePort).where(DevicePort.id.in_(port_ids))
+            )).scalars().all()}
+        dev_name: dict[uuid.UUID, str] = {}
+        need_dev = set(dev_ids) | {p.device_id for p in ports.values()}
+        if need_dev:
+            dev_name = {d.id: d.name for d in (await session.execute(
+                select(Device).where(Device.id.in_(need_dev))
+            )).scalars().all()}
+        for t in terms:
+            label = None
+            device_id = None
+            if t.object_type == "device_port" and t.object_id in ports:
+                p = ports[t.object_id]
+                device_id = p.device_id
+                label = f"{dev_name.get(p.device_id, '?')}@{p.name}"
+            elif t.object_type == "device":
+                device_id = t.object_id
+                label = dev_name.get(t.object_id, str(t.object_id)[:8])
+            else:
+                label = t.port_label or t.object_type
+            ends[t.cable_id][t.side] = {"label": label, "device_id": device_id}
+
+    items = []
+    for r in rows:
+        e = ends.get(r.id, {})
+        a, b = e.get("A") or {}, e.get("B") or {}
+        items.append(CableRead.model_validate(r).model_copy(update={
+            "a_end": a.get("label"), "b_end": b.get("label"),
+            "a_device_id": a.get("device_id"), "b_device_id": b.get("device_id"),
+        }))
+    return Paginated[CableRead](items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("/cables", response_model=CableRead, status_code=201,
@@ -117,6 +162,46 @@ async def create_cable(
     await session.commit()
     await session.refresh(obj)
     return CableRead.model_validate(obj)
+
+
+@router.patch("/cables/{cable_id}", response_model=CableRead,
+              dependencies=[Depends(require_admin)])
+async def update_cable(
+    cable_id: uuid.UUID, payload: CableWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CableRead:
+    obj = await session.get(Cable, cable_id)
+    if obj is None:
+        raise HTTPException(404, detail="Cable not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    await session.flush()
+    await _audit(session, user=user, request=request, object_type="cable",
+                 object_id=str(obj.id), action="update",
+                 diff=payload.model_dump(mode="json", exclude_unset=True))
+    await session.commit()
+    await session.refresh(obj)
+    return CableRead.model_validate(obj)
+
+
+@router.delete("/cables/{cable_id}", status_code=204,
+               dependencies=[Depends(require_admin)])
+async def delete_cable(
+    cable_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    obj = await session.get(Cable, cable_id)
+    if obj is None:
+        raise HTTPException(404, detail="Cable not found")
+    # 先刪兩端 termination 再刪 cable
+    for t in (await session.execute(
+        select(CableTermination).where(CableTermination.cable_id == cable_id)
+    )).scalars().all():
+        await session.delete(t)
+    await session.delete(obj)
+    await _audit(session, user=user, request=request, object_type="cable",
+                 object_id=str(cable_id), action="delete", diff=None)
+    await session.commit()
 
 
 @router.post("/cable-terminations", response_model=CableTerminationRead,
@@ -657,6 +742,68 @@ async def create_power_outlet(
     await session.commit()
     await session.refresh(obj)
     return PowerOutletRead.model_validate(obj)
+
+
+# ── 電力資源 編輯 / 刪除（admin）──
+async def _power_update(session, model, obj_id, payload, otype, user, request):  # type: ignore[no-untyped-def]
+    obj = await session.get(model, obj_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    await session.flush()
+    await _audit(session, user=user, request=request, object_type=otype,
+                 object_id=str(obj_id), action="update",
+                 diff=payload.model_dump(mode="json", exclude_unset=True))
+    await session.commit()
+    await session.refresh(obj)
+    return obj
+
+
+async def _power_delete(session, model, obj_id, otype, user, request):  # type: ignore[no-untyped-def]
+    obj = await session.get(model, obj_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    await session.delete(obj)
+    await _audit(session, user=user, request=request, object_type=otype,
+                 object_id=str(obj_id), action="delete", diff=None)
+    await session.commit()
+
+
+@router.patch("/power-panels/{pid}", response_model=PowerPanelRead, dependencies=[Depends(require_admin)])
+async def update_power_panel(pid: uuid.UUID, payload: PowerPanelWrite, user: CurrentUser, request: Request,
+                             session: Annotated[AsyncSession, Depends(get_session)]) -> PowerPanelRead:
+    return PowerPanelRead.model_validate(await _power_update(session, PowerPanel, pid, payload, "power_panel", user, request))
+
+
+@router.delete("/power-panels/{pid}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_power_panel(pid: uuid.UUID, user: CurrentUser, request: Request,
+                             session: Annotated[AsyncSession, Depends(get_session)]) -> None:
+    await _power_delete(session, PowerPanel, pid, "power_panel", user, request)
+
+
+@router.patch("/power-feeds/{fid}", response_model=PowerFeedRead, dependencies=[Depends(require_admin)])
+async def update_power_feed(fid: uuid.UUID, payload: PowerFeedWrite, user: CurrentUser, request: Request,
+                            session: Annotated[AsyncSession, Depends(get_session)]) -> PowerFeedRead:
+    return PowerFeedRead.model_validate(await _power_update(session, PowerFeed, fid, payload, "power_feed", user, request))
+
+
+@router.delete("/power-feeds/{fid}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_power_feed(fid: uuid.UUID, user: CurrentUser, request: Request,
+                            session: Annotated[AsyncSession, Depends(get_session)]) -> None:
+    await _power_delete(session, PowerFeed, fid, "power_feed", user, request)
+
+
+@router.patch("/power-outlets/{oid}", response_model=PowerOutletRead, dependencies=[Depends(require_admin)])
+async def update_power_outlet(oid: uuid.UUID, payload: PowerOutletWrite, user: CurrentUser, request: Request,
+                              session: Annotated[AsyncSession, Depends(get_session)]) -> PowerOutletRead:
+    return PowerOutletRead.model_validate(await _power_update(session, PowerOutlet, oid, payload, "power_outlet", user, request))
+
+
+@router.delete("/power-outlets/{oid}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_power_outlet(oid: uuid.UUID, user: CurrentUser, request: Request,
+                              session: Annotated[AsyncSession, Depends(get_session)]) -> None:
+    await _power_delete(session, PowerOutlet, oid, "power_outlet", user, request)
 
 
 # ─────────────────── VPN ───────────────────

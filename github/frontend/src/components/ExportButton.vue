@@ -42,8 +42,8 @@ const options = [
   { label: "CSV", key: "csv" },
   { label: "Markdown (.md)", key: "md" },
   { label: "PDF", key: "pdf" },
+  { label: "Excel (.xlsx)", key: "xlsx" },
   { label: "OpenDocument 試算表 (.ods)", key: "ods" },
-  { label: "OpenDocument 文件 (.odt)", key: "odt" },
 ];
 
 async function onSelect(key: ExportFormat) {

@@ -13,6 +13,9 @@ export interface UserMe {
   auth_provider: string;
   is_active: boolean;
   is_admin: boolean;
+  has_visibility?: boolean;
+  has_global_read?: boolean;
+  can_edit?: boolean;
   last_login_at: string | null;
   created_at: string;
 }
@@ -55,6 +58,7 @@ export interface Subnet {
   threshold_pct: number | null;
   auto_dns: boolean;
   customer_id: string | null;
+  customer_name: string | null;
   gateway: string | null;
   dns_servers: string | null;
   location_id: string | null;

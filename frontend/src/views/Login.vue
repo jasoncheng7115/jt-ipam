@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -7,6 +7,7 @@ import {
   NForm,
   NFormItem,
   NInput,
+  NSelect,
   NButton,
   NIcon,
   NSpace,
@@ -15,6 +16,7 @@ import {
 } from "naive-ui";
 import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/auth";
+import { apiClient } from "@/api/client";
 import { LoginIcon } from "@/icons";
 import { ShieldCheck, Globe } from "@iconoir/vue";
 
@@ -29,6 +31,16 @@ const code = ref("");
 const loading = ref(false);
 const errorMsg = ref<string | null>(null);
 
+// 領域（PVE 風）：本機 / LDAP，預設本機
+const realm = ref("local");
+const realms = ref<{ label: string; value: string }[]>([{ label: "本機", value: "local" }]);
+onMounted(async () => {
+  try {
+    const { data } = await apiClient.get<{ realms: { label: string; value: string }[] }>("/api/v1/auth/realms");
+    if (data.realms?.length) realms.value = data.realms;
+  } catch { /* 預設只有本機 */ }
+});
+
 function targetAfterLogin(): string {
   const next = route.query.next;
   if (typeof next === "string" && next.startsWith("/")) return next;
@@ -39,7 +51,7 @@ async function submitLogin() {
   errorMsg.value = null;
   loading.value = true;
   try {
-    const res = await auth.login(username.value, password.value);
+    const res = await auth.login(username.value, password.value, realm.value);
     if (!res.mfa_required) {
       // 整頁載入(非 SPA 導向)：以新 token 全新啟動，清掉前一個 session 殘留的
       // 模組級快取 / loading 旗標，避免登入後某些功能因舊狀態出錯、要切頁才好。
@@ -104,6 +116,9 @@ function ssoSaml() {
             :disabled="loading"
             @keyup.enter="submitLogin"
           />
+        </n-form-item>
+        <n-form-item v-if="realms.length > 1" :label="t('login.realm')">
+          <n-select v-model:value="realm" :options="realms" :disabled="loading" />
         </n-form-item>
         <n-space justify="end">
           <n-button type="primary" :loading="loading" @click="submitLogin">
