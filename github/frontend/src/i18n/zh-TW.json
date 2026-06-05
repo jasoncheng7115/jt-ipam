@@ -1194,7 +1194,7 @@
     "provider": "供應商",
     "provider_placeholder": "選擇供應商",
     "type": "類型",
-    "type_placeholder": "選擇電路類型",
+    "type_placeholder": "選擇，或直接輸入新類型後按 Enter 新增",
     "account": "帳號",
     "down_kbps": "下載 (kbps)",
     "up_kbps": "上傳 (kbps)",

@@ -88,6 +88,48 @@ The script installs `postgresql-16` / `python3.12` / `nginx` / `redis`, creates 
 
 Upgrade an existing install with `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade` — **the script runs `git pull` itself**, then backup → deps → alembic → build → restart. See [`docs/INSTALL.md`](docs/INSTALL.md).
 
+## TLS / HTTPS
+
+HTTPS is mandatory; pick one mode via `BACKEND_TLS_MODE` in `/etc/jt-ipam/backend.env`.
+
+**Mode A — nginx reverse proxy (default, recommended)** `BACKEND_TLS_MODE=nginx`
+nginx terminates TLS and proxies to uvicorn on 127.0.0.1:8000. To install a real cert:
+
+```bash
+# overwrite the fixed cert/key paths, then reload (paths are hard-coded in the nginx site)
+cp fullchain.pem /etc/jt-ipam/tls/server.crt
+cp privkey.pem   /etc/jt-ipam/tls/server.key
+chmod 600 /etc/jt-ipam/tls/server.key
+nginx -t && systemctl reload nginx
+```
+
+Let's Encrypt: point `ssl_certificate` at `/etc/letsencrypt/live/<FQDN>/fullchain.pem` and `ssl_certificate_key` at `…/privkey.pem`, then `systemctl reload nginx` after renewal. Minimal self-hosted reverse-proxy block:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name ipam.example.com;
+    ssl_certificate     /etc/jt-ipam/tls/server.crt;
+    ssl_certificate_key /etc/jt-ipam/tls/server.key;
+    root /opt/jt-ipam/frontend/dist;
+    index index.html;
+    location /api/ { proxy_pass http://127.0.0.1:8000; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
+    location / { try_files $uri $uri/ /index.html; }
+}
+```
+
+**Mode B — uvicorn direct, self-signed** `BACKEND_TLS_MODE=direct`
+uvicorn serves TLS itself; `scripts/generate-self-signed-cert.sh` creates a self-signed cert at install. To replace it, overwrite the same paths and restart the service:
+
+```bash
+cp fullchain.pem /etc/jt-ipam/tls/server.crt
+cp privkey.pem   /etc/jt-ipam/tls/server.key
+chmod 600 /etc/jt-ipam/tls/server.key
+systemctl restart jt-ipam-backend
+```
+
+> Both modes use the same cert paths (`/etc/jt-ipam/tls/server.{crt,key}`); the only difference is who terminates TLS — Mode A reloads nginx, Mode B restarts the backend.
+
 ## Project layout
 
 ```

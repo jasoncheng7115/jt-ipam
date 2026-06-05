@@ -1196,7 +1196,7 @@
     "provider": "Provider",
     "provider_placeholder": "Pick a provider",
     "type": "Type",
-    "type_placeholder": "Pick a circuit type",
+    "type_placeholder": "Pick one, or type a new type and press Enter to add",
     "account": "Account",
     "down_kbps": "Download (kbps)",
     "up_kbps": "Upload (kbps)",

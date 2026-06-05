@@ -10,7 +10,7 @@ import {
 import { apiClient } from "@/api/client";
 import { Advanced } from "@/api/phase3";
 import {
-  AdvancedIcon, PlusIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+  AdvancedIcon, PlusIcon, DeleteIcon, EditIcon, RefreshIcon, SaveIcon, CancelIcon,
   CustomersIcon, VlansIcon, PhysicalIcon, UsersIcon, ScanAgentsIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
@@ -80,19 +80,35 @@ type Resource = "tenant" | "tenant_group" | "asn" | "provider" | "circuit" | "co
 const showCreate = ref(false);
 const createKind = ref<Resource>("tenant");
 const form = ref<Record<string, any>>({});
+const editingId = ref<string | null>(null);   // null = 新增；有值 = 編輯
+
+// 各資源的表單欄位骨架；有 row 就從既有資料帶入（編輯）
+function formFor(kind: Resource, row?: any): Record<string, any> {
+  const g = (k: string, d: any = null) => (row ? (row[k] ?? d) : d);
+  switch (kind) {
+    case "tenant":        return { name: g("name", ""), group_id: g("group_id"), description: g("description", "") };
+    case "tenant_group":  return { name: g("name", ""), description: g("description", "") };
+    case "asn":           return { asn: g("asn", 65000), rir: g("rir", ""), description: g("description", ""), tenant_id: g("tenant_id") };
+    case "provider":      return { name: g("name", ""), account_number: g("account_number", ""), description: g("description", "") };
+    case "circuit":       return { cid: g("cid", ""), provider_id: g("provider_id"), type_id: g("type_id"), status: g("status", "active"), up_kbps: g("up_kbps"), down_kbps: g("down_kbps"), commit_rate_kbps: g("commit_rate_kbps"), monthly_fee_cents: g("monthly_fee_cents"), install_date: g("install_date"), contract_end_date: g("contract_end_date"), description: g("description", "") };
+    case "contact_group": return { name: g("name", ""), description: g("description", "") };
+    case "contact":       return { name: g("name", ""), email: g("email", ""), phone: g("phone", ""), group_id: g("group_id"), description: g("description", "") };
+    case "ssid":          return { ssid: g("ssid", ""), description: g("description", "") };
+    default:              return {};
+  }
+}
 
 function openCreate(kind: Resource) {
   createKind.value = kind;
-  switch (kind) {
-    case "tenant":        form.value = { name: "", group_id: null, description: "" }; break;
-    case "tenant_group":  form.value = { name: "", description: "" }; break;
-    case "asn":           form.value = { asn: 65000, rir: "", description: "", tenant_id: null }; break;
-    case "provider":      form.value = { name: "", account_number: "", description: "" }; break;
-    case "circuit":       form.value = { cid: "", provider_id: null, type_id: null, status: "active", up_kbps: null, down_kbps: null, commit_rate_kbps: null, monthly_fee_cents: null, install_date: null, contract_end_date: null, description: "" }; break;
-    case "contact_group": form.value = { name: "", description: "" }; break;
-    case "contact":       form.value = { name: "", email: "", phone: "", group_id: null, description: "" }; break;
-    case "ssid":          form.value = { ssid: "", description: "" }; break;
-  }
+  editingId.value = null;
+  form.value = formFor(kind);
+  showCreate.value = true;
+}
+
+function openEdit(kind: Resource, row: any) {
+  createKind.value = kind;
+  editingId.value = row.id;
+  form.value = formFor(kind, row);
   showCreate.value = true;
 }
 
@@ -132,8 +148,14 @@ async function submit() {
     return;
   }
   try {
-    await apiClient.post(`/api/v1/${URL_MAP[createKind.value]}`, payload);
+    const base = `/api/v1/${URL_MAP[createKind.value]}`;
+    if (editingId.value) {
+      await apiClient.patch(`${base}/${editingId.value}`, payload);
+    } else {
+      await apiClient.post(base, payload);
+    }
     showCreate.value = false;
+    editingId.value = null;
     await loadAll();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
@@ -159,43 +181,52 @@ async function onCircuitTypeSelect(val: string | null) {
   }
 }
 
-const delBtn = (resource: string, id: string) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
-  h(NPopconfirm, {
-    onPositiveClick: () => delResource(resource, id),
-  }, {
-    trigger: () => h(NTooltip, null, {
-      trigger: () => h(NButton, { size: "small", quaternary: true, type: "error",
-        onClick: (e: MouseEvent) => { e.stopPropagation(); } },
-        { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
-      default: () => t("common.delete"),
-    }),
-    default: () => t("common.confirm_delete"),
+const editBtn = (kind: Resource, row: any) => h(NTooltip, null, {
+  trigger: () => h(NButton, { size: "small", quaternary: true, type: "primary",
+    onClick: (e: MouseEvent) => { e.stopPropagation(); openEdit(kind, row); } },
+    { icon: () => h(NIcon, null, () => h(EditIcon)) }),
+  default: () => t("common.edit"),
+});
+
+const delBtn = (resource: string, id: string) => h(NPopconfirm, {
+  onPositiveClick: () => delResource(resource, id),
+}, {
+  trigger: () => h(NTooltip, null, {
+    trigger: () => h(NButton, { size: "small", quaternary: true, type: "error",
+      onClick: (e: MouseEvent) => { e.stopPropagation(); } },
+      { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
+    default: () => t("common.delete"),
   }),
-]);
+  default: () => t("common.confirm_delete"),
+});
+
+// 編輯 + 刪除 一組（kind 用來開對應編輯表單；resource 是 API 路徑）
+const actionsCell = (kind: Resource, resource: string, row: any) =>
+  h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [editBtn(kind, row), delBtn(resource, row.id)]);
 
 const tenantCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("advanced.tenant_group"), key: "group_id", width: 160, ellipsis: { tooltip: true },
     render: (r) => tenantGroups.value.find((g) => g.id === r.group_id)?.name ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
-  { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("tenants", r.id) },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("tenant", "tenants", r) },
 ]));
 const tenantGroupCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
-  { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("tenant-groups", r.id) },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("tenant_group", "tenant-groups", r) },
 ]));
 const asnCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: "ASN", key: "asn", width: 140 },
   { title: t("cols.rir"), key: "rir", width: 120, render: (r) => r.rir ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
-  { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("asns", r.id) },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("asn", "asns", r) },
 ]));
 const providerCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("circuits.account"), key: "account_number", width: 160, ellipsis: { tooltip: true }, render: (r) => r.account_number ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
-  { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("providers", r.id) },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("provider", "providers", r) },
 ]));
 const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("cols.cid"), key: "cid", minWidth: 160, ellipsis: { tooltip: true } },
@@ -204,6 +235,7 @@ const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("circuits.type"), key: "type_id", width: 160, ellipsis: { tooltip: true },
     render: (r) => circuitTypes.value.find((p) => p.id === r.type_id)?.name ?? "—" },
   { title: t("common.status"), key: "status", width: 120 },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("circuit", "circuits", r) },
 ]));
 const contactCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
@@ -211,12 +243,12 @@ const contactCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("cols.phone"), key: "phone", width: 140, render: (r) => r.phone ?? "—" },
   { title: t("contacts.group"), key: "group_id", width: 160, ellipsis: { tooltip: true },
     render: (r) => contactGroups.value.find((g) => g.id === r.group_id)?.name ?? "—" },
-  { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("contacts", r.id) },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("contact", "contacts", r) },
 ]));
 const ssidCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: "SSID", key: "ssid", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
-  { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("wireless/ssids", r.id) },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("ssid", "wireless/ssids", r) },
 ]));
 
 onMounted(() => { void loadAll(); });
@@ -294,7 +326,7 @@ onMounted(() => { void loadAll(); });
             {{ t("common.create") }}
           </n-button>
         </n-space>
-        <n-data-table :columns="circuitCols" :data="circuits" :loading="loading" :bordered="false" :scroll-x="620" />
+        <n-data-table :columns="circuitCols" :data="circuits" :loading="loading" :bordered="false" :scroll-x="712" />
       </n-tab-pane>
 
       <n-tab-pane name="contacts">
@@ -338,8 +370,8 @@ onMounted(() => { void loadAll(); });
     <n-modal v-model:show="showCreate" preset="card" style="width: 520px">
       <template #header>
         <div style="display: flex; align-items: center; gap: 8px; line-height: 1">
-          <n-icon :size="20"><PlusIcon /></n-icon>
-          <span>{{ t(`advanced.create_${createKind}`) }}</span>
+          <n-icon :size="20"><component :is="editingId ? EditIcon : PlusIcon" /></n-icon>
+          <span>{{ editingId ? t("common.edit") : t(`advanced.create_${createKind}`) }}</span>
         </div>
       </template>
 

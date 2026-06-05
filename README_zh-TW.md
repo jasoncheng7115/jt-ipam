@@ -58,6 +58,48 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts
 
 升級：`sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade`（**腳本內含 `git pull`**，直接跑即可）。詳見 [`docs/INSTALL.md`](docs/INSTALL.md)。
 
+## TLS / HTTPS
+
+強制 HTTPS，兩種模式擇一（`/etc/jt-ipam/backend.env` 的 `BACKEND_TLS_MODE`）：
+
+**模式 A — nginx 反代（預設、建議）** `BACKEND_TLS_MODE=nginx`
+nginx 終止 TLS、反代到本機 uvicorn(127.0.0.1:8000)。換成正式憑證：
+
+```bash
+# 把正式憑證/私鑰覆蓋到固定路徑後 reload（路徑已寫死在 nginx 設定）
+cp fullchain.pem /etc/jt-ipam/tls/server.crt
+cp privkey.pem   /etc/jt-ipam/tls/server.key
+chmod 600 /etc/jt-ipam/tls/server.key
+nginx -t && systemctl reload nginx
+```
+
+Let's Encrypt：把 `ssl_certificate` 指到 `/etc/letsencrypt/live/<FQDN>/fullchain.pem`、`ssl_certificate_key` 指到 `…/privkey.pem`，續期後 `systemctl reload nginx`。自架 nginx 反代最小設定：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name ipam.example.com;
+    ssl_certificate     /etc/jt-ipam/tls/server.crt;
+    ssl_certificate_key /etc/jt-ipam/tls/server.key;
+    root /opt/jt-ipam/frontend/dist;
+    index index.html;
+    location /api/ { proxy_pass http://127.0.0.1:8000; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
+    location / { try_files $uri $uri/ /index.html; }
+}
+```
+
+**模式 B — uvicorn 直接自簽** `BACKEND_TLS_MODE=direct`
+uvicorn 自己掛 `--ssl-*`，安裝時 `scripts/generate-self-signed-cert.sh` 會產自簽憑證。換憑證：把正式(或自管)憑證覆蓋同一組路徑後重啟服務：
+
+```bash
+cp fullchain.pem /etc/jt-ipam/tls/server.crt
+cp privkey.pem   /etc/jt-ipam/tls/server.key
+chmod 600 /etc/jt-ipam/tls/server.key
+systemctl restart jt-ipam-backend
+```
+
+> 兩種模式憑證路徑相同(`/etc/jt-ipam/tls/server.{crt,key}`)，差別只在「誰終止 TLS」：模式 A reload nginx、模式 B 重啟 backend。
+
 ## 授權
 
 Apache-2.0｜商業支援請聯繫 Jason Tools。
