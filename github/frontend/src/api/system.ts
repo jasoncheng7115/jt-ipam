@@ -56,6 +56,44 @@ export async function testAuditForward(p: AuditForward): Promise<{ ok: boolean; 
   return data;
 }
 
+// ── OIDC SSO 設定（webui 管理）──
+export interface OidcConfig {
+  enabled: boolean;
+  issuer: string | null;
+  client_id: string | null;
+  client_secret_set: boolean;
+  redirect_uri: string | null;
+  scope: string;
+  groups_claim: string;
+  username_claim: string;
+  admin_groups: string[];
+  default_group_id: string | null;
+}
+export interface OidcConfigPatch {
+  enabled: boolean;
+  issuer: string | null;
+  client_id: string | null;
+  client_secret?: string | null;  // 留空(undefined)=不變更；空字串=清除
+  redirect_uri: string | null;
+  scope: string;
+  groups_claim: string;
+  username_claim: string;
+  admin_groups: string[];
+  default_group_id: string | null;
+}
+export async function getOidcConfig(): Promise<OidcConfig> {
+  const { data } = await apiClient.get<OidcConfig>("/api/v1/auth/oidc/config");
+  return data;
+}
+export async function putOidcConfig(p: OidcConfigPatch): Promise<OidcConfig> {
+  const { data } = await apiClient.put<OidcConfig>("/api/v1/auth/oidc/config", p);
+  return data;
+}
+export async function testOidc(): Promise<{ ok: boolean; issuer?: string; authorization_endpoint?: string; error?: string }> {
+  const { data } = await apiClient.get("/api/v1/auth/oidc/test");
+  return data;
+}
+
 export interface LLMConfig {
   enabled: boolean;
   url: string;

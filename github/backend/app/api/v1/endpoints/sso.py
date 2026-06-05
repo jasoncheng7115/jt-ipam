@@ -20,7 +20,9 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import require_admin
+from pydantic import BaseModel, Field
+
+from app.api.v1.dependencies import CurrentUser, require_admin
 from app.core.audit import append_audit
 from app.core.config import get_settings
 from app.core.db import get_session
@@ -28,9 +30,91 @@ from app.core.security import create_access_token, decode_access_token
 from app.services import oidc as oidc_service
 from app.services import saml as saml_service
 from app.services.auth import issue_access_token, issue_refresh_token
-from app.services.system_config import get_oidc_config
+from app.services.system_config import get_oidc_config, set_oidc_config
 
 router = APIRouter(prefix="/auth", tags=["sso"])
+
+
+# ─────────────────── OIDC 設定（webui 管理；admin only）───────────────────
+class OidcConfigOut(BaseModel):
+    enabled: bool
+    issuer: str | None
+    client_id: str | None
+    client_secret_set: bool   # 不回傳明文，只說有沒有設
+    redirect_uri: str | None
+    scope: str
+    groups_claim: str
+    username_claim: str
+    admin_groups: list[str]
+    default_group_id: str | None
+
+
+class OidcConfigIn(BaseModel):
+    enabled: bool = False
+    issuer: str | None = None
+    client_id: str | None = None
+    # 留空 = 不變更既有密鑰；明確傳空字串需用獨立旗標，這裡語意：None/不送=不動，有值=更新
+    client_secret: str | None = None
+    redirect_uri: str | None = None
+    scope: str = "openid profile email"
+    groups_claim: str = "groups"
+    username_claim: str = "preferred_username"
+    admin_groups: list[str] = Field(default_factory=list)
+    default_group_id: str | None = None
+
+
+@router.get("/oidc/config", response_model=OidcConfigOut,
+            dependencies=[Depends(require_admin)])
+async def get_oidc_config_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> OidcConfigOut:
+    cfg = await get_oidc_config(session)
+    return OidcConfigOut(
+        enabled=cfg.enabled, issuer=cfg.issuer, client_id=cfg.client_id,
+        client_secret_set=bool(cfg.client_secret),
+        redirect_uri=cfg.redirect_uri, scope=cfg.scope,
+        groups_claim=cfg.groups_claim, username_claim=cfg.username_claim,
+        admin_groups=cfg.admin_groups, default_group_id=cfg.default_group_id,
+    )
+
+
+@router.put("/oidc/config", response_model=OidcConfigOut,
+            dependencies=[Depends(require_admin)])
+async def put_oidc_config_endpoint(
+    payload: OidcConfigIn, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> OidcConfigOut:
+    data: dict[str, Any] = {
+        "enabled": payload.enabled,
+        "issuer": payload.issuer,
+        "client_id": payload.client_id,
+        "redirect_uri": payload.redirect_uri,
+        "scope": payload.scope,
+        "groups_claim": payload.groups_claim,
+        "username_claim": payload.username_claim,
+        "admin_groups": payload.admin_groups,
+        "default_group_id": payload.default_group_id,
+    }
+    # 只有實際送了 client_secret(非 None) 才更新；空字串=清除
+    if payload.client_secret is not None:
+        data["client_secret"] = payload.client_secret
+    await set_oidc_config(session, data=data, updated_by_user_id=user.id)
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="system_setting", object_id=None, action="update",
+        diff={"oidc": {k: v for k, v in data.items() if k != "client_secret"}},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    cfg = await get_oidc_config(session)
+    return OidcConfigOut(
+        enabled=cfg.enabled, issuer=cfg.issuer, client_id=cfg.client_id,
+        client_secret_set=bool(cfg.client_secret),
+        redirect_uri=cfg.redirect_uri, scope=cfg.scope,
+        groups_claim=cfg.groups_claim, username_claim=cfg.username_claim,
+        admin_groups=cfg.admin_groups, default_group_id=cfg.default_group_id,
+    )
 
 
 def _state_token(state: str, nonce: str) -> str:
