@@ -22,7 +22,7 @@
 | RACK 機櫃 | **phpIPAM** | 簡單的 U 位管理 |
 | 補強功能（選用） | **NetBox** | Tenancy、Contacts、Cabling、Circuits、L2VPN…使用者可選擇啟用 |
 
-**白話說**：使用者打開 jt-ipam 看到的就是 phpIPAM 熟悉的介面（Section 樹、Subnet 方塊、IP 表格），只是介面更現代、效能更好、繁中更完整、API 更強、有 AI 助手、有 DNS/LibreNMS 雙向互通。
+**白話說**：使用者打開 jt-ipam 看到的就是 phpIPAM 熟悉的介面（Section 樹、Subnet 方塊、IP 表格），只是介面更現代、效能更好、繁中更完整、API 更強、有 AI 助手、與 DNS（讀取＋可選推送）/LibreNMS（雙向同步）深度互通。
 
 ---
 
@@ -32,7 +32,7 @@
 - **完整覆蓋 phpIPAM 全部功能**，phpIPAM 老使用者零學習成本
 - **採用現代技術堆疊**，解決 phpIPAM 效能、UI、API 的歷史包袱
 - **補強 phpIPAM 缺少的進階功能**（取自 NetBox 設計，但維持簡潔）
-- **深度整合多家 DNS Server**：OPNsense Unbound、Windows DNS、BIND 9、PowerDNS
+- **深度整合多家 DNS Server**：OPNsense Unbound、Windows DNS、BIND 9、PowerDNS（讀取正反解狀態，可選擇性推送記錄；非全自動雙向同步）
 - **深度整合 LibreNMS**：雙向同步、ARP/FDB 抓取、即時狀態互補、自動加入監控
 - **整合 Jason 既有開源生態系**：Proxmox VE、Wazuh、Graylog、OPNsense、Zimbra、Odoo
 - **內建本地 AI 能力**：Ollama、自然語言查詢、語意搜尋
