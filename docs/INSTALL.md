@@ -1,5 +1,7 @@
 # jt-ipam 安裝與運維 SOP
 
+> English: [INSTALL.en.md](INSTALL.en.md)
+
 針對 **Proxmox LXC、裸機、虛擬機**（Ubuntu 22.04+/Debian 12+）。本專案
 **不使用 Docker**；以 systemd + apt 直裝。
 
