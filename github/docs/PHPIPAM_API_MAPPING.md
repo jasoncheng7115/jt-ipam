@@ -1,5 +1,7 @@
 # phpIPAM v1.7 API 相容層對照表
 
+> English: [PHPIPAM_API_MAPPING.en.md](PHPIPAM_API_MAPPING.en.md)
+
 > 目標：phpIPAM 老腳本零改動可遷移；路徑首碼 `/api/phpipam/<app_id>/`
 >
 > Phase 1 完成「Sections / Subnets / Addresses / VLANs / VRFs / Devices / Tools / User」這 8 大類。其餘類別（Folder/Locations/L2Domains/Circuits/Tags）Phase 2 補齊。

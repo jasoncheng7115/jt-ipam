@@ -1,5 +1,7 @@
 # jt-ipam 安全設計（OWASP Top 10:2025 對齊）
 
+> English: [SECURITY.en.md](SECURITY.en.md)
+
 > 本文件是 jt-ipam 專案的**強制性**安全規範。每個 PR 與功能設計都必須通過此處的自我檢核清單。
 >
 > 對齊版本：[OWASP Top 10:2025](https://owasp.org/Top10/)

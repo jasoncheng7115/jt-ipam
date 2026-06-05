@@ -1,5 +1,7 @@
 # jt-ipam 核心資料模型
 
+> English: [DATA_MODEL.en.md](DATA_MODEL.en.md)
+
 > Phase 1 範圍：Section / Subnet / IP Address / VLAN / VRF / Device / Rack / Location / NAT / User / Group / AuditLog / EncryptedSecret / CustomField。
 >
 > 後端：SQLAlchemy 2.0 + PostgreSQL 16，使用原生 `inet` / `cidr` / `macaddr` / `jsonb` 型別。

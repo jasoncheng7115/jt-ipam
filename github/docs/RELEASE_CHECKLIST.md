@@ -1,5 +1,7 @@
 # jt-ipam 改版 / 發布檢查清單
 
+> English: [RELEASE_CHECKLIST.en.md](RELEASE_CHECKLIST.en.md)
+
 每次「準備 commit」「準備 tag release」「準備 deploy 到 production」都對照這份走一遍。**沒打勾不能上**。
 
 ---

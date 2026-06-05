@@ -1,14 +1,14 @@
-# jt-ipam 核心資料模型
+# jt-ipam Core Data Model
 
-> English: [DATA_MODEL.en.md](DATA_MODEL.en.md)
+> 繁體中文版：[DATA_MODEL.md](DATA_MODEL.md)
 
-> Phase 1 範圍：Section / Subnet / IP Address / VLAN / VRF / Device / Rack / Location / NAT / User / Group / AuditLog / EncryptedSecret / CustomField。
+> Phase 1 scope: Section / Subnet / IP Address / VLAN / VRF / Device / Rack / Location / NAT / User / Group / AuditLog / EncryptedSecret / CustomField.
 >
-> 後端：SQLAlchemy 2.0 + PostgreSQL 16，使用原生 `inet` / `cidr` / `macaddr` / `jsonb` 型別。
+> Backend: SQLAlchemy 2.0 + PostgreSQL 16, using native `inet` / `cidr` / `macaddr` / `jsonb` types.
 
 ---
 
-## 一、ER 圖（核心）
+## 1. ER diagram (core)
 
 ```mermaid
 erDiagram
@@ -46,68 +46,68 @@ erDiagram
 
 ---
 
-## 二、Phase 1 資料表
+## 2. Phase 1 tables
 
 ### 2.1 `users`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | PK |
-| username | citext UNIQUE | 大小寫不敏感唯一 |
+| username | citext UNIQUE | case-insensitive unique |
 | email | citext UNIQUE | |
 | display_name | text | |
-| password_hash | text | argon2id；外部驗證者（LDAP/OIDC）為 NULL |
+| password_hash | text | argon2id; NULL for external auth (LDAP/OIDC) |
 | auth_provider | text | local / ldap / radius / saml / oidc |
 | external_subject | text | OIDC sub / SAML NameID / LDAP DN |
 | is_active | bool | |
 | is_admin | bool | superuser |
-| totp_secret_enc | bytea | 加密儲存的 TOTP secret（NULL 表未啟用） |
+| totp_secret_enc | bytea | encrypted TOTP secret (NULL = not enabled) |
 | failed_login_count | int | |
-| locked_until | timestamptz | NULL 或解鎖時間 |
+| locked_until | timestamptz | NULL or unlock time |
 | last_login_at | timestamptz | |
 | last_login_ip | inet | |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
-> A02：`password_hash` 與 `totp_secret_enc` 永遠加密。`totp_secret_enc` 由 `EncryptedSecret` 工具加密。
-> A07：`failed_login_count` / `locked_until` 用於帳號鎖定。
+> A02: `password_hash` and `totp_secret_enc` are always encrypted. `totp_secret_enc` is encrypted by the `EncryptedSecret` helper.
+> A07: `failed_login_count` / `locked_until` drive account lockout.
 
 ### 2.2 `groups`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | PK |
 | name | citext UNIQUE | |
 | description | text | |
-| is_builtin | bool | 例如 admin / readonly 等內建群組 |
+| is_builtin | bool | e.g. admin / readonly built-in groups |
 
 ### 2.3 `user_group_members`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | user_id | UUID FK | |
 | group_id | UUID FK | |
 | (PK: user_id, group_id) | | |
 
 ### 2.4 `sections`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | PK |
 | name | text | |
 | description | text | |
-| parent_id | UUID FK sections.id | 巢狀 |
-| strict_mode | bool | phpIPAM 一致 |
+| parent_id | UUID FK sections.id | nesting |
+| strict_mode | bool | phpIPAM-consistent |
 | display_order | int | |
 | created_at / updated_at | timestamptz | |
 
 INDEX: (parent_id), (name)
 
 ### 2.5 `vlan_domains`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | name | citext UNIQUE | |
 | description | text | |
 
 ### 2.6 `vlans`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | PK |
 | domain_id | UUID FK | |
@@ -119,21 +119,21 @@ INDEX: (parent_id), (name)
 CHECK: number BETWEEN 1 AND 4094
 
 ### 2.7 `vrfs`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | |
 | name | text UNIQUE | |
 | rd | text | Route Distinguisher (e.g. 65000:100) |
 | description | text | |
-| allow_overlap | bool | 是否允許 IP 重疊（預設 true） |
+| allow_overlap | bool | whether IP overlap is allowed (default true) |
 
 ### 2.8 `subnets`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | PK |
 | section_id | UUID FK | |
-| master_subnet_id | UUID FK subnets.id | 巢狀；NULL 表頂層 |
-| cidr | cidr | PostgreSQL 原生型別 |
+| master_subnet_id | UUID FK subnets.id | nesting; NULL = top-level |
+| cidr | cidr | native PostgreSQL type |
 | description | text | |
 | vlan_id | UUID FK | |
 | vrf_id | UUID FK | |
@@ -141,12 +141,12 @@ CHECK: number BETWEEN 1 AND 4094
 | is_full | bool | Mark as Used |
 | scan_enabled | bool | |
 | scan_method | text[] | ['icmp','snmp','arp','nmap'] |
-| threshold_pct | int | 使用率閾值通知 |
+| threshold_pct | int | utilization threshold alert |
 | auto_dns | bool | Phase 2 |
 | custom_fields | jsonb | |
 | created_at / updated_at | timestamptz | |
 
-EXCLUDE 約束（同 vrf 不可有重疊 cidr，除非 VRF.allow_overlap=true）：
+EXCLUDE constraint (no overlapping cidr within the same vrf, unless VRF.allow_overlap=true):
 
 ```sql
 EXCLUDE USING gist (
@@ -158,18 +158,18 @@ EXCLUDE USING gist (
 INDEX: (section_id), (master_subnet_id), GIST(cidr)
 
 ### 2.9 `ip_addresses`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |------|------|------|
 | id | UUID | PK |
 | subnet_id | UUID FK | |
 | ip | inet | host address |
 | hostname | text | |
 | description | text | |
-| state | text | active / reserved / offline / dhcp（phpIPAM 對齊） |
+| state | text | active / reserved / offline / dhcp (phpIPAM-aligned) |
 | mac | macaddr | |
 | owner | text | |
 | device_id | UUID FK devices.id | |
-| switch_port | text | 手動填寫；Phase 2 由 LibreNMS 自動推導 |
+| switch_port | text | manual; Phase 2 auto-derived from LibreNMS |
 | exclude_from_ping | bool | |
 | ptr_ignore | bool | |
 | note | text | |
@@ -178,14 +178,14 @@ INDEX: (section_id), (master_subnet_id), GIST(cidr)
 | last_seen_scanner | timestamptz | |
 | last_seen_librenms | timestamptz | |
 | last_seen_dns | timestamptz | |
-| effective_status | text | online / offline / unknown（Phase 2 計算） |
+| effective_status | text | online / offline / unknown (computed in Phase 2) |
 | created_at / updated_at | timestamptz | |
 
 UNIQUE (subnet_id, ip)
 INDEX: GIST(ip), (hostname trgm), (mac)
 
 ### 2.10 `locations`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | name | text | |
@@ -195,16 +195,16 @@ INDEX: GIST(ip), (hostname trgm), (mac)
 | description | text | |
 
 ### 2.11 `racks`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | location_id | UUID FK | |
 | name | text | |
-| u_height | int | 預設 42 |
+| u_height | int | default 42 |
 | description | text | |
 
 ### 2.12 `devices`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | name | text | |
@@ -221,9 +221,9 @@ INDEX: GIST(ip), (hostname trgm), (mac)
 | custom_fields | jsonb | |
 
 ### 2.13 `nat_translations`
-phpIPAM 三種 NAT：
+The three phpIPAM NAT kinds:
 
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | name | text | |
@@ -233,31 +233,31 @@ phpIPAM 三種 NAT：
 | src_port | int | nullable |
 | dst_port | int | nullable |
 | protocol | text | tcp/udp/any |
-| device_id | UUID FK | 哪台 firewall |
+| device_id | UUID FK | which firewall |
 | description | text | |
 
-### 2.14 `audit_logs`（A08 / A09）
-| 欄位 | 型別 | 說明 |
+### 2.14 `audit_logs` (A08 / A09)
+| Column | Type | Notes |
 |---|---|---|
-| id | bigint | PK（單調遞增） |
+| id | bigint | PK (monotonic) |
 | ts | timestamptz | |
-| actor_user_id | UUID FK | NULL 表系統 |
+| actor_user_id | UUID FK | NULL = system |
 | actor_ip | inet | |
 | actor_user_agent | text | |
 | object_type | text | section / subnet / ip / device / ... |
 | object_id | UUID | |
 | action | text | create / update / delete / login / token_create / ... |
-| diff | jsonb | before/after，敏感欄位 redact |
-| request_id | uuid | 對應 trace ID |
-| prev_hash | bytea | 前一筆 hash |
+| diff | jsonb | before/after, sensitive fields redacted |
+| request_id | uuid | matching trace ID |
+| prev_hash | bytea | previous row's hash |
 | this_hash | bytea | sha256(prev_hash \|\| ts \|\| actor \|\| object \|\| action \|\| diff) |
 
 INDEX: (object_type, object_id), (actor_user_id), (ts)
 
-> SHA-256 鏈在寫入時用 advisory lock 序列化，避免併發插入導致鏈錯亂。
+> The SHA-256 chain is serialized with an advisory lock on write, to avoid concurrent inserts corrupting the chain.
 
-### 2.15 `encrypted_secrets`（A02）
-| 欄位 | 型別 | 說明 |
+### 2.15 `encrypted_secrets` (A02)
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | object_type | text | dns_server / librenms_instance / api_token / totp / ... |
@@ -271,14 +271,14 @@ INDEX: (object_type, object_id), (actor_user_id), (ts)
 UNIQUE (object_type, object_id, field, key_id)
 
 ### 2.16 `api_tokens`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | user_id | UUID FK | |
 | name | text | |
-| token_hash | bytea | sha256(token) — token 本身不存 |
-| token_prefix | text(8) | 用於 UI 識別 |
-| scopes | text[] | endpoint 模式 |
+| token_hash | bytea | sha256(token) — the token itself is not stored |
+| token_prefix | text(8) | for UI identification |
+| scopes | text[] | endpoint patterns |
 | object_filters | jsonb | section/subnet ACL |
 | expires_at | timestamptz | NOT NULL |
 | last_used_at | timestamptz | |
@@ -286,7 +286,7 @@ UNIQUE (object_type, object_id, field, key_id)
 | revoked_at | timestamptz | |
 
 ### 2.17 `custom_field_definitions`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | object_type | text | section / subnet / ip / device |
@@ -301,10 +301,10 @@ UNIQUE (object_type, object_id, field, key_id)
 
 UNIQUE (object_type, name)
 
-### 2.18 `permissions` (一般化)
-**Section 與 Subnet 的權限統一表**：
+### 2.18 `permissions` (generalized)
+**Unified permission table for Section and Subnet**:
 
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | id | UUID | |
 | object_type | text | section / subnet |
@@ -313,10 +313,10 @@ UNIQUE (object_type, name)
 | principal_id | UUID | |
 | level | text | none / read / write / admin |
 
-預設未設定 = none（deny-by-default，A01）。
+Unset by default = none (deny-by-default, A01).
 
 ### 2.19 `user_preferences`
-| 欄位 | 型別 | 說明 |
+| Column | Type | Notes |
 |---|---|---|
 | user_id | UUID PK | |
 | locale | text | zh-TW / en-US |
@@ -329,7 +329,7 @@ UNIQUE (object_type, name)
 
 ---
 
-## 三、Phase 2+ 表（預留）
+## 3. Phase 2+ tables (reserved)
 
 - `dns_servers`, `dns_zones`, `dns_records`
 - `librenms_instances`, `librenms_devices`, `arp_entries`, `fdb_entries`
@@ -338,20 +338,20 @@ UNIQUE (object_type, name)
 
 ---
 
-## 四、命名與索引慣例
+## 4. Naming and indexing conventions
 
-- 主鍵：UUIDv7（時間排序，pk 索引友善）
-- 時間欄位：一律 `timestamptz`（UTC 儲存）
-- 列舉：用 `text` + CHECK constraint（避免 PG enum 改值困難）
-- 全文搜尋：對 `description`、`hostname`、`name` 建 `pg_trgm` GIN index
-- 軟刪除：避免使用；改用 `is_active` / `archived_at` 視需要
-- 並發更新：所有可變表都有 `updated_at`，配合 `If-Match` ETag 防 lost update
+- Primary key: UUIDv7 (time-ordered, PK-index friendly)
+- Time columns: always `timestamptz` (stored as UTC)
+- Enumerations: `text` + CHECK constraint (avoids PG enum's value-change pain)
+- Full-text search: `pg_trgm` GIN index on `description`, `hostname`, `name`
+- Soft delete: avoided; use `is_active` / `archived_at` as needed instead
+- Concurrent updates: every mutable table has `updated_at`, paired with `If-Match` ETag to prevent lost updates
 
 ---
 
-## 五、Migration 策略
+## 5. Migration strategy
 
-- Alembic auto-generate 後**人工 review**；不直接套用
-- Migration 必須 **forward-only**（不寫 downgrade）的同時，保留 `downgrade()` 函式給開發環境用
-- 大資料表變更分兩階段：先加欄位 + 雙寫，再切換、最後刪舊欄位
-- 所有 migration 在 staging 跑過才能 prod
+- After Alembic auto-generate, **review manually**; never apply blindly
+- Migrations are effectively **forward-only** (don't rely on downgrade) while still keeping a `downgrade()` function for dev environments
+- Large-table changes are two-phased: add column + dual-write first, then switch over, finally drop the old column
+- Every migration must run on staging before prod
