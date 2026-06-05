@@ -14,6 +14,7 @@ import {
   type IPChangeLog,
 } from "@/api/ip_history";
 import { fmtDateTime } from "@/utils/datetime";
+import ExportButton from "@/components/ExportButton.vue";
 
 const { t } = useI18n();
 
@@ -127,6 +128,7 @@ const columns = computed<DataTableColumns<IPChangeLog>>(() => [
         :placeholder="t('ipChanges.all_sources')"
       />
       <n-button @click="load" :loading="loading">{{ t("common.refresh") }}</n-button>
+      <ExportButton :columns="columns" :rows="rows" filename="ip-changes" :title="t('nav.ip_changes')" />
     </n-space>
 
     <n-data-table

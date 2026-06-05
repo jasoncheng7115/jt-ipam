@@ -13,6 +13,7 @@ import {
   VrfsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
 } from "@/icons";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 
 const { t } = useI18n();
@@ -145,6 +146,7 @@ onMounted(() => { void refresh(); });
       </n-button>
       <ColumnPicker :all="columnPickerItems" :visible="visibleKeys"
                     @update:visible="setVisible" @reset="reset" />
+      <ExportButton :columns="cols" :rows="filteredRows" filename="vrfs" :title="t('nav.vrfs')" />
     </n-space>
     <n-space v-if="checkedKeys.length" align="center" style="margin-bottom: 8px; padding: 8px 12px; background: rgba(127,127,127,0.08); border-radius: 6px;">
       <span>{{ t("common.selected_n", { n: checkedKeys.length }) }}</span>
