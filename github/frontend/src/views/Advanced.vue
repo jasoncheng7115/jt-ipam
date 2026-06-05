@@ -186,7 +186,7 @@ const tenantGroupCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("tenant-groups", r.id) },
 ]));
 const asnCols = computed<DataTableColumns<any>>(() => autoSort([
-  { title: "ASN", key: "number", width: 140 },
+  { title: "ASN", key: "asn", width: 140 },
   { title: t("cols.rir"), key: "rir", width: 120, render: (r) => r.rir ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("asns", r.id) },
@@ -214,7 +214,7 @@ const contactCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("contacts", r.id) },
 ]));
 const ssidCols = computed<DataTableColumns<any>>(() => autoSort([
-  { title: "SSID", key: "name", minWidth: 180, ellipsis: { tooltip: true } },
+  { title: "SSID", key: "ssid", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 56, render: (r) => delBtn("wireless/ssids", r.id) },
 ]));

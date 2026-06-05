@@ -251,7 +251,7 @@ const allVlanCols = computed<DataTableColumns<VLAN>>(() => [
   { title: t("cols.vid"), key: "number", width: 70, sorter: (a, b) => a.number - b.number },
   { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
   {
-    title: t("cols.domain"), key: "domain_id", width: 140, ellipsis: { tooltip: true },
+    title: t("cols.domain"), key: "domain_id", width: 120, ellipsis: { tooltip: true },
     render: (r) => domains.value.find((d) => d.id === r.domain_id)?.name ?? "—",
     sorter: (a, b) => {
       const an = domains.value.find((d) => d.id === a.domain_id)?.name ?? "";
@@ -260,7 +260,7 @@ const allVlanCols = computed<DataTableColumns<VLAN>>(() => [
     },
   },
   {
-    title: t("vlans.device_count"), key: "devices", width: 90,
+    title: t("vlans.device_count"), key: "devices", width: 72,
     sorter: (a, b) => (a.device_count ?? 0) - (b.device_count ?? 0),
     render: (r) => (r.device_count ?? 0) > 0
       ? h(NButton, { size: "tiny", text: true, type: "primary", onClick: () => openVlanDevices(r) },
@@ -268,7 +268,7 @@ const allVlanCols = computed<DataTableColumns<VLAN>>(() => [
       : "—",
   },
   {
-    title: t("vlans.port_count"), key: "ports", width: 90,
+    title: t("vlans.port_count"), key: "ports", width: 76,
     sorter: (a, b) => (a.port_count ?? 0) - (b.port_count ?? 0),
     render: (r) => (r.port_count ?? 0) > 0
       ? h(NButton, { size: "tiny", text: true, type: "primary", onClick: () => openVlanMembers(r) },
@@ -276,16 +276,16 @@ const allVlanCols = computed<DataTableColumns<VLAN>>(() => [
       : "—",
   },
   {
-    title: t("vlans.ip_count"), key: "ips", width: 80,
+    title: t("vlans.ip_count"), key: "ips", width: 68,
     sorter: (a, b) => (a.ip_count ?? 0) - (b.ip_count ?? 0),
     render: (r) => String(r.ip_count ?? 0),
   },
   {
-    title: t("nav.customers"), key: "customer", width: 160, ellipsis: { tooltip: true },
+    title: t("nav.customers"), key: "customer", width: 130, ellipsis: { tooltip: true },
     render: (r) => r.customer_id ? customerLabelFor(r.customer_id) : "—",
   },
   {
-    title: t("nav.sections"), key: "section", width: 160, ellipsis: { tooltip: true },
+    title: t("nav.sections"), key: "section", width: 130, ellipsis: { tooltip: true },
     render: (r) => r.section_id ? (sectionMap.value[r.section_id] ?? "—") : "—",
   },
   { title: t("common.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true },
@@ -380,7 +380,7 @@ onMounted(() => {
         </n-space>
         <n-data-table
           :columns="vlanCols" :data="vlansFiltered" :loading="loading" :bordered="false"
-          :scroll-x="1116"
+          :scroll-x="992"
           :row-key="(row: VLAN) => row.id"
           :checked-row-keys="vlanChecked"
           @update:checked-row-keys="(keys: DataTableRowKey[]) => vlanChecked = keys"

@@ -95,7 +95,13 @@ function labelEffective(v: string | null | undefined): string {
   const m = /^(\w+)(.*)$/.exec(v);
   if (!m) return v;
   const base = m[1].toLowerCase();
-  const rest = m[2];
+  let rest = m[2];
+  // 來源附註本地化：(scanner) → (掃描代理)
+  rest = rest.replace(/\(([^)]+)\)/g, (_full, src: string) => {
+    const sk = `addresses.source_${src.trim().toLowerCase()}`;
+    const sv = t(sk);
+    return `(${sv === sk ? src : sv})`;
+  });
   const key = `addresses.effective_${base}`;
   const out = t(key);
   return (out === key ? m[1] : out) + rest;

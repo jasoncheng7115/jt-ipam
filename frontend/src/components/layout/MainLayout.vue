@@ -479,6 +479,10 @@ function startDrag(e: MouseEvent) {
 }
 .topbar {
   padding: 8px 16px;
+  /* 頂端列固定，內容捲動時保持可見 */
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 /* ── 左側選單拖動把手 ── */
