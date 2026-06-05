@@ -394,6 +394,124 @@ async def set_oidc_config(
     return val
 
 
+# ─────────────────── SSO：SAML 2.0 ───────────────────
+SAML_KEY = "saml"
+_SAML_AAD = b"saml:sp_private_key"
+
+
+def _enc_saml(s: str) -> str:
+    ct, nonce = encrypt_secret(s, aad=_SAML_AAD)
+    return "v1:" + base64.b64encode(nonce).decode() + ":" + base64.b64encode(ct).decode()
+
+
+def _dec_saml(blob: str) -> str | None:
+    try:
+        _ver, b_nonce, b_ct = blob.split(":", 2)
+        return decrypt_secret(base64.b64decode(b_ct), base64.b64decode(b_nonce),
+                              aad=_SAML_AAD).decode("utf-8")
+    except Exception:
+        return None
+
+
+@dataclass
+class SamlConfig:
+    enabled: bool
+    idp_metadata_url: str | None
+    idp_metadata_xml: str | None
+    sp_entity_id: str | None
+    sp_acs_url: str | None
+    sp_sls_url: str | None
+    sp_x509_cert: str | None
+    sp_private_key: str | None   # 明文（已解密），僅 process 內用
+    want_assertions_signed: bool
+    want_assertions_encrypted: bool
+    want_name_id_encrypted: bool
+    authn_requests_signed: bool
+    attr_username: str
+    attr_email: str
+    attr_displayname: str
+    attr_groups: str
+    admin_groups: list[str]
+    default_group_id: str | None = None
+
+
+async def get_saml_config(session: AsyncSession) -> SamlConfig:
+    """env 為預設、DB(system_settings.saml) 覆寫；無 DB row → 行為與舊版讀 env 完全相同。"""
+    s = get_settings()
+    cfg = SamlConfig(
+        enabled=s.saml_enabled,
+        idp_metadata_url=s.saml_idp_metadata_url or s.saml_metadata_url,
+        idp_metadata_xml=s.saml_idp_metadata_xml,
+        sp_entity_id=s.saml_sp_entity_id or s.saml_entity_id,
+        sp_acs_url=s.saml_sp_acs_url or s.saml_acs_url,
+        sp_sls_url=s.saml_sp_sls_url,
+        sp_x509_cert=s.saml_sp_x509_cert,
+        sp_private_key=s.saml_sp_private_key.get_secret_value() if s.saml_sp_private_key else None,
+        want_assertions_signed=s.saml_want_assertions_signed,
+        want_assertions_encrypted=s.saml_want_assertions_encrypted,
+        want_name_id_encrypted=s.saml_want_name_id_encrypted,
+        authn_requests_signed=s.saml_authn_requests_signed,
+        attr_username=s.saml_attr_username,
+        attr_email=s.saml_attr_email,
+        attr_displayname=s.saml_attr_displayname,
+        attr_groups=s.saml_attr_groups,
+        admin_groups=list(s.saml_admin_groups),
+    )
+    row = await session.get(SystemSetting, SAML_KEY)
+    if row and isinstance(row.value, dict):
+        v = row.value
+        for k in ("idp_metadata_url", "idp_metadata_xml", "sp_entity_id", "sp_acs_url",
+                  "sp_sls_url", "sp_x509_cert", "attr_username", "attr_email",
+                  "attr_displayname", "attr_groups"):
+            if isinstance(v.get(k), str) and v[k] != "":
+                setattr(cfg, k, v[k])
+        for bk in ("enabled", "want_assertions_signed", "want_assertions_encrypted",
+                   "want_name_id_encrypted", "authn_requests_signed"):
+            if isinstance(v.get(bk), bool):
+                setattr(cfg, bk, v[bk])
+        if isinstance(v.get("admin_groups"), list):
+            cfg.admin_groups = [str(x) for x in v["admin_groups"]]
+        if isinstance(v.get("default_group_id"), str) and v["default_group_id"]:
+            cfg.default_group_id = v["default_group_id"]
+        if isinstance(v.get("sp_private_key_enc"), str) and v["sp_private_key_enc"]:
+            pk = _dec_saml(v["sp_private_key_enc"])
+            if pk is not None:
+                cfg.sp_private_key = pk
+    return cfg
+
+
+_SAML_SCALARS = ("enabled", "idp_metadata_url", "idp_metadata_xml", "sp_entity_id",
+                 "sp_acs_url", "sp_sls_url", "sp_x509_cert", "want_assertions_signed",
+                 "want_assertions_encrypted", "want_name_id_encrypted",
+                 "authn_requests_signed", "attr_username", "attr_email",
+                 "attr_displayname", "attr_groups", "admin_groups", "default_group_id")
+
+
+async def set_saml_config(
+    session: AsyncSession, *, data: dict[str, Any], updated_by_user_id: uuid.UUID
+) -> dict[str, Any]:
+    from sqlalchemy.orm.attributes import flag_modified
+    row = await session.get(SystemSetting, SAML_KEY)
+    if row is None:
+        row = SystemSetting(key=SAML_KEY, value={}, updated_by=updated_by_user_id)
+        session.add(row)
+    val: dict[str, Any] = dict(row.value or {})
+    for k in _SAML_SCALARS:
+        if k in data:
+            val[k] = data[k]
+    if "sp_private_key" in data:
+        pk = data["sp_private_key"]
+        if pk:
+            val["sp_private_key_enc"] = _enc_saml(str(pk))
+        elif pk == "":
+            val.pop("sp_private_key_enc", None)
+    row.value = val
+    row.updated_by = updated_by_user_id
+    flag_modified(row, "value")
+    await session.commit()
+    return val
+
+
 # ─────────────────── 稽核轉送到 Graylog（syslog / CEF / GELF）───────────────────
 AUDIT_FWD_KEY = "audit_forward"
 

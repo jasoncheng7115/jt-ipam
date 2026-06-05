@@ -61,24 +61,22 @@ def _public_base_url() -> str:
     return str(s.api_public_url).rstrip("/")
 
 
-def _resolve_sp_endpoints() -> dict[str, str]:
-    s = get_settings()
+def _resolve_sp_endpoints(cfg: Any) -> dict[str, str]:
     base = _public_base_url()
     return {
-        "entity_id": s.saml_sp_entity_id or s.saml_entity_id or f"{base}/api/v1/auth/saml/metadata",
-        "acs_url": s.saml_sp_acs_url or s.saml_acs_url or f"{base}/api/v1/auth/saml/acs",
-        "sls_url": s.saml_sp_sls_url or f"{base}/api/v1/auth/saml/sls",
+        "entity_id": cfg.sp_entity_id or f"{base}/api/v1/auth/saml/metadata",
+        "acs_url": cfg.sp_acs_url or f"{base}/api/v1/auth/saml/acs",
+        "sls_url": cfg.sp_sls_url or f"{base}/api/v1/auth/saml/sls",
     }
 
 
-async def _fetch_idp_metadata() -> _IdPInfo:
-    """從 saml_idp_metadata_url（safe_request）或 saml_idp_metadata_xml 取 IdP info。"""
-    s = get_settings()
-    if not s.saml_enabled:
+async def _fetch_idp_metadata(cfg: Any) -> _IdPInfo:
+    """從 idp_metadata_url（safe_request）或 idp_metadata_xml 取 IdP info。"""
+    if not cfg.enabled:
         raise SAMLNotConfigured("SAML is disabled")
 
-    url = s.saml_idp_metadata_url or s.saml_metadata_url
-    inline_xml = s.saml_idp_metadata_xml
+    url = cfg.idp_metadata_url
+    inline_xml = cfg.idp_metadata_xml
 
     cache_key = url or "<inline>"
     if cache_key in _idp_cache:
@@ -141,14 +139,13 @@ def _parse_idp_metadata(xml: str) -> _IdPInfo:
     )
 
 
-async def build_settings() -> dict[str, Any]:
+async def build_settings(cfg: Any) -> dict[str, Any]:
     """組成 OneLogin_Saml2_Auth 要的 settings dict。"""
-    s = get_settings()
-    if not s.saml_enabled:
+    if not cfg.enabled:
         raise SAMLNotConfigured("SAML is disabled")
 
-    sp = _resolve_sp_endpoints()
-    idp = await _fetch_idp_metadata()
+    sp = _resolve_sp_endpoints(cfg)
+    idp = await _fetch_idp_metadata(cfg)
 
     settings_dict: dict[str, Any] = {
         "strict": True,
@@ -164,10 +161,8 @@ async def build_settings() -> dict[str, Any]:
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
             },
             "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
-            "x509cert": s.saml_sp_x509_cert or "",
-            "privateKey": (
-                s.saml_sp_private_key.get_secret_value() if s.saml_sp_private_key else ""
-            ),
+            "x509cert": cfg.sp_x509_cert or "",
+            "privateKey": cfg.sp_private_key or "",
         },
         "idp": {
             "entityId": idp.entity_id,
@@ -178,12 +173,12 @@ async def build_settings() -> dict[str, Any]:
             "x509cert": idp.x509_cert,
         },
         "security": {
-            "wantAssertionsSigned": s.saml_want_assertions_signed,
-            "wantAssertionsEncrypted": s.saml_want_assertions_encrypted,
-            "wantNameIdEncrypted": s.saml_want_name_id_encrypted,
-            "authnRequestsSigned": s.saml_authn_requests_signed,
-            "logoutRequestSigned": s.saml_authn_requests_signed,
-            "logoutResponseSigned": s.saml_authn_requests_signed,
+            "wantAssertionsSigned": cfg.want_assertions_signed,
+            "wantAssertionsEncrypted": cfg.want_assertions_encrypted,
+            "wantNameIdEncrypted": cfg.want_name_id_encrypted,
+            "authnRequestsSigned": cfg.authn_requests_signed,
+            "logoutRequestSigned": cfg.authn_requests_signed,
+            "logoutResponseSigned": cfg.authn_requests_signed,
             "wantMessagesSigned": False,
             "signatureAlgorithm": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
             "digestAlgorithm": "http://www.w3.org/2001/04/xmlenc#sha256",
@@ -214,20 +209,20 @@ def _request_dict_from_starlette(req: Any, post_data: dict[str, Any] | None = No
 # ─────────────────── 核心 API ───────────────────
 
 
-async def build_auth_url(request: Any, *, return_to: str | None = None) -> str:
+async def build_auth_url(request: Any, cfg: Any, *, return_to: str | None = None) -> str:
     """產生 SP-initiated SSO 的 IdP 重導 URL。"""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
-    settings_dict = await build_settings()
+    settings_dict = await build_settings(cfg)
     auth = OneLogin_Saml2_Auth(_request_dict_from_starlette(request), settings_dict)
     return auth.login(return_to=return_to or "/")  # type: ignore[no-any-return]
 
 
-async def process_acs(request: Any, post_data: dict[str, Any]) -> dict[str, Any]:
+async def process_acs(request: Any, cfg: Any, post_data: dict[str, Any]) -> dict[str, Any]:
     """處理 IdP 送回的 SAMLResponse；回傳 normalized claims。"""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
-    settings_dict = await build_settings()
+    settings_dict = await build_settings(cfg)
     auth = OneLogin_Saml2_Auth(
         _request_dict_from_starlette(request, post_data=post_data),
         settings_dict,
@@ -250,11 +245,11 @@ async def process_acs(request: Any, post_data: dict[str, Any]) -> dict[str, Any]
     }
 
 
-async def metadata_xml() -> str:
+async def metadata_xml(cfg: Any) -> str:
     """產生 SP metadata（給 IdP 註冊用）。"""
     from onelogin.saml2.settings import OneLogin_Saml2_Settings
 
-    settings_dict = await build_settings()
+    settings_dict = await build_settings(cfg)
     saml_settings = OneLogin_Saml2_Settings(settings=settings_dict, sp_validation_only=True)
     metadata = saml_settings.get_sp_metadata()
     errors = saml_settings.validate_metadata(metadata)
@@ -265,11 +260,11 @@ async def metadata_xml() -> str:
     return metadata  # type: ignore[no-any-return]
 
 
-async def build_logout_url(request: Any, *, name_id: str | None, session_index: str | None) -> str:
+async def build_logout_url(request: Any, cfg: Any, *, name_id: str | None, session_index: str | None) -> str:
     """產生 SP-initiated SLO 的 IdP 重導 URL。"""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
-    settings_dict = await build_settings()
+    settings_dict = await build_settings(cfg)
     auth = OneLogin_Saml2_Auth(_request_dict_from_starlette(request), settings_dict)
     return auth.logout(name_id=name_id, session_index=session_index)  # type: ignore[no-any-return]
 
@@ -287,25 +282,24 @@ def _first(attrs: dict[str, list[Any]], key: str) -> str | None:
 
 
 async def upsert_user_from_saml(
-    session: AsyncSession, claims: dict[str, Any], *, actor_ip: str | None,
+    session: AsyncSession, claims: dict[str, Any], cfg: Any, *, actor_ip: str | None,
 ) -> User:
     """以 SAML claims 建立或更新 User。external_subject = NameID。"""
-    settings = get_settings()
     attrs: dict[str, list[Any]] = claims.get("attributes") or {}
     name_id = claims.get("name_id")
     if not name_id:
         raise SAMLError("SAML response missing NameID")
 
-    username = _first(attrs, settings.saml_attr_username) or name_id
-    email = _first(attrs, settings.saml_attr_email) or (name_id if "@" in name_id else None)
-    display_name = _first(attrs, settings.saml_attr_displayname) or username
+    username = _first(attrs, cfg.attr_username) or name_id
+    email = _first(attrs, cfg.attr_email) or (name_id if "@" in name_id else None)
+    display_name = _first(attrs, cfg.attr_displayname) or username
 
-    groups_raw = attrs.get(settings.saml_attr_groups) or []
+    groups_raw = attrs.get(cfg.attr_groups) or []
     if isinstance(groups_raw, str):
         groups = [g.strip() for g in groups_raw.split(",") if g.strip()]
     else:
         groups = [str(g) for g in groups_raw]
-    is_admin = any(g in settings.saml_admin_groups for g in groups)
+    is_admin = any(g in cfg.admin_groups for g in groups)
 
     user = (
         await session.execute(
