@@ -121,12 +121,21 @@ function exportPDF(title: string, cols: ExportColumn[], rows: Record<string, any
     </style></head><body>
     <h1>${xmlEscape(title)}</h1>
     <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload=function(){window.print();}<\/script>
     </body></html>`;
-  const w = window.open("", "_blank");
-  if (!w) { throw new Error("popup blocked"); }
-  w.document.write(html);
-  w.document.close();
+  // 隱藏 iframe 觸發列印（不再開 about:blank 分頁），於列印對話框選「另存為 PDF」
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+  document.body.appendChild(iframe);
+  const doc = iframe.contentWindow?.document;
+  if (!doc) { iframe.remove(); throw new Error("pdf failed"); }
+  doc.open(); doc.write(html); doc.close();
+  const cw = iframe.contentWindow;
+  if (cw) {
+    setTimeout(() => {
+      cw.focus(); cw.print();
+      setTimeout(() => iframe.remove(), 1000);
+    }, 250);
+  }
 }
 
 // ── 手刻 ZIP（STORE 模式）給 ODF 用 ──

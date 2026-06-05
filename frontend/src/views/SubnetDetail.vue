@@ -42,6 +42,7 @@ import { useCustomers } from "@/composables/useCustomers";
 import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 const { t } = useI18n();
 
@@ -771,6 +772,9 @@ onMounted(() => {
             </n-button>
             <ColumnPicker :all="ipColumnPickerItems" :visible="ipVisibleKeys"
                           @update:visible="setIpVisible" @reset="resetIpVisible" />
+            <ExportButton v-if="subnet" size="small" :columns="ipColumns" :rows="addresses"
+                          :filename="`ip-${subnet.cidr.replace('/', '_')}`"
+                          :title="`${t('addresses.ip_list_title')} ${subnet.cidr}`" />
             <n-button @click="load(subnet.id)" :loading="loading">
               <template #icon><n-icon><RefreshIcon /></n-icon></template>
               {{ t("common.refresh") }}
