@@ -498,6 +498,10 @@
     "view_all": "查看全部",
     "history_title": "通知記錄"
   },
+  "update": {
+    "new_version": "已有新版本 v{v}，",
+    "reload": "點此重新整理"
+  },
   "vlans": {
     "device_count": "裝置數",
     "devices_on_vlan": "使用此 VLAN 的裝置",
@@ -1259,7 +1263,7 @@
     "cabling": "佈線",
     "power": "電力",
     "panels": "配電盤",
-    "feeds": "饋線",
+    "feeds": "供電迴路",
     "outlets": "插座",
     "vpn_peer": "對接 / 對端",
     "pair_reliable": "公鑰配對",

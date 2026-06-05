@@ -34,10 +34,18 @@ const errorMsg = ref<string | null>(null);
 // 領域（PVE 風）：本機 / LDAP，預設本機
 const realm = ref("local");
 const realms = ref<{ label: string; value: string }[]>([{ label: "本機", value: "local" }]);
+// 先用上次快取的 realms 立刻渲染（避免冷啟動時「領域」一閃才出現／沒出現），再向後端刷新
+try {
+  const cached = JSON.parse(localStorage.getItem("jtipam.realms") || "null");
+  if (Array.isArray(cached) && cached.length) realms.value = cached;
+} catch { /* ignore */ }
 onMounted(async () => {
   try {
     const { data } = await apiClient.get<{ realms: { label: string; value: string }[] }>("/api/v1/auth/realms");
-    if (data.realms?.length) realms.value = data.realms;
+    if (data.realms?.length) {
+      realms.value = data.realms;
+      localStorage.setItem("jtipam.realms", JSON.stringify(data.realms));
+    }
   } catch { /* 預設只有本機 */ }
 });
 

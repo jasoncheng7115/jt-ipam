@@ -118,7 +118,7 @@ const { isPinned, toggle: togglePinned, ensureLoaded: ensurePinsLoaded } = usePi
 
 const { visibleKeys: ipVisibleKeys, setVisible: setIpVisible, reset: resetIpVisible } = useColumnPrefs(
   "subnet_detail_ips",
-  ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "owner", "switch_port", "description", "last_seen", "stale_days", "note"],
+  ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "owner", "switch_port", "device", "description", "last_seen", "stale_days", "note"],
   ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "switch_port", "description", "last_seen"],
 );
 const ipColumnPickerItems = [
@@ -131,12 +131,13 @@ const ipColumnPickerItems = [
   { key: "mac_vendor", label: t("cols.vendor") },
   { key: "owner", label: t("cols.owner") },
   { key: "switch_port", label: t("cols.switch_port") },
+  { key: "device", label: t("cols.device") },
   { key: "description", label: t("cols.description") },
   { key: "last_seen", label: t("cols.last_seen") },
   { key: "stale_days", label: t("stale.col_stale") },
   { key: "note", label: t("cols.note") },
 ];
-import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon } from "@/icons";
+import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon, SearchIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";
@@ -367,7 +368,7 @@ function stateTag(state: string) {
 
 // 閒置區間列：IP 欄要橫跨「ip 之後的所有可見欄位」，文字才不會被切在一欄裡。
 const IP_COL_ORDER = ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor",
-  "owner", "switch_port", "description", "last_seen", "stale_days", "note"];
+  "owner", "switch_port", "device", "description", "last_seen", "stale_days", "note"];
 const gapSpan = computed(() => {
   const vis = IP_COL_ORDER.filter((k) => ipVisibleKeys.value.includes(k));
   const i = vis.indexOf("ip");
@@ -416,6 +417,15 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
           default: () => r.switch_port_confident === false
             ? t("addresses.switch_port_uncertain")
             : r.switch_port }) },
+  { title: t("cols.device"), key: "device", width: 150, ellipsis: { tooltip: true },
+    render: (r) => {
+      if ((r as any).__gap || !r.device_id) return "—";
+      return h("a", {
+        href: "#",
+        style: "color: var(--primary-color, #18a058); text-decoration: none;",
+        onClick: (e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); router.push({ name: "device-detail", params: { id: r.device_id } }); },
+      }, r.device_name || (r.device_id.slice(0, 8) + "…"));
+    } },
   { title: t("common.description"), key: "description", width: 200,
     ellipsis: { tooltip: true }, render: (r) => r.description ?? "" },
   { title: t("addresses.last_seen"), key: "last_seen", width: 170, render: (r) => lastSeen(r) },
@@ -556,9 +566,19 @@ function _intToIp(n: number): string {
 function _gapRow(gs: number, ge: number): any {
   return { __gap: true, id: `gap:${gs}`, ip: _intToIp(gs), _gapEnd: _intToIp(ge), _gapCount: ge - gs + 1 };
 }
+const ipFilterText = ref("");
+function ipMatchesFilter(a: IPAddress): boolean {
+  const q = ipFilterText.value.trim().toLowerCase();
+  if (!q) return true;
+  return [a.ip, a.hostname, a.mac, a.mac_vendor, a.owner, a.description, a.note, a.device_name]
+    .some((v) => !!v && String(v).toLowerCase().includes(q));
+}
+
 const ipRows = computed<any[]>(() => {
   // 失聯篩選開啟時：只列符合的已登記 IP，不插入閒置區間列
-  if (staleFilterOn.value) return [...staleMatches.value];
+  if (staleFilterOn.value) return staleMatches.value.filter(ipMatchesFilter);
+  // 有搜尋字時：只列符合的已登記 IP，不插入閒置區間列
+  if (ipFilterText.value.trim()) return addresses.value.filter(ipMatchesFilter);
   const cidr = subnet.value?.cidr;
   const list = [...addresses.value];
   if (!cidr || cidr.includes(":")) return list;   // IPv6 暫不算閒置區間
@@ -786,6 +806,10 @@ onMounted(() => {
         </template>
         <template #header-extra>
           <n-space align="center">
+            <n-input v-model:value="ipFilterText" size="small" clearable
+                     :placeholder="t('common.filter')" style="width: 200px">
+              <template #prefix><n-icon><SearchIcon /></n-icon></template>
+            </n-input>
             <n-button v-if="subnet" type="primary" size="small" :disabled="_authBtn.me?.can_edit === false" @click="onAddAddress">
               <template #icon><n-icon><PlusIcon /></n-icon></template>
               {{ t("subnet_detail.add_address") }}

@@ -12,7 +12,7 @@
 
 phpIPAM 老使用者幾乎零學習成本；以現代技術全新打造（非基於 phpIPAM 程式碼）。深度整合：
 
-- **DNS**：PowerDNS、BIND 9、OPNsense Unbound、Univention UCS、Microsoft Windows DNS（雙向同步）
+- **DNS**：PowerDNS、BIND 9、OPNsense Unbound、Univention UCS、Microsoft Windows DNS（讀取正反解狀態，可選擇性推送記錄）
 - **LibreNMS**：裝置同步、ARP / FDB 抓取、上線狀態互補、自動加入監控
 - **基礎設施**：Proxmox VE、Wazuh、OPNsense
 - **Graylog**：提供 IP→主機名稱/FQDN 的 DSV 對照表端點，供 Graylog「DSV File from HTTP」資料配接器抓取

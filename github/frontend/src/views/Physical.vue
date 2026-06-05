@@ -221,7 +221,7 @@ async function delCable(r: any) {
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.network")); }
 }
 
-// ── 新增電力（配電盤 / 饋線 / 插座）──
+// ── 新增電力（配電盤 / 供電迴路 / 插座）──
 const showPower = ref(false);
 const powerKind = ref<"panel" | "feed" | "outlet">("panel");
 const savingPower = ref(false);

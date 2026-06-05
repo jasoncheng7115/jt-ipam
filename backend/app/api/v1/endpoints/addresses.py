@@ -185,11 +185,23 @@ async def list_addresses(
                 select(Subnet.id, Subnet.scan_enabled).where(Subnet.id.in_(scan_ids))
             )).all()
         )
+    # 批次帶上關聯裝置名稱（清單「裝置」欄用）
+    dev_ids = list({r.device_id for r in rows if r.device_id})
+    dev_map: dict[uuid.UUID, str] = {}
+    if dev_ids:
+        from app.models.device import Device
+        dev_map = dict(
+            (await session.execute(
+                select(Device.id, Device.name).where(Device.id.in_(dev_ids))
+            )).all()
+        )
     for it, r in zip(items, rows, strict=False):
         p = mac_prefix(r.mac)
         if p:
             it.mac_vendor = vmap.get(p)
         it.subnet_scan_enabled = scan_map.get(r.subnet_id)
+        if r.device_id:
+            it.device_name = dev_map.get(r.device_id)
     total = int(await session.scalar(count_stmt) or 0)
     return Paginated[IPAddressRead](items=items, total=total, page=page, page_size=page_size)
 

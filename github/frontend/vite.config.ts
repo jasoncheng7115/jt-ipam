@@ -1,17 +1,31 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { fileURLToPath, URL } from "node:url";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 // 從 package.json 讀版本號，build 時注入 __APP_VERSION__
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
+
+// build 後輸出 dist/version.json，給前端輪詢偵測「已部署新版」→ 提示重新整理（解長壽分頁跑舊 bundle）
+function emitVersionJson(): Plugin {
+  return {
+    name: "emit-version-json",
+    apply: "build",
+    closeBundle() {
+      writeFileSync(
+        fileURLToPath(new URL("./dist/version.json", import.meta.url)),
+        JSON.stringify({ version: pkg.version }),
+      );
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
 
   return {
-    plugins: [vue()],
+    plugins: [vue(), emitVersionJson()],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },

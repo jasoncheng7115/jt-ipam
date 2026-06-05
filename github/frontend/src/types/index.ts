@@ -102,6 +102,7 @@ export interface IPAddress {
   effective_status: string | null;
   subnet_scan_enabled: boolean | null;
   mac_vendor: string | null;
+  device_name: string | null;
   created_at: string;
   updated_at: string;
 }

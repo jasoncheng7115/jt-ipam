@@ -128,5 +128,7 @@ class IPAddressRead(IPAddressBase):
     subnet_scan_enabled: bool | None = None
     # 後端從 oui_vendors 表 lookup 帶上來；前端不用自己查
     mac_vendor: str | None = None
+    # 關聯裝置名稱（清單顯示用，前端不用再查）
+    device_name: str | None = None
     created_at: datetime
     updated_at: datetime

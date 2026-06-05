@@ -25,6 +25,7 @@ import { useCustomers } from "@/composables/useCustomers";
 import { useRouter } from "vue-router";
 import { listDevices, type Device } from "@/api/basic";
 import { getAddressRelations, type RelationNode } from "@/api/relations";
+import { listDhcpRanges } from "@/api/integrations";
 import RelationChain from "@/components/RelationChain.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 
@@ -46,6 +47,36 @@ function deviceLabel(id: string | null | undefined): string {
 }
 const deviceOptions = computed(() =>
   devices.value.map((d) => ({ label: d.name, value: d.id })));
+
+// DHCP 發放範圍：標示本 IP 是否落在某 DHCP 主機的動態池內
+interface DhcpInfo { server: string; source: string; start: string; end: string; }
+const dhcpRanges = ref<{ a: number; b: number; server: string; source: string; start: string; end: string }[]>([]);
+function _ip2int(ip: string): number | null {
+  const p = ip.trim().split(".");
+  if (p.length !== 4) return null;
+  let n = 0;
+  for (const o of p) { const v = Number(o); if (!Number.isInteger(v) || v < 0 || v > 255) return null; n = n * 256 + v; }
+  return n >>> 0;
+}
+async function loadDhcpRanges() {
+  if (dhcpRanges.value.length) return;
+  try {
+    const rows = await listDhcpRanges();
+    const out: typeof dhcpRanges.value = [];
+    for (const r of rows) {
+      const a = _ip2int(r.start_ip), b = _ip2int(r.end_ip);
+      if (a != null && b != null) out.push({ a: Math.min(a, b), b: Math.max(a, b), server: r.firewall_name || "—", source: (r.source || "").toUpperCase(), start: r.start_ip, end: r.end_ip });
+    }
+    dhcpRanges.value = out;
+  } catch { /* silent */ }
+}
+const dhcpInfo = computed<DhcpInfo | null>(() => {
+  const ip = (props.address?.ip ?? "").split("/")[0];
+  const n = ip ? _ip2int(ip) : null;
+  if (n == null) return null;
+  const r = dhcpRanges.value.find((x) => n >= x.a && n <= x.b);
+  return r ? { server: r.server, source: r.source, start: r.start, end: r.end } : null;
+});
 
 const relations = ref<RelationNode[]>([]);
 async function loadRelations() {
@@ -227,6 +258,7 @@ watch(
     if (props.show) {
       void ensureCustomersLoaded();
       void loadDevices();
+      void loadDhcpRanges();
       void loadRelations();
       void loadRelatedNat();
     }
@@ -430,6 +462,16 @@ async function remove() {
           <span>{{ props.address?.ip ?? props.createContext?.ip ?? '' }}</span>
           <n-tag v-if="isCreate" type="info" size="small">{{ t("common.create") }}</n-tag>
           <n-tag v-else :type="stateType" size="small">{{ labelState(props.address?.state) }}</n-tag>
+          <n-tooltip v-if="dhcpInfo" :delay="0">
+            <template #trigger>
+              <n-tag type="warning" size="small" :bordered="false">DHCP</n-tag>
+            </template>
+            <div style="max-width:260px;line-height:1.5">
+              <div>{{ t("addresses.dhcp_pool_hint") }}</div>
+              <div style="margin-top:4px"><strong>{{ t("addresses.dhcp_server") }}：</strong>{{ dhcpInfo.server }}{{ dhcpInfo.source ? ` (${dhcpInfo.source})` : "" }}</div>
+              <div>{{ t("addresses.dhcp_range") }}：{{ dhcpInfo.start }} – {{ dhcpInfo.end }}</div>
+            </div>
+          </n-tooltip>
         </span>
       </template>
       <!-- inline(頁面)模式：操作鈕放右上，比照裝置詳情頁 -->

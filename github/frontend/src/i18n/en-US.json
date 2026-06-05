@@ -498,6 +498,10 @@
     "view_all": "View all",
     "history_title": "Notification history"
   },
+  "update": {
+    "new_version": "A new version v{v} is available — ",
+    "reload": "click to refresh"
+  },
   "vlans": {
     "device_count": "Devices",
     "devices_on_vlan": "Devices using this VLAN",

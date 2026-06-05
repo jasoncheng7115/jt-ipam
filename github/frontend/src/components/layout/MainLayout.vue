@@ -3,6 +3,7 @@ import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useFloatingHScroll } from "@/composables/useFloatingHScroll";
+import { useVersionCheck } from "@/composables/useVersionCheck";
 import {
   NLayout,
   NLayoutHeader,
@@ -50,6 +51,8 @@ const ui = useUiStore();
 
 // 全站懸浮水平捲軸：任何頁面的寬表格只要原生捲軸落在畫面外，視窗底部就會出現一條
 useFloatingHScroll();
+// 偵測已部署新版 → 提示重新整理（解長壽分頁跑舊 bundle）
+useVersionCheck();
 const auth = useAuthStore();
 const { theme, locale } = storeToRefs(ui);
 const { me } = storeToRefs(auth);
