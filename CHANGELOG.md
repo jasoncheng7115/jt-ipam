@@ -4,6 +4,104 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.92] — 2026-06-06
+
+### Added
+- Advanced (tenancy / circuits / contacts) and Power pages: multi-table pages are
+  split into **inner tabs** (matching the firewall rules/aliases style). Every
+  Advanced / Power / Virtualization table now has a **unified toolbar**:
+  filter + refresh + create + column picker + export.
+- Racks: a **merged single-card** view mode (all racks of a room in one card).
+- Topology: **persistent edge-selection highlight** with a two-end card (IP /
+  device / port, shown even when only one end is known); multi-subnet centers
+  spread apart so dual-homed devices no longer overlap.
+- Circuits: **fixed-IP fields** (IP / gateway / netmask / DNS) + device link
+  (migration 0067); built-in **circuit types** with add/delete management.
+- Scan agents: show **last source IP** (migration 0068).
+- Device detail: one-click **link-IP-mapping** button in the IP list.
+- Graylog DSV settings promoted to a standalone **Graylog integration** page
+  under Wazuh, with a wiring guide.
+
+### Changed
+- nginx API rate-limit raised (100 → 1200 r/m, burst 20 → 80) to stop spurious
+  "connection failed" on API-heavy pages.
+- IP-address editor: green save buttons; save/cancel returns to the IP detail page.
+
+### Fixed
+- **Stale-bundle navigation hang**: the router auto-reloads once when a code-split
+  chunk fails to load, and the build now **retains hashed assets across deploys**
+  (pruning ones older than 7 days), so tabs opened before a deploy no longer 404
+  their chunks and hang on navigation.
+- Contact-groups table reused tenant-group columns (hit the wrong API) — fixed.
+- ruff: corrected noqa rule code in `audit.py`, import ordering in `sso.py`.
+
+### Security / Chore
+- **vitest** dev dependency bumped 3.2.6 → 4.1.8 (resolves the critical
+  "Vitest UI server arbitrary file read/exec" advisory; dev-only, not in the
+  production bundle).
+- Bilingual docs added: `CHANGELOG_zh-TW.md`, `SECURITY_zh-TW.md`, and
+  `TEST_CHECKLIST.md` (English) alongside `TEST_CHECKLIST_zh-TW.md`.
+- All `scripts/*.sh` are now English-only (comments and messages); behavior
+  unchanged.
+
+## [0.4.79] — 2026-06-06
+
+### Added
+- **SSO web UI configuration**: OIDC and SAML are now DB-backed with an admin web
+  UI (env defaults + DB override, AES-GCM encrypted secrets); LDAP management page.
+- **Device power ports ↔ PDU outlets** modeling (NetBox PowerPort style,
+  migration 0066).
+- **Version auto-reload**: `dist/version.json` polling prompts a reload when a new
+  build is deployed (the root cause behind "my save didn't take" stale-bundle
+  reports).
+- **Full bilingual documentation**: README and all `docs/*.md` in English and
+  zh-TW; GitHub Pages feature-map tree.
+
+### Changed
+- Universal table **column picker + multi-format export** everywhere (incl.
+  zero-dependency `.ods` / `.odt`, `.xlsx`, PDF).
+- Generic pinning moved to backend preferences (migration 0065); rack front/rear
+  face support.
+
+## [0.4.61] — 2026-06-05
+
+### Added
+- **RBAC convergence for global infrastructure data**: `require_global_read` /
+  `has_global_read` / `can_edit`. Lists, details, search, dashboard aggregates,
+  counts and trends all scale to the user's visibility; action buttons grey out
+  by capability.
+- **Cable Trace** (NetBox-style multi-hop, migration 0063): a `device_ports`
+  table with bridge → NIC → external-device traversal.
+- Rack **half-U** support and front/rear visualization; device-detail rack
+  diagram highlighting the current device.
+
+### Changed
+- AI / MCP: 100-question test-and-fix pass; tool list filtered by permission;
+  a **change-confirm gate** before any write; cursor pagination + "next batch"
+  continuation for large results.
+- Archived subnets also hide their IPs (lists + search).
+
+### Fixed
+- AI chat / topology **RBAC leaks** closed (zero-permission accounts could
+  previously query IPs/devices and view the topology).
+
+## [0.4.43] — 2026-06-04
+
+### Added
+- **Device-to-device cabling / port** connection management; cabling and power
+  resources gain full CRUD editing.
+- LDAP management page; AI change-confirmation gate; Graylog DSV lookup
+  (plain HTTP on port 8088).
+- Dashboard charts; device detail shows its rack diagram.
+
+### Changed
+- Proxmox connection settings moved to the admin area; node network interfaces
+  (bridge / bond / NIC) are pulled and made traceable.
+
+### Fixed
+- Hostname sync thrash (repeated re-sync); left half-U device save 500;
+  audit `object_id` must be a UUID (`append_audit` needs `request_id`).
+
 ## [0.4.32] — 2026-06-02
 
 ### Added

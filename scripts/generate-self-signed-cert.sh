@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# jt-ipam — 產生自簽 TLS 憑證（ECDSA P-384，5 年）
+# jt-ipam — Generate a self-signed TLS certificate (ECDSA P-384, 5 years)
 #
-# 用法：
+# Usage:
 #   sudo ./scripts/generate-self-signed-cert.sh \
 #       [--out-dir /etc/jt-ipam/tls] \
 #       [--cn ipam.local] \
@@ -10,17 +10,17 @@
 #       [--days 1825] \
 #       [--owner root:jtipam]
 #
-# 預設行為：
-#   * 自動偵測 hostname、本機所有非 loopback IP，加入 SAN
-#   * 一律加入 DNS:localhost、IP:127.0.0.1、IP:::1
-#   * 私鑰權限 0640，憑證 0644，所有權 root:jtipam
+# Default behavior:
+#   * Auto-detect the hostname and all non-loopback local IPs, add them to the SAN
+#   * Always add DNS:localhost, IP:127.0.0.1, IP:::1
+#   * Private key perms 0640, certificate 0644, owner root:jtipam
 #
-# OWASP A02：
-#   * ECDSA P-384（也可改 RSA-4096）— 比 RSA 小、簽章快
-#   * SHA-384 訊息摘要（不再用 SHA-1 / MD5）
-#   * 預設 5 年有效；自簽憑證可長一點，正式 CA 簽的請走 certbot 流程
+# OWASP A02:
+#   * ECDSA P-384 (can also switch to RSA-4096) — smaller than RSA, faster signing
+#   * SHA-384 message digest (no longer using SHA-1 / MD5)
+#   * Defaults to 5-year validity; self-signed certs can be long-lived, for proper CA-signed certs use the certbot flow
 #
-# 注意：自簽憑證瀏覽器會出現警示；公開服務請改用 Let's Encrypt 或內網 CA。
+# Note: browsers warn on self-signed certs; for public services use Let's Encrypt or an internal CA instead.
 # =============================================================================
 set -euo pipefail
 
@@ -51,11 +51,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $EUID -ne 0 ]]; then
-    echo "[error] 必須以 root 執行（需寫入 $OUT_DIR 並設定 owner）" >&2
+    echo "[error] must run as root (needs to write $OUT_DIR and set owner)" >&2
     exit 1
 fi
 
-# ── SAN 自動偵測 ──
+# ── SAN auto-detection ──
 HOSTNAME_FQDN="$(hostname -f 2>/dev/null || hostname)"
 HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
 [[ -z "$CN" ]] && CN="$HOSTNAME_FQDN"
@@ -68,12 +68,12 @@ san_lines=(
     "IP:::1"
 )
 
-# 加入主要 IP（hostname -I 給的所有 IPv4）
+# Add primary IPs (all IPv4 returned by hostname -I)
 for ip in $(hostname -I 2>/dev/null || true); do
     [[ -n "$ip" ]] && san_lines+=("IP:$ip")
 done
 
-# 額外 SAN（呼叫者指定）
+# Extra SAN (caller-specified)
 if [[ -n "$EXTRA_SAN" ]]; then
     IFS=',' read -ra extra <<< "$EXTRA_SAN"
     for s in "${extra[@]}"; do
@@ -82,7 +82,7 @@ if [[ -n "$EXTRA_SAN" ]]; then
     done
 fi
 
-# 去重
+# Deduplicate
 declare -A seen
 unique_san=()
 for s in "${san_lines[@]}"; do
@@ -105,7 +105,7 @@ fi
 
 install -d -m 0750 -o root -g "${OWNER#*:}" "$OUT_DIR"
 
-# ── OpenSSL config（避免 CLI 引號跳脫地獄）──
+# ── OpenSSL config (avoids CLI quote-escaping hell) ──
 TMPCONF="$(mktemp)"
 trap 'rm -f "$TMPCONF"' EXIT
 cat > "$TMPCONF" <<EOF
@@ -130,10 +130,10 @@ echo "[gen] CN=$CN"
 echo "[gen] SAN=$SAN_VALUE"
 echo "[gen] days=$DAYS curve=prime384v1"
 
-# 產生 ECDSA P-384 私鑰
+# Generate ECDSA P-384 private key
 openssl ecparam -name secp384r1 -genkey -noout -out "$KEY"
 
-# CSR + 自簽
+# CSR + self-sign
 openssl req -new -x509 \
     -key "$KEY" \
     -out "$CERT" \
@@ -142,7 +142,7 @@ openssl req -new -x509 \
     -config "$TMPCONF" \
     -extensions v3_req
 
-# 權限
+# Permissions
 chown "$OWNER" "$KEY" "$CERT"
 chmod 0640 "$KEY"
 chmod 0644 "$CERT"
@@ -151,10 +151,10 @@ echo "[done]"
 echo "  cert: $CERT  ($(stat -c '%U:%G %a' "$CERT" 2>/dev/null || stat -f '%Su:%Sg %Lp' "$CERT"))"
 echo "  key:  $KEY  ($(stat -c '%U:%G %a' "$KEY"  2>/dev/null || stat -f '%Su:%Sg %Lp' "$KEY"))"
 echo
-echo "驗證："
+echo "Verify:"
 echo "  openssl x509 -in $CERT -noout -text | grep -E 'Subject:|DNS:|IP Address:|Not After'"
 echo
-echo "在 /etc/jt-ipam/backend.env 設定："
+echo "Set in /etc/jt-ipam/backend.env:"
 echo "  BACKEND_TLS_MODE=direct"
 echo "  BACKEND_BIND_HOST=0.0.0.0"
 echo "  BACKEND_BIND_PORT=8443"

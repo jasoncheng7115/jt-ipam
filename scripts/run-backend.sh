@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # =============================================================================
-# jt-ipam — backend uvicorn 啟動 wrapper
+# jt-ipam — backend uvicorn launch wrapper
 #
-# 由 systemd（jt-ipam-backend.service）或 dev.sh 呼叫，依 BACKEND_TLS_MODE
-# 決定是否啟用 uvicorn 內建的 TLS。
+# Invoked by systemd (jt-ipam-backend.service) or dev.sh; decides whether to
+# enable uvicorn's built-in TLS based on BACKEND_TLS_MODE.
 #
-# 環境變數（從 /etc/jt-ipam/backend.env 或 backend/.env 讀入）：
-#   BACKEND_TLS_MODE         nginx | direct（預設 nginx）
-#   BACKEND_BIND_HOST        綁定 host（nginx 模式必須是 loopback）
-#   BACKEND_BIND_PORT        綁定 port
-#   BACKEND_TLS_CERT_FILE    direct 模式下的 PEM 憑證
-#   BACKEND_TLS_KEY_FILE     direct 模式下的 PEM 私鑰
-#   UVICORN_WORKERS          worker 數量（預設 4）
-#   UVICORN_EXTRA_OPTS       額外旗標（例如 --reload）
+# Environment variables (read from /etc/jt-ipam/backend.env or backend/.env):
+#   BACKEND_TLS_MODE         nginx | direct (default nginx)
+#   BACKEND_BIND_HOST        bind host (must be loopback in nginx mode)
+#   BACKEND_BIND_PORT        bind port
+#   BACKEND_TLS_CERT_FILE    PEM certificate for direct mode
+#   BACKEND_TLS_KEY_FILE     PEM private key for direct mode
+#   UVICORN_WORKERS          number of workers (default 4)
+#   UVICORN_EXTRA_OPTS       extra flags (e.g. --reload)
 #
-# OWASP 對應：
-#   * A02：強制 TLS — direct 模式啟動前驗證 cert/key 存在 + 權限合理
-#   * A05：以 exec 取代當前行程，systemd watchdog 才能正確管理
+# OWASP mapping:
+#   * A02: enforce TLS — in direct mode, verify cert/key exist + sane permissions before start
+#   * A05: replace the current process via exec so the systemd watchdog can manage it correctly
 # =============================================================================
 set -euo pipefail
 
@@ -44,8 +44,8 @@ args=(
 
 case "$mode" in
     nginx)
-        # 後端只跑 HTTP；nginx 終結 HTTPS。
-        # config.py 的 _tls_guards 會擋掉非 loopback 的 host。
+        # Backend serves plain HTTP; nginx terminates HTTPS.
+        # _tls_guards in config.py rejects any non-loopback host.
         if [[ "$host" != "127.0.0.1" && "$host" != "::1" && "$host" != "localhost" ]]; then
             echo "[run-backend] BACKEND_TLS_MODE=nginx requires loopback BACKEND_BIND_HOST" >&2
             echo "             got: $host" >&2
@@ -67,11 +67,11 @@ case "$mode" in
             echo "[run-backend] cannot read TLS key: $key" >&2
             exit 1
         fi
-        # 私鑰權限檢查（OWASP A02 / A05）：拒絕 world-readable / writable
-        # POSIX stat 旗標差異：先試 GNU，再退到 BSD
+        # Private key permission check (OWASP A02 / A05): reject world-readable / writable
+        # POSIX stat flag differences: try GNU first, then fall back to BSD
         key_perm="$(stat -c '%a' "$key" 2>/dev/null || stat -f '%Lp' "$key" 2>/dev/null || echo '?')"
         if [[ "$key_perm" =~ ^[0-9]+$ ]]; then
-            # 取最後一位（others 的權限位）
+            # take the last digit (the others permission bits)
             others_octal="${key_perm: -1}"
             if (( others_octal != 0 )); then
                 echo "[run-backend] TLS key $key has world-accessible bits ($key_perm); chmod 0640 (or 0600) and retry" >&2

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# jt-ipam — 開發模式啟動（無容器）
+# jt-ipam — development mode launcher (no containers)
 #
-# 前置：本機已裝好 Python 3.12 / pnpm / 本機可連 Postgres + Redis（或遠端）
+# Prerequisites: Python 3.12 / pnpm installed locally, plus local or remote
+# Postgres + Redis reachable.
 #
-# 用法：
-#   1. 建立 backend/.env（複製自 .env.example 並填值）
-#   2. ./scripts/dev.sh setup    # 建立 venv + 安裝依賴 + alembic upgrade
-#   3. ./scripts/dev.sh up       # 啟動 backend (8000) + frontend (5173)
+# Usage:
+#   1. Create backend/.env (copy from .env.example and fill in values)
+#   2. ./scripts/dev.sh setup    # create venv + install deps + alembic upgrade
+#   3. ./scripts/dev.sh up       # start backend (8000) + frontend (5173)
 # =============================================================================
 set -euo pipefail
 
@@ -31,7 +32,7 @@ case "$cmd" in
             set -a; source "$ENV_FILE"; set +a
             .venv/bin/alembic upgrade head
         else
-            echo "[warn] $ENV_FILE 不存在；請先 cp .env.example .env 並填值"
+            echo "[warn] $ENV_FILE not found; run cp .env.example .env and fill in values first"
         fi
 
         echo "[setup] frontend deps"
@@ -46,10 +47,10 @@ case "$cmd" in
         fi
         cd "$BACKEND_DIR"
         set -a; source "$ENV_FILE"; set +a
-        # dev 預設 direct TLS + 自簽（避免 prod guard 擋 https://localhost）
+        # dev defaults to direct TLS + self-signed (avoids prod guard blocking https://localhost)
         export UVICORN_EXTRA_OPTS="${UVICORN_EXTRA_OPTS:-} --reload"
         echo "[up] backend (TLS=${BACKEND_TLS_MODE:-nginx}) on ${BACKEND_BIND_HOST:-127.0.0.1}:${BACKEND_BIND_PORT:-8000}"
-        echo "     frontend on :5173 — Ctrl+C 結束兩者"
+        echo "     frontend on :5173 — Ctrl+C to stop both"
         "$REPO_ROOT/scripts/run-backend.sh" &
         BACKEND_PID=$!
         cd "$FRONTEND_DIR"
@@ -70,14 +71,14 @@ case "$cmd" in
         ;;
     *)
         cat <<USAGE
-用法：./scripts/dev.sh <command>
+Usage: ./scripts/dev.sh <command>
 
-  setup            建立 venv、安裝依賴、跑 alembic upgrade head、安裝前端依賴
-  up               同時啟動 backend (uvicorn --reload) 與 frontend (vite)
-  migrate ARGS...  執行 alembic（如 ./scripts/dev.sh migrate revision --autogenerate -m "x"）
-  test ARGS...     執行 pytest
+  setup            create venv, install deps, run alembic upgrade head, install frontend deps
+  up               start backend (uvicorn --reload) and frontend (vite) together
+  migrate ARGS...  run alembic (e.g. ./scripts/dev.sh migrate revision --autogenerate -m "x")
+  test ARGS...     run pytest
 
-預設指令：up
+Default command: up
 USAGE
         exit 1
         ;;

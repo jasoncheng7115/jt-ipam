@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # =============================================================================
-# jt-ipam 本地 CI — 升版前把關（對應 TEST_CHECKLIST.md 的靜態檢查 + 選用整合測試）
+# jt-ipam local CI — pre-release gate (mirrors TEST_CHECKLIST.md static checks + optional integration tests)
 #
-# 預設（快、免 DB）：
-#   - 後端可 import
-#   - 後端 pytest 收集（DB 測試會 skip）
-#   - 前端 vue-tsc
-#   - 前端 build
+# Default (fast, no DB):
+#   - backend imports
+#   - backend pytest collection (DB tests are skipped)
+#   - frontend vue-tsc
+#   - frontend build
 #
-# 加 --db：另跑後端整合測試（需設 JTIPAM_TEST_DATABASE_URL 指向拋棄式 test DB，
-#          且該 DB 已 alembic upgrade head）。
+# With --db: also run backend integration tests (requires JTIPAM_TEST_DATABASE_URL
+#            pointing at a disposable test DB that has been alembic upgrade head'd).
 #
-# 用法：
-#   scripts/ci.sh                # 靜態檢查
-#   JTIPAM_TEST_DATABASE_URL=... scripts/ci.sh --db    # 連同整合測試
-# 任一步失敗即以非 0 結束。
+# Usage:
+#   scripts/ci.sh                # static checks
+#   JTIPAM_TEST_DATABASE_URL=... scripts/ci.sh --db    # including integration tests
+# Exits non-zero if any step fails.
 # =============================================================================
 set -uo pipefail
 
@@ -24,11 +24,11 @@ step() { echo -e "\n\033[1;36m== $* ==\033[0m"; }
 ok()   { echo -e "\033[1;32mPASS\033[0m $*"; }
 bad()  { echo -e "\033[1;31mFAIL\033[0m $*"; FAIL=1; }
 
-# ── 後端 ──
+# ── backend ──
 if [[ -x "$ROOT/backend/.venv/bin/python" ]]; then
   cd "$ROOT/backend"
   step "backend import"
-  if .venv/bin/python -c "import app.main" 2>/dev/null; then ok "import app.main"; else bad "import app.main（檢查是否缺 env：set -a; source <env>; set +a）"; fi
+  if .venv/bin/python -c "import app.main" 2>/dev/null; then ok "import app.main"; else bad "import app.main (check for missing env: set -a; source <env>; set +a)"; fi
 
   step "backend pytest collect"
   if .venv/bin/pytest -q --collect-only >/dev/null 2>&1; then ok "pytest collect"; else bad "pytest collect"; fi
@@ -38,14 +38,14 @@ if [[ -x "$ROOT/backend/.venv/bin/python" ]]; then
     if [[ -n "${JTIPAM_TEST_DATABASE_URL:-}" ]]; then
       if .venv/bin/pytest -q; then ok "pytest"; else bad "pytest"; fi
     else
-      bad "JTIPAM_TEST_DATABASE_URL 未設，跳過整合測試"
+      bad "JTIPAM_TEST_DATABASE_URL not set, skipping integration tests"
     fi
   fi
 else
-  bad "找不到 backend/.venv —— 略過後端檢查"
+  bad "backend/.venv not found -- skipping backend checks"
 fi
 
-# ── 前端 ──
+# ── frontend ──
 if [[ -d "$ROOT/frontend/node_modules" ]]; then
   cd "$ROOT/frontend"
   step "frontend vue-tsc"
@@ -53,9 +53,9 @@ if [[ -d "$ROOT/frontend/node_modules" ]]; then
   step "frontend build"
   if npm run build >/dev/null 2>&1; then ok "build"; else bad "build"; fi
 else
-  bad "找不到 frontend/node_modules —— 略過前端檢查"
+  bad "frontend/node_modules not found -- skipping frontend checks"
 fi
 
 echo
-if [[ $FAIL -eq 0 ]]; then echo -e "\033[1;32mCI OK — 可以升版\033[0m"; else echo -e "\033[1;31mCI FAILED — 先修紅的再升版\033[0m"; fi
+if [[ $FAIL -eq 0 ]]; then echo -e "\033[1;32mCI OK — safe to release\033[0m"; else echo -e "\033[1;31mCI FAILED — fix the red items before releasing\033[0m"; fi
 exit $FAIL

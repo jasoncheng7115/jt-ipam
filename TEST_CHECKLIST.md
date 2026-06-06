@@ -1,68 +1,88 @@
-# jt-ipam 升版測試清單
+# jt-ipam Release Test Checklist
 
-> 規矩：**每次 bump `frontend/package.json` 的 version 之前，先把這份清單跑過一輪，全綠才升版。**
-> CI 目前沒跑驗證，所以靠這份手動把關。紅的先修，不要帶病升版。
+> zh-TW version: [TEST_CHECKLIST_zh-TW.md](TEST_CHECKLIST_zh-TW.md).
 
-升版流程：跑清單 → 全綠 → 改 version → 部署（backend rsync + alembic + restart；frontend build）。
+> Rule: **before bumping the `version` in `frontend/package.json`, run this whole
+> checklist once; only release when everything is green.**
+> Treat it as the manual gate. Fix the red ones first — do not ship sick.
 
----
-
-## 1. 靜態檢查（dev 機，免 DB，最快）
-
-- [ ] 後端可被 import：`cd backend && set -a; source <env>; set +a; .venv/bin/python -c "import app.main"`
-- [ ] 後端 pytest 收集無 error（DB 測試會 skip）：`.venv/bin/pytest -q`
-- [ ] 前端型別：`cd frontend && npx vue-tsc --noEmit`（必須零錯誤）
-- [ ] 前端 build：`npm run build`（成功產生 dist）
-- [ ] i18n：這次新增的 key 在 `zh-TW.json` 與 `en-US.json` 都有；無寫死中文漏網
-
-## 2. 資料庫 / Migration（用拋棄式 test DB，勿碰正式資料）
-
-- [ ] 全新 DB 從 0001 升到 head 無誤：對 `jt_ipam_test` 跑 `alembic upgrade head`
-- [ ] 這次新增的 migration 有 `downgrade()` 且能 `alembic downgrade -1` 再 `upgrade head` 來回一次
-- [ ] 沒有「model 改了但忘了 migration」：升完 head 後 app 啟動不報 asyncpg「column does not exist」
-
-## 3. 後端整合測試（test DB + pytest，全面）
-
-- [ ] 設 `JTIPAM_TEST_DATABASE_URL` 後 `.venv/bin/pytest -q` 全綠（e2e CRUD / auth / 各模組）
-- [ ] 認證：登入、refresh、TOTP、權限（require_admin 的端點未授權回 401/403）
-- [ ] 核心 CRUD：sections / subnets / addresses / devices / customers / locations / racks
-- [ ] 稽核鏈：寫入操作有 audit、鏈完整性驗證過
-
-## 4. 關鍵 API smoke（部署後對 prod 打，唯讀為主）
-
-- [ ] `GET /api/v1/health`（或 `/notifications`）200
-- [ ] `GET /api/v1/subnets`、`/addresses`、`/devices`、`/locations`、`/racks` 200
-- [ ] 這次動到的端點：手動打一次成功路徑 + 一個失敗路徑（驗證 4xx 正確）
-
-## 5. OWASP Top 10:2025 逐項自我檢核（這次動到的模組）
-
-- [ ] A01 權限：新端點有沒有正確 require_admin / 物件層級授權？
-- [ ] A03 注入 / 輸入驗證：Pydantic StrictModel、檔案上傳驗 magic bytes + 限大小 + 禁危險類型（如 SVG）
-- [ ] A08 完整性：上傳/外部資料有驗證；路徑無 traversal（上傳/下載檔案路徑解析後仍在白名單目錄內）
-- [ ] 機密：無把 secret/token 寫進 log 或回應
-
-## 5b. 部署腳本流程（拋棄式環境，**勿在 dev/prod 跑 install**）
-
-- [ ] **全新安裝**：乾淨 LXC/VM 跑 `scripts/install-debian.sh`，裝完服務起得來、能登入
-- [ ] **舊版升級**：對上一版的環境跑 `scripts/jt-ipam-upgrade.sh`，升完正常、必要時可回滾
-- [ ] 這次若新增了目錄 / 套件 / 服務 / DB extension / env，確認**兩支腳本都已同步**
-
-## 5c. headless 瀏覽器冒煙
-
-- [ ] `cd frontend && pnpm exec playwright test smoke`（免後端，自起 vite preview）全綠
-- [ ] 對已部署實例（給 `E2E_BASE_URL` + `E2E_ADMIN_PASS`）跑 `pnpm test:e2e` 主路徑（登入/sections/audit）
-
-## 6. 主要頁面手動點檢（部署後瀏覽器）
-
-- [ ] 登入 / 登出 / 主題切換（淺/深/自動）
-- [ ] 子網路：列表、樹狀、IP 清單（含閒置區間列跨欄位）、編輯
-- [ ] 裝置 / 機櫃：排序（IP 自然序）、操作鈕高度一致、機房平面圖上傳+拖拉定位+點選
-- [ ] 拓樸圖：節點/連線、VPN 對接連線、圖例
-- [ ] 掃描代理 / 同步作業：頁面正常、無 console error
+Release flow: run the checklist → all green → bump version → deploy
+(backend rsync + alembic + restart; frontend build).
 
 ---
 
-### 附：拋棄式 test DB 指令（在 prod 主機，**不碰正式 DB**）
+## 1. Static checks (dev box, no DB, fastest)
+
+- [ ] Backend imports: `cd backend && set -a; source <env>; set +a; .venv/bin/python -c "import app.main"`
+- [ ] Backend pytest collection has no error (DB tests skip): `.venv/bin/pytest -q`
+- [ ] Frontend types: `cd frontend && npx vue-tsc --noEmit` (must be zero errors)
+- [ ] Frontend build: `npm run build` (dist produced successfully)
+- [ ] i18n: every new key exists in both `zh-TW.json` and `en-US.json`; no hard-coded
+  Chinese slipped through
+
+## 2. Database / migration (use a throwaway test DB, never touch prod data)
+
+- [ ] A fresh DB upgrades from 0001 to head cleanly: run `alembic upgrade head`
+  against `jt_ipam_test`
+- [ ] Each new migration has a `downgrade()` and survives one
+  `alembic downgrade -1` then `upgrade head` round-trip
+- [ ] No "model changed but migration forgotten": after upgrading to head the app
+  starts without an asyncpg "column does not exist" error
+
+## 3. Backend integration tests (test DB + pytest, thorough)
+
+- [ ] With `JTIPAM_TEST_DATABASE_URL` set, `.venv/bin/pytest -q` is all green
+  (e2e CRUD / auth / each module)
+- [ ] Auth: login, refresh, TOTP, permissions (unauthorized `require_admin`
+  endpoints return 401/403)
+- [ ] Core CRUD: sections / subnets / addresses / devices / customers / locations / racks
+- [ ] Audit chain: write operations are audited and chain integrity verifies
+
+## 4. Key API smoke (against prod after deploy, mostly read-only)
+
+- [ ] `GET /api/v1/health` (or `/notifications`) returns 200
+- [ ] `GET /api/v1/subnets`, `/addresses`, `/devices`, `/locations`, `/racks` return 200
+- [ ] Endpoints touched this release: manually hit one success path + one failure
+  path (verify the 4xx is correct)
+
+## 5. OWASP Top 10:2025 self-review (modules touched this release)
+
+- [ ] A01 authorization: do new endpoints correctly use `require_admin` /
+  object-level authorization?
+- [ ] A03 injection / input validation: Pydantic StrictModel; file uploads verify
+  magic bytes + size limit + reject dangerous types (e.g. SVG)
+- [ ] A08 integrity: uploads / external data are validated; no path traversal
+  (resolved upload/download paths stay inside the allow-listed directory)
+- [ ] Secrets: no secret/token written to logs or responses
+
+## 5b. Deploy-script flows (throwaway environment, **never run install on dev/prod**)
+
+- [ ] **Fresh install**: on a clean LXC/VM run `scripts/install-debian.sh`; the
+  service comes up and you can log in
+- [ ] **Upgrade**: against a previous-version environment run
+  `scripts/jt-ipam-upgrade.sh`; it upgrades cleanly and can roll back if needed
+- [ ] If this release added a directory / package / service / DB extension / env,
+  confirm **both scripts are in sync**
+
+## 5c. Headless browser smoke
+
+- [ ] `cd frontend && pnpm exec playwright test smoke` (no backend; self-starts
+  vite preview) all green
+- [ ] Against a deployed instance (with `E2E_BASE_URL` + `E2E_ADMIN_PASS`) run
+  `pnpm test:e2e` main paths (login / sections / audit)
+
+## 6. Manual page review (browser, after deploy)
+
+- [ ] Login / logout / theme switch (light / dark / auto)
+- [ ] Subnets: list, tree, IP list (incl. idle-range rows spanning columns), edit
+- [ ] Devices / racks: sorting (natural IP order), consistent action-button height,
+  floor-plan upload + drag-to-place + select
+- [ ] Topology: nodes / links, VPN pairing links, legend
+- [ ] Scan agents / sync jobs: pages render, no console errors
+
+---
+
+### Appendix: throwaway test DB commands (on the prod host, **never the prod DB**)
 
 ```bash
 set -a; source /etc/jt-ipam/backend.env; set +a
