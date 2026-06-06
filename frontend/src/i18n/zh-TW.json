@@ -155,6 +155,10 @@
     "select": "選擇",
     "download": "下載"
   },
+  "scan_agent": {
+    "outdated": "可更新",
+    "outdated_hint": "代理版本落後 server（v{v}）；下次回報時應自動更新。若長期沒更新，請檢查代理主機是否有覆寫程式的權限。"
+  },
   "scan_probes": {
     "title": "掃描項目",
     "agent_probes": "此代理執行的探測",

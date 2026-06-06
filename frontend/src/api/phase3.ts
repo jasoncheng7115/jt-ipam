@@ -51,6 +51,7 @@ export interface ScanAgent {
   enabled: boolean;
   has_key: boolean;
   agent_version: string | null;
+  server_agent_version: string | null;
   last_source_ip: string | null;
   enabled_probes: string[];
   probe_intervals: Record<string, number> | null;

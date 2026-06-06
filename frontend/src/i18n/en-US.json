@@ -155,6 +155,10 @@
     "select": "Select",
     "download": "Download"
   },
+  "scan_agent": {
+    "outdated": "update available",
+    "outdated_hint": "Agent is older than the server (v{v}); it should self-update on the next report. If it stays behind, check that the agent host can overwrite its own program."
+  },
   "scan_probes": {
     "title": "Scan probes",
     "agent_probes": "Probes this agent runs",

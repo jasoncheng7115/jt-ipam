@@ -80,6 +80,7 @@ class ScanAgentRead(StrictModel):
     enabled: bool
     has_key: bool = False
     agent_version: str | None = None
+    server_agent_version: str | None = None   # server 端 agent.py 版本；UI 比對標「可更新」
     last_source_ip: str | None = None
     enabled_probes: list[str] = Field(default_factory=lambda: ["icmp"])
     probe_intervals: dict[str, int] | None = None
@@ -107,6 +108,7 @@ def _new_key() -> str:
 def _to_read(obj: ScanAgent) -> ScanAgentRead:
     m = ScanAgentRead.model_validate(obj)
     m.has_key = bool(obj.enroll_key_hash)
+    m.server_agent_version = _server_agent_version()
     return m
 
 
@@ -335,6 +337,17 @@ def _agent_sha() -> str:
         return hashlib.sha256(p.read_bytes()).hexdigest()
     except OSError:
         return ""
+
+
+def _server_agent_version() -> str | None:
+    """從 server 端 agent.py 解析 AGENT_VERSION，給 UI 標示「代理版本落後」。"""
+    p = _AGENT_DIR / "jt_ipam_agent.py"
+    try:
+        import re
+        m = re.search(r'^AGENT_VERSION\s*=\s*["\']([^"\']+)["\']', p.read_text(), re.M)
+        return m.group(1) if m else None
+    except OSError:
+        return None
 
 
 class AgentPollOut(StrictModel):

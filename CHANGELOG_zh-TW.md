@@ -4,6 +4,16 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.95] — 2026-06-06
+
+### 變更
+- 掃描探測：移除連接埠探測選項（TCP 連接埠存活、連接埠 / 服務掃描）與 SNMP —
+  jt-ipam 不開放需要憑證或連接埠掃描類的探測。保留：ICMP / ARP / 反解 DNS /
+  NetBIOS / mDNS / OS 偵測。
+- 掃描代理：當代理回報的版本落後 server 內建的代理程式時，顯示**「可更新」**標籤
+  （代理是從 jt-ipam server 自我更新，非 GitHub；此標籤用來凸顯自我更新失敗的代理）。
+- 拓樸圖：子網路中心點分開時，VPN 對連的防火牆會保持靠近，不再被推到相對最遠的兩端。
+
 > 英文版見 [CHANGELOG.md](CHANGELOG.md)。
 
 ## [0.4.94] — 2026-06-06

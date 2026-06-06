@@ -11,15 +11,16 @@ def test_default_agent_probes_is_icmp_only() -> None:
 
 
 def test_normalize_probes_aliases_and_filters() -> None:
-    # nmap 舊別名 → os；未知 key 丟掉；去重並保持目錄順序
-    assert sp.normalize_probes(["nmap", "icmp", "bogus", "tcp"]) == ["icmp", "tcp", "os"]
+    # nmap 舊別名 → os；未知 key（含已移除的 tcp/snmp/ports）丟掉；去重並保持目錄順序
+    assert sp.normalize_probes(["nmap", "icmp", "bogus", "arp"]) == ["icmp", "arp", "os"]
+    assert sp.normalize_probes(["tcp", "snmp", "ports"]) == []   # 已不開放的探測一律過濾
     assert sp.normalize_probes(None) == []
 
 
 def test_effective_probes_three_layers() -> None:
     # 子網路要跑 − IP 略過 ∩ 代理能力
-    eff = sp.effective_probes(["icmp", "os", "tcp"], ["os"], ["icmp", "tcp"])
-    assert eff == ["icmp", "tcp"]
+    eff = sp.effective_probes(["icmp", "os", "arp"], ["os"], ["icmp", "arp"])
+    assert eff == ["icmp", "arp"]
     # 沒指派代理（None）→ 無能力上限
     assert sp.effective_probes(["icmp", "rdns"], [], None) == ["icmp", "rdns"]
     # IP 略過 icmp

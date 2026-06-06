@@ -198,10 +198,21 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
       () => r.has_key ? t("scanAgentHelp.key_set") : t("scanAgentHelp.key_none")),
   },
   {
-    title: t("scanAgentHelp.col_version"), key: "agent_version", width: 110,
-    render: (r) => r.agent_version
-      ? h(NTag, { size: "small", type: "success", bordered: false }, () => `v${r.agent_version}`)
-      : "—",
+    title: t("scanAgentHelp.col_version"), key: "agent_version", width: 132,
+    render: (r) => {
+      if (!r.agent_version) return "—";
+      const outdated = !!r.server_agent_version && r.agent_version !== r.server_agent_version;
+      const verTag = h(NTag, { size: "small", type: outdated ? "warning" : "success", bordered: false },
+        () => `v${r.agent_version}`);
+      if (!outdated) return verTag;
+      return h(NTooltip, null, {
+        trigger: () => h(NSpace, { size: 4, wrapItem: false, align: "center", wrap: false }, () => [
+          verTag,
+          h(NTag, { size: "small", type: "warning", bordered: false }, () => t("scan_agent.outdated")),
+        ]),
+        default: () => t("scan_agent.outdated_hint", { v: r.server_agent_version }),
+      });
+    },
   },
   {
     title: t("cols.source_ip"), key: "source_ip", width: 140,

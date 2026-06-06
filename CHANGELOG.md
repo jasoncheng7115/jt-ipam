@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.95] — 2026-06-06
+
+### Changed
+- Scan probes: removed the port-probing options (TCP port liveness, port/service
+  scan) and SNMP — jt-ipam does not expose credential-based or port-scan probes.
+  Remaining: ICMP / ARP / reverse DNS / NetBIOS / mDNS / OS detection.
+- Scan Agents: show an **"update available"** tag when an agent's reported version
+  is behind the server's bundled agent (it self-updates from the jt-ipam server,
+  not GitHub; the tag surfaces agents that failed to self-update).
+- Topology: VPN-paired firewalls are kept near each other instead of being pushed
+  to opposite far ends when subnet centers are spread apart.
+
 ## [0.4.94] — 2026-06-06
 
 ### Added

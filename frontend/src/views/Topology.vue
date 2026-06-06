@@ -489,6 +489,9 @@ function spreadSubnets() {
     sn.position({ x: tx, y: cyy });
     sn.openNeighborhood().nodes().forEach((nbEle: any) => {
       const nb = nbEle as any;
+      // VPN 端點（站對站對連的防火牆等）不跟著子網路被推到最遠端：留在 cose-bilkent
+      // 因 VPN 邊互相吸引而靠近的中間位置，VPN 對連線才不會被拉成橫跨全圖的長線。
+      if (nb.connectedEdges('[kind = "vpn"]').length > 0) return;
       const conn = nb.openNeighborhood().nodes().filter((x: any) => String(x.id()).startsWith("subnet:"));
       if (conn.length === 1 && conn[0].id() === sn.id()) {
         nb.position({ x: nb.position("x") + dx, y: nb.position("y") + dy });

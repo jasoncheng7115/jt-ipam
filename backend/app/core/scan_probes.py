@@ -20,11 +20,6 @@ PROBES: dict[str, dict[str, Any]] = {
         "klass": "light", "default_interval_seconds": 300, "min_interval_seconds": 60,
         "intrusive": False, "default_on": True, "needs": "ping",
     },
-    "tcp": {
-        "label_en": "TCP port liveness", "label_zh": "TCP 連接埠存活",
-        "klass": "light", "default_interval_seconds": 300, "min_interval_seconds": 60,
-        "intrusive": False, "default_on": False, "needs": "",
-    },
     "arp": {
         "label_en": "ARP (L2)", "label_zh": "ARP 探測（L2）",
         "klass": "light", "default_interval_seconds": 300, "min_interval_seconds": 60,
@@ -49,11 +44,6 @@ PROBES: dict[str, dict[str, Any]] = {
         "label_en": "OS detection", "label_zh": "OS 偵測",
         "klass": "heavy", "default_interval_seconds": 86400, "min_interval_seconds": 21600,
         "intrusive": True, "default_on": False, "needs": "nmap + root/cap_net_raw",
-    },
-    "ports": {
-        "label_en": "Port / service scan", "label_zh": "連接埠 / 服務掃描",
-        "klass": "heavy", "default_interval_seconds": 86400, "min_interval_seconds": 21600,
-        "intrusive": True, "default_on": False, "needs": "nmap",
     },
 }
 
