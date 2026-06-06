@@ -54,6 +54,7 @@ const routes: RouteRecordRaw[] = [
       { path: "system-settings", name: "system_settings", component: () => import("@/views/SystemSettings.vue"), meta: { admin: true } },
       { path: "version", name: "version", component: () => import("@/views/VersionInfo.vue"), meta: { admin: true } },
       { path: "system-logs", name: "system_logs", component: () => import("@/views/SystemLogs.vue"), meta: { admin: true } },
+      { path: "graylog-dsv", name: "graylog_dsv", component: () => import("@/views/GraylogDsvSettings.vue"), meta: { admin: true } },
       { path: "chat-history", name: "chat_history", component: () => import("@/views/ChatHistoryAdmin.vue"), meta: { admin: true } },
       { path: "my-chat-history", name: "my_chat_history", component: () => import("@/views/MyChatHistory.vue") },
       { path: "permissions", name: "permissions", component: () => import("@/views/Permissions.vue"), meta: { admin: true } },
@@ -83,6 +84,33 @@ export const router = createRouter({
   history: createWebHistory(),
   routes,
 });
+
+// 部署新版後會產生新的 chunk 檔名(hash)，舊分頁裡記的舊 chunk 已不存在 → 點功能時
+// 動態 import 會 404 失敗、vue-router 靜默中斷導覽，症狀就是「點很多次都沒反應、
+// 要等很久 / 硬重整才好」。偵測到這類「載入失敗」就自動重載一次到目標頁(防無限迴圈)。
+function isChunkLoadError(e: unknown): boolean {
+  const m = (e as Error)?.message || String(e ?? "");
+  return /dynamically imported module|Failed to fetch dynamically|Importing a module script failed|Loading chunk|error loading dynamically imported|'?text\/html'? is not a valid JavaScript MIME type/i.test(m);
+}
+function reloadOnce(target?: string): void {
+  const KEY = "jt-chunk-reload-at";
+  const last = Number(sessionStorage.getItem(KEY) || 0);
+  // 30 秒內已自動重載過就不再重載(避免伺服器真的故障時無限刷新)
+  if (Date.now() - last < 30000) return;
+  sessionStorage.setItem(KEY, String(Date.now()));
+  if (target && target !== window.location.pathname) window.location.assign(target);
+  else window.location.reload();
+}
+
+router.onError((err, to) => {
+  if (isChunkLoadError(err)) reloadOnce(to?.fullPath);
+});
+
+// Vite 預載動態 chunk 失敗時會丟此事件(比 router.onError 更早攔到)
+window.addEventListener("vite:preloadError", ((e: Event) => {
+  e.preventDefault();
+  reloadOnce();
+}) as EventListener);
 
 router.beforeEach(async (to, _from) => {
   const auth = useAuthStore();

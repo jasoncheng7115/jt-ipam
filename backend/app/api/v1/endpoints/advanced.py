@@ -508,6 +508,11 @@ class CircuitRead(StrictModel):
     down_kbps: int | None = None
     install_date: datetime | None = None
     contract_end_date: datetime | None = None
+    ip_address: str | None = None
+    gateway: str | None = None
+    netmask: str | None = None
+    dns_servers: str | None = None
+    device_id: uuid.UUID | None = None
     description: str | None
 
 
@@ -522,6 +527,11 @@ class CircuitWrite(StrictModel):
     down_kbps: Annotated[int | None, Field(ge=0)] = None
     install_date: datetime | None = None
     contract_end_date: datetime | None = None
+    ip_address: Annotated[str | None, Field(max_length=64)] = None
+    gateway: Annotated[str | None, Field(max_length=64)] = None
+    netmask: Annotated[str | None, Field(max_length=64)] = None
+    dns_servers: Annotated[str | None, Field(max_length=1024)] = None
+    device_id: uuid.UUID | None = None
     description: Annotated[str | None, Field(max_length=1024)] = None
 
 
@@ -578,6 +588,48 @@ async def create_circuit_type(
     await session.commit()
     await session.refresh(obj)
     return CircuitTypeRead.model_validate(obj)
+
+
+@router.delete("/circuit-types/{ct_id}", status_code=204,
+               dependencies=[Depends(require_admin)])
+async def delete_circuit_type(
+    ct_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    obj = await session.get(CircuitType, ct_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    # 既有電路若用到此類型，FK 設了 ON DELETE SET NULL，會自動清成「未分類」
+    await _audit(session, user=user, request=request, object_type="circuit_type",
+                 object_id=str(obj.id), action="delete", diff={"name": obj.name})
+    await session.delete(obj)
+    await session.commit()
+
+
+# 內建電路類型（啟動時冪等 seed；表為空才塞，之後使用者可自行增刪）
+DEFAULT_CIRCUIT_TYPES: list[tuple[str, str]] = [
+    ("光纖專線", "Dedicated fiber / 點對點專線"),
+    ("FTTH 光纖到府", "Fiber to the home"),
+    ("Metro Ethernet", "都會乙太網路 (EPL/EVPL)"),
+    ("MPLS", "MPLS VPN 專線"),
+    ("專線 (T1/E1)", "傳統數據專線"),
+    ("DSL / VDSL", "電話線寬頻"),
+    ("Cable 纜線", "同軸纜線寬頻"),
+    ("行動網路 (4G/5G)", "行動 / 無線寬頻"),
+    ("衛星", "衛星連線"),
+    ("暗光纖", "Dark fiber 裸光纖"),
+]
+
+
+async def seed_default_circuit_types(session: AsyncSession) -> int:
+    """表為空時塞入內建電路類型；回傳新增筆數（冪等）。"""
+    existing = int(await session.scalar(select(func.count()).select_from(CircuitType)) or 0)
+    if existing:
+        return 0
+    for name, desc in DEFAULT_CIRCUIT_TYPES:
+        session.add(CircuitType(name=name, description=desc))
+    await session.commit()
+    return len(DEFAULT_CIRCUIT_TYPES)
 
 
 @router.get("/contact-groups", response_model=Paginated[ContactGroupRead])

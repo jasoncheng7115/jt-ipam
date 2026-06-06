@@ -25,14 +25,15 @@ const { t } = useI18n();
 
 const { visibleKeys: saVis, setVisible: saSet, reset: saReset } = useColumnPrefs(
   "scan_agents",
-  ["name", "enabled", "has_key", "agent_version", "subnet_count", "last_seen_at", "last_error", "actions"],
-  ["name", "enabled", "has_key", "agent_version", "subnet_count", "last_seen_at", "last_error", "actions"],
+  ["name", "enabled", "has_key", "agent_version", "source_ip", "subnet_count", "last_seen_at", "last_error", "actions"],
+  ["name", "enabled", "has_key", "agent_version", "source_ip", "subnet_count", "last_seen_at", "last_error", "actions"],
 );
 const saPicker = [
   { key: "name", label: t("cols.name") },
   { key: "enabled", label: t("cols.enabled") },
   { key: "has_key", label: t("cols.key") },
   { key: "agent_version", label: t("cols.version") },
+  { key: "source_ip", label: t("cols.source_ip") },
   { key: "subnet_count", label: t("cols.subnet") },
   { key: "last_seen_at", label: t("cols.last_report") },
   { key: "last_error", label: t("cols.last_error") },
@@ -154,6 +155,11 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
     render: (r) => r.agent_version
       ? h(NTag, { size: "small", type: "success", bordered: false }, () => `v${r.agent_version}`)
       : "—",
+  },
+  {
+    title: t("cols.source_ip"), key: "source_ip", width: 140,
+    render: (r) => r.last_source_ip
+      ? h("span", { style: "font-family:monospace" }, r.last_source_ip) : "—",
   },
   {
     title: t("scanAgentHelp.col_subnets"), key: "subnet_count", width: 90,

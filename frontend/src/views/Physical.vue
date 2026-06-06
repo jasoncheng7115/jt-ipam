@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watch } from "vue";
+import { computed, h, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NTag, NModal, NForm, NFormItem,
-  NSelect, NInput, NInputNumber, NPopconfirm,
+  NSelect, NInput, NInputNumber, NPopconfirm, NTabs, NTabPane,
   useMessage, type DataTableColumns,
 } from "naive-ui";
-import { PhysicalIcon, PowerIcon, VpnIcon, RefreshIcon, PlusIcon, EditIcon, DeleteIcon } from "@/icons";
+import { PhysicalIcon, PowerIcon, VpnIcon, RefreshIcon, PlusIcon, EditIcon, DeleteIcon, ListIcon } from "@/icons";
 import { Physical, type DevicePort } from "@/api/phase3";
 import { listDevices, listLocations } from "@/api/basic";
+import { useCustomers } from "@/composables/useCustomers";
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import { useAuthStore } from "@/stores/auth";
 const _authBtn = useAuthStore();
 const canEdit = computed(() => _authBtn.me?.can_edit !== false);
@@ -36,14 +38,21 @@ const devices = ref<{ id: string; name: string }[]>([]);
 const locations = ref<{ id: string; name: string }[]>([]);
 const deviceOpts = computed(() => devices.value.map((d) => ({ label: d.name, value: d.id })));
 
-// 佈線篩選：文字（兩端/類型/線標/說明）+ 裝置
+// 佈線篩選：文字（兩端/類型/線標/說明）+ 裝置 + 單位 + 機房（兩端任一符合即顯示）
+const { options: customerOptions, ensureLoaded: ensureCustomers } = useCustomers();
 const cableFilterText = ref("");
 const cableFilterDevice = ref<string | null>(null);
+const cableFilterCustomer = ref<string | null>(null);
+const cableFilterLocation = ref<string | null>(null);
 const filteredCables = computed(() => {
   const q = cableFilterText.value.trim().toLowerCase();
   const dev = cableFilterDevice.value;
+  const cust = cableFilterCustomer.value;
+  const loc = cableFilterLocation.value;
   return cables.value.filter((c: any) => {
     if (dev && c.a_device_id !== dev && c.b_device_id !== dev) return false;
+    if (cust && c.a_customer_id !== cust && c.b_customer_id !== cust) return false;
+    if (loc && c.a_location_id !== loc && c.b_location_id !== loc) return false;
     if (q) {
       const hay = [c.type, c.label, c.a_end, c.b_end, c.status, c.description]
         .map((x) => String(x ?? "").toLowerCase()).join(" ");
@@ -143,6 +152,22 @@ const outletCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("cols.feed"), key: "feed_id", render: (r: any) => feeds.value.find((f) => f.id === r.feed_id)?.name ?? "—" },
   powerActionsCol("outlet"),
 ]));
+// 電力三表的欄位顯示偏好（ColumnPicker + useColumnPrefs）+ 即時篩選。actions 欄永遠保留。
+function usePowerPrefs(name: string, cols: typeof panelCols, rows: typeof panels) {
+  const allKeys = cols.value.filter((c: any) => c.key && c.key !== "actions").map((c: any) => String(c.key));
+  const { visibleKeys, setVisible, reset } = useColumnPrefs(`power_${name}`, allKeys, allKeys);
+  const items = computed(() => cols.value
+    .filter((c: any) => c.key && c.key !== "actions")
+    .map((c: any) => ({ key: String(c.key), label: typeof c.title === "string" ? c.title : String(c.key) })));
+  const visibleCols = computed<DataTableColumns<any>>(() =>
+    cols.value.filter((c: any) => c.key === "actions" || visibleKeys.value.includes(String(c.key))));
+  const { query, filtered } = useTableQuickFilter(rows);
+  return reactive({ visibleKeys, setVisible, reset, items, visibleCols, query, filtered });
+}
+const panelP = usePowerPrefs("panels", panelCols, panels);
+const feedP = usePowerPrefs("feeds", feedCols, feeds);
+const outletP = usePowerPrefs("outlets", outletCols, outlets);
+
 const vpnCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name" },
   { title: t("cols.type"), key: "type" },
@@ -294,8 +319,11 @@ function powerActionsCol(kind: "panel" | "feed" | "outlet") {
   };
 }
 
-onMounted(() => { void refresh(); if (mode.value === "cabling") void ensureDevices(); });
-watch(mode, () => { void refresh(); if (mode.value === "cabling") void ensureDevices(); });
+function ensureCablingFilters() {
+  void ensureDevices(); void ensureLocations(); void ensureCustomers();
+}
+onMounted(() => { void refresh(); if (mode.value === "cabling") ensureCablingFilters(); });
+watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingFilters(); });
 </script>
 
 <template>
@@ -312,6 +340,10 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") void ensureDev
                  :placeholder="t('physical.cable_filter_ph')" />
         <n-select v-model:value="cableFilterDevice" :options="deviceOpts" filterable clearable
                   style="width: 200px" :placeholder="t('physical.cable_filter_device')" />
+        <n-select v-model:value="cableFilterCustomer" :options="customerOptions" filterable clearable
+                  style="width: 170px" :placeholder="t('physical.cable_filter_customer')" />
+        <n-select v-model:value="cableFilterLocation" :options="locationOpts" filterable clearable
+                  style="width: 170px" :placeholder="t('physical.cable_filter_location')" />
       </template>
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
@@ -330,29 +362,63 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") void ensureDev
     <n-data-table v-if="mode === 'cabling'"
       :columns="cableCols" :data="filteredCables" :loading="loading" :bordered="false" :scroll-x="900" />
 
-    <template v-else-if="mode === 'power'">
-      <n-space align="center" style="margin-bottom:6px">
-        <h3 style="margin:0">{{ t("physical.panels") }} ({{ panels.length }})</h3>
-        <n-button type="primary" size="small" @click="openPower('panel')">
-          <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.add") }}
-        </n-button>
-      </n-space>
-      <n-data-table :columns="panelCols" :data="panels" :loading="loading" :bordered="false" />
-      <n-space align="center" style="margin:16px 0 6px">
-        <h3 style="margin:0">{{ t("physical.feeds") }} ({{ feeds.length }})</h3>
-        <n-button type="primary" size="small" :disabled="!panels.length" @click="openPower('feed')">
-          <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.add") }}
-        </n-button>
-      </n-space>
-      <n-data-table :columns="feedCols" :data="feeds" :loading="loading" :bordered="false" />
-      <n-space align="center" style="margin:16px 0 6px">
-        <h3 style="margin:0">{{ t("physical.outlets") }} ({{ outlets.length }})</h3>
-        <n-button type="primary" size="small" @click="openPower('outlet')">
-          <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.add") }}
-        </n-button>
-      </n-space>
-      <n-data-table :columns="outletCols" :data="outlets" :loading="loading" :bordered="false" />
-    </template>
+    <!-- 電力：配電盤 / 供電迴路 / 插座 三表拆內層頁籤（比照防火牆規則/別名：type=line + icon） -->
+    <n-tabs v-else-if="mode === 'power'" type="line">
+      <n-tab-pane name="panels">
+        <template #tab>
+          <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><PowerIcon /></n-icon>{{ t('physical.panels') }} ({{ panels.length }})</span>
+        </template>
+        <n-space align="center" style="margin:8px 0">
+          <n-input v-model:value="panelP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openPower('panel')">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.add") }}
+          </n-button>
+          <ColumnPicker :all="panelP.items" :visible="panelP.visibleKeys"
+                        @update:visible="panelP.setVisible" @reset="panelP.reset" />
+          <ExportButton :columns="panelP.visibleCols" :rows="panelP.filtered" filename="power-panels" :title="t('physical.panels')" />
+        </n-space>
+        <n-data-table :columns="panelP.visibleCols" :data="panelP.filtered" :loading="loading" :bordered="false" />
+      </n-tab-pane>
+      <n-tab-pane name="feeds">
+        <template #tab>
+          <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ListIcon /></n-icon>{{ t('physical.feeds') }} ({{ feeds.length }})</span>
+        </template>
+        <n-space align="center" style="margin:8px 0">
+          <n-input v-model:value="feedP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" :disabled="!panels.length" @click="openPower('feed')">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.add") }}
+          </n-button>
+          <ColumnPicker :all="feedP.items" :visible="feedP.visibleKeys"
+                        @update:visible="feedP.setVisible" @reset="feedP.reset" />
+          <ExportButton :columns="feedP.visibleCols" :rows="feedP.filtered" filename="power-feeds" :title="t('physical.feeds')" />
+        </n-space>
+        <n-data-table :columns="feedP.visibleCols" :data="feedP.filtered" :loading="loading" :bordered="false" />
+      </n-tab-pane>
+      <n-tab-pane name="outlets">
+        <template #tab>
+          <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ListIcon /></n-icon>{{ t('physical.outlets') }} ({{ outlets.length }})</span>
+        </template>
+        <n-space align="center" style="margin:8px 0">
+          <n-input v-model:value="outletP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openPower('outlet')">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.add") }}
+          </n-button>
+          <ColumnPicker :all="outletP.items" :visible="outletP.visibleKeys"
+                        @update:visible="outletP.setVisible" @reset="outletP.reset" />
+          <ExportButton :columns="outletP.visibleCols" :rows="outletP.filtered" filename="power-outlets" :title="t('physical.outlets')" />
+        </n-space>
+        <n-data-table :columns="outletP.visibleCols" :data="outletP.filtered" :loading="loading" :bordered="false" />
+      </n-tab-pane>
+    </n-tabs>
 
     <n-data-table v-else
       :columns="vpnCols" :data="vpns" :loading="loading" :bordered="false" />

@@ -220,8 +220,11 @@ const matchingDevice = computed<Device | null>(() => {
       || (!!ip && dname === ip);           // 舊行為：裝置名稱剛好是 IP 字串
   }) ?? null;
 });
-function linkMatchingDevice() {
-  if (matchingDevice.value) form.value.device_id = matchingDevice.value.id;
+async function linkMatchingDevice() {
+  if (!matchingDevice.value) return;
+  form.value.device_id = matchingDevice.value.id;
+  // 一鍵關聯即存：避免使用者漏按儲存、或編輯狀態問題導致「關聯沒生效」
+  if (!isCreate.value && props.address) await save();
 }
 
 function fromAddress(a: IPAddress): FormState {
@@ -505,7 +508,7 @@ async function remove() {
             <n-button size="small" @click="close">
               <template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}
             </n-button>
-            <n-button type="primary" size="small" :loading="saving" @click="save">
+            <n-button type="success" size="small" :loading="saving" @click="save">
               <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
             </n-button>
           </template>
@@ -738,7 +741,7 @@ async function remove() {
               <template #icon><n-icon><EditIcon /></n-icon></template>
               {{ t("common.edit") }}
             </n-button>
-            <n-button v-else type="primary" :loading="saving" @click="save">
+            <n-button v-else type="success" :loading="saving" @click="save">
               <template #icon><n-icon><SaveIcon /></n-icon></template>
               {{ t("common.save") }}
             </n-button>

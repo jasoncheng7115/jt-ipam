@@ -38,3 +38,4 @@ class ScanAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     agent_version: Mapped[str | None] = mapped_column(String(32))  # agent 連上來回報的版本
+    last_source_ip: Mapped[str | None] = mapped_column(String(64))  # agent 連上來的來源 IP

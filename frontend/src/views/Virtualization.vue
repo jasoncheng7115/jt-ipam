@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useAuthStore } from "@/stores/auth";
 const _authBtn = useAuthStore();
-import { computed, h, onMounted, ref } from "vue";
+import { computed, h, onMounted, reactive, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
 import {
@@ -16,6 +16,10 @@ import {
 import { Virt, type ProxmoxInstance } from "@/api/phase3";
 import { autoSort } from "@/composables/useTableSort";
 import { useCustomers } from "@/composables/useCustomers";
+import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 import { useRoute } from "vue-router";
 
 const { t } = useI18n();
@@ -275,6 +279,25 @@ const proxmoxCols = computed<DataTableColumns<ProxmoxInstance>>(() => autoSort([
     ]),
   },
 ]));
+
+// 每張表的欄位顯示偏好 + 即時篩選。操作欄(key="actions"/"_")永遠保留。
+function useVirtPrefs(name: string, cols: typeof clusterCols, rows: typeof clusters) {
+  const allKeys = cols.value
+    .filter((c: any) => c.key && c.key !== "actions" && c.key !== "_")
+    .map((c: any) => String(c.key));
+  const { visibleKeys, setVisible, reset } = useColumnPrefs(`virt_${name}`, allKeys, allKeys);
+  const items = computed(() => cols.value
+    .filter((c: any) => c.key && c.key !== "actions" && c.key !== "_")
+    .map((c: any) => ({ key: String(c.key), label: typeof c.title === "string" ? c.title : String(c.key) })));
+  const visibleCols = computed<DataTableColumns<any>>(() =>
+    cols.value.filter((c: any) => c.key === "actions" || c.key === "_" || visibleKeys.value.includes(String(c.key))));
+  const { query, filtered } = useTableQuickFilter(rows);
+  return reactive({ visibleKeys, setVisible, reset, items, visibleCols, query, filtered });
+}
+const clusterP = useVirtPrefs("clusters", clusterCols, clusters);
+const vmP = useVirtPrefs("vms", vmCols, vms);
+const proxmoxP = useVirtPrefs("proxmox", proxmoxCols, proxmox);
+
 onMounted(() => {
   tab.value = adminMode.value ? "proxmox" : "clusters";
   void refresh();
@@ -290,40 +313,59 @@ onMounted(() => {
         <span>{{ adminMode ? t("virt.proxmox_admin_title") : t("nav.virtualization") }}</span>
       </n-space>
     </template>
-    <n-space style="margin-bottom: 12px">
-      <n-button @click="refresh" :loading="loading">
-        <template #icon><n-icon><RefreshIcon /></n-icon></template>
-        {{ t("common.refresh") }}
-      </n-button>
-      <n-button v-if="tab === 'proxmox'" type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openPxCreate">
-        <template #icon><n-icon><PlusIcon /></n-icon></template>
-        {{ t("virt.add_proxmox") }}
-      </n-button>
-    </n-space>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane v-if="!adminMode" name="clusters">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><AdvancedIcon /></n-icon>{{ `${t('virt.clusters')} (${clusters.length})` }}</span>
         </template>
-        <n-space style="margin-bottom: 10px">
-          <n-button type="primary" size="small" :disabled="_authBtn.me?.can_edit === false" @click="openClusterCreate">
+        <n-space align="center" style="margin: 8px 0">
+          <n-input v-model:value="clusterP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openClusterCreate">
             <template #icon><n-icon><PlusIcon /></n-icon></template>
             {{ t("virt.add_cluster") }}
           </n-button>
+          <ColumnPicker :all="clusterP.items" :visible="clusterP.visibleKeys"
+                        @update:visible="clusterP.setVisible" @reset="clusterP.reset" />
+          <ExportButton :columns="clusterP.visibleCols" :rows="clusterP.filtered" filename="virt-clusters" :title="t('virt.clusters')" />
         </n-space>
-        <n-data-table :columns="clusterCols" :data="clusters" :loading="loading" :bordered="false" />
+        <n-data-table :columns="clusterP.visibleCols" :data="clusterP.filtered" :loading="loading" :bordered="false" />
       </n-tab-pane>
       <n-tab-pane v-if="!adminMode" name="vms">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><VirtualizationIcon /></n-icon>{{ `${t('virt.vms')} (${vms.length})` }}</span>
         </template>
-        <n-data-table :columns="vmCols" :data="vms" :loading="loading" :bordered="false" />
+        <n-space align="center" style="margin: 8px 0">
+          <n-input v-model:value="vmP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <ColumnPicker :all="vmP.items" :visible="vmP.visibleKeys"
+                        @update:visible="vmP.setVisible" @reset="vmP.reset" />
+          <ExportButton :columns="vmP.visibleCols" :rows="vmP.filtered" filename="virt-vms" :title="t('virt.vms')" />
+        </n-space>
+        <n-data-table :columns="vmP.visibleCols" :data="vmP.filtered" :loading="loading" :bordered="false" />
       </n-tab-pane>
       <n-tab-pane v-if="adminMode" name="proxmox">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><DevicesIcon /></n-icon>{{ `${t('virt.proxmox')} (${proxmox.length})` }}</span>
         </template>
-        <n-data-table :columns="proxmoxCols" :data="proxmox" :loading="loading" :bordered="false" />
+        <n-space align="center" style="margin: 8px 0">
+          <n-input v-model:value="proxmoxP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="refresh" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openPxCreate">
+            <template #icon><n-icon><PlusIcon /></n-icon></template>
+            {{ t("virt.add_proxmox") }}
+          </n-button>
+          <ColumnPicker :all="proxmoxP.items" :visible="proxmoxP.visibleKeys"
+                        @update:visible="proxmoxP.setVisible" @reset="proxmoxP.reset" />
+          <ExportButton :columns="proxmoxP.visibleCols" :rows="proxmoxP.filtered" filename="proxmox" :title="t('virt.proxmox')" />
+        </n-space>
+        <n-data-table :columns="proxmoxP.visibleCols" :data="proxmoxP.filtered" :loading="loading" :bordered="false" />
       </n-tab-pane>
     </n-tabs>
 

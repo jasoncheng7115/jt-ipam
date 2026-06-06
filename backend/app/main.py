@@ -56,6 +56,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 log.info("default_roles_seeded", created=n)
     except Exception as exc:
         log.warning("seed_default_roles_failed", error=str(exc))
+    # 啟動時確保內建電路類型存在（表為空才塞，冪等）
+    try:
+        from app.api.v1.endpoints.advanced import seed_default_circuit_types
+        from app.core.db import SessionLocal
+        async with SessionLocal() as s:
+            n = await seed_default_circuit_types(s)
+            if n:
+                log.info("default_circuit_types_seeded", created=n)
+    except Exception as exc:
+        log.warning("seed_default_circuit_types_failed", error=str(exc))
     yield
     log.info("shutdown")
 

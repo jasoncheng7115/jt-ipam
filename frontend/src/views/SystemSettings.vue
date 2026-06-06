@@ -9,8 +9,8 @@ import {
   NCard, NSpace, NIcon, NSelect, NInput, NInputNumber, NSwitch, NCheckbox, NButton, NTag, useMessage,
 } from "naive-ui";
 const origin = window.location.origin;
-import { AdminIcon, SaveIcon, RefreshIcon, CopyIcon } from "@/icons";
-import { getGraylogDsv, putGraylogDsv, getLdap, putLdap, testLdap, testLdapAuth, type LdapConfig,
+import { AdminIcon, SaveIcon, RefreshIcon } from "@/icons";
+import { getLdap, putLdap, testLdap, testLdapAuth, type LdapConfig,
   getAuditForward, putAuditForward, testAuditForward, type AuditForward,
   getOidcConfig, putOidcConfig, testOidc, type OidcConfig,
   getSamlConfig, putSamlConfig, testSaml, type SamlConfig } from "@/api/system";
@@ -95,35 +95,6 @@ async function updateGeoipNow() {
 function fmtBytes(n: number | null): string {
   if (!n) return "—";
   return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : (n / 1e3).toFixed(0) + " KB";
-}
-
-// Graylog DSV 查表
-const dsv = ref({ enabled: false, fmt: "csv", path: "ip-fqdn", token: "" });
-const dsvSaving = ref(false);
-const dsvFmtOpts = [{ label: "CSV (,)", value: "csv" }, { label: "TSV (Tab)", value: "tsv" }];
-const dsvUrl = computed(() =>
-  dsv.value.token ? `${location.origin}/api/v1/lookup/${dsv.value.path}?token=${dsv.value.token}` : "");
-// 明文 HTTP 專用埠（對應 nginx 8088 server 區塊）；給不便走 HTTPS 的 Graylog 轉接器用
-const DSV_HTTP_PORT = 8088;
-const dsvUrlHttp = computed(() =>
-  dsv.value.token
-    ? `http://${location.hostname}:${DSV_HTTP_PORT}/api/v1/lookup/${dsv.value.path}?token=${dsv.value.token}`
-    : "");
-async function loadDsv() { try { dsv.value = await getGraylogDsv(); } catch { /* ignore */ } }
-async function saveDsv(regenerate = false) {
-  dsvSaving.value = true;
-  try {
-    dsv.value = await putGraylogDsv({
-      enabled: dsv.value.enabled, fmt: dsv.value.fmt, path: dsv.value.path, regenerate_token: regenerate,
-    });
-    msg.success(t("common.saved"));
-  } catch { msg.error(t("errors.network")); } finally { dsvSaving.value = false; }
-}
-function copyDsvUrl() {
-  if (dsvUrl.value) { void navigator.clipboard.writeText(dsvUrl.value); msg.success(t("common.ok")); }
-}
-function copyDsvUrlHttp() {
-  if (dsvUrlHttp.value) { void navigator.clipboard.writeText(dsvUrlHttp.value); msg.success(t("common.ok")); }
 }
 
 // 外部認證 / LDAP（AD）
@@ -299,7 +270,6 @@ onMounted(() => {
   getRackNameAlign().then((a) => { rackAlign.value = a; }).catch(() => {});
   getOnlineGrace().then((m) => { grace.value = m; }).catch(() => {});
   void loadGeoip();
-  void loadDsv();
   void loadLdap();
   void loadLdapGroups();
   void loadOidc();
@@ -393,55 +363,6 @@ onMounted(() => {
           {{ t("settings.system.geoip_hint") }}<br>
           {{ t("settings.system.geoip_freq_advice") }}
         </div>
-      </section>
-
-      <!-- Graylog DSV 查表 -->
-      <section class="ss-group">
-        <h3 class="ss-h">{{ t("settings.system.graylog_title") }}</h3>
-        <div class="ss-row">
-          <div style="display:flex; align-items:center; gap:8px">
-            <n-switch v-model:value="dsv.enabled" @update:value="() => saveDsv()" />
-            <span style="font-size:13px">{{ t("settings.system.graylog_enable") }}</span>
-          </div>
-        </div>
-        <div class="ss-grid" style="margin-top:12px">
-          <div class="fld">
-            <label>{{ t("settings.system.graylog_path") }}</label>
-            <n-input v-model:value="dsv.path" placeholder="ip-fqdn" />
-          </div>
-          <div class="fld">
-            <label>{{ t("settings.system.graylog_format") }}</label>
-            <n-select v-model:value="dsv.fmt" :options="dsvFmtOpts" />
-          </div>
-        </div>
-        <div class="ss-row" style="margin-top:12px">
-          <n-button size="small" :loading="dsvSaving" @click="() => saveDsv()">
-            <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
-          </n-button>
-          <n-button size="small" @click="() => saveDsv(true)">
-            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("settings.system.graylog_regen") }}
-          </n-button>
-        </div>
-        <div v-if="dsvUrl" class="fld" style="margin-top:14px">
-          <label>{{ t("settings.system.graylog_url") }}</label>
-          <div style="display:flex; gap:8px; align-items:center">
-            <n-input :value="dsvUrl" readonly style="flex:1" />
-            <n-button size="small" type="primary" ghost @click="copyDsvUrl">
-              <template #icon><n-icon><CopyIcon /></n-icon></template>{{ t("settings.system.graylog_copy") }}
-            </n-button>
-          </div>
-        </div>
-        <div v-if="dsvUrlHttp" class="fld" style="margin-top:10px">
-          <label>{{ t("settings.system.graylog_url_http") }}</label>
-          <div style="display:flex; gap:8px; align-items:center">
-            <n-input :value="dsvUrlHttp" readonly style="flex:1" />
-            <n-button size="small" type="primary" ghost @click="copyDsvUrlHttp">
-              <template #icon><n-icon><CopyIcon /></n-icon></template>{{ t("settings.system.graylog_copy") }}
-            </n-button>
-          </div>
-          <div class="hint" style="margin-top:4px">{{ t("settings.system.graylog_url_http_hint") }}</div>
-        </div>
-        <div class="hint" style="line-height:1.6; margin-top:10px">{{ t("settings.system.graylog_hint") }}</div>
       </section>
 
       <!-- 外部認證 / LDAP（AD） -->

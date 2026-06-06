@@ -42,9 +42,17 @@ sudo systemctl reboot
 
 ### 2.2 One-shot install
 
+Fastest: one-shot bootstrap (auto-clones to /opt/jt-ipam, then runs the unified deploy script; install flags can be passed through):
+
 ```bash
-# clone (or rsync from a dev machine)
-git clone https://github.com/jasontools/jt-ipam.git /opt/jt-ipam
+curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts/bootstrap.sh \
+  | sudo bash -s -- --tls-mode nginx --public-fqdn ipam.example.com
+```
+
+Or clone manually and run the unified deploy script `scripts/jt-ipam.sh`:
+
+```bash
+git clone https://github.com/jasoncheng7115/jt-ipam.git /opt/jt-ipam
 cd /opt/jt-ipam
 
 # Pick one of three TLS modes:
@@ -54,11 +62,13 @@ cd /opt/jt-ipam
 #   direct        — uvicorn direct, you provide the cert (falls back to self-signed if missing)
 
 # (A) nginx + temporary self-signed (cp a real cert in later) — recommended for production
-sudo ./scripts/install-debian.sh --tls-mode nginx --public-fqdn ipam.example.com
+sudo ./scripts/jt-ipam.sh install --tls-mode nginx --public-fqdn ipam.example.com
 
 # (B) uvicorn direct self-signed (fastest for internal/dev)
-sudo ./scripts/install-debian.sh --tls-mode self-signed --public-fqdn ipam.local
+sudo ./scripts/jt-ipam.sh install --tls-mode self-signed --public-fqdn ipam.local
 ```
+
+> `scripts/install-debian.sh` is kept as a compatibility shim (it forwards to `jt-ipam.sh install`), so older commands still work.
 
 The script will:
 
@@ -297,6 +307,15 @@ curl -X POST https://ipam.example.com/api/v1/audit/verify \
 
 ## 6. Upgrade
 
+One-shot upgrade via the unified script (git pull → backup → pip → alembic → build → restart):
+
+```bash
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade
+# already pulled, skip git pull:  sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade --no-pull
+```
+
+The equivalent manual steps (run individually if needed):
+
 ```bash
 cd /opt/jt-ipam
 git pull
@@ -333,10 +352,22 @@ all audit logs.
 
 ## 8. Uninstall
 
+Unified-script uninstall (by default only stops services, removes systemd units/timers + the nginx site, and **keeps DB / config / source**):
+
+```bash
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall
+# also drop DB / config / uploads / system user (asks to confirm; --yes skips the prompt):
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall --purge
+```
+
+> `uninstall` never deletes the `/opt/jt-ipam` source.
+
+The equivalent manual steps:
+
 ```bash
 sudo systemctl disable --now jt-ipam-backend jt-ipam-sync.timer jt-ipam-backup.timer
 sudo rm /etc/systemd/system/jt-ipam-{backend,sync,backup}.{service,timer}
-sudo rm -rf /opt/jt-ipam /etc/jt-ipam /var/log/jt-ipam /var/lib/jt-ipam
+sudo rm -rf /etc/jt-ipam /var/log/jt-ipam /var/lib/jt-ipam
 sudo -u postgres dropdb jt_ipam
 sudo -u postgres dropuser jt_ipam
 sudo userdel -r jtipam

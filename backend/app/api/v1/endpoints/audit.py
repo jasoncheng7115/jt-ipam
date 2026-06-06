@@ -133,7 +133,7 @@ async def _resolve_labels(
             for oid, val in qrows:
                 if val is not None:
                     labels[(otype, oid)] = str(val)
-        except Exception:  # noqa: BLE001 — 任一型別解析失敗都不該讓稽核頁壞掉
+        except Exception:  # noqa: S112 — 任一型別解析失敗都不該讓稽核頁壞掉（稽核頁穩定優先）
             continue
 
     return actor_names, labels

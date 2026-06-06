@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watch } from "vue";
+import { computed, h, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NTabs, NTabPane, NDataTable, NSpace, NIcon, NButton, NTooltip,
@@ -9,11 +9,16 @@ import {
 } from "naive-ui";
 import { apiClient } from "@/api/client";
 import { Advanced } from "@/api/phase3";
+import { listDevices } from "@/api/basic";
 import {
   AdvancedIcon, PlusIcon, DeleteIcon, EditIcon, RefreshIcon, SaveIcon, CancelIcon,
-  CustomersIcon, VlansIcon, PhysicalIcon, UsersIcon, ScanAgentsIcon,
+  CustomersIcon, VlansIcon, PhysicalIcon, UsersIcon, ScanAgentsIcon, ListIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
+import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -51,6 +56,8 @@ const circuits = ref<any[]>([]);
 const contactGroups = ref<any[]>([]);
 const contacts = ref<any[]>([]);
 const ssids = ref<any[]>([]);
+const devices = ref<{ id: string; name: string }[]>([]);
+const deviceOptions = computed(() => devices.value.map((d) => ({ label: d.name, value: d.id })));
 const loading = ref(false);
 
 async function loadAll() {
@@ -64,6 +71,7 @@ async function loadAll() {
         Advanced.providers(), Advanced.circuitTypes(), Advanced.circuits(),
         Advanced.contactGroups(), Advanced.contacts(), Advanced.ssids(),
       ]);
+    try { devices.value = (await listDevices({ pageSize: 1000 })).items.map((d: any) => ({ id: d.id, name: d.name })); } catch { /* */ }
   } catch { msg.error(t("errors.network")); }
   finally { loading.value = false; }
 }
@@ -76,7 +84,7 @@ async function delResource(resource: string, id: string) {
 }
 
 // ── 各資源的 modal state ──
-type Resource = "tenant" | "tenant_group" | "asn" | "provider" | "circuit" | "contact_group" | "contact" | "ssid";
+type Resource = "tenant" | "tenant_group" | "asn" | "provider" | "circuit" | "circuit_type" | "contact_group" | "contact" | "ssid";
 const showCreate = ref(false);
 const createKind = ref<Resource>("tenant");
 const form = ref<Record<string, any>>({});
@@ -90,7 +98,8 @@ function formFor(kind: Resource, row?: any): Record<string, any> {
     case "tenant_group":  return { name: g("name", ""), description: g("description", "") };
     case "asn":           return { asn: g("asn", 65000), rir: g("rir", ""), description: g("description", ""), tenant_id: g("tenant_id") };
     case "provider":      return { name: g("name", ""), account_number: g("account_number", ""), description: g("description", "") };
-    case "circuit":       return { cid: g("cid", ""), provider_id: g("provider_id"), type_id: g("type_id"), status: g("status", "active"), up_kbps: g("up_kbps"), down_kbps: g("down_kbps"), commit_rate_kbps: g("commit_rate_kbps"), monthly_fee_cents: g("monthly_fee_cents"), install_date: g("install_date"), contract_end_date: g("contract_end_date"), description: g("description", "") };
+    case "circuit_type":  return { name: g("name", ""), description: g("description", "") };
+    case "circuit":       return { cid: g("cid", ""), provider_id: g("provider_id"), type_id: g("type_id"), status: g("status", "active"), up_kbps: g("up_kbps"), down_kbps: g("down_kbps"), commit_rate_kbps: g("commit_rate_kbps"), monthly_fee_cents: g("monthly_fee_cents"), install_date: g("install_date"), contract_end_date: g("contract_end_date"), ip_address: g("ip_address", ""), gateway: g("gateway", ""), netmask: g("netmask", ""), dns_servers: g("dns_servers", ""), device_id: g("device_id"), description: g("description", "") };
     case "contact_group": return { name: g("name", ""), description: g("description", "") };
     case "contact":       return { name: g("name", ""), email: g("email", ""), phone: g("phone", ""), group_id: g("group_id"), description: g("description", "") };
     case "ssid":          return { ssid: g("ssid", ""), description: g("description", "") };
@@ -118,6 +127,7 @@ const URL_MAP: Record<Resource, string> = {
   asn:           "asns",
   provider:      "providers",
   circuit:       "circuits",
+  circuit_type:  "circuit-types",
   contact_group: "contact-groups",
   contact:       "contacts",
   ssid:          "wireless/ssids",
@@ -237,6 +247,11 @@ const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.status"), key: "status", width: 120 },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("circuit", "circuits", r) },
 ]));
+const circuitTypeCols = computed<DataTableColumns<any>>(() => autoSort([
+  { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
+  { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("circuit_type", "circuit-types", r) },
+]));
 const contactCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
   { title: t("cols.email"), key: "email", minWidth: 180, ellipsis: { tooltip: true }, render: (r) => r.email ?? "—" },
@@ -245,11 +260,38 @@ const contactCols = computed<DataTableColumns<any>>(() => autoSort([
     render: (r) => contactGroups.value.find((g) => g.id === r.group_id)?.name ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("contact", "contacts", r) },
 ]));
+const contactGroupCols = computed<DataTableColumns<any>>(() => autoSort([
+  { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
+  { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("contact_group", "contact-groups", r) },
+]));
 const ssidCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: "SSID", key: "ssid", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("ssid", "wireless/ssids", r) },
 ]));
+
+// 每張表的欄位顯示偏好（ColumnPicker + useColumnPrefs）+ 即時篩選。actions 欄(key="_")永遠保留。
+function useTablePrefs(name: string, cols: typeof tenantCols, rows: typeof tenants) {
+  const allKeys = cols.value.filter((c: any) => c.key && c.key !== "_").map((c: any) => String(c.key));
+  const { visibleKeys, setVisible, reset } = useColumnPrefs(`advanced_${name}`, allKeys, allKeys);
+  const items = computed(() => cols.value
+    .filter((c: any) => c.key && c.key !== "_")
+    .map((c: any) => ({ key: String(c.key), label: typeof c.title === "string" ? c.title : String(c.key) })));
+  const visibleCols = computed<DataTableColumns<any>>(() =>
+    cols.value.filter((c: any) => c.key === "_" || visibleKeys.value.includes(String(c.key))));
+  const { query, filtered } = useTableQuickFilter(rows);
+  return reactive({ visibleKeys, setVisible, reset, items, visibleCols, query, filtered });
+}
+const tenantP = useTablePrefs("tenants", tenantCols, tenants);
+const tenantGroupP = useTablePrefs("tenant_groups", tenantGroupCols, tenantGroups);
+const asnP = useTablePrefs("asns", asnCols, asns);
+const providerP = useTablePrefs("providers", providerCols, providers);
+const circuitP = useTablePrefs("circuits", circuitCols, circuits);
+const circuitTypeP = useTablePrefs("circuit_types", circuitTypeCols, circuitTypes);
+const contactGroupP = useTablePrefs("contact_groups", contactGroupCols, contactGroups);
+const contactP = useTablePrefs("contacts", contactCols, contacts);
+const ssidP = useTablePrefs("ssids", ssidCols, ssids);
 
 onMounted(() => { void loadAll(); });
 </script>
@@ -262,108 +304,204 @@ onMounted(() => { void loadAll(); });
         <span>{{ mode ? headerTitle : t("nav.advanced") }}</span>
       </n-space>
     </template>
-    <n-space style="margin-bottom: 12px">
-      <n-button @click="loadAll" :loading="loading">
-        <template #icon><n-icon><RefreshIcon /></n-icon></template>
-        {{ t("common.refresh") }}
-      </n-button>
-    </n-space>
-
     <n-tabs v-model:value="tab" type="line" :class="{ 'single-mode': !!mode }">
       <n-tab-pane name="tenancy">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><CustomersIcon /></n-icon>{{ t('advanced.tenancy') }}</span>
         </template>
-        <h3>{{ t("advanced.tenants") }}</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('tenant')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-        </n-space>
-        <n-data-table :columns="tenantCols" :data="tenants" :loading="loading" :bordered="false" :scroll-x="596" />
-
-        <h3 style="margin-top: 24px">{{ t("advanced.tenant_groups") }}</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('tenant_group')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-        </n-space>
-        <n-data-table :columns="tenantGroupCols" :data="tenantGroups" :loading="loading" :bordered="false" :scroll-x="456" />
+        <!-- 同頁多表 → 內層頁籤分開（比照防火牆規則/別名：type=line + icon） -->
+        <n-tabs type="line">
+          <n-tab-pane name="tenants">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><CustomersIcon /></n-icon>{{ t('advanced.tenants') }}</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="tenantP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('tenant')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="tenantP.items" :visible="tenantP.visibleKeys"
+                            @update:visible="tenantP.setVisible" @reset="tenantP.reset" />
+              <ExportButton :columns="tenantP.visibleCols" :rows="tenantP.filtered" filename="tenants" :title="t('advanced.tenants')" />
+            </n-space>
+            <n-data-table :columns="tenantP.visibleCols" :data="tenantP.filtered" :loading="loading" :bordered="false" :scroll-x="596" />
+          </n-tab-pane>
+          <n-tab-pane name="tenant_groups">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ListIcon /></n-icon>{{ t('advanced.tenant_groups') }}</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="tenantGroupP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('tenant_group')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="tenantGroupP.items" :visible="tenantGroupP.visibleKeys"
+                            @update:visible="tenantGroupP.setVisible" @reset="tenantGroupP.reset" />
+              <ExportButton :columns="tenantGroupP.visibleCols" :rows="tenantGroupP.filtered" filename="tenant-groups" :title="t('advanced.tenant_groups')" />
+            </n-space>
+            <n-data-table :columns="tenantGroupP.visibleCols" :data="tenantGroupP.filtered" :loading="loading" :bordered="false" :scroll-x="456" />
+          </n-tab-pane>
+        </n-tabs>
       </n-tab-pane>
 
       <n-tab-pane name="asn">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><VlansIcon /></n-icon>ASN</span>
         </template>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('asn')">
+        <n-space style="margin: 8px 0" align="center">
+          <n-input v-model:value="asnP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="loadAll" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openCreate('asn')">
             <template #icon><n-icon><PlusIcon /></n-icon></template>
             {{ t("common.create") }}
           </n-button>
+          <ColumnPicker :all="asnP.items" :visible="asnP.visibleKeys"
+                        @update:visible="asnP.setVisible" @reset="asnP.reset" />
+          <ExportButton :columns="asnP.visibleCols" :rows="asnP.filtered" filename="asns" title="ASN" />
         </n-space>
-        <n-data-table :columns="asnCols" :data="asns" :loading="loading" :bordered="false" :scroll-x="536" />
+        <n-data-table :columns="asnP.visibleCols" :data="asnP.filtered" :loading="loading" :bordered="false" :scroll-x="536" />
       </n-tab-pane>
 
       <n-tab-pane name="circuits">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><PhysicalIcon /></n-icon>{{ t('advanced.circuits') }}</span>
         </template>
-        <h3>{{ t("circuits.providers") }}</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('provider')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-        </n-space>
-        <n-data-table :columns="providerCols" :data="providers" :loading="loading" :bordered="false" :scroll-x="596" />
-
-        <h3 style="margin-top: 24px">{{ t("advanced.circuits") }}</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('circuit')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-        </n-space>
-        <n-data-table :columns="circuitCols" :data="circuits" :loading="loading" :bordered="false" :scroll-x="712" />
+        <n-tabs type="line">
+          <n-tab-pane name="providers">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><UsersIcon /></n-icon>{{ t('circuits.providers') }}</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="providerP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('provider')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="providerP.items" :visible="providerP.visibleKeys"
+                            @update:visible="providerP.setVisible" @reset="providerP.reset" />
+              <ExportButton :columns="providerP.visibleCols" :rows="providerP.filtered" filename="providers" :title="t('circuits.providers')" />
+            </n-space>
+            <n-data-table :columns="providerP.visibleCols" :data="providerP.filtered" :loading="loading" :bordered="false" :scroll-x="596" />
+          </n-tab-pane>
+          <n-tab-pane name="circuits">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><PhysicalIcon /></n-icon>{{ t('advanced.circuits') }}</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="circuitP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('circuit')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="circuitP.items" :visible="circuitP.visibleKeys"
+                            @update:visible="circuitP.setVisible" @reset="circuitP.reset" />
+              <ExportButton :columns="circuitP.visibleCols" :rows="circuitP.filtered" filename="circuits" :title="t('advanced.circuits')" />
+            </n-space>
+            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="712" />
+          </n-tab-pane>
+          <n-tab-pane name="circuit_types">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ListIcon /></n-icon>{{ t('circuits.types') }}</span>
+            </template>
+            <div class="hint" style="margin: 8px 0 4px">{{ t("circuits.types_hint") }}</div>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="circuitTypeP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('circuit_type')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="circuitTypeP.items" :visible="circuitTypeP.visibleKeys"
+                            @update:visible="circuitTypeP.setVisible" @reset="circuitTypeP.reset" />
+              <ExportButton :columns="circuitTypeP.visibleCols" :rows="circuitTypeP.filtered" filename="circuit-types" :title="t('circuits.types')" />
+            </n-space>
+            <n-data-table :columns="circuitTypeP.visibleCols" :data="circuitTypeP.filtered" :loading="loading" :bordered="false" :scroll-x="472" />
+          </n-tab-pane>
+        </n-tabs>
       </n-tab-pane>
 
       <n-tab-pane name="contacts">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><UsersIcon /></n-icon>{{ t('advanced.contacts') }}</span>
         </template>
-        <h3>{{ t("advanced.contact_groups") }}</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('contact_group')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-        </n-space>
-        <n-data-table :columns="tenantGroupCols" :data="contactGroups" :loading="loading" :bordered="false" :scroll-x="456" />
-
-        <h3 style="margin-top: 24px">{{ t("advanced.contacts") }}</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('contact')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-        </n-space>
-        <n-data-table :columns="contactCols" :data="contacts" :loading="loading" :bordered="false" :scroll-x="696" />
+        <n-tabs type="line">
+          <n-tab-pane name="contacts">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><UsersIcon /></n-icon>{{ t('advanced.contacts') }}</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="contactP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('contact')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="contactP.items" :visible="contactP.visibleKeys"
+                            @update:visible="contactP.setVisible" @reset="contactP.reset" />
+              <ExportButton :columns="contactP.visibleCols" :rows="contactP.filtered" filename="contacts" :title="t('advanced.contacts')" />
+            </n-space>
+            <n-data-table :columns="contactP.visibleCols" :data="contactP.filtered" :loading="loading" :bordered="false" :scroll-x="696" />
+          </n-tab-pane>
+          <n-tab-pane name="contact_groups">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ListIcon /></n-icon>{{ t('advanced.contact_groups') }}</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="contactGroupP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('contact_group')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="contactGroupP.items" :visible="contactGroupP.visibleKeys"
+                            @update:visible="contactGroupP.setVisible" @reset="contactGroupP.reset" />
+              <ExportButton :columns="contactGroupP.visibleCols" :rows="contactGroupP.filtered" filename="contact-groups" :title="t('advanced.contact_groups')" />
+            </n-space>
+            <n-data-table :columns="contactGroupP.visibleCols" :data="contactGroupP.filtered" :loading="loading" :bordered="false" :scroll-x="456" />
+          </n-tab-pane>
+        </n-tabs>
       </n-tab-pane>
 
       <n-tab-pane name="wireless">
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ScanAgentsIcon /></n-icon>{{ t('advanced.wireless') }}</span>
         </template>
-        <h3>SSID</h3>
-        <n-space style="margin: 8px 0">
-          <n-button size="small" type="primary" @click="openCreate('ssid')">
+        <n-space style="margin: 8px 0" align="center">
+          <n-input v-model:value="ssidP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+          <n-button @click="loadAll" :loading="loading">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+          </n-button>
+          <n-button type="primary" @click="openCreate('ssid')">
             <template #icon><n-icon><PlusIcon /></n-icon></template>
             {{ t("common.create") }}
           </n-button>
+          <ColumnPicker :all="ssidP.items" :visible="ssidP.visibleKeys"
+                        @update:visible="ssidP.setVisible" @reset="ssidP.reset" />
+          <ExportButton :columns="ssidP.visibleCols" :rows="ssidP.filtered" filename="ssids" title="SSID" />
         </n-space>
-        <n-data-table :columns="ssidCols" :data="ssids" :loading="loading" :bordered="false" :scroll-x="456" />
+        <n-data-table :columns="ssidP.visibleCols" :data="ssidP.filtered" :loading="loading" :bordered="false" :scroll-x="456" />
       </n-tab-pane>
     </n-tabs>
 
@@ -430,6 +568,16 @@ onMounted(() => { void loadAll(); });
           </n-form-item>
         </template>
 
+        <!-- Circuit Type -->
+        <template v-else-if="createKind === 'circuit_type'">
+          <n-form-item :label="t('common.name')">
+            <n-input v-model:value="form.name" :placeholder="t('circuits.type_name_ph')" />
+          </n-form-item>
+          <n-form-item :label="t('sections.description')">
+            <n-input v-model:value="form.description" type="textarea" :rows="2" />
+          </n-form-item>
+        </template>
+
         <!-- Circuit -->
         <template v-else-if="createKind === 'circuit'">
           <n-form-item :label="t('advanced.cid_label')">
@@ -472,6 +620,26 @@ onMounted(() => { void loadAll(); });
               <n-date-picker v-model:formatted-value="form.contract_end_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 100%" />
             </n-form-item>
           </div>
+          <div class="circuit-row">
+            <n-form-item :label="t('circuits.ip_address')" :show-feedback="false">
+              <n-input v-model:value="form.ip_address" placeholder="203.0.113.10/30" />
+            </n-form-item>
+            <n-form-item :label="t('circuits.gateway')" :show-feedback="false">
+              <n-input v-model:value="form.gateway" placeholder="203.0.113.9" />
+            </n-form-item>
+          </div>
+          <div class="circuit-row">
+            <n-form-item :label="t('circuits.netmask')" :show-feedback="false">
+              <n-input v-model:value="form.netmask" placeholder="255.255.255.252" />
+            </n-form-item>
+            <n-form-item :label="t('circuits.dns_servers')" :show-feedback="false">
+              <n-input v-model:value="form.dns_servers" placeholder="8.8.8.8, 1.1.1.1" />
+            </n-form-item>
+          </div>
+          <n-form-item :label="t('circuits.device')">
+            <n-select v-model:value="form.device_id" :options="deviceOptions" filterable clearable
+                      :placeholder="t('circuits.device_ph')" />
+          </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
           </n-form-item>
@@ -534,8 +702,9 @@ onMounted(() => { void loadAll(); });
 </template>
 
 <style scoped>
-/* 拆成獨立頁面時隱藏頁籤列（只顯示該模組內容） */
-.single-mode :deep(.n-tabs-nav) { display: none; }
+/* 拆成獨立頁面時隱藏「外層」頁籤列（只顯示該模組內容）。
+   用直接子選擇器，避免連內層 segment 頁籤列(供應商/電路/類型…)也一起被藏掉。 */
+.single-mode > :deep(.n-tabs-nav) { display: none; }
 /* Circuit 表單兩欄：等寬、輸入框填滿欄寬、上緣對齊（取代會錯位的固定寬 n-space） */
 .circuit-row { display: flex; gap: 12px; margin-bottom: 14px; }
 .circuit-row > * { flex: 1 1 0; min-width: 0; }

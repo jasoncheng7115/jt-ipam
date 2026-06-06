@@ -41,9 +41,17 @@ sudo systemctl reboot
 
 ### 2.2 一鍵安裝
 
+最快：一鍵 bootstrap（自動 clone 到 /opt/jt-ipam 後執行統一部署腳本，可附帶安裝參數）：
+
 ```bash
-# clone（或從 dev 機 rsync 過去）
-git clone https://github.com/jasontools/jt-ipam.git /opt/jt-ipam
+curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts/bootstrap.sh \
+  | sudo bash -s -- --tls-mode nginx --public-fqdn ipam.example.com
+```
+
+或手動 clone 後跑統一部署腳本 `scripts/jt-ipam.sh`：
+
+```bash
+git clone https://github.com/jasoncheng7115/jt-ipam.git /opt/jt-ipam
 cd /opt/jt-ipam
 
 # 三種 TLS 模式擇一：
@@ -53,11 +61,13 @@ cd /opt/jt-ipam
 #   direct        — uvicorn direct，憑證自備（缺則 fallback 產自簽）
 
 # (A) nginx + 暫用自簽（之後 cp 正式憑證即可）— 推薦生產環境
-sudo ./scripts/install-debian.sh --tls-mode nginx --public-fqdn ipam.example.com
+sudo ./scripts/jt-ipam.sh install --tls-mode nginx --public-fqdn ipam.example.com
 
 # (B) uvicorn direct 自簽（內網/開發環境最快）
-sudo ./scripts/install-debian.sh --tls-mode self-signed --public-fqdn ipam.local
+sudo ./scripts/jt-ipam.sh install --tls-mode self-signed --public-fqdn ipam.local
 ```
+
+> `scripts/install-debian.sh` 仍保留為相容 shim（會轉呼叫 `jt-ipam.sh install`），舊指令不會壞。
 
 腳本會：
 
@@ -294,6 +304,15 @@ curl -X POST https://ipam.example.com/api/v1/audit/verify \
 
 ## 6. 升級
 
+統一腳本一鍵升級（內含 git pull → 備份 → pip → alembic → build → restart）：
+
+```bash
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade
+# 已自行 git pull、不想再拉：  sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade --no-pull
+```
+
+等同的手動步驟（需要時逐步執行）：
+
 ```bash
 cd /opt/jt-ipam
 git pull
@@ -330,10 +349,22 @@ log 同步外送。
 
 ## 8. 移除
 
+統一腳本移除（預設只停服務、移除 systemd units/timers + nginx site，**保留 DB / 設定 / 原始碼**）：
+
+```bash
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall
+# 連 DB / 設定 / 上傳檔 / 系統 user 一起刪（會要求確認；--yes 跳過確認）：
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall --purge
+```
+
+> `uninstall` 永不刪除 `/opt/jt-ipam` 原始碼。
+
+等同的手動步驟：
+
 ```bash
 sudo systemctl disable --now jt-ipam-backend jt-ipam-sync.timer jt-ipam-backup.timer
 sudo rm /etc/systemd/system/jt-ipam-{backend,sync,backup}.{service,timer}
-sudo rm -rf /opt/jt-ipam /etc/jt-ipam /var/log/jt-ipam /var/lib/jt-ipam
+sudo rm -rf /etc/jt-ipam /var/log/jt-ipam /var/lib/jt-ipam
 sudo -u postgres dropdb jt_ipam
 sudo -u postgres dropuser jt_ipam
 sudo userdel -r jtipam

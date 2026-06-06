@@ -696,7 +696,7 @@ Within IPAM you can:
 2. **Bare metal Debian / Ubuntu** (systemd + nginx + apt packages)
 3. **Offline install bundle** (closed government environments; includes .deb and a wheel cache)
 
-> One-shot script: `scripts/install-debian.sh`; systemd units: `deploy/systemd/`.
+> One-shot script: `scripts/jt-ipam.sh install`; systemd units: `deploy/systemd/`.
 
 ### 12.4 System requirements (minimum)
 - 2 vCPU, 4 GB RAM, 20 GB disk
@@ -788,7 +788,7 @@ Within IPAM you can:
 ## 14. Naming & branding
 
 - Project name: `jt-ipam`
-- GitHub: `github.com/jasontools/jt-ipam`
+- GitHub: `github.com/jasoncheng7115/jt-ipam`
 - Official site: `ipam.jason.tools`
 - Demo: `demo-ipam.jason.tools`
 - Docs: `docs-ipam.jason.tools`

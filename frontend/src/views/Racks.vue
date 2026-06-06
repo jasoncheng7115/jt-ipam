@@ -15,6 +15,7 @@ import {
   NInput,
   NInputNumber,
   NTooltip,
+  NSwitch,
   useMessage,
   type DataTableColumns,
   type DataTableRowKey,
@@ -68,6 +69,10 @@ function togglePinRoom() {
   }
 }
 const isAdmin = computed(() => !!auth.me?.is_admin);
+// 合併單卡模式：機房內所有機櫃排進同一張卡（不分卡片），存 localStorage（每瀏覽器）
+const MERGED_VIEW_KEY = "jt_rack_merged";
+const mergedView = ref<boolean>(localStorage.getItem(MERGED_VIEW_KEY) === "1");
+watch(mergedView, (v) => localStorage.setItem(MERGED_VIEW_KEY, v ? "1" : "0"));
 const roomFocus = ref<RD | null>(null);   // 在平面圖上點選的機櫃 → 顯示其 U 位
 async function onRoomRackSelect(rackId: string) {
   try { roomFocus.value = await getRackDiagram(rackId); }
@@ -418,6 +423,10 @@ async function confirmPickDevice() {
           <template #icon><n-icon><LocationsIcon /></n-icon></template>
           {{ t("racks.manage_rooms") }}
         </n-button>
+        <n-space v-if="roomId" align="center" :size="6" :wrap-item="false" style="margin-left:8px">
+          <n-switch v-model:value="mergedView" size="small" />
+          <span style="font-size:13px; opacity:.75">{{ t("racks.merged_view") }}</span>
+        </n-space>
       </n-space>
     </n-card>
 
@@ -439,16 +448,37 @@ async function confirmPickDevice() {
 
       <!-- 點選聚焦時隱藏整排總覽，避免同一機櫃顯示兩次 -->
       <n-spin v-if="!roomFocus" :show="roomLoading">
-        <div v-if="roomDiagrams.length" class="rack-row">
-          <rack-diagram v-for="d in roomDiagrams" :key="d.rack_id" :diagram="d"
-                        :show-legend="false" :editable="isAdmin" :floor-align-to="maxRoomU"
-                        @pick-empty="onPickEmpty" />
-        </div>
-        <!-- 整排機櫃共用一個圖例（不用每櫃都重複） -->
-        <div v-if="roomDiagrams.length" class="rack-legend-shared">
-          <span v-for="ty in RACK_DEVICE_TYPES" :key="ty" class="legend-item"
-                :style="{ background: rackTypeColor(ty) }">{{ ty }}</span>
-        </div>
+        <template v-if="roomDiagrams.length">
+          <!-- 合併單卡：所有機櫃排進同一張卡（去各櫃外框，加小標題） -->
+          <n-card v-if="mergedView" :title="t('racks.merged_title')">
+            <div class="rack-row">
+              <div v-for="d in roomDiagrams" :key="d.rack_id" class="merged-rack">
+                <div class="merged-rack__name">
+                  {{ d.name }}<span class="merged-rack__u">{{ d.u_height }}U</span>
+                </div>
+                <rack-diagram :diagram="d" :show-legend="false" :editable="isAdmin"
+                              :floor-align-to="maxRoomU" bare @pick-empty="onPickEmpty" />
+              </div>
+            </div>
+            <div class="rack-legend-shared">
+              <span v-for="ty in RACK_DEVICE_TYPES" :key="ty" class="legend-item"
+                    :style="{ background: rackTypeColor(ty) }">{{ ty }}</span>
+            </div>
+          </n-card>
+          <!-- 各自一張卡片（預設） -->
+          <template v-else>
+            <div class="rack-row">
+              <rack-diagram v-for="d in roomDiagrams" :key="d.rack_id" :diagram="d"
+                            :show-legend="false" :editable="isAdmin" :floor-align-to="maxRoomU"
+                            @pick-empty="onPickEmpty" />
+            </div>
+            <!-- 整排機櫃共用一個圖例（不用每櫃都重複） -->
+            <div class="rack-legend-shared">
+              <span v-for="ty in RACK_DEVICE_TYPES" :key="ty" class="legend-item"
+                    :style="{ background: rackTypeColor(ty) }">{{ ty }}</span>
+            </div>
+          </template>
+        </template>
         <n-card v-else-if="!roomLoading" :title="t('racks.diagram_title')">
           <p style="opacity: 0.7">{{ t("racks.room_empty") }}</p>
         </n-card>
@@ -608,6 +638,22 @@ async function confirmPickDevice() {
 }
 .rack-row > * { flex: 0 0 auto; }
 .rack-row :deep(.n-card) { width: auto; height: 100%; }
+/* 合併單卡模式：每櫃一欄（小標題 + bare 機櫃圖），共用外層卡片 */
+.merged-rack { display: flex; flex-direction: column; }
+.merged-rack__name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  text-align: center;
+}
+.merged-rack__u {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.6;
+  font-family: monospace;
+}
 /* 整排機櫃共用的圖例 */
 .rack-legend-shared {
   display: flex;

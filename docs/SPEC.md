@@ -698,7 +698,7 @@ Switch + Port
 2. **裸機 Debian / Ubuntu**（systemd + nginx + apt 套件）
 3. **離線安裝包**（封閉政府環境；含 .deb 與 wheel 快取）
 
-> 一鍵腳本見 `scripts/install-debian.sh`；systemd unit 見 `deploy/systemd/`。
+> 一鍵腳本見 `scripts/jt-ipam.sh install`；systemd unit 見 `deploy/systemd/`。
 
 ### 12.4 系統需求（最小）
 - 2 vCPU、4 GB RAM、20 GB 磁碟
@@ -790,7 +790,7 @@ Switch + Port
 ## 十四、命名與品牌
 
 - 專案名稱：`jt-ipam`
-- GitHub：`github.com/jasontools/jt-ipam`
+- GitHub：`github.com/jasoncheng7115/jt-ipam`
 - 官方網站：`ipam.jason.tools`
 - Demo：`demo-ipam.jason.tools`
 - 文件：`docs-ipam.jason.tools`

@@ -62,6 +62,11 @@ class CableRead(StrictModel):
     b_end: str | None = None
     a_device_id: uuid.UUID | None = None
     b_device_id: uuid.UUID | None = None
+    # 兩端裝置所屬單位 / 機房（供清單篩選用；任一端符合即算）
+    a_customer_id: uuid.UUID | None = None
+    b_customer_id: uuid.UUID | None = None
+    a_location_id: uuid.UUID | None = None
+    b_location_id: uuid.UUID | None = None
 
 
 class CableWrite(StrictModel):
@@ -117,10 +122,11 @@ async def list_cables(
             ports = {p.id: p for p in (await session.execute(
                 select(DevicePort).where(DevicePort.id.in_(port_ids))
             )).scalars().all()}
-        dev_name: dict[uuid.UUID, str] = {}
+        # dev_meta: id → (name, customer_id, location_id)
+        dev_meta: dict[uuid.UUID, tuple[str, uuid.UUID | None, uuid.UUID | None]] = {}
         need_dev = set(dev_ids) | {p.device_id for p in ports.values()}
         if need_dev:
-            dev_name = {d.id: d.name for d in (await session.execute(
+            dev_meta = {d.id: (d.name, d.customer_id, d.location_id) for d in (await session.execute(
                 select(Device).where(Device.id.in_(need_dev))
             )).scalars().all()}
         for t in terms:
@@ -129,13 +135,18 @@ async def list_cables(
             if t.object_type == "device_port" and t.object_id in ports:
                 p = ports[t.object_id]
                 device_id = p.device_id
-                label = f"{dev_name.get(p.device_id, '?')}@{p.name}"
+                label = f"{dev_meta.get(p.device_id, ('?',))[0]}@{p.name}"
             elif t.object_type == "device":
                 device_id = t.object_id
-                label = dev_name.get(t.object_id, str(t.object_id)[:8])
+                label = dev_meta.get(t.object_id, (str(t.object_id)[:8],))[0]
             else:
                 label = t.port_label or t.object_type
-            ends[t.cable_id][t.side] = {"label": label, "device_id": device_id}
+            meta = dev_meta.get(device_id) if device_id else None
+            ends[t.cable_id][t.side] = {
+                "label": label, "device_id": device_id,
+                "customer_id": meta[1] if meta else None,
+                "location_id": meta[2] if meta else None,
+            }
 
     items = []
     for r in rows:
@@ -144,6 +155,8 @@ async def list_cables(
         items.append(CableRead.model_validate(r).model_copy(update={
             "a_end": a.get("label"), "b_end": b.get("label"),
             "a_device_id": a.get("device_id"), "b_device_id": b.get("device_id"),
+            "a_customer_id": a.get("customer_id"), "b_customer_id": b.get("customer_id"),
+            "a_location_id": a.get("location_id"), "b_location_id": b.get("location_id"),
         }))
     return Paginated[CableRead](items=items, total=total, page=page, page_size=page_size)
 

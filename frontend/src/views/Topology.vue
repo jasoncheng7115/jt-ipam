@@ -41,6 +41,9 @@ const includeL3 = ref(true);
 const onlineOnly = ref(false);   // 預設：不管上線與否都畫
 const loading = ref(false);
 const selected = ref<Record<string, any> | null>(null);
+// 連線(edge)兩端資訊：name=裝置/子網路、ip、port=連接埠、endpoint=VPN 端點
+type EdgeEnd = { name: string | null; ip: string | null; port: string | null; endpoint: string | null };
+const edgeEnds = ref<{ a: EdgeEnd; b: EdgeEnd } | null>(null);
 
 // 友善欄位名稱（中文），對應 cytoscape node/edge data 的 key
 const FIELD_LABELS = computed<Record<string, string>>(() => ({
@@ -91,6 +94,8 @@ const KIND_LABELS = computed<Record<string, string>>(() => ({
 const HIDDEN_FIELDS = new Set([
   "id", "source", "target", "a_device_id", "b_device_id",
   "rack_id", "location_id", "subnet_uuid", "label",
+  // 連線兩端資訊改用專屬區塊呈現，這裡不重複列出
+  "source_port", "target_port", "a_endpoint", "b_endpoint", "ip",
 ]);
 
 function displayValue(key: string, val: any): string {
@@ -408,10 +413,21 @@ function render(data: TopologyData) {
         },
       },
       {
-        selector: ":selected",
+        selector: "node:selected",
         style: {
-          "border-width": 3,
+          "border-width": 4,
           "border-color": "#fbbf24",
+        },
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          "line-color": "#fbbf24",
+          "target-arrow-color": "#fbbf24",
+          "source-arrow-color": "#fbbf24",
+          width: 5,
+          opacity: 1,
+          "z-index": 9999,
         },
       },
     ],
@@ -429,17 +445,57 @@ function render(data: TopologyData) {
   });
 
   cy.on("tap", "node", (evt) => {
+    evt.cy.elements().unselect();
+    evt.target.select();                 // 維持選定高亮
+    edgeEnds.value = null;
     selected.value = { ...evt.target.data() };
   });
   cy.on("tap", "edge", (evt) => {
-    selected.value = { ...evt.target.data() };
+    evt.cy.elements().unselect();
+    evt.target.select();                 // 點線後維持選定狀態（放開滑鼠不會消失）
+    const d = { ...evt.target.data() };
+    const sn = (evt.cy.getElementById(d.source)?.data() ?? {}) as Record<string, any>;
+    const tn = (evt.cy.getElementById(d.target)?.data() ?? {}) as Record<string, any>;
+    edgeEnds.value = {
+      a: { name: sn.label ?? null, ip: sn.ip ?? null, port: d.source_port ?? null, endpoint: d.a_endpoint ?? null },
+      b: { name: tn.label ?? null, ip: tn.ip ?? null, port: d.target_port ?? null, endpoint: d.b_endpoint ?? null },
+    };
+    selected.value = d;
   });
   cy.on("tap", (evt) => {
-    if (evt.target === cy) {
+    if (evt.target === evt.cy) {
+      evt.cy.elements().unselect();
+      edgeEnds.value = null;
       selected.value = null;
     }
   });
   applyVisibility();   // 套用圖例的點暗（隱藏類別）狀態
+  spreadSubnets();     // 多個子網路中心點水平分開，避免兩團擠在一起
+}
+
+// 把多個 subnet 中心節點沿水平等距推開；只屬單一 subnet 的節點跟著平移，
+// 同時連多個 subnet 的裝置留在原處（落在兩團中間），避免被夾擠。
+function spreadSubnets() {
+  if (!cy) return;
+  const subs: any = cy.nodes().filter((n) => String(n.id()).startsWith("subnet:"));
+  if (subs.length < 2) return;
+  const cx = subs.reduce((a: number, n: any) => a + n.position("x"), 0) / subs.length;
+  const cyy = subs.reduce((a: number, n: any) => a + n.position("y"), 0) / subs.length;
+  const SPACING = 760;
+  subs.forEach((sn: any, i: number) => {
+    const tx = cx + (i - (subs.length - 1) / 2) * SPACING;
+    const dx = tx - sn.position("x");
+    const dy = cyy - sn.position("y");
+    sn.position({ x: tx, y: cyy });
+    sn.openNeighborhood().nodes().forEach((nbEle: any) => {
+      const nb = nbEle as any;
+      const conn = nb.openNeighborhood().nodes().filter((x: any) => String(x.id()).startsWith("subnet:"));
+      if (conn.length === 1 && conn[0].id() === sn.id()) {
+        nb.position({ x: nb.position("x") + dx, y: nb.position("y") + dy });
+      }
+    });
+  });
+  cy.fit(undefined, 40);
 }
 
 watch(subnetIds, () => { void refresh(); });
@@ -520,6 +576,20 @@ onUnmounted(() => {
               </tr>
             </tbody>
           </table>
+          <div v-if="edgeEnds" class="edge-ends">
+            <div class="ee-title">{{ t("topology.connection_ends") }}</div>
+            <div class="ee-grid">
+              <div v-for="(e, i) in [{ label: t('topology.end_a'), d: edgeEnds.a }, { label: t('topology.end_b'), d: edgeEnds.b }]"
+                   :key="i" class="ee-col">
+                <div class="ee-h">{{ e.label }}</div>
+                <div v-if="e.d.name" class="ee-row"><span>{{ t('topology.end_name') }}</span><b>{{ e.d.name }}</b></div>
+                <div v-if="e.d.ip" class="ee-row"><span>IP</span><b>{{ e.d.ip }}</b></div>
+                <div v-if="e.d.port" class="ee-row"><span>{{ t('topology.port') }}</span><b>{{ e.d.port }}</b></div>
+                <div v-if="e.d.endpoint" class="ee-row"><span>{{ t('topology.endpoint') }}</span><b>{{ e.d.endpoint }}</b></div>
+                <div v-if="!e.d.name && !e.d.ip && !e.d.port && !e.d.endpoint" class="ee-empty">{{ t('topology.end_unknown') }}</div>
+              </div>
+            </div>
+          </div>
           <template v-if="selectedDeviceId || selectedSubnetId" #action>
             <n-button v-if="selectedDeviceId" size="small" type="primary" ghost block @click="goDevice">
               {{ t("topology.open_device") }}
@@ -602,6 +672,15 @@ onUnmounted(() => {
   overflow: auto;
   z-index: 10;
 }
+.edge-ends { margin-top: 10px; }
+.ee-title { font-size: 12px; font-weight: 600; opacity: .75; margin-bottom: 6px; }
+.ee-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ee-col { border: 1px solid rgba(127,127,127,.2); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.ee-h { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.ee-row { display: flex; justify-content: space-between; gap: 6px; font-size: 11.5px; line-height: 1.6; }
+.ee-row span { opacity: .6; flex: none; }
+.ee-row b { font-weight: 600; text-align: right; word-break: break-all; }
+.ee-empty { font-size: 11.5px; opacity: .5; }
 .info-pane pre {
   font-size: 11px;
   margin: 0;

@@ -1,13 +1,14 @@
 # jt-ipam
 
-新世代、可自架的 IPAM（整合 DNS / LibreNMS / OPNsense / AdGuard / Wazuh / Proxmox / Ollama LLM；提供 phpIPAM 相容 API 與遷移路徑，但**並非以 phpIPAM 為核心、也非建構於 phpIPAM 之上**）。
+可自架、以整合為核心的 IPAM（整合 DNS / LibreNMS / OPNsense / AdGuard / Wazuh / Proxmox / Ollama LLM；提供 phpIPAM 相容 API 與遷移路徑，但**並非以 phpIPAM 為核心、也非建構於 phpIPAM 之上**）。**已公開發布於 github.com/jasoncheng7115/jt-ipam（Apache-2.0）。**
 
 ## 部署環境
 
-- **Prod**: `192.168.1.144` (ipam2 LXC)。所有改檔/重啟都 `ssh root@192.168.1.144`
-- 本機（log4 / 132）`/opt/jt-ipam` 是過時 mirror，本機改檔不會影響線上
-- 不用 Docker。靠 systemd + apt（適合 Proxmox LXC / 裸機）
-- 強制 HTTPS（`BACKEND_TLS_MODE=nginx` 反代 或 `direct` uvicorn 自簽）
+- **Prod**: `192.168.1.144` (ipam2 LXC)。所有改檔/重啟都 `ssh root@192.168.1.144`；prod 用 rsync 部署（見下方部署流程），**不是 git pull**
+- 本機（log4 / 132）`/opt/jt-ipam` 是 dev；本機改檔不影響線上，要 rsync 過去才生效。**注意本機同時裝了 Docker**（FORWARD policy DROP，會擋 LXD 容器對外）
+- 不用 Docker 部署。靠 systemd + apt（適合 Proxmox LXC / 裸機）
+- 強制 HTTPS（`BACKEND_TLS_MODE=nginx` 反代 / `direct` uvicorn 自簽 / `self-signed` uvicorn 自動產自簽）
+- **對外安裝/升級走統一腳本 `scripts/jt-ipam.sh`**（`install` / `upgrade` / `uninstall`）；`scripts/install-debian.sh` 是相容 shim 轉呼叫它。一行式 bootstrap：`curl -fsSL .../scripts/bootstrap.sh | sudo bash`（自動 clone 到 /opt/jt-ipam 再跑 install）。`upgrade` 內含 git pull→備份→pip→alembic→build→restart；`uninstall` 永不刪原始碼（`--purge` 才連 DB/設定一起刪）
 
 ## Stack
 
@@ -39,16 +40,17 @@
 
 ```
 backend/app/
-├── api/v1/endpoints/   # FastAPI routes（addresses / sections / subnets / devices / customers / nat / oui / system_settings ...）
+├── api/v1/endpoints/   # FastAPI routes（addresses / sections / subnets / devices / customers / nat / oui / firewall / dns / librenms / wazuh / virt / topology / advanced / physical / sso / migration / preferences / system_settings ...）
 ├── api/v1/router.py    # router mount
+├── cli/                # bootstrap.py（create-admin --password-stdin）
 ├── core/               # db / audit / config / safe_http / encrypted_secret
 ├── models/             # SQLAlchemy 2.0 ORM
-├── schemas/            # Pydantic v2
-├── services/           # ai / oui / opnsense_firewall / phpipam_migration / topology / search
-├── mcp/                # MCP server + tools（LLM 用）
+├── schemas/            # Pydantic v2（StrictModel extra=forbid）
+├── services/           # ai / anomaly / oui / opnsense_firewall / phpipam_migration / topology / search / librenms / ssh_tunnel / saml / system_config
+├── mcp/                # MCP server + tools（LLM 用；stdio + Streamable HTTP）
 └── plugins/            # 插件系統
 
-alembic/versions/       # 0001 ~ 0026 migrations
+alembic/versions/       # 0001 ~ 0066 migrations（最新 0066 device_power_ports）
 ```
 
 ```
@@ -67,10 +69,14 @@ frontend/src/
 ## 關鍵 entities
 
 - **Section** (區段) → **Subnet** (子網路) → **IPAddress** (IP 位址)
-- **Device** (裝置)、**Rack** (機櫃)、**Location** (地點)
-- **Customer** (客戶 / 管理單位) — 2026-05 新增，掛 sections/subnets/devices/IPs
+- **Device** (裝置)、**Rack** (機櫃，支援半 U / 正背面 rack_face)、**Location** (地點＝機房)
+- **Customer** (客戶 / 管理單位)，掛 sections/subnets/devices/IPs
 - **OPNsenseFirewall** + alias mappings + rules + NAT
 - **OUIVendor** — IEEE MAC 廠商 lookup（Wireshark manuf 每月排程更新）
+- **DevicePort / Cable** — 裝置間佈線與 Cable Trace（多跳穿透，bridge→NIC→外部裝置）
+- **DevicePowerPort → PowerOutlet** — NetBox 風電源埠↔插座建模（migration 0066）
+- **進階資源**（advanced.py，全域基礎設施）：VLAN / VRF / ASN / Tenant / Provider / Circuit（含頻寬）/ Contact / SSID — 皆可 CRUD 編輯
+- **SSO**：`OidcConfig` / `SamlConfig`（env 預設 + DB override，AES-GCM 加密 secret）；另有 LDAP 管理頁
 
 ## 部署流程
 
@@ -86,10 +92,13 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/backend; \
 
 ssh root@192.168.1.144 'systemctl restart jt-ipam-backend'
 
-# 前端 build
+# 前端 build（⚠️ 必須先 cd frontend，或用 npm --prefix；漏了會 build 錯目錄）
 rsync -az /opt/jt-ipam/frontend/src/ root@192.168.1.144:/opt/jt-ipam/frontend/src/
 ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
+# 或：ssh root@192.168.1.144 'npm --prefix /opt/jt-ipam/frontend run build'
 ```
+
+> 部署前可先 `rsync -azn --checksum` dry-run 比對本機與 prod，確認真的有差異再推（避免無謂重啟線上服務）。rsync 一律從 `/opt/jt-ipam` 根目錄跑。docs/*.md 不在部署流程內（屬 GitHub Pages，不影響 prod 運作）。
 
 ## 常見背景作業
 
@@ -104,10 +113,12 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
 
 ## 已知地雷
 
-1. **prod DB 是 SQL_ASCII** — engine 設了 `json_serializer=ensure_ascii=False` 繞過。要根治 → 排 maintenance：`pg_dump → drop → createdb -E UTF8 → restore`
+1. **長壽 SPA 分頁跑舊 JS bundle** — 多次「存檔沒生效 / 功能怪怪的」真因都是舊 bundle，不是後端。已用 `dist/version.json` + `useVersionCheck` 自動提示重載解掉根因；遇到先請使用者 hard refresh，再查後端。
 2. **pytest filterwarnings=error 必須 ignore anyio DeprecationWarning** — 否則 ASGI 測試會 hang 在 CancelScope._deliver_cancellation
-3. **避免把 phpIPAM 的缺點搬過來** — phpIPAM 的 description-only 搜尋、JSONB blob 等都別照抄
-4. **Phase 4 範圍縮減** — 不做 Zimbra/Odoo/Ansible/Terraform/HA；只做 MCP/LLM/Plugin
+3. **AuditLog.object_id 是 UUID** — `append_audit` 要帶 request_id；object_id 別塞非 UUID
+4. **避免把 phpIPAM 的缺點搬過來** — phpIPAM 的 description-only 搜尋、JSONB blob 等都別照抄
+5. **Phase 4 範圍縮減** — 不做 Zimbra/Odoo/Ansible/Terraform/HA；只做 MCP/LLM/Plugin
+6. ~~prod DB SQL_ASCII~~ — 已於 2026-05-31 轉 UTF8（舊庫 `jt_ipam_old_sqlascii` 留作安全網）
 
 ## 用詞慣例（繁中）
 
@@ -133,23 +144,29 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
 - `/api/v1/topology?include_l3=true` — L3 自動推導 device→subnet
 - `/api/v1/me/preferences` — 含 pinned_subnet_ids / table_columns / online_grace_minutes
 - `/api/v1/firewalls/opnsense` + alias mappings + rules
+- 進階資源：`/api/v1/vlans` `/vrfs` `/asns` `/tenants` `/providers` `/circuits` `/contacts` `/ssids`（皆含 PATCH 編輯）
+- 佈線/電力：`/api/v1/cables` `/device-ports` `/cable-trace` `/power-*`
+- SSO 設定：`/api/v1/sso/oidc` `/sso/saml`（admin DB 設定）
+- 版本：`dist/version.json`（前端自動偵測新版提示重載）
 
 ## 升版規矩
 
-- **bump `frontend/package.json` version 前先跑 `TEST_CHECKLIST.md`**（pytest/tsc/build/migration up-down/手動點檢），綠了才升版。可跑 `scripts/ci.sh` 當本地 CI。
+- **升版要同時改兩個檔**：`frontend/package.json` 的 `version` + `backend/app/version.py`，務必一致。
+- **bump version 前先跑 `TEST_CHECKLIST.md`**（pytest/tsc/build/migration up-down/手動點檢），綠了才升版。可跑 `scripts/ci.sh` 當本地 CI。
+- 每次升版實際過一次安裝（全新）+ 升級（舊版升）流程，已整合成單一 `scripts/jt-ipam.sh`（install/upgrade/uninstall）。
+- commit/push 訊息**一律英文**；程式註解 / UI 文案仍繁中。
 
-## 狀態（截至 2026-05-31，v0.4.x）
+## 狀態（截至 2026-06-06，v0.4.79）
 
-已完成（原「沒做完的」清單全清）：
-- i18n：欄位標籤 + toast/placeholder/template 文字皆改 `t()`；Tools OUI tab 也做了
-- 後端 pytest 126 綠（對拋棄式 UTF8 test DB 跑）
-- `UserPreference.dashboard_layout`/`default_section_id` 死 code 已移除（migration 0045）
-- CSV import 改背景作業（`ip.csv_import`，上限 16 MB）
-- **prod DB 已從 SQL_ASCII 轉成 UTF8**（2026-05-31，dry-run 驗過才換；舊庫留 `jt_ipam_old_sqlascii` 當安全網，確認後可 drop）
-- 機房平面圖：上傳底圖 + 拖拉定位 + zoom/pan + 機櫃方框(按 U)/旋轉
-- VPN 對接偵測：WireGuard（公鑰，可靠）/ IPsec（端點比對，best-effort）
+已公開發布於 GitHub（Apache-2.0），install/upgrade SOP 已在乾淨 Ubuntu 24.04 容器端到端驗證通過。近期重點完成：
+- **RBAC 全面收斂**：require_global_read / has_global_read / can_edit；列表/詳情/搜尋/儀表板彙總/計數/趨勢全部依可見性縮放；按鈕依能力反灰。相關 [[project_rbac_ai_topology_leak]]
+- **AI / MCP**：100 題實測修一輪、cursor 分頁與「下一批」續抓、異動需確認 gate、工具清單依權限過濾
+- **物理層**：機櫃半 U / 正背面、裝置詳情機櫃圖、平面圖拖曳貼齊與任意角度、電源埠↔插座（0066）、Cable Trace（多跳穿透）
+- **整合**：OIDC/SAML SSO 後端 DB 化 + webui、LDAP 管理頁、Graylog DSV、Proxmox 網路介面（bridge/bond/NIC）
+- **UX**：通用表格欄位選擇 + 多格式匯出（含零相依 .ods/.odt、xlsx、PDF）、版本自動偵測重載、登入整頁載入
+- **CI**：`scripts/ci.sh` 收綠（eslint flat config / ruff / bandit + defusedxml）；仍無 GitHub Actions，靠本地 CI + TEST_CHECKLIST 手動把關
 
 仍可加強（nice-to-have）：
+- LibreNMS LLDP/CDP 鄰居連線同步、WiFi SSID 撈取：暫無資料源，擱置（#213 / #226）
 - IPsec 對接無加密身分，只能靠端點精準命中；WireGuard 才是可靠配對
-- 機房平面圖機櫃尚未做「真實腳印按比例 / 任意角度」（目前 0/90/180/270）
-- 沒有自動化 CI（GitHub Actions 等）；靠 `scripts/ci.sh` + TEST_CHECKLIST 手動把關
+- GitHub default branch 有 2 個 critical Dependabot 警示待評估

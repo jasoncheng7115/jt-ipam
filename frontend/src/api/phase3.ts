@@ -51,6 +51,7 @@ export interface ScanAgent {
   enabled: boolean;
   has_key: boolean;
   agent_version: string | null;
+  last_source_ip: string | null;
   subnet_count: number;
   last_seen_at: string | null;
   last_error: string | null;
@@ -276,7 +277,7 @@ export interface TenantGroup { id: string; name: string; description: string | n
 export interface ASN { id: string; number: number; rir: string | null; description: string | null; tenant_id: string | null; created_at: string; updated_at: string; }
 export interface Provider { id: string; name: string; asn: number | null; account_number: string | null; portal_url: string | null; noc_contact: string | null; description: string | null; }
 export interface CircuitType { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
-export interface Circuit { id: string; cid: string; provider_id: string; type_id: string; status: string; monthly_fee_cents: number | null; commit_rate_kbps: number | null; up_kbps: number | null; down_kbps: number | null; install_date: string | null; contract_end_date: string | null; description: string | null; created_at: string; updated_at: string; }
+export interface Circuit { id: string; cid: string; provider_id: string; type_id: string; status: string; monthly_fee_cents: number | null; commit_rate_kbps: number | null; up_kbps: number | null; down_kbps: number | null; install_date: string | null; contract_end_date: string | null; ip_address: string | null; gateway: string | null; netmask: string | null; dns_servers: string | null; device_id: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface ContactGroup { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface ContactRole { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface Contact { id: string; name: string; email: string | null; phone: string | null; group_id: string | null; description: string | null; created_at: string; updated_at: string; }

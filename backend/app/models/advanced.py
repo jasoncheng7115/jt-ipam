@@ -188,6 +188,17 @@ class Circuit(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # 非對稱頻寬（上傳 / 下載），單位 kbps
     up_kbps: Mapped[int | None] = mapped_column(Integer)
     down_kbps: Mapped[int | None] = mapped_column(Integer)
+    # 固定 IP 電路的網路資訊（選填）
+    ip_address: Mapped[str | None] = mapped_column(String(64))
+    gateway: Mapped[str | None] = mapped_column(String(64))
+    netmask: Mapped[str | None] = mapped_column(String(64))
+    dns_servers: Mapped[str | None] = mapped_column(Text)
+    # 此電路接到哪台裝置（如防火牆 / 路由器 WAN）
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="SET NULL"),
+        index=True,
+    )
     description: Mapped[str | None] = mapped_column(Text)
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

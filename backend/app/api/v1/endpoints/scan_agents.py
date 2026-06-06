@@ -67,6 +67,7 @@ class ScanAgentRead(StrictModel):
     enabled: bool
     has_key: bool = False
     agent_version: str | None = None
+    last_source_ip: str | None = None
     subnet_count: int = 0
     last_seen_at: Any
     last_error: str | None
@@ -322,6 +323,7 @@ class AgentPollOut(StrictModel):
 
 @router.get("/poll", response_model=AgentPollOut)
 async def agent_poll(
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     x_agent_key: Annotated[str | None, Header()] = None,
     x_agent_version: Annotated[str | None, Header()] = None,
@@ -329,6 +331,10 @@ async def agent_poll(
     """Agent 主動拉取「要掃哪些網段」。回傳指派給此 agent 且啟用掃描的子網路。"""
     agent = await _agent_from_key(session, x_agent_key)
     agent.last_seen_at = datetime.now(UTC)
+    # 記錄 agent 連上來的來源 IP（走 nginx 反代要取 X-Forwarded-For 的第一個）
+    _xff = request.headers.get("x-forwarded-for")
+    agent.last_source_ip = (_xff.split(",")[0].strip() if _xff
+                            else (request.client.host if request.client else None))
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
     rows = (await session.execute(

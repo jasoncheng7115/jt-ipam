@@ -4,13 +4,13 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NSpace, NIcon, NButton, NDescriptions, NDescriptionsItem,
-  NTag, NDataTable, NSpin, NTooltip,
+  NTag, NDataTable, NSpin, NTooltip, NModal, NSelect,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
-import { DevicesIcon, RefreshIcon, EditIcon, TopologyIcon, AddressesIcon, LibreNMSIcon, WazuhIcon, VirtualizationIcon, SubnetsIcon } from "@/icons";
+import { DevicesIcon, RefreshIcon, EditIcon, TopologyIcon, AddressesIcon, LibreNMSIcon, WazuhIcon, VirtualizationIcon, SubnetsIcon, LinkIcon } from "@/icons";
 import { apiClient } from "@/api/client";
-import { listAddresses } from "@/api/addresses";
+import { listAddresses, updateAddress } from "@/api/addresses";
 import { listLocations, listRacks, getDeviceVlans, getDeviceLibrenms, type Device, type Location, type Rack, type DeviceVLAN, type DeviceLibreNMS } from "@/api/basic";
 import { getDeviceRelations, type RelationNode } from "@/api/relations";
 import RelationChain from "@/components/RelationChain.vue";
@@ -67,6 +67,35 @@ const location = ref<Location | null>(null);
 const rack = ref<Rack | null>(null);
 const rackDiagram = ref<RackDiagramData | null>(null);
 const addresses = ref<IPAddress[]>([]);
+
+// 新增 IP 對應：把一個現有 IP 指派給本裝置（一個裝置可多 IP）
+const showLinkIp = ref(false);
+const linkIpId = ref<string | null>(null);
+const linkCandidates = ref<IPAddress[]>([]);
+const linking = ref(false);
+const linkOptions = computed(() => linkCandidates.value.map((a) => ({
+  label: `${a.ip}${a.hostname ? " — " + a.hostname : ""}`, value: a.id,
+})));
+async function openLinkIp() {
+  if (!device.value) return;
+  linkIpId.value = null;
+  try {
+    const r = await listAddresses({ page: 1, pageSize: 2000 });
+    linkCandidates.value = r.items.filter((a) => (a as any).device_id !== device.value!.id);
+  } catch { msg.error(t("errors.network")); return; }
+  showLinkIp.value = true;
+}
+async function doLinkIp() {
+  if (!linkIpId.value || !device.value) return;
+  linking.value = true;
+  try {
+    await updateAddress(linkIpId.value, { device_id: device.value.id });
+    msg.success(t("common.ok"));
+    showLinkIp.value = false;
+    await load(device.value.id);
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.network")); }
+  finally { linking.value = false; }
+}
 const vlans = ref<DeviceVLAN[]>([]);
 const lnms = ref<DeviceLibreNMS | null>(null);
 const integrations = ref<{ wazuh: any; vm: any } | null>(null);
@@ -288,6 +317,10 @@ onMounted(() => {
       <n-card v-if="device" :title="() => cardHead(AddressesIcon, `${t('addresses.ip_list_title')} (${addresses.length})`)">
         <template #header-extra>
           <n-space>
+            <n-button size="small" type="primary" @click="openLinkIp">
+              <template #icon><n-icon><LinkIcon /></n-icon></template>
+              {{ t("devices.link_ip") }}
+            </n-button>
             <ColumnPicker size="small" :all="ipColumnPickerItems" :visible="ipVisibleKeys"
                           @update:visible="setIpVisible" @reset="resetIpVisible" />
             <n-button size="small" @click="load(device.id)" :loading="loading">
@@ -313,6 +346,20 @@ onMounted(() => {
           </template>
         </n-data-table>
       </n-card>
+
+      <n-modal v-model:show="showLinkIp" preset="card" :title="t('devices.link_ip')" style="width: 480px">
+        <n-space vertical :size="12">
+          <span style="font-size: 13px; opacity: .75">{{ t("devices.link_ip_hint") }}</span>
+          <n-select v-model:value="linkIpId" :options="linkOptions" filterable clearable
+                    :placeholder="t('devices.link_ip_ph')" />
+          <n-space justify="end">
+            <n-button @click="showLinkIp = false">{{ t("common.cancel") }}</n-button>
+            <n-button type="success" :loading="linking" :disabled="!linkIpId" @click="doLinkIp">
+              {{ t("common.ok") }}
+            </n-button>
+          </n-space>
+        </n-space>
+      </n-modal>
 
       <n-card v-if="device && lnms" :title="() => cardHead(LibreNMSIcon, 'LibreNMS')">
         <n-descriptions bordered :column="2" size="small" label-placement="left"
