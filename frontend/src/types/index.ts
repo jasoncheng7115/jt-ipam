@@ -89,6 +89,11 @@ export interface IPAddress {
   device_id: string | null;
   switch_port: string | null;
   exclude_from_ping: boolean;
+  excluded_probes: string[];
+  os_guess: string | null;
+  os_family: string | null;
+  probe_last_run: Record<string, string> | null;
+  effective_probes: string[] | null;
   ptr_ignore: boolean;
   note: string | null;
   customer_id: string | null;

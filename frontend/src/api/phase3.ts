@@ -52,6 +52,9 @@ export interface ScanAgent {
   has_key: boolean;
   agent_version: string | null;
   last_source_ip: string | null;
+  enabled_probes: string[];
+  probe_intervals: Record<string, number> | null;
+  available_probes: string[] | null;
   subnet_count: number;
   last_seen_at: string | null;
   last_error: string | null;
@@ -69,6 +72,7 @@ export async function listScanAgents(): Promise<Paginated<ScanAgent>> {
 }
 export async function createScanAgent(p: {
   name: string; description?: string; enabled?: boolean;
+  enabled_probes?: string[]; probe_intervals?: Record<string, number>;
 }): Promise<ScanAgentCreated> {
   const { data } = await apiClient.post<ScanAgentCreated>("/api/v1/scan-agents", p);
   return data;
@@ -79,6 +83,7 @@ export async function rotateScanAgentKey(id: string): Promise<ScanAgentCreated> 
 }
 export async function updateScanAgent(id: string, p: Partial<{
   description: string; enabled: boolean;
+  enabled_probes: string[]; probe_intervals: Record<string, number>;
 }>): Promise<ScanAgent> {
   const { data } = await apiClient.patch<ScanAgent>(`/api/v1/scan-agents/${id}`, p);
   return data;

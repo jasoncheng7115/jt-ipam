@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSwitch, NPopconfirm, NTag, NInputGroup, NAlert, NSelect, NTooltip,
+  NCheckbox, NCheckboxGroup, NInputNumber,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
@@ -17,11 +18,13 @@ import {
   type ScanAgent,
 } from "@/api/phase3";
 import { listSubnets } from "@/api/subnets";
+import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const { catalog } = useScanProbes();
 
 const { visibleKeys: saVis, setVisible: saSet, reset: saReset } = useColumnPrefs(
   "scan_agents",
@@ -49,6 +52,31 @@ const show = ref(false);
 const showHelp = ref(false);
 const editing = ref<ScanAgent | null>(null);
 const form = ref({ name: "", description: "", enabled: true, subnet_ids: [] as string[] });
+// 每代理探測設定
+const enabledProbes = ref<string[]>([]);
+const probeIntervals = ref<Record<string, number>>({});
+// 取目前可用探測清單（編輯且有回報 available_probes 時用以反灰）
+const availProbes = computed<string[] | null>(() => editing.value?.available_probes ?? null);
+function probeAvailable(key: string): boolean {
+  return availProbes.value === null || availProbes.value.includes(key);
+}
+// 已勾選的重型探測（需顯示間隔輸入）
+const heavyChecked = computed(() =>
+  catalog.value.probes.filter(
+    (p) => p.klass === "heavy" && enabledProbes.value.includes(p.key),
+  ),
+);
+// 確保某重型探測的間隔有預設值（勾選時補上）
+function ensureInterval(key: string) {
+  const p = catalog.value.probes.find((x) => x.key === key);
+  if (p && probeIntervals.value[key] == null) {
+    probeIntervals.value[key] = p.default_interval_seconds;
+  }
+}
+function onProbesChange(vals: (string | number)[]) {
+  enabledProbes.value = vals.map((v) => String(v));
+  enabledProbes.value.forEach(ensureInterval);
+}
 const subnetOpts = ref<{ label: string; value: string }[]>([]);
 async function loadSubnetOpts() {
   try {
@@ -79,15 +107,30 @@ async function refresh() {
 function openCreate() {
   editing.value = null;
   form.value = { name: "", description: "", enabled: true, subnet_ids: [] };
+  enabledProbes.value = ["icmp"];
+  probeIntervals.value = {};
+  enabledProbes.value.forEach(ensureInterval);
   void loadSubnetOpts();
   show.value = true;
 }
 function openEdit(r: ScanAgent) {
   editing.value = r;
   form.value = { name: r.name, description: r.description ?? "", enabled: r.enabled, subnet_ids: [] };
+  enabledProbes.value = [...(r.enabled_probes ?? [])];
+  probeIntervals.value = { ...(r.probe_intervals ?? {}) };
+  enabledProbes.value.forEach(ensureInterval);
   void loadSubnetOpts();
   void getAgentSubnets(r.id).then((ids) => { form.value.subnet_ids = ids; }).catch(() => {});
   show.value = true;
+}
+// 只送出已勾選的重型探測間隔（輕型走預設，不送）
+function buildProbeIntervals(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of heavyChecked.value) {
+    const v = probeIntervals.value[p.key];
+    out[p.key] = v != null ? v : p.default_interval_seconds;
+  }
+  return out;
 }
 async function submit() {
   try {
@@ -95,6 +138,8 @@ async function submit() {
       await updateScanAgent(editing.value.id, {
         description: form.value.description || undefined,
         enabled: form.value.enabled,
+        enabled_probes: enabledProbes.value,
+        probe_intervals: buildProbeIntervals(),
       });
       await setAgentSubnets(editing.value.id, form.value.subnet_ids);
       show.value = false;
@@ -103,6 +148,8 @@ async function submit() {
         name: form.value.name,
         description: form.value.description || undefined,
         enabled: form.value.enabled,
+        enabled_probes: enabledProbes.value,
+        probe_intervals: buildProbeIntervals(),
       });
       show.value = false;
       revealedKey.value = created.enroll_key;
@@ -237,6 +284,47 @@ onMounted(() => { void refresh(); });
                     multiple filterable clearable
                     :placeholder="t('scanAgentHelp.assign_subnets_ph')" />
         </n-form-item>
+        <n-form-item :label="t('scan_probes.agent_probes')">
+          <n-space vertical size="small" style="width: 100%">
+            <span class="probe-hint">{{ t("scan_probes.agent_probes_hint") }}</span>
+            <n-checkbox-group :value="enabledProbes" @update:value="onProbesChange">
+              <n-space vertical size="small">
+                <div v-for="p in catalog.probes" :key="p.key" class="probe-row">
+                  <n-tooltip v-if="!probeAvailable(p.key)" trigger="hover">
+                    <template #trigger>
+                      <n-checkbox :value="p.key" disabled>
+                        {{ probeLabel(p, locale) }}
+                      </n-checkbox>
+                    </template>
+                    {{ t("scan_probes.unavailable") }}
+                  </n-tooltip>
+                  <n-checkbox v-else :value="p.key">
+                    {{ probeLabel(p, locale) }}
+                  </n-checkbox>
+                  <n-tooltip v-if="p.intrusive" trigger="hover">
+                    <template #trigger>
+                      <n-tag size="small" type="warning" :bordered="false" round>
+                        {{ t("scan_probes.intrusive") }}
+                      </n-tag>
+                    </template>
+                    {{ t("scan_probes.intrusive_warn") }}
+                  </n-tooltip>
+                </div>
+              </n-space>
+            </n-checkbox-group>
+          </n-space>
+        </n-form-item>
+        <n-form-item
+          v-for="p in heavyChecked" :key="p.key"
+          :label="`${probeLabel(p, locale)} — ${t('scan_probes.interval')}`"
+        >
+          <n-input-number
+            v-model:value="probeIntervals[p.key]"
+            :min="p.min_interval_seconds"
+            :placeholder="String(p.default_interval_seconds)"
+            style="width: 100%"
+          />
+        </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
@@ -360,4 +448,6 @@ onMounted(() => { void refresh(); });
   word-break: break-all;
 }
 .agent-help .paths-note { margin-top: 8px; font-size: 12px; opacity: .6; }
+.probe-hint { font-size: 12px; opacity: .65; line-height: 1.5; }
+.probe-row { display: flex; align-items: center; gap: 6px; }
 </style>

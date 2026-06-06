@@ -40,10 +40,17 @@ def test_invalid_cidr():
         SubnetCreate(**_payload(cidr="not-a-cidr"))
 
 
-@pytest.mark.parametrize("methods", [["icmp"], ["icmp", "snmp"], ["nmap"]])
+@pytest.mark.parametrize("methods", [["icmp"], ["icmp", "snmp"], ["icmp", "tcp", "os"]])
 def test_valid_scan_methods(methods: list[str]):
+    # normalize_probes 會依目錄順序回傳；參數已用目錄順序，故為原樣
     obj = SubnetCreate(**_payload(scan_method=methods))
     assert obj.scan_method == methods
+
+
+def test_legacy_nmap_alias_normalized_to_os():
+    # 舊詞彙 nmap → 正規化成 os（拆 os/ports 後的對應）
+    obj = SubnetCreate(**_payload(scan_method=["nmap"]))
+    assert obj.scan_method == ["os"]
 
 
 def test_invalid_scan_method():

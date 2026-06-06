@@ -3,18 +3,25 @@
 
 Runs inside the target network segment and connects OUT to the jt-ipam server:
   1. GET  {SERVER}/api/v1/scan-agents/poll    -> subnets to scan (+ server agent sha)
-  2. ICMP ping sweep each subnet, fill MAC from the local ARP table
+  2. Run the requested probes per subnet (icmp / tcp / arp / rdns / os / ports ...)
   3. POST {SERVER}/api/v1/scan-agents/report  -> send results back
 
 Auth: every request carries header  X-Agent-Key: <enrollment key>  (server compares sha256).
 
+Capability self-report: each poll also carries header  X-Agent-Probes  listing the
+probe keys this host can actually perform (depends on tools/permissions available).
+
 Auto-update: each poll returns the server's agent.py sha256. If it differs from this
 running copy, the agent downloads the new agent.py, overwrites itself and re-executes.
+
+排程（重點）：輕量探測（icmp/tcp/arp/rdns）跟著 fast loop（interval_seconds）每輪跑；
+重量探測（os/ports，可能上 nmap）只在距離上次執行超過 intervals[probe] 秒時才跑。
+每個探測的「上次執行時間」存在記憶體裡，依此節流。
 
 Environment variables:
   JT_IPAM_URL        e.g. https://192.0.2.10      (required)
   JT_IPAM_AGENT_KEY  enrollment key from the agent page (required)
-  JT_IPAM_INTERVAL   seconds between rounds, default 300
+  JT_IPAM_INTERVAL   fallback fast-loop seconds if server omits interval_seconds, default 300
   JT_IPAM_INSECURE   =1 to skip TLS verification (self-signed server)
   JT_IPAM_MAX_HOSTS  max hosts scanned per subnet, default 1024 (avoid huge /16)
   JT_IPAM_AUTO_UPDATE =0 to disable self-update (default on)
@@ -27,13 +34,15 @@ import ipaddress
 import json
 import os
 import re
+import shutil
+import socket
 import ssl
 import subprocess
 import sys
 import time
 import urllib.request
 
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INTERVAL = int(os.environ.get("JT_IPAM_INTERVAL", "300"))
@@ -42,6 +51,21 @@ MAX_HOSTS = int(os.environ.get("JT_IPAM_MAX_HOSTS", "1024"))
 AUTO_UPDATE = os.environ.get("JT_IPAM_AUTO_UPDATE", "1") not in ("0", "false", "no")
 PING_WORKERS = 128
 AGENT_PATH = os.path.realpath(__file__)
+
+# 所有已知探測鍵；server 沒指定 probes 時，向下相容用 icmp。
+ALL_PROBES = ("icmp", "tcp", "arp", "rdns", "snmp", "netbios", "mdns", "os", "ports")
+DEFAULT_PROBES = ("icmp",)
+
+# tcp 探測掃的常見埠（也作為 alive 判定依據）
+TCP_PROBE_PORTS = (22, 80, 443, 445, 3389, 8006)
+TCP_PROBE_TIMEOUT = 1.0
+
+# 每個探測在記憶體裡的「上次執行時間」：key = (subnet_id, probe) -> epoch seconds。
+# 用 subnet 粒度節流（同一輪同子網的所有 host 一起跑某探測或一起跳過）。
+_last_run: dict[tuple, float] = {}
+
+# scan_once 把 server 回的 fast loop 寫在這，給 main 的 sleep 用（單元素 list 當可變參照）。
+_CURRENT_FAST: list[int] = [0]
 
 
 def _ctx() -> ssl.SSLContext | None:
@@ -54,12 +78,42 @@ def _ctx() -> ssl.SSLContext | None:
     return ctx
 
 
-def _req(method: str, path: str, body: dict | None = None) -> dict:
+def _capabilities() -> list[str]:
+    """回報本機實際能做的探測（送 X-Agent-Probes header 給 server）。
+
+    icmp/tcp/rdns 一律支援；arp 需 neigh 表可讀；os/ports 需 PATH 上有 nmap；
+    snmp/netbios/mdns 需對應工具/函式庫，沒有就略過（Phase B）。
+    """
+    caps = ["icmp", "tcp", "rdns"]
+    try:
+        if _arp_table():
+            caps.append("arp")
+    except Exception:
+        pass
+    if shutil.which("nmap"):
+        caps.extend(["os", "ports"])
+    # snmp / netbios / mdns 目前無內建工具支援；偵測到再加入。
+    if shutil.which("snmpget") or shutil.which("snmpwalk"):
+        caps.append("snmp")
+    if shutil.which("nmblookup") or shutil.which("nbtscan"):
+        caps.append("netbios")
+    if shutil.which("avahi-resolve") or shutil.which("dns-sd"):
+        caps.append("mdns")
+    # 去重並維持 ALL_PROBES 順序
+    seen = set(caps)
+    return [p for p in ALL_PROBES if p in seen]
+
+
+def _req(method: str, path: str, body: dict | None = None,
+         extra_headers: dict | None = None) -> dict:
     url = f"{SERVER}{path}"
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("X-Agent-Key", KEY)
     req.add_header("X-Agent-Version", AGENT_VERSION)
+    if extra_headers:
+        for k, v in extra_headers.items():
+            req.add_header(k, v)
     if data is not None:
         req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=30, context=_ctx()) as resp:
@@ -105,7 +159,12 @@ def _maybe_self_update(server_sha: str | None) -> None:
         print(f"[update] failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
 
 
+# --------------------------------------------------------------------------- #
+# 探測實作（每個都必須對單一 host 的失敗保持容忍，絕不可讓 loop 崩掉）           #
+# --------------------------------------------------------------------------- #
+
 def _ping(ip: str) -> bool:
+    """icmp 探測：回 True 表示有回應。"""
     try:
         r = subprocess.run(
             ["ping", "-c", "1", "-W", "1", ip],
@@ -114,6 +173,27 @@ def _ping(ip: str) -> bool:
         return r.returncode == 0
     except Exception:
         return False
+
+
+def _tcp_scan(ip: str) -> list[int]:
+    """tcp 探測：嘗試連線常見埠，回傳成功連上的埠清單。"""
+    open_ports: list[int] = []
+    for port in TCP_PROBE_PORTS:
+        try:
+            with socket.create_connection((ip, port), timeout=TCP_PROBE_TIMEOUT):
+                open_ports.append(port)
+        except Exception:
+            continue
+    return open_ports
+
+
+def _rdns(ip: str) -> str | None:
+    """rdns 探測：反查 hostname。"""
+    try:
+        host, _, _ = socket.gethostbyaddr(ip)
+        return host or None
+    except Exception:
+        return None
 
 
 _ARP_RE = re.compile(r"^(\d+\.\d+\.\d+\.\d+)\s+\S+\s+\S+\s+([0-9a-f:]{17})", re.I)
@@ -142,6 +222,48 @@ def _arp_table() -> dict[str, str]:
     return out
 
 
+def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
+    """os / ports 重量探測：有 nmap 才跑，回 {os_guess?, open_ports?}。
+
+    os 偵測需 root（-O），失敗就只回 ports；任何錯誤都回空 dict（略過）。
+    """
+    result: dict = {}
+    if not shutil.which("nmap"):
+        return result
+    args = ["nmap", "-Pn", "-T4", "--host-timeout", "30s"]
+    if want_ports:
+        args += ["--top-ports", "100"]
+    else:
+        args += ["-p", ",".join(str(p) for p in TCP_PROBE_PORTS)]
+    if want_os:
+        args.append("-O")
+    args.append(ip)
+    try:
+        r = subprocess.run(
+            args, capture_output=True, text=True, timeout=60,
+        )
+        text = r.stdout or ""
+        if want_ports:
+            ports: list[int] = []
+            for line in text.splitlines():
+                m = re.match(r"^(\d+)/tcp\s+open", line.strip())
+                if m:
+                    ports.append(int(m.group(1)))
+            if ports:
+                result["open_ports"] = ports
+        if want_os:
+            m = re.search(r"OS details:\s*(.+)", text)
+            if not m:
+                m = re.search(r"Running:\s*(.+)", text)
+            if not m:
+                m = re.search(r"OS guesses:\s*(.+)", text)
+            if m:
+                result["os_guess"] = m.group(1).strip()[:200]
+    except Exception:
+        return {}
+    return result
+
+
 def _hosts(cidr: str) -> list[str]:
     net = ipaddress.ip_network(cidr, strict=False)
     if not isinstance(net, ipaddress.IPv4Network):
@@ -153,31 +275,154 @@ def _hosts(cidr: str) -> list[str]:
     return hosts
 
 
+def _due(subnet_id, probe: str, intervals: dict, fast: int, now: float) -> bool:
+    """這個探測本輪是否該對此子網執行（依 per-probe cadence 節流）。
+
+    輕量探測 cadence 預設等於 fast loop；重量探測（os/ports）用 intervals 指定的大週期。
+    第一次（沒有 last_run 記錄）一律執行。
+    """
+    cadence = int(intervals.get(probe, fast) or fast)
+    key = (subnet_id, probe)
+    last = _last_run.get(key)
+    if last is None:
+        return True
+    return (now - last) >= cadence
+
+
 def scan_once() -> None:
-    poll = _req("GET", "/api/v1/scan-agents/poll")
+    caps = _capabilities()
+    poll = _req("GET", "/api/v1/scan-agents/poll",
+                extra_headers={"X-Agent-Probes": ",".join(caps)})
     _maybe_self_update(poll.get("agent_sha"))
     subnets = poll.get("subnets") or []
-    print(f"[poll] agent={poll.get('agent')} subnets={len(subnets)}", flush=True)
+    fast = int(poll.get("interval_seconds") or INTERVAL)
+    _CURRENT_FAST[0] = fast  # 給 main 的 sleep 用
+    intervals = poll.get("intervals") or {}
+    ip_overrides = poll.get("ip_overrides") or {}
+    print(f"[poll] agent={poll.get('agent')} subnets={len(subnets)} "
+          f"fast={fast}s caps={','.join(caps)}", flush=True)
+
+    cap_set = set(caps)
+    now = time.time()
     results: list[dict] = []
+
     for s in subnets:
         cidr = s.get("cidr")
         if not cidr:
             continue
+        subnet_id = s.get("subnet_id")
+        # server 要求的探測；缺/空 -> 向下相容用 icmp。再交集本機能力。
+        requested = s.get("probes") or list(DEFAULT_PROBES)
+        requested = [p for p in requested if p in ALL_PROBES]
+        if not requested:
+            requested = list(DEFAULT_PROBES)
+        # 本輪實際對此子網要跑哪些探測（能力 ∩ 請求 ∩ cadence-due）
+        due = [p for p in requested
+               if p in cap_set and _due(subnet_id, p, intervals, fast, now)]
+        # 標記這些探測本輪已跑（即使後面某 host 失敗，cadence 仍以本輪為準）
+        for p in due:
+            _last_run[(subnet_id, p)] = now
+
+        if not due:
+            print(f"  {cidr}: no probe due this cycle", flush=True)
+            continue
+
         hosts = _hosts(cidr)
-        alive: list[str] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=PING_WORKERS) as ex:
-            for ip, ok in zip(hosts, ex.map(_ping, hosts)):
-                if ok:
-                    alive.append(ip)
+        # arp 表用於 arp 探測，也順手在其他探測時補 mac。
         arp = _arp_table()
-        for ip in alive:
-            results.append({"ip": ip, "alive": True, "mac": arp.get(ip)})
-        print(f"  {cidr}: {len(alive)}/{len(hosts)} alive", flush=True)
+
+        # 先用 icmp/tcp/arp 判定哪些 host alive；其餘探測只對 alive host 跑。
+        icmp_alive: dict[str, bool] = {}
+        if "icmp" in due:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=PING_WORKERS) as ex:
+                for ip, ok in zip(hosts, ex.map(_ping, hosts)):
+                    icmp_alive[ip] = bool(ok)
+
+        tcp_ports: dict[str, list[int]] = {}
+        if "tcp" in due:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=PING_WORKERS) as ex:
+                for ip, ports in zip(hosts, ex.map(_tcp_scan, hosts)):
+                    if ports:
+                        tcp_ports[ip] = ports
+
+        # 整理每個 host 的本輪結果。
+        subnet_alive = 0
+        for ip in hosts:
+            # 套用 per-IP override：略過指定探測
+            skip = set(ip_overrides.get(ip) or [])
+            host_probes = [p for p in due if p not in skip]
+            if not host_probes:
+                continue
+
+            alive = False
+            item: dict = {"ip": ip}
+            probes_run: list[str] = []
+
+            if "icmp" in host_probes:
+                probes_run.append("icmp")
+                if icmp_alive.get(ip):
+                    alive = True
+
+            if "tcp" in host_probes:
+                probes_run.append("tcp")
+                ports = tcp_ports.get(ip) or []
+                if ports:
+                    alive = True
+                    item["open_ports"] = sorted(set(ports))
+
+            if "arp" in host_probes:
+                probes_run.append("arp")
+                mac = arp.get(ip)
+                if mac:
+                    item["mac"] = mac
+                    alive = True  # 在 neigh 表代表本子網有回應過
+            else:
+                # 即使沒跑 arp 探測，若 arp 表剛好有資料也順手補 mac
+                mac = arp.get(ip)
+                if mac:
+                    item["mac"] = mac
+
+            # rdns / 重量探測只對「目前判定 alive」的 host 跑，省資源。
+            if alive and "rdns" in host_probes:
+                probes_run.append("rdns")
+                rd = _rdns(ip)
+                if rd:
+                    item["rdns"] = rd
+
+            if alive and ("os" in host_probes or "ports" in host_probes):
+                want_os = "os" in host_probes
+                want_ports = "ports" in host_probes
+                np = _nmap_os_ports(ip, want_os, want_ports)
+                if want_os:
+                    probes_run.append("os")
+                if want_ports:
+                    probes_run.append("ports")
+                if np.get("os_guess"):
+                    item["os_guess"] = np["os_guess"]
+                if np.get("open_ports"):
+                    merged = set(item.get("open_ports") or []) | set(np["open_ports"])
+                    item["open_ports"] = sorted(merged)
+
+            # snmp / netbios / mdns 目前為 Phase B，能力清單未含時不會進到 due；
+            # 萬一進來也只記錄已嘗試但不產生欄位（graceful skip）。
+            for ph in ("snmp", "netbios", "mdns"):
+                if ph in host_probes:
+                    probes_run.append(ph)
+
+            if alive:
+                item["alive"] = True
+                item["probes_run"] = probes_run
+                results.append(item)
+                subnet_alive += 1
+
+        summary = "+".join(due)
+        print(f"  {cidr}: probes={summary} alive={subnet_alive}/{len(hosts)}", flush=True)
+
     if results:
         r = _req("POST", "/api/v1/scan-agents/report", {"results": results})
         print(f"[report] sent={len(results)} updated={r.get('updated')}", flush=True)
     else:
-        print("[report] nothing alive", flush=True)
+        print("[report] nothing to report", flush=True)
 
 
 def main() -> int:
@@ -185,14 +430,19 @@ def main() -> int:
         print("ERROR: JT_IPAM_URL and JT_IPAM_AGENT_KEY environment variables are required",
               file=sys.stderr)
         return 2
-    print(f"jt-ipam agent -> {SERVER}  interval={INTERVAL}s insecure={INSECURE} "
-          f"auto_update={AUTO_UPDATE}", flush=True)
+    print(f"jt-ipam agent v{AGENT_VERSION} -> {SERVER}  fallback_interval={INTERVAL}s "
+          f"insecure={INSECURE} auto_update={AUTO_UPDATE}", flush=True)
+    # fast loop 由 server 的 interval_seconds 決定；poll 失敗時退回 env INTERVAL。
+    sleep_for = INTERVAL
     while True:
         try:
             scan_once()
+            # scan_once 內已用 server 回的 interval_seconds；這裡再讀一次當下次 sleep。
         except Exception as exc:  # noqa: BLE001 — stay resilient, retry next round
             print(f"[error] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-        time.sleep(INTERVAL)
+        # 取最近一次 poll 拿到的 fast loop（存在模組層好讓 sleep 跟上）
+        sleep_for = _CURRENT_FAST[0] or INTERVAL
+        time.sleep(sleep_for)
 
 
 if __name__ == "__main__":

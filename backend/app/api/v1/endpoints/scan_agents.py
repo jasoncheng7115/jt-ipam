@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import CurrentUser, require_admin
+from app.core import scan_probes
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.address import IPAddress
@@ -48,15 +49,27 @@ async def download_agent() -> Any:
     return PlainTextResponse(p.read_text(), media_type="text/x-python")
 
 
+@router.get("/probes")
+async def list_probes(_user: CurrentUser) -> dict[str, Any]:
+    """探測項目目錄 + OS 家族（前端三處設定共用：代理 / 子網路 / IP）。
+    需登入即可（子網路 / IP 編輯者也要用），非僅 admin。"""
+    from app.core.os_fingerprint import families_for_api
+    return {"probes": scan_probes.catalog_for_api(), "os_families": families_for_api()}
+
+
 class ScanAgentCreate(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=128)]
     description: Annotated[str | None, Field(max_length=1024)] = None
     enabled: bool = True
+    enabled_probes: list[str] | None = None
+    probe_intervals: dict[str, int] | None = None
 
 
 class ScanAgentUpdate(StrictModel):
     description: Annotated[str | None, Field(max_length=1024)] = None
     enabled: bool | None = None
+    enabled_probes: list[str] | None = None
+    probe_intervals: dict[str, int] | None = None
 
 
 class ScanAgentRead(StrictModel):
@@ -68,6 +81,9 @@ class ScanAgentRead(StrictModel):
     has_key: bool = False
     agent_version: str | None = None
     last_source_ip: str | None = None
+    enabled_probes: list[str] = Field(default_factory=lambda: ["icmp"])
+    probe_intervals: dict[str, int] | None = None
+    available_probes: list[str] | None = None
     subnet_count: int = 0
     last_seen_at: Any
     last_error: str | None
@@ -152,6 +168,9 @@ async def create_agent(
         description=payload.description,
         enabled=payload.enabled,
         enroll_key_hash=_key_hash(raw_key),
+        enabled_probes=scan_probes.normalize_probes(payload.enabled_probes)
+        or list(scan_probes.DEFAULT_AGENT_PROBES),
+        probe_intervals=payload.probe_intervals or None,
     )
     session.add(obj)
     try:
@@ -220,6 +239,10 @@ async def update_agent(
         obj.description = payload.description
     if payload.enabled is not None:
         obj.enabled = payload.enabled
+    if payload.enabled_probes is not None:
+        obj.enabled_probes = scan_probes.normalize_probes(payload.enabled_probes) or ["icmp"]
+    if payload.probe_intervals is not None:
+        obj.probe_intervals = payload.probe_intervals or None
 
     await append_audit(
         session,
@@ -316,9 +339,14 @@ def _agent_sha() -> str:
 
 class AgentPollOut(StrictModel):
     agent: str
-    subnets: list[dict[str, Any]]   # [{subnet_id, cidr}]
-    interval_seconds: int = 300
+    # 每個子網路：{subnet_id, cidr, probes:[...]}（probes = 子網路要跑 ∩ 代理能力）
+    subnets: list[dict[str, Any]]
+    interval_seconds: int = 300          # 快迴圈節奏（相容舊欄位名）
+    intervals: dict[str, int] = Field(default_factory=dict)   # 各 probe 間隔（秒）
+    # 已知 IP 的逐項略過：{"<ip>": ["icmp", ...]}；代理對該 IP 扣掉這些 probe
+    ip_overrides: dict[str, list[str]] = Field(default_factory=dict)
     agent_sha: str = ""             # server 端 agent.py 的 sha256；不同→agent 自動更新
+    # 代理回報它裝得起哪些 probe（POST 也可，這裡讓 agent 用 query/header 帶回）
 
 
 @router.get("/poll", response_model=AgentPollOut)
@@ -327,8 +355,9 @@ async def agent_poll(
     session: Annotated[AsyncSession, Depends(get_session)],
     x_agent_key: Annotated[str | None, Header()] = None,
     x_agent_version: Annotated[str | None, Header()] = None,
+    x_agent_probes: Annotated[str | None, Header()] = None,
 ) -> AgentPollOut:
-    """Agent 主動拉取「要掃哪些網段」。回傳指派給此 agent 且啟用掃描的子網路。"""
+    """Agent 主動拉取「要掃哪些網段、各網段跑哪些探測、各探測間隔、逐 IP 略過」。"""
     agent = await _agent_from_key(session, x_agent_key)
     agent.last_seen_at = datetime.now(UTC)
     # 記錄 agent 連上來的來源 IP（走 nginx 反代要取 X-Forwarded-For 的第一個）
@@ -337,16 +366,47 @@ async def agent_poll(
                             else (request.client.host if request.client else None))
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
+    # 代理用 X-Agent-Probes 回報它「裝得起」哪些（逗號分隔）→ UI 反灰用
+    if x_agent_probes is not None:
+        agent.available_probes = scan_probes.normalize_probes(
+            [p.strip() for p in x_agent_probes.split(",") if p.strip()]
+        )
+
+    cap = set(agent.enabled_probes or ["icmp"])   # 代理能力天花板
     rows = (await session.execute(
-        select(Subnet.id, Subnet.cidr).where(
+        select(Subnet.id, Subnet.cidr, Subnet.scan_method).where(
             Subnet.scan_agent_id == agent.id,
             Subnet.scan_enabled.is_(True),
+            Subnet.archived_at.is_(None),
         )
     )).all()
+    subnets_out: list[dict[str, Any]] = []
+    sub_ids: list[Any] = []
+    for sid, cidr, methods in rows:
+        sub_ids.append(sid)
+        probes = [p for p in scan_probes.normalize_probes(list(methods or [])) if p in cap]
+        subnets_out.append({"subnet_id": str(sid), "cidr": str(cidr), "probes": probes})
+
+    # 逐 IP 略過（只送有設定的，量小）
+    ip_overrides: dict[str, list[str]] = {}
+    if sub_ids:
+        orows = (await session.execute(
+            select(IPAddress.ip, IPAddress.excluded_probes).where(
+                IPAddress.subnet_id.in_(sub_ids),
+                func.cardinality(IPAddress.excluded_probes) > 0,
+            )
+        )).all()
+        for ip, excl in orows:
+            ip_overrides[str(ip)] = scan_probes.normalize_probes(list(excl or []))
+
+    intervals = scan_probes.probe_intervals(agent.probe_intervals)
     await session.commit()
     return AgentPollOut(
         agent=agent.name,
-        subnets=[{"subnet_id": str(sid), "cidr": str(cidr)} for sid, cidr in rows],
+        subnets=subnets_out,
+        interval_seconds=scan_probes.fast_interval(intervals),
+        intervals=intervals,
+        ip_overrides=ip_overrides,
         agent_sha=_agent_sha(),
     )
 
@@ -355,6 +415,10 @@ class AgentReportItem(StrictModel):
     ip: str
     alive: bool = True
     mac: str | None = None
+    rdns: str | None = None          # 反解 PTR / NetBIOS / mDNS 主機名稱
+    os_guess: str | None = None      # OS 偵測原始字串
+    open_ports: list[int] | None = None
+    probes_run: list[str] | None = None   # 這輪實際對此 IP 跑了哪些 probe（回填 last_run）
 
 
 class AgentReportIn(StrictModel):
@@ -423,6 +487,22 @@ async def agent_report(
         if item.mac:
             from app.services.arp_precedence import consider_mac
             await consider_mac(session, ip=ipa, mac=item.mac, source="scanner")
+        # OS 偵測：存原始字串 + 正規化家族（前端依 family 配 icon）
+        if item.os_guess:
+            from app.core.os_fingerprint import normalize_os
+            ipa.os_guess = item.os_guess[:160]
+            ipa.os_family = normalize_os(item.os_guess)
+        # 反解 / NetBIOS / mDNS 主機名稱 → 走既有觀測優先序（source=scanner，不會 thrash）
+        if item.rdns:
+            from app.services.hostname import apply_observation
+            await apply_observation(session, ip=ipa, source="scanner",
+                                    hostname=item.rdns, tiebreak_min=True)
+        # 記各 probe 上次執行時間（給「下次到期」顯示）
+        if item.probes_run:
+            lr = dict(ipa.probe_last_run or {})
+            for p in scan_probes.normalize_probes(item.probes_run):
+                lr[p] = now.isoformat()
+            ipa.probe_last_run = lr
         updated += 1
     agent.last_seen_at = now
     agent.last_error = None

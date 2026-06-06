@@ -229,6 +229,22 @@ async def export_csv(
     )
 
 
+async def _effective_probes_for(session: AsyncSession, obj: IPAddress) -> list[str]:
+    """此 IP 實際會被執行的探測 = 子網路 scan_method − IP excluded ∩ 代理 enabled。
+    子網路未開掃描 → 空。沒指派代理 → 無能力上限。"""
+    from app.core.scan_probes import effective_probes
+    from app.models.scan_agent import ScanAgent
+    sub = await session.get(Subnet, obj.subnet_id)
+    if sub is None or not sub.scan_enabled:
+        return []
+    agent_enabled: list[str] | None = None
+    if sub.scan_agent_id:
+        ag = await session.get(ScanAgent, sub.scan_agent_id)
+        if ag is not None:
+            agent_enabled = list(ag.enabled_probes or [])
+    return effective_probes(list(sub.scan_method or []), list(obj.excluded_probes or []), agent_enabled)
+
+
 @router.get("/{address_id}", response_model=IPAddressRead)
 async def get_address(
     address_id: uuid.UUID,
@@ -241,6 +257,8 @@ async def get_address(
     await _require_subnet_perm(session, user, obj.subnet_id, "read")
     out = IPAddressRead.model_validate(obj)
     out.mac_vendor = await vendor_for_mac(session, obj.mac)
+    # 算出此 IP 實際會被執行的探測（子網路要跑 − IP 略過 ∩ 代理能力）給詳情頁顯示
+    out.effective_probes = await _effective_probes_for(session, obj)
     return out
 
 
@@ -605,6 +623,17 @@ async def update_address(
 
     for key, value in changes.items():
         setattr(obj, key, value)
+
+    # 同步 excluded_probes ⇄ exclude_from_ping：icmp 視為同一件事，保留既有「不掃 ping」行為
+    if "excluded_probes" in changes or "exclude_from_ping" in changes:
+        from app.core.scan_probes import normalize_probes as _norm_probes
+        if "excluded_probes" in changes:
+            obj.excluded_probes = _norm_probes(obj.excluded_probes)
+            obj.exclude_from_ping = "icmp" in obj.excluded_probes
+        if "exclude_from_ping" in changes:
+            s = set(obj.excluded_probes or [])
+            s.add("icmp") if obj.exclude_from_ping else s.discard("icmp")
+            obj.excluded_probes = _norm_probes(list(s))
 
     # 把這個 IP 指派給某裝置 → 若該裝置還沒設主要 IP，順手補上（雙向連結方便）
     if changes.get("device_id"):

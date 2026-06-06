@@ -1,19 +1,33 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { NSpin, NSpace, useMessage } from "naive-ui";
+import { NCard, NDescriptions, NDescriptionsItem, NSpin, NSpace, NTag, NTooltip, useMessage } from "naive-ui";
 import { getAddress } from "@/api/addresses";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
+import OsIcon from "@/components/OsIcon.vue";
+import { useScanProbes, osFamilyLabel, probeLabel } from "@/api/scanProbes";
 import type { IPAddress } from "@/types";
 
 const route = useRoute();
 const router = useRouter();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const msg = useMessage();
+const { catalog } = useScanProbes();
 
 const addr = ref<IPAddress | null>(null);
 const loading = ref(false);
+
+// 把探測 key 轉成顯示 label（比不到目錄就直接顯示 key）
+function labelForProbe(key: string): string {
+  const p = catalog.value.probes.find((x) => x.key === key);
+  return p ? probeLabel(p, locale.value) : key;
+}
+
+const showScanSection = computed(() => {
+  const a = addr.value;
+  return !!a && ((a.effective_probes?.length ?? 0) > 0 || (a.excluded_probes?.length ?? 0) > 0);
+});
 
 async function load(id: string) {
   loading.value = true;
@@ -44,6 +58,49 @@ watch(() => route.params.id, (id) => { if (id) load(String(id)); });
         @deleted="onDeleted"
         @back="back"
       />
+
+      <!-- OS 與掃描項目（唯讀，由探測結果推導） -->
+      <n-card v-if="addr && (addr.os_family || showScanSection)" size="small" :bordered="true">
+        <n-descriptions label-placement="left" :column="1" size="small">
+          <n-descriptions-item v-if="addr.os_family" :label="t('cols.os')">
+            <n-tooltip v-if="addr.os_guess" trigger="hover">
+              <template #trigger>
+                <span style="display: inline-flex; align-items: center; gap: 6px">
+                  <OsIcon :family="addr.os_family" :size="16" />
+                  {{ osFamilyLabel(catalog.os_families, addr.os_family, locale) }}
+                </span>
+              </template>
+              {{ addr.os_guess }}
+            </n-tooltip>
+            <span v-else style="display: inline-flex; align-items: center; gap: 6px">
+              <OsIcon :family="addr.os_family" :size="16" />
+              {{ osFamilyLabel(catalog.os_families, addr.os_family, locale) }}
+            </span>
+          </n-descriptions-item>
+        </n-descriptions>
+
+        <template v-if="showScanSection">
+          <div style="font-weight: 600; margin: 8px 0 4px">{{ t("scan_probes.title") }}</div>
+          <n-descriptions label-placement="left" :column="1" size="small">
+            <n-descriptions-item v-if="addr.effective_probes?.length" :label="t('scan_probes.effective')">
+              <n-space :size="4" :wrap="true">
+                <n-tag v-for="k in addr.effective_probes" :key="k" size="small" :bordered="false">
+                  {{ labelForProbe(k) }}
+                </n-tag>
+              </n-space>
+              <div style="font-size: 12px; opacity: .6; margin-top: 4px">{{ t("scan_probes.effective_hint") }}</div>
+            </n-descriptions-item>
+            <n-descriptions-item v-if="addr.excluded_probes?.length" :label="t('scan_probes.excluded')">
+              <n-space :size="4" :wrap="true">
+                <n-tag v-for="k in addr.excluded_probes" :key="k" size="small" type="warning" :bordered="false">
+                  {{ labelForProbe(k) }}
+                </n-tag>
+              </n-space>
+            </n-descriptions-item>
+          </n-descriptions>
+        </template>
+      </n-card>
+
       <n-space v-else-if="!loading" justify="center" style="padding: 40px; opacity: .6">
         {{ t("common.no_data") }}
       </n-space>

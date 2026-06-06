@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 from pydantic import Field, field_validator
 
+from app.core.scan_probes import VALID_PROBES, normalize_probes
 from app.schemas.base import StrictModel
 
 
@@ -63,11 +64,12 @@ class SubnetBase(StrictModel):
     @field_validator("scan_method")
     @classmethod
     def _scan_methods_valid(cls, v: list[str]) -> list[str]:
-        allowed = {"icmp", "snmp", "arp", "nmap", "mdns", "netbios"}
-        bad = [m for m in v if m not in allowed]
+        # 套用舊別名(nmap→os)後檢查；未知 key 擋下
+        normalized = normalize_probes(v)
+        bad = [m for m in v if m not in VALID_PROBES and m not in {"nmap"}]
         if bad:
-            raise ValueError(f"invalid scan_method: {bad}; allowed={sorted(allowed)}")
-        return v
+            raise ValueError(f"invalid scan_method: {bad}; allowed={sorted(VALID_PROBES)}")
+        return normalized
 
 
 class SubnetCreate(SubnetBase):

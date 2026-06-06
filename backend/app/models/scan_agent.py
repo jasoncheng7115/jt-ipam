@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, LargeBinary, String, Text
+from sqlalchemy import ARRAY, Boolean, DateTime, LargeBinary, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -39,3 +40,15 @@ class ScanAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     last_error: Mapped[str | None] = mapped_column(Text)
     agent_version: Mapped[str | None] = mapped_column(String(32))  # agent 連上來回報的版本
     last_source_ip: Mapped[str | None] = mapped_column(String(64))  # agent 連上來的來源 IP
+
+    # 此代理「被允許 / 有能力」執行的探測項目（能力天花板）；預設只 ICMP。
+    # 詳見 app/core/scan_probes.py 的目錄。
+    enabled_probes: Mapped[list[str]] = mapped_column(
+        ARRAY(String),
+        server_default=text("ARRAY['icmp']::varchar[]"),
+        nullable=False,
+    )
+    # 各 probe 的執行間隔覆寫（秒）；空 = 用目錄預設。{"os": 86400, ...}
+    probe_intervals: Mapped[dict[str, int] | None] = mapped_column(JSONB)
+    # agent 回報它「實際裝得起」哪些 probe（有沒有 nmap、能不能 raw socket）→ UI 反灰用
+    available_probes: Mapped[list[str] | None] = mapped_column(ARRAY(String))

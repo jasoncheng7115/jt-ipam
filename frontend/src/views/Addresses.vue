@@ -32,10 +32,13 @@ import LiveStatusDot from "@/components/LiveStatusDot.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
+import OsIcon from "@/components/OsIcon.vue";
+import { useScanProbes, osFamilyLabel } from "@/api/scanProbes";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { computed } from "vue";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const { catalog } = useScanProbes();
 const msg = useMessage();
 const route = useRoute();
 const router = useRouter();
@@ -241,12 +244,23 @@ const allColumns: DataTableColumns<IPAddress> = [
     title: () => t("addresses.source"), key: "discovery_source", width: 120,
     render: (r) => labelSource(r.discovery_source), sorter: true,
   },
+  {
+    title: () => t("cols.os"), key: "os", width: 70,
+    render: (r) => {
+      if (!r.os_family) return "—";
+      const label = osFamilyLabel(catalog.value.os_families, r.os_family, locale.value);
+      return h("span", { title: r.os_guess ?? undefined }, [
+        h(OsIcon, { family: r.os_family, size: 16 }),
+        label ? h("span", { style: "margin-left:4px" }, label) : null,
+      ]);
+    },
+  },
 ];
 
 // 欄位顯示偏好 (per-user，後端 user_preferences.table_columns)
 const { visibleKeys, setVisible, reset } = useColumnPrefs(
   "addresses",
-  ["live", "ip", "hostname", "mac", "state", "owner", "switch_port", "note", "discovery_source"],
+  ["live", "ip", "hostname", "mac", "state", "owner", "switch_port", "note", "discovery_source", "os"],
   ["live", "ip", "hostname", "mac", "state", "discovery_source"],
 );
 
@@ -281,6 +295,7 @@ const columnPickerItems = computed(() => [
   { key: "switch_port", label: t("cols.switch_port") },
   { key: "note", label: t("cols.note") },
   { key: "discovery_source", label: t("cols.source") },
+  { key: "os", label: t("cols.os") },
 ]);
 
 const sortField = ref<string | null>(null);

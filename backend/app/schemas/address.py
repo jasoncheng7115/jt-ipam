@@ -29,6 +29,8 @@ class IPAddressBase(StrictModel):
     device_id: uuid.UUID | None = None
     switch_port: Annotated[str | None, Field(max_length=64)] = None
     exclude_from_ping: bool = False
+    # 此 IP 略過的探測項目（扣除）；icmp 與 exclude_from_ping 在端點層雙向同步
+    excluded_probes: list[str] = Field(default_factory=list)
     ptr_ignore: bool = False
     note: Annotated[str | None, Field(max_length=2048)] = None
     customer_id: uuid.UUID | None = None
@@ -106,6 +108,7 @@ class IPAddressUpdate(StrictModel):
     device_id: uuid.UUID | None = None
     switch_port: Annotated[str | None, Field(max_length=64)] = None
     exclude_from_ping: bool | None = None
+    excluded_probes: list[str] | None = None
     ptr_ignore: bool | None = None
     note: Annotated[str | None, Field(max_length=2048)] = None
     customer_id: uuid.UUID | None = None
@@ -120,6 +123,11 @@ class IPAddressRead(IPAddressBase):
     discovery_source: str
     hostname_source_pin: str | None = None
     switch_port_confident: bool | None = None
+    os_guess: str | None = None
+    os_family: str | None = None
+    probe_last_run: dict[str, Any] | None = None
+    # 此 IP 實際會被執行的探測（subnet.scan_method − excluded − ∩ agent 能力），後端算好
+    effective_probes: list[str] | None = None
     last_seen_scanner: datetime | None
     last_seen_librenms: datetime | None
     last_seen_dns: datetime | None
