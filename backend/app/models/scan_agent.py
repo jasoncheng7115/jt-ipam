@@ -52,3 +52,5 @@ class ScanAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     probe_intervals: Mapped[dict[str, int] | None] = mapped_column(JSONB)
     # agent 回報它「實際裝得起」哪些 probe（有沒有 nmap、能不能 raw socket）→ UI 反灰用
     available_probes: Mapped[list[str] | None] = mapped_column(ARRAY(String))
+    # 「立刻執行一次」：admin 按鈕設此時間，代理下次 poll 取走（清空）後本輪所有探測強制到期立即跑
+    force_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

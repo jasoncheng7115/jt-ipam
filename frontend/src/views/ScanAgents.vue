@@ -9,11 +9,11 @@ import {
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
-  ScanAgentsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+  ScanAgentsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, SaveIcon, CancelIcon,
   InfoIcon, CloneIcon,
 } from "@/icons";
 import {
-  listScanAgents, createScanAgent, updateScanAgent, deleteScanAgent, rotateScanAgentKey,
+  listScanAgents, createScanAgent, updateScanAgent, deleteScanAgent, rotateScanAgentKey, scanNowAgent,
   getAgentSubnets, setAgentSubnets,
   type ScanAgent,
 } from "@/api/phase3";
@@ -181,6 +181,12 @@ async function del(r: ScanAgent) {
   try { await deleteScanAgent(r.id); await refresh(); }
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
+async function scanNow(r: ScanAgent) {
+  try {
+    const res = await scanNowAgent(r.id);
+    msg.success(t("scan_agent.scan_now_done", { n: res.eta_seconds }));
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
 function copy(text: string) {
   void navigator.clipboard?.writeText(text);
   msg.success(t("scanAgentHelp.copied"));
@@ -235,8 +241,12 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
   { title: t("scanAgentHelp.col_last_seen"), key: "last_seen_at", width: 170, render: (r) => fmtDateTime(r.last_seen_at) },
   { title: t("scanAgentHelp.col_last_error"), key: "last_error", minWidth: 160, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
   {
-    title: t("common.actions"), key: "actions", className: "col-actions", width: 136,
+    title: t("common.actions"), key: "actions", className: "col-actions", width: 172,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
+      h(NPopconfirm, { onPositiveClick: () => scanNow(r) }, {
+        trigger: () => iconAction(SyncIcon, t("scan_agent.scan_now"), () => {}, "primary"),
+        default: () => t("scan_agent.scan_now_confirm"),
+      }),
       iconAction(EditIcon, t("common.edit"), () => openEdit(r)),
       iconAction(RefreshIcon, t("scanAgentHelp.rotate"), () => rotate(r)),
       h(NPopconfirm, { onPositiveClick: () => del(r) }, {

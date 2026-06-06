@@ -4,6 +4,14 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.97] — 2026-06-06
+
+### 新增
+- 掃描代理：新增**「立刻執行一次」**動作，代理下次 poll 時立即跑所有已啟用的探測
+  （migration 0070）；OS 偵測（`nmap -O`）在裝有 nmap 的代理主機上端到端驗證可用
+  （以 root 執行）。
+- 探測間隔輸入框顯示單位（秒）與換算提示。
+
 ## [0.4.96] — 2026-06-06
 
 ### 變更

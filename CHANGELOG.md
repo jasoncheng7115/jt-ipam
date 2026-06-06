@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.97] — 2026-06-06
+
+### Added
+- Scan agents: a **"Scan now"** action that triggers the agent to run all enabled
+  probes immediately on its next poll (migration 0070); OS detection (`nmap -O`)
+  is now exercised end-to-end on agent hosts that have nmap (runs as root).
+- Probe-interval inputs show a unit (seconds) + human-readable equivalent.
+
 ## [0.4.96] — 2026-06-06
 
 ### Changed

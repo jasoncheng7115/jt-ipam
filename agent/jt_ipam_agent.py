@@ -42,7 +42,7 @@ import sys
 import time
 import urllib.request
 
-AGENT_VERSION = "1.2.0"
+AGENT_VERSION = "1.3.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INTERVAL = int(os.environ.get("JT_IPAM_INTERVAL", "300"))
@@ -297,6 +297,10 @@ def scan_once() -> None:
     _CURRENT_FAST[0] = fast  # 給 main 的 sleep 用
     intervals = poll.get("intervals") or {}
     ip_overrides = poll.get("ip_overrides") or {}
+    # 「立刻執行一次」：server 要求強制本輪全跑 → 清掉各探測的上次執行時間（全部判定到期）
+    if poll.get("force_scan"):
+        _last_run.clear()
+        print("[poll] force_scan: running all probes now", flush=True)
     print(f"[poll] agent={poll.get('agent')} subnets={len(subnets)} "
           f"fast={fast}s caps={','.join(caps)}", flush=True)
 

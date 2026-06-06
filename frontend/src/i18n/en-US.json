@@ -157,7 +157,10 @@
   },
   "scan_agent": {
     "outdated": "update available",
-    "outdated_hint": "Agent is older than the server (v{v}); it should self-update on the next report. If it stays behind, check that the agent host can overwrite its own program."
+    "outdated_hint": "Agent is older than the server (v{v}); it should self-update on the next report. If it stays behind, check that the agent host can overwrite its own program.",
+    "scan_now": "Scan now",
+    "scan_now_done": "Queued; the agent will run a scan within {n}s.",
+    "scan_now_confirm": "Run a scan now on this agent's scan-enabled subnets (with their enabled probes)?"
   },
   "scan_probes": {
     "title": "Scan probes",

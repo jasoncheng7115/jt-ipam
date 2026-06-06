@@ -223,6 +223,34 @@ async def rotate_key(
     return ScanAgentCreated(**_to_read(obj).model_dump(), enroll_key=raw_key)
 
 
+@router.post("/{agent_id}/scan-now", status_code=202,
+             dependencies=[Depends(require_admin)])
+async def scan_now(
+    agent_id: uuid.UUID,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """立刻執行一次：設旗標，代理下次 poll（最多一個間隔）取走後本輪所有探測強制立即跑。"""
+    obj = await session.get(ScanAgent, agent_id)
+    if obj is None:
+        raise HTTPException(404, detail="Agent not found")
+    obj.force_scan_at = datetime.now(UTC)
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="scan_agent", object_id=str(obj.id), action="scan_now",
+        diff={"name": obj.name},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    # 代理下次 poll 的等待上限 = 快迴圈節奏
+    eta = scan_probes.fast_interval(scan_probes.probe_intervals(obj.probe_intervals))
+    return {"queued": True, "eta_seconds": eta}
+
+
 @router.patch("/{agent_id}", response_model=ScanAgentRead,
               dependencies=[Depends(require_admin)])
 async def update_agent(
@@ -359,7 +387,7 @@ class AgentPollOut(StrictModel):
     # 已知 IP 的逐項略過：{"<ip>": ["icmp", ...]}；代理對該 IP 扣掉這些 probe
     ip_overrides: dict[str, list[str]] = Field(default_factory=dict)
     agent_sha: str = ""             # server 端 agent.py 的 sha256；不同→agent 自動更新
-    # 代理回報它裝得起哪些 probe（POST 也可，這裡讓 agent 用 query/header 帶回）
+    force_scan: bool = False        # 「立刻執行一次」：本輪所有探測強制到期立即跑
 
 
 @router.get("/poll", response_model=AgentPollOut)
@@ -413,6 +441,10 @@ async def agent_poll(
             ip_overrides[str(ip)] = scan_probes.normalize_probes(list(excl or []))
 
     intervals = scan_probes.probe_intervals(agent.probe_intervals)
+    # 「立刻執行一次」：有旗標就回 force_scan=True 並清掉（一次性消費）
+    force_scan = agent.force_scan_at is not None
+    if force_scan:
+        agent.force_scan_at = None
     await session.commit()
     return AgentPollOut(
         agent=agent.name,
@@ -420,6 +452,7 @@ async def agent_poll(
         interval_seconds=scan_probes.fast_interval(intervals),
         intervals=intervals,
         ip_overrides=ip_overrides,
+        force_scan=force_scan,
         agent_sha=_agent_sha(),
     )
 

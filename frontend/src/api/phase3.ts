@@ -82,6 +82,10 @@ export async function rotateScanAgentKey(id: string): Promise<ScanAgentCreated> 
   const { data } = await apiClient.post<ScanAgentCreated>(`/api/v1/scan-agents/${id}/rotate-key`);
   return data;
 }
+export async function scanNowAgent(id: string): Promise<{ queued: boolean; eta_seconds: number }> {
+  const { data } = await apiClient.post(`/api/v1/scan-agents/${id}/scan-now`);
+  return data;
+}
 export async function updateScanAgent(id: string, p: Partial<{
   description: string; enabled: boolean;
   enabled_probes: string[]; probe_intervals: Record<string, number>;
