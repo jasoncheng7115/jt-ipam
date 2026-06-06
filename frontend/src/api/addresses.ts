@@ -39,6 +39,7 @@ export interface IPAddressUpdate {
   device_id?: string | null;
   switch_port?: string | null;
   exclude_from_ping?: boolean | null;
+  excluded_probes?: string[] | null;
   ptr_ignore?: boolean | null;
   note?: string | null;
   customer_id?: string | null;

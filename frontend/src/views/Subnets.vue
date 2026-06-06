@@ -20,6 +20,7 @@ import {
   NSelect,
   NInputNumber,
   NCheckbox,
+  NCheckboxGroup,
   NSwitch,
   NTag,
   useMessage,
@@ -41,7 +42,10 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useCustomers } from "@/composables/useCustomers";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
+import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import { computed } from "vue";
+
+const { catalog } = useScanProbes();
 
 const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 
@@ -52,7 +56,7 @@ const router = useRouter();
 const route = useRoute();
 const links = useEntityLinks(router);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const msg = useMessage();
 // 從某單位的「子網路數」點過來時，只顯示該單位的子網路（可清除）
 const customerFilter = ref<string | null>(null);
@@ -96,11 +100,7 @@ const form = ref({
   allow_overlap: false,
 });
 
-// 目前掃描代理只實作 ICMP ping + 從 ARP 表補 MAC（snmp/nmap/mdns/netbios 尚未實作）
-const scanMethodOpts = [
-  { label: "ICMP (ping)", value: "icmp" },
-  { label: t("cols.arp_fill"), value: "arp" },
-];
+// 掃描項目改由探測目錄（/scan-agents/probes）動態提供，見表單 checkbox group
 const scanAgentOpts = ref<{ label: string; value: string }[]>([]);
 const locationOpts = ref<{ label: string; value: string }[]>([]);
 
@@ -602,9 +602,25 @@ onMounted(() => {
         <n-form-item :label="t('subnets.scan')">
           <n-space vertical style="width: 100%">
             <n-checkbox v-model:checked="form.scan_enabled">{{ t("subnets.scan_enable") }}</n-checkbox>
-            <n-select v-if="form.scan_enabled"
-                      v-model:value="form.scan_method" :options="scanMethodOpts"
-                      multiple :placeholder="t('subnets.scan_methods')" />
+            <div v-if="catalog.probes.length"
+                 :style="{ opacity: form.scan_enabled ? 1 : 0.5, pointerEvents: form.scan_enabled ? 'auto' : 'none' }">
+              <div style="font-size: 13px; margin-bottom: 4px;">{{ t("scan_probes.subnet_probes") }}</div>
+              <n-checkbox-group v-model:value="form.scan_method" :disabled="!form.scan_enabled">
+                <n-space vertical size="small">
+                  <n-checkbox v-for="p in catalog.probes" :key="p.key" :value="p.key">
+                    {{ probeLabel(p, locale) }}
+                    <n-tooltip v-if="p.intrusive" trigger="hover">
+                      <template #trigger>
+                        <n-tag size="tiny" type="warning" style="margin-left: 4px;">
+                          {{ t("scan_probes.intrusive") }}
+                        </n-tag>
+                      </template>
+                      {{ t("scan_probes.intrusive_warn") }}
+                    </n-tooltip>
+                  </n-checkbox>
+                </n-space>
+              </n-checkbox-group>
+            </div>
             <n-select v-if="form.scan_enabled"
                       v-model:value="form.scan_agent_id" :options="scanAgentOpts"
                       clearable

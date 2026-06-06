@@ -11,7 +11,7 @@ import {
   NModal, NCard, NSpace, NButton, NDescriptions, NDescriptionsItem,
   NForm, NFormItem, NInput, NSelect, NSwitch, NPopconfirm, NTag, NIcon,
   NCollapse, NCollapseItem, NTimeline, NTimelineItem, NText, NEmpty, NSpin,
-  NTooltip,
+  NTooltip, NCheckbox, NCheckboxGroup,
   useMessage,
 } from "naive-ui";
 import type { IPAddress } from "@/types";
@@ -28,6 +28,7 @@ import { getAddressRelations, type RelationNode } from "@/api/relations";
 import { listDhcpRanges } from "@/api/integrations";
 import RelationChain from "@/components/RelationChain.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
+import { useScanProbes, probeLabel } from "@/api/scanProbes";
 
 const router = useRouter();
 const { options: customerOptions, labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
@@ -165,8 +166,12 @@ const emit = defineEmits<{
   (e: "back"): void;
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const msg = useMessage();
+const { catalog } = useScanProbes();
+
+// 此 IP 略過的探測項目（取代舊的單一 exclude_from_ping 開關）
+const excludedProbes = ref<string[]>([]);
 
 const editMode = ref(false);
 const saving = ref(false);
@@ -181,7 +186,6 @@ interface FormState {
   mac: string;
   owner: string;
   switch_port: string;
-  exclude_from_ping: boolean;
   ptr_ignore: boolean;
   note: string;
   customer_id: string | null;
@@ -195,7 +199,7 @@ function emptyForm(): FormState {
   return {
     hostname: "", description: "", state: "active", mac: "",
     owner: "", switch_port: "",
-    exclude_from_ping: false, ptr_ignore: false, note: "",
+    ptr_ignore: false, note: "",
     customer_id: null,
     device_id: null,
     hostname_source_pin: "",
@@ -235,7 +239,6 @@ function fromAddress(a: IPAddress): FormState {
     mac: a.mac ?? "",
     owner: a.owner ?? "",
     switch_port: a.switch_port ?? "",
-    exclude_from_ping: !!a.exclude_from_ping,
     ptr_ignore: !!a.ptr_ignore,
     note: a.note ?? "",
     customer_id: a.customer_id ?? null,
@@ -258,6 +261,14 @@ watch(
     // create 模式自動進 edit form；既有 IP 進 view
     editMode.value = isCreate.value;
     form.value = props.address ? fromAddress(props.address) : emptyForm();
+    // 略過探測初始化：優先用 excluded_probes；空但舊 exclude_from_ping=true → 回填 ['icmp']
+    const a = props.address;
+    if (a) {
+      const ex = Array.isArray(a.excluded_probes) ? [...a.excluded_probes] : [];
+      excludedProbes.value = ex.length ? ex : (a.exclude_from_ping ? ["icmp"] : []);
+    } else {
+      excludedProbes.value = [];
+    }
     if (props.show) {
       void ensureCustomersLoaded();
       void loadDevices();
@@ -415,7 +426,7 @@ async function save() {
       mac: form.value.mac.trim() || null,
       owner: form.value.owner.trim() || null,
       switch_port: form.value.switch_port.trim() || null,
-      exclude_from_ping: form.value.exclude_from_ping,
+      excluded_probes: excludedProbes.value,
       ptr_ignore: form.value.ptr_ignore,
       note: form.value.note.trim() || null,
       customer_id: form.value.customer_id ?? null,
@@ -705,14 +716,20 @@ async function remove() {
               </n-button>
             </n-space>
           </n-form-item>
-          <n-space :size="24">
-            <n-form-item :label="t('addresses.exclude_from_ping')">
-              <n-switch v-model:value="form.exclude_from_ping" />
-            </n-form-item>
-            <n-form-item :label="t('addresses.ptr_ignore')">
-              <n-switch v-model:value="form.ptr_ignore" />
-            </n-form-item>
-          </n-space>
+          <n-form-item :label="t('scan_probes.excluded')">
+            <n-space vertical :size="4" style="width: 100%">
+              <n-checkbox-group v-model:value="excludedProbes">
+                <n-space :size="[16, 8]" style="flex-wrap: wrap">
+                  <n-checkbox v-for="p in catalog.probes" :key="p.key"
+                              :value="p.key" :label="probeLabel(p, locale)" />
+                </n-space>
+              </n-checkbox-group>
+              <span style="font-size: 11px; opacity: .7">{{ t("scan_probes.excluded_hint") }}</span>
+            </n-space>
+          </n-form-item>
+          <n-form-item :label="t('addresses.ptr_ignore')">
+            <n-switch v-model:value="form.ptr_ignore" />
+          </n-form-item>
         </n-form>
       </div>
 

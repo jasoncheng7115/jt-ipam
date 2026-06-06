@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    ARRAY,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB, MACADDR, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -48,6 +50,15 @@ class IPAddress(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     switch_port_confident: Mapped[bool | None] = mapped_column(Boolean)
 
     exclude_from_ping: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 此 IP「略過」的探測項目（扣除）；icmp 與 exclude_from_ping 雙向同步以保留既有行為。
+    excluded_probes: Mapped[list[str]] = mapped_column(
+        ARRAY(String), server_default=text("'{}'::varchar[]"), nullable=False,
+    )
+    # OS 偵測結果：原始字串 + 正規化家族 key（前端依 family 配 icon）。see core/os_fingerprint.py
+    os_guess: Mapped[str | None] = mapped_column(String(160))
+    os_family: Mapped[str | None] = mapped_column(String(24))
+    # 各 probe 上次被執行的時間（由 report 回填），給「下次到期」顯示用。{"icmp": "...", "os": "..."}
+    probe_last_run: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     ptr_ignore: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
 

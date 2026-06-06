@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.93] — 2026-06-06
+
+### Added
+- **Configurable scan probes** with a three-layer model (migration 0069):
+  - **Probe catalog** (icmp / tcp / arp / rdns / snmp / netbios / mdns / os / ports)
+    with per-probe class (light/heavy), default interval, and intrusiveness; default
+    is **ICMP only**. Heavy probes (OS / port scan) run on their **own long interval**,
+    never at the ICMP cadence.
+  - **Scan agent**: pick which probes it may run + per-heavy-probe interval; the agent
+    self-reports which probes it can actually perform (others greyed out).
+  - **Subnet**: choose the probes to run (`scan_method`).
+  - **IP address**: skip specific probes (the old "exclude from ping" generalised; icmp
+    stays in sync). The IP detail page shows the **effective** probe set
+    (subnet probes − IP skips ∩ agent capability).
+- **OS detection display**: scan results are normalised into an OS family
+  (Windows / Linux / macOS / BSD / network / printer / storage / hypervisor / …) and
+  shown with a per-family SVG icon (IP list column + IP detail), tooltip = raw string.
+- Agent poll/report protocol carries per-subnet probes, per-probe intervals, per-IP
+  skip overrides, and richer results (rdns / os_guess / open_ports / probes_run); the
+  bundled agent gains tcp/arp/rdns probes and fast/slow scheduling.
+
 ## [0.4.92] — 2026-06-06
 
 ### Added
