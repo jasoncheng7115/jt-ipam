@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.96] — 2026-06-06
+
+### Changed
+- Scan agent probe-interval inputs now show a unit suffix (seconds) and a
+  human-readable equivalent (e.g. 86400 -> "1 day").
+
 ## [0.4.95] — 2026-06-06
 
 ### Changed

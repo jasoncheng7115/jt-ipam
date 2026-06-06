@@ -4,6 +4,11 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.96] — 2026-06-06
+
+### 變更
+- 掃描代理的探測間隔輸入框加上單位後綴（秒）與換算提示（如 86400 → 「1 天」）。
+
 ## [0.4.95] — 2026-06-06
 
 ### 變更

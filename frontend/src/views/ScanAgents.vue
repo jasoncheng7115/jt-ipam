@@ -66,6 +66,15 @@ const heavyChecked = computed(() =>
     (p) => p.klass === "heavy" && enabledProbes.value.includes(p.key),
   ),
 );
+// 秒數 → 人類可讀（天 / 小時 / 分 / 秒），給間隔輸入框旁的換算提示
+function humanInterval(secs: number | null | undefined): string {
+  const s = Number(secs || 0);
+  if (s <= 0) return "—";
+  if (s % 86400 === 0) return `${s / 86400} ${t("scan_probes.days")}`;
+  if (s % 3600 === 0) return `${s / 3600} ${t("scan_probes.hours")}`;
+  if (s % 60 === 0) return `${s / 60} ${t("scan_probes.mins")}`;
+  return `${s} ${t("scan_probes.secs")}`;
+}
 // 確保某重型探測的間隔有預設值（勾選時補上）
 function ensureInterval(key: string) {
   const p = catalog.value.probes.find((x) => x.key === key);
@@ -334,7 +343,12 @@ onMounted(() => { void refresh(); });
             :min="p.min_interval_seconds"
             :placeholder="String(p.default_interval_seconds)"
             style="width: 100%"
-          />
+          >
+            <template #suffix>{{ t("scan_probes.secs") }}</template>
+          </n-input-number>
+          <span class="probe-hint" style="margin-left:8px;white-space:nowrap">
+            ≈ {{ humanInterval(probeIntervals[p.key] ?? p.default_interval_seconds) }}
+          </span>
         </n-form-item>
       </n-form>
       <template #footer>
