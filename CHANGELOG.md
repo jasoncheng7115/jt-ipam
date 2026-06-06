@@ -4,11 +4,11 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
-## [0.4.93] — 2026-06-06
+## [0.4.94] — 2026-06-06
 
 ### Added
 - **Configurable scan probes** with a three-layer model (migration 0069):
-  - **Probe catalog** (icmp / tcp / arp / rdns / snmp / netbios / mdns / os / ports)
+  - **Probe catalog** (icmp / tcp / arp / rdns / netbios / mdns / os / ports)
     with per-probe class (light/heavy), default interval, and intrusiveness; default
     is **ICMP only**. Heavy probes (OS / port scan) run on their **own long interval**,
     never at the ICMP cadence.

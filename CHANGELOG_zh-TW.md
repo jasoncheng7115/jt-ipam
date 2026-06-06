@@ -6,11 +6,11 @@
 
 > 英文版見 [CHANGELOG.md](CHANGELOG.md)。
 
-## [0.4.93] — 2026-06-06
+## [0.4.94] — 2026-06-06
 
 ### 新增
 - **可組態的掃描探測**，三層模型（migration 0069）：
-  - **探測項目目錄**（icmp / tcp / arp / rdns / snmp / netbios / mdns / os / ports），
+  - **探測項目目錄**（icmp / tcp / arp / rdns / netbios / mdns / os / ports），
     每項分輕量 / 重量、各自預設間隔與侵入性；預設**只開 ICMP**。重項目（OS / 連接埠
     掃描）走**自己的長間隔**，絕不跟 ICMP 同頻。
   - **掃描代理**：勾選可執行的探測 + 各重項目間隔；代理會自我回報實際裝得起哪些

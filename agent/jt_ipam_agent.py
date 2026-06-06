@@ -53,7 +53,7 @@ PING_WORKERS = 128
 AGENT_PATH = os.path.realpath(__file__)
 
 # 所有已知探測鍵；server 沒指定 probes 時，向下相容用 icmp。
-ALL_PROBES = ("icmp", "tcp", "arp", "rdns", "snmp", "netbios", "mdns", "os", "ports")
+ALL_PROBES = ("icmp", "tcp", "arp", "rdns", "netbios", "mdns", "os", "ports")
 DEFAULT_PROBES = ("icmp",)
 
 # tcp 探測掃的常見埠（也作為 alive 判定依據）
@@ -82,7 +82,7 @@ def _capabilities() -> list[str]:
     """回報本機實際能做的探測（送 X-Agent-Probes header 給 server）。
 
     icmp/tcp/rdns 一律支援；arp 需 neigh 表可讀；os/ports 需 PATH 上有 nmap；
-    snmp/netbios/mdns 需對應工具/函式庫，沒有就略過（Phase B）。
+    netbios/mdns 需對應工具，沒有就略過（Phase B）。不做需要憑證的探測（如 SNMP）。
     """
     caps = ["icmp", "tcp", "rdns"]
     try:
@@ -92,9 +92,7 @@ def _capabilities() -> list[str]:
         pass
     if shutil.which("nmap"):
         caps.extend(["os", "ports"])
-    # snmp / netbios / mdns 目前無內建工具支援；偵測到再加入。
-    if shutil.which("snmpget") or shutil.which("snmpwalk"):
-        caps.append("snmp")
+    # netbios / mdns 目前無內建工具支援；偵測到再加入。
     if shutil.which("nmblookup") or shutil.which("nbtscan"):
         caps.append("netbios")
     if shutil.which("avahi-resolve") or shutil.which("dns-sd"):

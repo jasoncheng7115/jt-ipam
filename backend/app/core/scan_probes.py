@@ -35,11 +35,6 @@ PROBES: dict[str, dict[str, Any]] = {
         "klass": "light", "default_interval_seconds": 3600, "min_interval_seconds": 300,
         "intrusive": False, "default_on": False, "needs": "DNS reachable",
     },
-    "snmp": {
-        "label_en": "SNMP identity", "label_zh": "SNMP 探測",
-        "klass": "light", "default_interval_seconds": 3600, "min_interval_seconds": 300,
-        "intrusive": False, "default_on": False, "needs": "SNMP community / v3 credential",
-    },
     "netbios": {
         "label_en": "NetBIOS name", "label_zh": "NetBIOS 名稱",
         "klass": "light", "default_interval_seconds": 3600, "min_interval_seconds": 300,
