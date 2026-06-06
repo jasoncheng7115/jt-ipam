@@ -5,8 +5,7 @@ import { useI18n } from "vue-i18n";
 import { NCard, NDescriptions, NDescriptionsItem, NSpin, NSpace, NTag, NTooltip, useMessage } from "naive-ui";
 import { getAddress } from "@/api/addresses";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
-import OsIcon from "@/components/OsIcon.vue";
-import { useScanProbes, osFamilyLabel, probeLabel } from "@/api/scanProbes";
+import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import type { IPAddress } from "@/types";
 
 const route = useRoute();
@@ -59,28 +58,10 @@ watch(() => route.params.id, (id) => { if (id) load(String(id)); });
         @back="back"
       />
 
-      <!-- OS 與掃描項目（唯讀，由探測結果推導） -->
-      <n-card v-if="addr && (addr.os_family || showScanSection)" size="small" :bordered="true">
-        <n-descriptions label-placement="left" :column="1" size="small">
-          <n-descriptions-item v-if="addr.os_family" :label="t('cols.os')">
-            <n-tooltip v-if="addr.os_guess" trigger="hover">
-              <template #trigger>
-                <span style="display: inline-flex; align-items: center; gap: 6px">
-                  <OsIcon :family="addr.os_family" :size="16" />
-                  {{ osFamilyLabel(catalog.os_families, addr.os_family, locale) }}
-                </span>
-              </template>
-              {{ addr.os_guess }}
-            </n-tooltip>
-            <span v-else style="display: inline-flex; align-items: center; gap: 6px">
-              <OsIcon :family="addr.os_family" :size="16" />
-              {{ osFamilyLabel(catalog.os_families, addr.os_family, locale) }}
-            </span>
-          </n-descriptions-item>
-        </n-descriptions>
-
+      <!-- 掃描項目（唯讀，由探測結果推導）；OS 已併入上方主要欄位表 -->
+      <n-card v-if="addr && showScanSection" size="small" :bordered="true">
         <template v-if="showScanSection">
-          <div style="font-weight: 600; margin: 8px 0 4px">{{ t("scan_probes.title") }}</div>
+          <div style="font-weight: 600; margin: 0 0 4px">{{ t("scan_probes.title") }}</div>
           <n-descriptions label-placement="left" :column="1" size="small">
             <n-descriptions-item v-if="addr.effective_probes?.length" :label="t('scan_probes.effective')">
               <n-space :size="4" :wrap="true">

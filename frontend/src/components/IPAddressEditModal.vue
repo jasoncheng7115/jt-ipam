@@ -28,7 +28,8 @@ import { getAddressRelations, type RelationNode } from "@/api/relations";
 import { listDhcpRanges } from "@/api/integrations";
 import RelationChain from "@/components/RelationChain.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
-import { useScanProbes, probeLabel } from "@/api/scanProbes";
+import { useScanProbes, probeLabel, osFamilyLabel } from "@/api/scanProbes";
+import OsIcon from "@/components/OsIcon.vue";
 
 const router = useRouter();
 const { options: customerOptions, labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
@@ -543,6 +544,18 @@ async function remove() {
             <span>{{ props.address?.mac ?? "—" }}</span>
             <n-tag v-if="props.address?.mac_vendor" size="tiny" type="info" bordered
                    style="margin-left: 6px">{{ props.address.mac_vendor }}</n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('cols.os')">
+            <n-tooltip v-if="props.address?.os_family" :disabled="!props.address?.os_guess">
+              <template #trigger>
+                <span style="display:inline-flex;align-items:center;gap:6px">
+                  <os-icon :family="props.address.os_family" :size="16" />
+                  <span>{{ osFamilyLabel(catalog.os_families, props.address.os_family, locale) }}</span>
+                </span>
+              </template>
+              {{ props.address?.os_guess }}
+            </n-tooltip>
+            <span v-else>—</span>
           </n-descriptions-item>
           <n-descriptions-item :label="t('addresses.owner')">{{ props.address?.owner ?? "—" }}</n-descriptions-item>
           <n-descriptions-item :label="t('addresses.switch_port')">

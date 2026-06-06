@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.98] — 2026-06-06
+
+### Changed
+- OS detection result now shown as an **"Operating system"** field in the IP detail
+  table (top), and as an optional **OS** column in the subnet IP list.
+
 ## [0.4.97] — 2026-06-06
 
 ### Added

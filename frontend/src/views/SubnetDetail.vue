@@ -44,7 +44,10 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
-const { t } = useI18n();
+import OsIcon from "@/components/OsIcon.vue";
+import { useScanProbes, osFamilyLabel } from "@/api/scanProbes";
+const { t, locale } = useI18n();
+const { catalog } = useScanProbes();
 
 const { labelFor: customerLabelFor, options: customerOptions, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 
@@ -118,7 +121,7 @@ const { isPinned, toggle: togglePinned, ensureLoaded: ensurePinsLoaded } = usePi
 
 const { visibleKeys: ipVisibleKeys, setVisible: setIpVisible, reset: resetIpVisible } = useColumnPrefs(
   "subnet_detail_ips",
-  ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "owner", "switch_port", "device", "description", "last_seen", "stale_days", "note"],
+  ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "os", "owner", "switch_port", "device", "description", "last_seen", "stale_days", "note"],
   ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "switch_port", "description", "last_seen"],
 );
 const ipColumnPickerItems = [
@@ -129,6 +132,7 @@ const ipColumnPickerItems = [
   { key: "dhcp", label: "DHCP" },
   { key: "mac", label: "MAC" },
   { key: "mac_vendor", label: t("cols.vendor") },
+  { key: "os", label: t("cols.os") },
   { key: "owner", label: t("cols.owner") },
   { key: "switch_port", label: t("cols.switch_port") },
   { key: "device", label: t("cols.device") },
@@ -367,7 +371,7 @@ function stateTag(state: string) {
 }
 
 // 閒置區間列：IP 欄要橫跨「ip 之後的所有可見欄位」，文字才不會被切在一欄裡。
-const IP_COL_ORDER = ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor",
+const IP_COL_ORDER = ["live", "ip", "hostname", "state", "dhcp", "mac", "mac_vendor", "os",
   "owner", "switch_port", "device", "description", "last_seen", "stale_days", "note"];
 const gapSpan = computed(() => {
   const vis = IP_COL_ORDER.filter((k) => ipVisibleKeys.value.includes(k));
@@ -407,6 +411,15 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
   { title: t("addresses.mac"), key: "mac", width: 150, render: (r) => r.mac ?? "" },
   { title: t("cols.vendor"), key: "mac_vendor", width: 140,
     ellipsis: { tooltip: true }, render: (r) => r.mac_vendor ?? "—" },
+  { title: t("cols.os"), key: "os", width: 70,
+    render: (r) => {
+      if ((r as any).__gap || !r.os_family) return "—";
+      const label = osFamilyLabel(catalog.value.os_families, r.os_family, locale.value);
+      return h("span", { title: r.os_guess ?? undefined }, [
+        h(OsIcon, { family: r.os_family, size: 16 }),
+        label ? h("span", { style: "margin-left:4px" }, label) : null,
+      ]);
+    } },
   { title: t("addresses.owner"), key: "owner", width: 120,
     ellipsis: { tooltip: true }, render: (r) => r.owner ?? "" },
   { title: t("addresses.switch_port"), key: "switch_port", width: 160,

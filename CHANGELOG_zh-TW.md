@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.98] — 2026-06-06
+
+### 變更
+- OS 偵測結果在 IP 詳情主要欄位表中以**「作業系統」**欄位呈現（上方），子網路 IP
+  清單也新增可切換的 **OS** 欄。
+
 ## [0.4.97] — 2026-06-06
 
 ### 新增
