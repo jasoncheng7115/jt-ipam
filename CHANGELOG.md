@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.111] — 2026-06-08
+
+### Security (MCP per-object RBAC scoping)
+- Several MCP/AI list tools returned data outside the caller's visible scope.
+  `list_racks` / `list_locations` / `list_sections` / `list_customers` now filter
+  rows by per-object visibility; `recent_ip_changes` is scoped to visible subnets;
+  `get_customer_summary` denies non-visible customers; `stats_overview` scales its
+  per-object counts to the caller's scope and omits global-infrastructure counts
+  for users without global read. `dns_lookup` is now treated as global-infra.
+- Added a regression test suite (`test_mcp_rbac_scope.py`) covering zero-visibility
+  denial, partial-visibility blocking global-infra tools, row scoping, and scoped
+  stats counts.
+
 ## [0.4.110] — 2026-06-08
 
 ### Fixed (create-admin CLI)

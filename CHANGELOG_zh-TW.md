@@ -4,6 +4,17 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.111] — 2026-06-08
+
+### 安全（MCP 逐物件 RBAC 範圍）
+- 多個 MCP/AI 清單工具會回到使用者可見範圍以外的資料。`list_racks` /
+  `list_locations` / `list_sections` / `list_customers` 現在依逐物件可見性過濾列；
+  `recent_ip_changes` 限定可見子網路；`get_customer_summary` 對不可見客戶回查無；
+  `stats_overview` 的逐物件計數依範圍縮放，且對無全域讀取者不洩漏全域基礎設施計數。
+  `dns_lookup` 改歸類為全域基礎設施工具。
+- 新增回歸測試（`test_mcp_rbac_scope.py`）：零權限全擋、部門帳號擋全域工具、清單列
+  範圍過濾、stats 計數縮放。
+
 ## [0.4.110] — 2026-06-08
 
 ### 修正（create-admin CLI）

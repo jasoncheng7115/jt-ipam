@@ -13,6 +13,7 @@ import ipaddress
 import uuid
 from typing import Any
 
+from sqlalchemy import false as sa_false
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -338,30 +339,60 @@ async def check_dns_consistency(
 
 
 async def stats_overview(session: AsyncSession, *, user: User) -> dict[str, Any]:
-    """各類實體的總數（回答「有幾個 X」用：區段/子網路/IP/裝置/機櫃/地點/客戶/VLAN）。"""
-    async def _c(model) -> int:  # type: ignore[no-untyped-def]
+    """各類實體的總數。逐物件計數依使用者可見範圍縮放；全域基礎設施計數僅 admin/萬用讀取者可見。"""
+    async def _all(model) -> int:  # type: ignore[no-untyped-def]
         return int(await session.scalar(select(func.count()).select_from(model)) or 0)
-    from app.models.advanced import ASN, Circuit, Contact, Provider, Tenant
-    from app.models.physical import Cable
-    from app.models.virt import VirtualMachine
-    return {
-        "sections": await _c(Section),
-        "subnets": await _c(Subnet),
-        "ip_addresses": await _c(IPAddress),
-        "devices": await _c(Device),
-        "racks": await _c(Rack),
-        "locations": await _c(Location),
-        "customers": await _c(Customer),
-        "vlans": await _c(VLAN),
-        "nat_rules": await _c(NATTranslation),
-        "vms": await _c(VirtualMachine),
-        "circuits": await _c(Circuit),
-        "providers": await _c(Provider),
-        "asns": await _c(ASN),
-        "tenants": await _c(Tenant),
-        "contacts": await _c(Contact),
-        "cables": await _c(Cable),
+
+    async def _scoped(model, vis) -> int:  # type: ignore[no-untyped-def]
+        if vis is None:
+            return await _all(model)
+        if not vis:
+            return 0
+        return int(await session.scalar(
+            select(func.count()).select_from(model).where(model.id.in_(vis))) or 0)
+
+    vis_sec = await visible_ids(session, user=user, object_type="section")
+    vis_sub = await visible_ids(session, user=user, object_type="subnet")
+    vis_dev = await visible_ids(session, user=user, object_type="device")
+    vis_rack = await visible_ids(session, user=user, object_type="rack")
+    vis_loc = await visible_ids(session, user=user, object_type="location")
+    vis_cust = await visible_ids(session, user=user, object_type="customer")
+    # IP 數依可見子網路縮放（IPAddress 本身不可逐物件授權，靠所屬子網路）
+    if vis_sub is None:
+        ip_n = await _all(IPAddress)
+    elif not vis_sub:
+        ip_n = 0
+    else:
+        ip_n = int(await session.scalar(
+            select(func.count()).select_from(IPAddress)
+            .where(IPAddress.subnet_id.in_(vis_sub))) or 0)
+
+    out: dict[str, Any] = {
+        "sections": await _scoped(Section, vis_sec),
+        "subnets": await _scoped(Subnet, vis_sub),
+        "ip_addresses": ip_n,
+        "devices": await _scoped(Device, vis_dev),
+        "racks": await _scoped(Rack, vis_rack),
+        "locations": await _scoped(Location, vis_loc),
+        "customers": await _scoped(Customer, vis_cust),
     }
+    # 全域基礎設施計數：僅 admin / 萬用讀取者
+    if await has_global_read(session, user):
+        from app.models.advanced import ASN, Circuit, Contact, Provider, Tenant
+        from app.models.physical import Cable
+        from app.models.virt import VirtualMachine
+        out.update({
+            "vlans": await _all(VLAN),
+            "nat_rules": await _all(NATTranslation),
+            "vms": await _all(VirtualMachine),
+            "circuits": await _all(Circuit),
+            "providers": await _all(Provider),
+            "asns": await _all(ASN),
+            "tenants": await _all(Tenant),
+            "contacts": await _all(Contact),
+            "cables": await _all(Cable),
+        })
+    return out
 
 
 async def list_racks(
@@ -374,8 +405,11 @@ async def list_racks(
         .outerjoin(Location, Location.id == Rack.location_id)
         .order_by(Rack.name).limit(limit)
     )).all()
+    vis = await visible_ids(session, user=user, object_type="rack")
     out = []
     for rack, loc_name in rows:
+        if vis is not None and rack.id not in vis:
+            continue
         devs = list((await session.execute(
             select(Device.name, Device.type, Device.u_position, Device.u_size, Device.rack_face)
             .where(Device.rack_id == rack.id).order_by(Device.u_position)
@@ -412,8 +446,11 @@ async def list_locations(
     rows = list((await session.execute(
         select(Location).order_by(Location.name).limit(limit)
     )).scalars().all())
+    vis = await visible_ids(session, user=user, object_type="location")
     out = []
     for loc in rows:
+        if vis is not None and loc.id not in vis:
+            continue
         rack_count = int(await session.scalar(
             select(func.count()).select_from(Rack).where(Rack.location_id == loc.id)
         ) or 0)
@@ -538,14 +575,14 @@ async def list_customers(
     rows = list((await session.execute(
         select(Customer).order_by(Customer.name).limit(limit)
     )).scalars().all())
-    return {
-        "customers": [
-            {"id": str(c.id), "name": c.name, "title": c.title, "contact": c.contact,
-             "email": c.email, "phone": c.phone, "address": c.address}
-            for c in rows
-        ],
-        "count": len(rows),
-    }
+    vis = await visible_ids(session, user=user, object_type="customer")
+    out = [
+        {"id": str(c.id), "name": c.name, "title": c.title, "contact": c.contact,
+         "email": c.email, "phone": c.phone, "address": c.address}
+        for c in rows
+        if vis is None or c.id in vis
+    ]
+    return {"customers": out, "count": len(out)}
 
 
 async def list_nat(
@@ -589,8 +626,11 @@ async def list_sections(session: AsyncSession, *, user: User, limit: int = 200) 
     rows = list((await session.execute(
         select(Section).order_by(Section.name).limit(limit)
     )).scalars().all())
+    vis = await visible_ids(session, user=user, object_type="section")
     out = []
     for s in rows:
+        if vis is not None and s.id not in vis:
+            continue
         sub_n = int(await session.scalar(
             select(func.count()).select_from(Subnet).where(Subnet.section_id == s.id)
         ) or 0)
@@ -675,10 +715,14 @@ async def recent_ip_changes(
     """最近的 IP 異動記錄（可指定某 IP）。"""
     from app.models.ip_change_log import IPChangeLog
     limit = min(int(limit), 100)
-    stmt = select(IPChangeLog).order_by(IPChangeLog.created_at.desc()).limit(limit)
+    stmt = select(IPChangeLog)
     if ip:
-        stmt = select(IPChangeLog).where(IPChangeLog.ip_text == ip).order_by(
-            IPChangeLog.created_at.desc()).limit(limit)
+        stmt = stmt.where(IPChangeLog.ip_text == ip)
+    # RBAC：只回使用者可見子網路內 IP 的異動（限定範圍時 subnet_id 必須落在 vis）
+    vis = await visible_ids(session, user=user, object_type="subnet")
+    if vis is not None:
+        stmt = stmt.where(IPChangeLog.subnet_id.in_(vis)) if vis else stmt.where(sa_false())
+    stmt = stmt.order_by(IPChangeLog.created_at.desc()).limit(limit)
     rows = list((await session.execute(stmt)).scalars().all())
     return {"changes": [
         {"ip": r.ip_text, "event": r.event_type, "field": r.field,
@@ -1173,6 +1217,10 @@ async def get_customer_summary(
             select(Customer).where(Customer.name == name)
         )).scalars().first()
     if cust is None:
+        raise IPAMToolError("customer not found")
+    # RBAC：客戶不在可見範圍 → 當作查無，不洩漏
+    vis = await visible_ids(session, user=user, object_type="customer")
+    if vis is not None and cust.id not in vis:
         raise IPAMToolError("customer not found")
     from sqlalchemy import func as _f
     n_sec = await session.scalar(select(_f.count()).select_from(Section).where(Section.customer_id == cust.id))
@@ -2229,6 +2277,7 @@ UTILITY_TOOLS: frozenset[str] = frozenset({
 GLOBAL_READ_TOOLS: frozenset[str] = frozenset({
     "list_vlans", "list_vrfs", "list_nat", "list_firewalls", "list_firewall_rules",
     "list_firewall_aliases", "list_dns_servers", "list_dns_zones", "check_dns_consistency",
+    "dns_lookup",
     "list_vms", "list_wireless_links", "list_vpn_tunnels", "list_scan_agents",
     "list_arp", "list_fdb", "list_circuits", "list_providers", "list_asns",
     "list_tenants", "list_contacts", "list_ssids", "list_cables", "cable_trace",
