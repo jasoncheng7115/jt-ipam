@@ -185,6 +185,10 @@
   .foot-in{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
   .disclaimer{font-size:13px;color:var(--muted);background:#fff;border:1px dashed var(--line);
     border-radius:12px;padding:16px 20px}
+  /* 系統需求：與「首次登入密碼」白底虛線框區隔 → 綠色淡底 + 左側強調邊 */
+  .sysreq{font-size:13px;color:#1f3a2e;background:linear-gradient(135deg,#eafaf0,#f3fbf7);
+    border:1px solid #cbe8d6;border-left:4px solid #18a058;border-radius:12px;padding:16px 20px}
+  .sysreq strong{color:#0c7a43}
   /* 卡片 icon / badge 配色輪替：綠為主體，輔以多色，避免整頁只有綠+白 */
   .grid .card .ic{color:var(--green);background:rgba(24,160,88,.12)}
   .grid .card:nth-child(6n+2) .ic{color:#6366f1;background:rgba(99,102,241,.13)}
@@ -584,7 +588,7 @@
       <h2><span class="zh">部署</span><span class="en">Deployment</span></h2>
       <p><span class="zh">以 systemd 託管、預設強制 HTTPS：可選 nginx 反向代理或 uvicorn 自簽憑證，內網、對外都能安心上線。</span><span class="en">Runs under systemd with HTTPS enforced by default — choose an nginx reverse proxy or a self-signed uvicorn, secure whether on an intranet or the public internet.</span></p>
     </div>
-    <p style="margin:0 0 14px" class="disclaimer">
+    <p style="margin:0 0 14px" class="sysreq">
       <span class="zh"><strong>系統需求：</strong>Debian 12+ 或 Ubuntu 22.04+（64 位元）。<br><strong>硬體：</strong>最低 2 核心 CPU / 4 GB 記憶體 / 20 GB 磁碟；建議 4 核心 / 8 GB / 40 GB 以上（保留給資料庫與備份成長）。選用的本地 LLM 請另跑於獨立主機、依模型自行配足記憶體 / 顯示記憶體，不含在此。<br><strong>自動安裝：</strong>安裝腳本會自動裝好並設定 PostgreSQL 16、Python 3.11+、Node 20+、nginx 等相依套件，並自動產生所有金鑰。<br><strong>更多：</strong>完整步驟與環境變數見 GitHub 上的 README 與 <code>scripts/</code>。</span>
       <span class="en"><strong>Requirements:</strong> Debian 12+ or Ubuntu 22.04+ (64-bit).<br><strong>Hardware:</strong> minimum 2 vCPU / 4 GB RAM / 20 GB disk; recommended 4 vCPU / 8 GB / 40 GB+ (headroom for the database and backups). The optional local LLM runs on a separate host with its own RAM/VRAM and is not included here.<br><strong>Auto-setup:</strong> the install script installs and configures PostgreSQL 16, Python 3.11+, Node 20+ and nginx, and generates all keys for you.<br><strong>More:</strong> see the README and <code>scripts/</code> on GitHub for full steps and env vars.</span>
     </p>

@@ -475,83 +475,83 @@ onMounted(() => { void refresh(); void loadOpts(); });
         </n-space>
       </template>
       <n-form :style="viewOnly ? 'pointer-events:none; opacity:.92' : ''">
-        <n-form-item :label="t('common.name')"><n-input v-model:value="form.name" /></n-form-item>
+        <n-form-item :label="t('common.name')"><n-input :disabled="viewOnly" v-model:value="form.name" /></n-form-item>
         <n-form-item :label="t('nat.type')">
-          <n-select v-model:value="form.type" :options="typeOpts" />
+          <n-select :disabled="viewOnly" v-model:value="form.type" :options="typeOpts" />
         </n-form-item>
         <n-form-item :label="t('nat.protocol')">
-          <n-select v-model:value="form.protocol" :options="protoOpts" />
+          <n-select :disabled="viewOnly" v-model:value="form.protocol" :options="protoOpts" />
         </n-form-item>
         <n-form-item :label="t('nat.ip_version')">
-          <n-select v-model:value="form.ip_version" :options="ipVersionOpts" />
+          <n-select :disabled="viewOnly" v-model:value="form.ip_version" :options="ipVersionOpts" />
         </n-form-item>
         <n-space :size="20" style="margin-bottom: 6px">
           <n-form-item :label="t('nat.disabled')" :show-feedback="false">
-            <n-switch v-model:value="form.disabled" />
+            <n-switch :disabled="viewOnly" v-model:value="form.disabled" />
           </n-form-item>
           <n-form-item :label="t('nat.no_rdr')" :show-feedback="false">
-            <n-switch v-model:value="form.no_rdr" />
+            <n-switch :disabled="viewOnly" v-model:value="form.no_rdr" />
           </n-form-item>
           <n-form-item :label="t('nat.log')" :show-feedback="false">
-            <n-switch v-model:value="form.log" />
+            <n-switch :disabled="viewOnly" v-model:value="form.log" />
           </n-form-item>
         </n-space>
         <n-form-item :label="t('nat.device')">
-          <n-select v-model:value="form.device_id" :options="deviceOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.device_id" :options="deviceOpts" filterable clearable
                     :placeholder="t('nat.device_placeholder')" />
         </n-form-item>
         <!-- 來源相關欄位放一起 -->
         <n-form-item :label="t('nat.src_ip')">
-          <n-select v-model:value="form.src_ip_id" :options="addrOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.src_ip_id" :options="addrOpts" filterable clearable
                     :placeholder="t('nat.src_ip_placeholder')" />
         </n-form-item>
         <n-form-item :label="t('nat.src_interface')">
-          <n-input v-model:value="form.src_interface" placeholder="wan / lan / opt2 …" />
+          <n-input :disabled="viewOnly" v-model:value="form.src_interface" placeholder="wan / lan / opt2 …" />
         </n-form-item>
         <n-space :size="12" align="end">
           <n-form-item :label="t('nat.src_port')" :show-feedback="false">
-            <n-input-number v-model:value="form.src_port" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.src_port" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.port_to')" :show-feedback="false">
-            <n-input-number v-model:value="form.src_port_to" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.src_port_to" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.invert')" :show-feedback="false">
-            <n-switch v-model:value="form.src_not" />
+            <n-switch :disabled="viewOnly" v-model:value="form.src_not" />
           </n-form-item>
         </n-space>
         <!-- 目的相關欄位放一起 -->
         <n-form-item :label="t('nat.dst_ip')">
-          <n-select v-model:value="form.dst_ip_id" :options="addrOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.dst_ip_id" :options="addrOpts" filterable clearable
                     :placeholder="t('nat.dst_ip_placeholder')" />
         </n-form-item>
         <n-space :size="12" align="end">
           <n-form-item :label="t('nat.dst_port')" :show-feedback="false">
-            <n-input-number v-model:value="form.dst_port" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.dst_port" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.port_to')" :show-feedback="false">
-            <n-input-number v-model:value="form.dst_port_to" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.dst_port_to" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.invert')" :show-feedback="false">
-            <n-switch v-model:value="form.dst_not" />
+            <n-switch :disabled="viewOnly" v-model:value="form.dst_not" />
           </n-form-item>
         </n-space>
         <n-divider style="margin: 8px 0" />
         <n-space :size="12">
           <n-form-item :label="t('nat.nat_reflection')" :show-feedback="false">
-            <n-select v-model:value="form.nat_reflection" :options="natReflectionOpts" style="width: 140px" />
+            <n-select :disabled="viewOnly" v-model:value="form.nat_reflection" :options="natReflectionOpts" style="width: 140px" />
           </n-form-item>
           <n-form-item :label="t('nat.pool_options')" :show-feedback="false">
-            <n-input v-model:value="form.pool_options" placeholder="default" style="width: 160px" />
+            <n-input :disabled="viewOnly" v-model:value="form.pool_options" placeholder="default" style="width: 160px" />
           </n-form-item>
           <n-form-item :label="t('nat.category')" :show-feedback="false">
-            <n-input v-model:value="form.category" style="width: 160px" />
+            <n-input :disabled="viewOnly" v-model:value="form.category" style="width: 160px" />
           </n-form-item>
         </n-space>
         <n-form-item :label="t('nat.filter_rule')">
-          <n-input v-model:value="form.filter_rule" :placeholder="t('nat.filter_rule_ph')" />
+          <n-input :disabled="viewOnly" v-model:value="form.filter_rule" :placeholder="t('nat.filter_rule_ph')" />
         </n-form-item>
         <n-form-item :label="t('sections.description')">
-          <n-input v-model:value="form.description" type="textarea" :rows="2" />
+          <n-input :disabled="viewOnly" v-model:value="form.description" type="textarea" :rows="2" />
         </n-form-item>
       </n-form>
       <n-space justify="end">
