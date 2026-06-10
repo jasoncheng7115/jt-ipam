@@ -40,6 +40,21 @@ try {
   if (Array.isArray(cached) && cached.length) realms.value = cached;
 } catch { /* ignore */ }
 onMounted(async () => {
+  // SSO（OIDC / SAML）callback：後端把 token 放在 URL fragment 帶回（#access_token=…&refresh_token=…）。
+  // 先處理它（落地 token → 抓 me → 整頁導向目標頁）；否則登入頁會忽略 token、無限停在登入頁。
+  const frag = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const ssoAccess = frag.get("access_token");
+  if (ssoAccess) {
+    try {
+      await auth.loginFromSso(ssoAccess, frag.get("refresh_token") ?? "");
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      window.location.assign(targetAfterLogin());
+      return;
+    } catch {
+      errorMsg.value = t("login.failed");
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }
   try {
     const { data } = await apiClient.get<{ realms: { label: string; value: string }[] }>("/api/v1/auth/realms");
     if (data.realms?.length) {
