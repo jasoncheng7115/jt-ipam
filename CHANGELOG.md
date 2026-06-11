@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.130] — 2026-06-11
+
+### Fixed
+- **ARP table retention** — `arp_entries` was insert/update only and never pruned, so it
+  grew unbounded over time (MAC↔IP churn and orphaned rows from deleted devices each left a
+  row). The sync timer now deletes ARP entries older than `ARP_RETENTION_DAYS` (default 30;
+  set 0 to disable) once per run, including orphan rows.
+
+### Added
+- **Overlapping-subnet warning on integration settings** — when overlapping subnets exist
+  (the same IP can appear in more than one subnet) and an integration (LibreNMS / OPNsense /
+  Wazuh / Proxmox / AdGuard / DNS) has no subnet scope set, the settings form now shows a
+  warning that a sync may stamp liveness / DHCP / MAC onto the wrong tenant's copy of an IP,
+  pointing the admin to set the subnet scope. New `GET /subnets/overlaps/exists` (admin).
+
+### Notes
+- No new duplicate-IP / duplicate-ARP risk: `ip_addresses` is unique on `(subnet_id, ip)`;
+  `arp_entries` is upserted on `(ip, mac, device_id)`; only LibreNMS writes ARP (scanner and
+  OPNsense only stamp existing IPs). Same-IP-string across overlapping subnets remains by design.
+
 ## [0.4.129] — 2026-06-11
 
 ### Security

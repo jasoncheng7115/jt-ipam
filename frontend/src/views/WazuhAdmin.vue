@@ -3,6 +3,7 @@ import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSwitch, NSelect, NTabs, NTabPane, NTag, NPopconfirm, NAlert, NTooltip,
@@ -325,6 +326,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <n-form-item :label="t('wazuh_admin.scope_subnets')">
           <n-select v-model:value="newInst.scope_subnet_ids" :options="subnetOptions"
                     multiple filterable clearable :placeholder="t('wazuh_admin.scope_all')" />
+          <ScopeOverlapWarning :scope-empty="!newInst.scope_subnet_ids?.length" />
         </n-form-item>
         <div style="margin: -8px 0 4px">
           <span style="font-size: 11px; opacity: .7">{{ t("wazuh_admin.scope_hint") }}</span>

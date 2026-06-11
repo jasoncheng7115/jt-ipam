@@ -1071,6 +1071,9 @@
     "help_ucs": "直接呼叫 Univention UCS 的 UDM REST API（/univention/udm/…），不連 UCS 內的 BIND9。API URL 填 https://<ucs主機>；帳號用具 DNS 寫權者（如 Administrator）；自簽憑證可關閉「驗證 TLS 憑證」。",
     "edit": "編輯 DNS 服務"
   },
+  "scope_overlap": {
+    "warning": "偵測到有重疊網段（同一個 IP 存在於多個子網路）。此整合未設定「限定子網路範圍」，同步時可能把存活狀態／DHCP／MAC 標到錯誤單位的同 IP。建議在下方指定關聯子網路範圍。"
+  },
   "librenms_admin": {
     "title": "LibreNMS 整合",
     "endpoint": "API URL",

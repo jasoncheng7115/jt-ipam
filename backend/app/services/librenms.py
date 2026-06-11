@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy import true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -440,6 +440,23 @@ async def sync_arp(
                     )
 
     return seen, inserted, updated, filled
+
+
+async def prune_stale_arp(session: AsyncSession, *, max_age_days: int = 30) -> int:
+    """刪除 last_seen_at 超過 max_age_days 的 ARP 紀錄，回傳刪除筆數。
+
+    ARP 是「曾經看過」的歷史紀錄（sync_arp 只新增/更新、從不刪）；MAC 換 IP、IP 換 MAC、
+    甚至來源 device 被刪（device_id→NULL 的孤兒）都會各留一筆，靠 last_seen_at 區分新舊。
+    若不回收，arp_entries 會無限累積。此函式定期把過期的整批刪除（含孤兒 row）。
+    max_age_days<=0 視為停用（不刪）。
+    """
+    if max_age_days <= 0:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+    result = await session.execute(
+        delete(ARPEntry).where(ARPEntry.last_seen_at < cutoff)
+    )
+    return int(result.rowcount or 0)
 
 
 # ─────────────────── 同步：FDB ───────────────────

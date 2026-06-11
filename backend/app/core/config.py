@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     outbound_allow_hosts: Annotated[list[str], NoDecode, Field(default_factory=list)]
     outbound_allow_private: bool = True
 
+    # ── ARP 紀錄保留 ──
+    # arp_entries 只新增/更新、不會自動回收；定時 sync 會刪掉 last_seen_at 超過此天數的
+    # 舊 ARP（含來源 device 被刪的孤兒 row）。設 0 或負數＝停用清除（永久保留）。
+    arp_retention_days: int = 30
+
     # ── Graylog ──
     graylog_host: str | None = None
     graylog_port: int = 12201

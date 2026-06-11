@@ -3,6 +3,7 @@ import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { autoSort } from "@/composables/useTableSort";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NInputNumber, NSwitch, NCheckbox, NTabs, NTabPane, NSelect, NPopconfirm, NTag, NAlert,
@@ -733,6 +734,7 @@ onMounted(() => {
               <div style="font-size: 12px; opacity: 0.8; margin-bottom: 2px;">{{ t("firewall.scope_subnets") }}</div>
               <n-select v-model:value="newFw.scope_subnet_ids" :options="subnetOpts"
                         multiple clearable filterable :placeholder="t('firewall.scope_subnets')" />
+              <ScopeOverlapWarning :scope-empty="!newFw.scope_subnet_ids?.length" />
             </div>
             <div>
               <div style="font-size: 12px; opacity: 0.8; margin-bottom: 2px;">{{ t("firewall.scope_iface_map") }}</div>

@@ -1073,6 +1073,9 @@
     "help_ucs": "Calls the Univention UCS UDM REST API (/univention/udm/…) directly — not the internal BIND9. API URL = https://<ucs-host>; use an account with DNS write rights (e.g. Administrator); turn off TLS verification for self-signed certs.",
     "edit": "Edit DNS server"
   },
+  "scope_overlap": {
+    "warning": "Overlapping subnets detected (the same IP exists in more than one subnet). This integration has no subnet scope set, so a sync may stamp liveness / DHCP / MAC onto the wrong tenant's copy of an IP. Consider setting the subnet scope below."
+  },
   "librenms_admin": {
     "title": "LibreNMS",
     "endpoint": "API URL",

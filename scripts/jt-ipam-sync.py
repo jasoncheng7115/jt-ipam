@@ -117,6 +117,20 @@ async def _run() -> int:
                 log.error("librenms %s sync failed: %s", name, exc)
                 failed += 1
 
+        # ── ARP 過期清除（每輪一次，與 instance 是否到期無關）──
+        # arp_entries 只新增不回收，靠這裡刪掉超過保留天數的舊紀錄（含孤兒 row）。
+        try:
+            from app.core.config import get_settings
+            pruned = await librenms_svc.prune_stale_arp(
+                session, max_age_days=get_settings().arp_retention_days,
+            )
+            await session.commit()
+            if pruned:
+                log.info("arp prune: removed %d stale entries", pruned)
+        except Exception as exc:  # noqa: BLE001
+            await session.rollback()
+            log.error("arp prune failed: %s", exc)
+
         # ── AdGuard ──
         ags = (
             await session.execute(

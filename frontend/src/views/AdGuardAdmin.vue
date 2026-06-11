@@ -2,6 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip,
   NModal, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NCheckbox, NPopconfirm,
@@ -257,6 +258,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <n-form-item :label="t('adguard_admin.scope_subnets')">
           <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
                     multiple filterable clearable :placeholder="t('adguard_admin.scope_all')" />
+          <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
         </n-form-item>
         <div style="margin: -8px 0 4px">
           <span style="font-size: 11px; opacity: .7">{{ t("adguard_admin.scope_hint") }}</span>

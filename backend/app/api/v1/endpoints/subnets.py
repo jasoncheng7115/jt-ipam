@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_object_perm
+from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.section import Section
@@ -36,10 +36,20 @@ from app.services.subnet import (
     compute_master_subnet,
     find_first_free_address,
     get_usage,
+    has_overlapping_subnets,
     rebuild_subnet_hierarchy,
 )
 
 router = APIRouter(prefix="/subnets", tags=["subnets"])
+
+
+@router.get("/overlaps/exists", dependencies=[Depends(require_admin)])
+async def overlaps_exist(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, bool]:
+    """是否存在同 VRF 下 CIDR 重疊的子網路。前端整合設定頁用來提醒：有重疊網段時
+    未設 scope_subnet_ids 的整合可能把同一 IP 標到錯誤客戶。"""
+    return {"has_overlap": await has_overlapping_subnets(session)}
 
 
 @router.get("", response_model=Paginated[SubnetRead])

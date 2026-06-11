@@ -4,6 +4,24 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.130] — 2026-06-11
+
+### 修正
+- **ARP 紀錄保留** — `arp_entries` 原本只新增/更新、從不回收，長期會無限累積（MAC↔IP 變動、
+  來源 device 被刪的孤兒 row 都各留一筆）。同步排程現在每輪刪除 `last_seen_at` 超過
+  `ARP_RETENTION_DAYS`（預設 30 天；設 0 停用）的舊 ARP，含孤兒 row。
+
+### 新增
+- **整合設定頁的重疊網段警告** — 當存在重疊網段（同一 IP 可能出現在多個子網路）且某整合
+  （LibreNMS / OPNsense / Wazuh / Proxmox / AdGuard / DNS）未設定限定子網路範圍時，設定表單
+  會顯示警告：同步可能把存活狀態／DHCP／MAC 標到錯誤單位的同 IP，並引導去設定關聯子網路範圍。
+  新增 `GET /subnets/overlaps/exists`（admin）。
+
+### 說明
+- 沒有新的重複 IP／重複 ARP 風險：`ip_addresses` 對 `(subnet_id, ip)` 唯一；`arp_entries` 以
+  `(ip, mac, device_id)` upsert；只有 LibreNMS 會寫 ARP（scanner 與 OPNsense 只 stamp 既有 IP）。
+  重疊網段下「同 IP 字串跨子網路多筆」屬設計上正常。
+
 ## [0.4.129] — 2026-06-11
 
 ### 安全性
