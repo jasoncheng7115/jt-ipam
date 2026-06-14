@@ -55,7 +55,14 @@
     "auth_hint": "用來登入 SFTP 主機。密碼或 SSH 私鑰二擇一即可（私鑰優先）；憑證本身的私鑰是下方的 key_path 遠端檔案,與此無關。",
     "remote_files": "遠端憑證檔案路徑",
     "interval_hours": "自動抓取間隔(小時)",
-    "last_error": "上次抓取錯誤"
+    "last_error": "上次抓取錯誤",
+    "test": "測試連線",
+    "test_ok": "連線成功",
+    "test_fail": "連線失敗",
+    "gen_key": "自動產生金鑰",
+    "gen_key_hint": "由 jt-ipam 產生 SSH 金鑰並儲存,公鑰請貼到 SFTP 主機。",
+    "key_generated": "已產生並儲存金鑰,請複製下方公鑰加到主機",
+    "pub_key_label": "公鑰（加到 SFTP 主機的 ~/.ssh/authorized_keys）"
   },
   "certHelp": {
     "button": "安裝說明",

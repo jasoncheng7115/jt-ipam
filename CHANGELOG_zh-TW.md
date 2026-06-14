@@ -4,6 +4,22 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.142] — 2026-06-14
+
+### 修正
+- **設定 SFTP/URL 來源儲存時 500**(MissingGreenlet):`PUT /certificates/{id}/source` commit 後
+  `model_validate` 在同步情境觸發 lazy IO → 改 commit 後 `session.refresh(cert)` 再序列化。
+
+### 新增 — 憑證來源測試連線 + 自動產生 SSH 金鑰
+- 來源設定加**「測試連線」**鈕:以表單目前內容(密碼/私鑰留空＝沿用已存)實際試連 URL / SFTP,
+  回成功訊息或可讀失敗原因,不存檔(`POST /certificates/{id}/source/test`)。
+- SFTP 登入私鑰加**「自動產生金鑰」**鈕:jt-ipam 產生 ed25519 金鑰對、私鑰 AES-GCM 加密儲存(不回明文),
+  回**公鑰**供貼到 SFTP 主機 `authorized_keys`(`POST /certificates/{id}/source/ssh-keypair`)。
+
+### 變更
+- 憑證 / 派送代理操作欄按鈕改 **icon-only + hover tooltip**(與全站列表一致)、欄寬收緊並置中,
+  解決過寬左空、右側溢出、icon 偏左問題。
+
 ## [0.4.141] — 2026-06-14
 
 ### 修正 / 變更

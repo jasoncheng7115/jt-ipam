@@ -9,14 +9,14 @@ import {
 } from "naive-ui";
 import {
   PlusIcon, RefreshIcon, CopyIcon, LockIcon, InfoIcon, SaveIcon,
-  ImportIcon, TokenIcon, SettingsIcon, SyncIcon, DeleteIcon,
+  ImportIcon, TokenIcon, SettingsIcon, SyncIcon, DeleteIcon, TestIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import {
   listCertificates, createCertificate, deleteCertificate, uploadVersion, generateSelfSigned,
-  setCertSource, fetchCertNow,
+  setCertSource, fetchCertNow, testCertSource, genCertSourceSshKey,
   listCertAgents, createCertAgent, rotateCertAgentKey, deleteCertAgent,
   type Certificate, type CertAgent,
 } from "@/api/certificates";
@@ -153,23 +153,51 @@ function openSource(c: Certificate) {
     cert_path: cfg.cert_path ?? "", key_path: cfg.key_path ?? "", chain_path: cfg.chain_path ?? "",
     source_password: "", source_private_key: "",
   };
+  sshPubKey.value = "";
   showSource.value = true;
 }
-async function saveSource() {
-  if (!sourceTarget.value) return;
+function buildSourcePayload() {
   const f = sourceForm.value;
   let cfg: Record<string, unknown> = {};
   if (f.source_type === "url") cfg = { cert_url: f.cert_url, key_url: f.key_url || undefined, chain_url: f.chain_url || undefined };
   else if (f.source_type === "sftp") cfg = { host: f.host, port: f.port, username: f.username, cert_path: f.cert_path, key_path: f.key_path || undefined, chain_path: f.chain_path || undefined };
+  return {
+    source_type: f.source_type, source_config: cfg,
+    fetch_interval_seconds: Math.max(300, f.fetch_interval_hours * 3600),
+    source_password: f.source_password || undefined,
+    source_private_key: f.source_private_key || undefined,
+  };
+}
+async function saveSource() {
+  if (!sourceTarget.value) return;
   try {
-    await setCertSource(sourceTarget.value.id, {
-      source_type: f.source_type, source_config: cfg,
-      fetch_interval_seconds: Math.max(300, f.fetch_interval_hours * 3600),
-      source_password: f.source_password || undefined,
-      source_private_key: f.source_private_key || undefined,
-    });
+    await setCertSource(sourceTarget.value.id, buildSourcePayload());
     showSource.value = false; await loadCerts(); msg.success(t("common.saved"));
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+const testing = ref(false);
+async function testSource() {
+  if (!sourceTarget.value) return;
+  testing.value = true;
+  try {
+    const r = await testCertSource(sourceTarget.value.id, buildSourcePayload());
+    if (r.ok) msg.success(r.message || t("certSource.test_ok"));
+    else msg.error(r.message || t("certSource.test_fail"));
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  finally { testing.value = false; }
+}
+const sshPubKey = ref("");
+const genningKey = ref(false);
+async function genSshKey() {
+  if (!sourceTarget.value) return;
+  genningKey.value = true;
+  try {
+    const r = await genCertSourceSshKey(sourceTarget.value.id);
+    sshPubKey.value = r.public_key;
+    sourceForm.value.source_private_key = "";  // 已存於後端,表單留空＝沿用
+    msg.success(t("certSource.key_generated"));
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  finally { genningKey.value = false; }
 }
 async function doFetchNow(c: Certificate) {
   try {
@@ -218,10 +246,13 @@ const configExample = `deployments:
   - cert: mail-cert
     profile: pmg`;
 
-// 操作欄按鈕：icon + 文字；欄寬不足時由全域 col-actions CSS 收成只剩 icon。
+// 操作欄按鈕：icon-only + hover tooltip 顯示文字（與全站列表操作欄一致）。
 function actBtn(icon: any, label: string, onClick: () => void, props: Record<string, any> = {}) {
-  return h(NButton, { size: "small", ...props, onClick }, {
-    icon: () => h(NIcon, null, () => h(icon)),
+  return h(NTooltip, null, {
+    trigger: () => h(NButton, {
+      size: "small", quaternary: true, ...props,
+      onClick: (e: MouseEvent) => { e.stopPropagation(); onClick(); },
+    }, { icon: () => h(NIcon, null, () => h(icon)) }),
     default: () => label,
   });
 }
@@ -258,8 +289,8 @@ const certColsAll = computed<DataTableColumns<Certificate>>(() => autoSort([
         ? h("span", { style: "opacity:.5" }, "—")
         : h(NTag, { size: "small", type: c.last_fetch_error ? "error" : "info" },
             () => c.source_type.toUpperCase()) },
-  { title: t("cols.actions"), key: "actions", className: "col-actions", align: "center", width: 420,
-    render: (c) => h(NSpace, { size: 4, wrapItem: false, wrap: false, justify: "center", style: "width:100%" }, () => [
+  { title: t("cols.actions"), key: "actions", className: "col-actions", align: "center", width: 190,
+    render: (c) => h(NSpace, { size: 2, wrapItem: false, wrap: false, justify: "center", style: "width:100%" }, () => [
       actBtn(ImportIcon, t("certs.upload_version"), () => openUpload(c)),
       actBtn(TokenIcon, t("certs.self_signed"), () => openSelf(c)),
       actBtn(SettingsIcon, t("certSource.source"), () => openSource(c)),
@@ -320,8 +351,8 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
   { title: t("certs.deployed"), key: "reported", width: 90,
     sorter: (a, b) => (a.reported ?? []).length - (b.reported ?? []).length,
     render: (a) => `${(a.reported ?? []).filter(d => (d as any).status === "ok").length} / ${(a.reported ?? []).length}` },
-  { title: t("cols.actions"), key: "actions", className: "col-actions", align: "center", width: 200,
-    render: (a) => h(NSpace, { size: 4, wrapItem: false, wrap: false, justify: "center", style: "width:100%" }, () => [
+  { title: t("cols.actions"), key: "actions", className: "col-actions", align: "center", width: 100,
+    render: (a) => h(NSpace, { size: 2, wrapItem: false, wrap: false, justify: "center", style: "width:100%" }, () => [
       actBtn(SyncIcon, t("certs.rotate_key"), () => doRotate(a)),
       h(NPopconfirm, { onPositiveClick: () => removeAgent(a) }, {
         trigger: () => actBtn(DeleteIcon, t("common.delete"), () => {}, { tertiary: true, type: "error" }),
@@ -484,7 +515,26 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
         </n-divider>
         <div style="font-size: 12px; opacity: .7; margin: -4px 0 8px">{{ t("certSource.auth_hint") }}</div>
         <n-form-item :label="t('certSource.password')"><n-input v-model:value="sourceForm.source_password" type="password" show-password-on="click" :placeholder="t('certSource.secret_keep')" /></n-form-item>
-        <n-form-item :label="t('certSource.private_key')"><n-input v-model:value="sourceForm.source_private_key" type="textarea" :rows="3" :placeholder="t('certSource.ssh_key_keep')" /></n-form-item>
+        <n-form-item :label="t('certSource.private_key')">
+          <n-space vertical :size="6" style="width:100%">
+            <n-input v-model:value="sourceForm.source_private_key" type="textarea" :rows="3" :placeholder="t('certSource.ssh_key_keep')" />
+            <n-space :size="8" align="center">
+              <n-button size="tiny" secondary :loading="genningKey" @click="genSshKey">
+                <template #icon><n-icon :component="TokenIcon" /></template>{{ t("certSource.gen_key") }}
+              </n-button>
+              <span style="font-size:12px;opacity:.6">{{ t("certSource.gen_key_hint") }}</span>
+            </n-space>
+            <n-alert v-if="sshPubKey" type="success" :bordered="true" :show-icon="false" style="font-size:12px">
+              <div style="font-weight:600;margin-bottom:4px">{{ t("certSource.pub_key_label") }}</div>
+              <n-input :value="sshPubKey" type="textarea" :rows="2" readonly style="font-family:monospace;font-size:11px" />
+              <n-space :size="6" style="margin-top:6px">
+                <n-button size="tiny" secondary @click="copy(sshPubKey)">
+                  <template #icon><n-icon :component="CopyIcon" /></template>{{ t("certHelp.copy") }}
+                </n-button>
+              </n-space>
+            </n-alert>
+          </n-space>
+        </n-form-item>
         <n-divider style="margin: 4px 0 10px" title-placement="left">
           <span style="font-size: 12px; opacity: .7">{{ t("certSource.remote_files") }}</span>
         </n-divider>
@@ -501,9 +551,15 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       {{ t("certSource.last_error") }}: {{ sourceTarget.last_fetch_error }}
     </n-alert>
     <template #footer>
-      <n-button type="primary" @click="saveSource">
-        <template #icon><n-icon :component="SaveIcon" /></template>{{ t("common.save") }}
-      </n-button>
+      <n-space justify="space-between">
+        <n-button v-if="sourceForm.source_type !== 'none'" :loading="testing" @click="testSource">
+          <template #icon><n-icon :component="TestIcon" /></template>{{ t("certSource.test") }}
+        </n-button>
+        <span v-else />
+        <n-button type="primary" @click="saveSource">
+          <template #icon><n-icon :component="SaveIcon" /></template>{{ t("common.save") }}
+        </n-button>
+      </n-space>
     </template>
   </n-modal>
 

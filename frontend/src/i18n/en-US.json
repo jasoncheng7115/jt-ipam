@@ -55,7 +55,14 @@
     "auth_hint": "Used to log in to the SFTP host. Provide a password OR an SSH private key (key takes precedence). The certificate's own private key is the remote key_path file below — unrelated to this.",
     "remote_files": "Remote certificate file paths",
     "interval_hours": "Fetch interval (hours)",
-    "last_error": "Last fetch error"
+    "last_error": "Last fetch error",
+    "test": "Test connection",
+    "test_ok": "Connection OK",
+    "test_fail": "Connection failed",
+    "gen_key": "Generate key",
+    "gen_key_hint": "jt-ipam generates and stores an SSH key; add the public key to the SFTP host.",
+    "key_generated": "Key generated and stored — copy the public key below onto the host",
+    "pub_key_label": "Public key (add to the SFTP host's ~/.ssh/authorized_keys)"
   },
   "certHelp": {
     "button": "Install instructions",

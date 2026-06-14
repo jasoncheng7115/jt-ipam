@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.142] — 2026-06-14
+
+### Fixed
+- **500 when saving an SFTP/URL source** (MissingGreenlet): `PUT /certificates/{id}/source` serialized
+  the ORM object after commit, triggering a lazy load in a sync context. Now refreshes the object
+  (`session.refresh`) after commit before serializing.
+
+### Added — Source connection test + auto-generated SSH key
+- Source config gains a **"Test connection"** button: it actually probes the URL / SFTP source using the
+  current form values (blank password/key = reuse stored), returning a success message or a readable
+  failure reason, without saving (`POST /certificates/{id}/source/test`).
+- The SFTP login private key gains a **"Generate key"** button: jt-ipam generates an ed25519 keypair,
+  stores the private key AES-GCM encrypted (never returned), and returns the **public key** to add to the
+  SFTP host's `authorized_keys` (`POST /certificates/{id}/source/ssh-keypair`).
+
+### Changed
+- Certificate / distribution-agent action buttons are now **icon-only with hover tooltips** (matching the
+  rest of the app), with tighter, centered columns — fixing the over-wide left gap, right overflow, and
+  left-aligned icons.
+
 ## [0.4.141] — 2026-06-14
 
 ### Fixed / Changed

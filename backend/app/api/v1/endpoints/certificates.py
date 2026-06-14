@@ -28,7 +28,14 @@ from app.schemas.certificate import (
     CertVersionRead,
     SelfSignedRequest,
 )
-from app.services.cert_fetch import fetch_certificate, save_cert_secret
+from app.services.cert_fetch import (
+    FetchError,
+    fetch_certificate,
+    generate_source_ssh_keypair,
+    load_cert_secret,
+    probe_source_connection,
+    save_cert_secret,
+)
 from app.services.cert_service import CertError, CertInfo, generate_self_signed, validate_bundle
 
 router = APIRouter(prefix="/certificates", tags=["certificates"],
@@ -259,6 +266,9 @@ async def set_source(
         request_id=getattr(request.state, "request_id", None),
     )
     await session.commit()
+    # commit 後 ORM 欄位可能被 autoflush 標記過期（server-side updated_at）；
+    # 重新載入避免 _to_read 內 model_validate 在同步情境觸發 lazy IO → MissingGreenlet 500。
+    await session.refresh(cert)
     return await _to_read(session, cert)
 
 
@@ -275,6 +285,52 @@ async def fetch_now(
     if cert.source_type == "none":
         raise HTTPException(400, detail="此憑證未設定自動來源")
     return await fetch_certificate(session, cert, actor_user_id=user.id)
+
+
+@router.post("/{cert_id}/source/test")
+async def test_source(
+    cert_id: uuid.UUID,
+    payload: CertSourceUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object]:
+    """以表單目前內容測試來源連線（不存檔）。密碼/私鑰留空時沿用已存的。"""
+    cert = await session.get(Certificate, cert_id)
+    if cert is None:
+        raise HTTPException(404, detail="Not found")
+    password = payload.source_password or await load_cert_secret(session, cert_id, "source_password")
+    private_key = payload.source_private_key or await load_cert_secret(
+        session, cert_id, "source_private_key")
+    try:
+        message = await probe_source_connection(
+            payload.source_config, source_type=payload.source_type,
+            password=password, private_key=private_key)
+    except FetchError as exc:
+        return {"ok": False, "message": str(exc)}
+    return {"ok": True, "message": message}
+
+
+@router.post("/{cert_id}/source/ssh-keypair")
+async def gen_source_ssh_keypair(
+    cert_id: uuid.UUID,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    """產生並儲存 jt-ipam 端登入 SFTP 來源用的 SSH 金鑰對；回傳公鑰（私鑰加密存,不回明文）。"""
+    cert = await session.get(Certificate, cert_id)
+    if cert is None:
+        raise HTTPException(404, detail="Not found")
+    priv, pub = generate_source_ssh_keypair(comment=f"jt-ipam:{cert.name}")
+    await save_cert_secret(session, cert_id, "source_private_key", priv)
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="certificate", object_id=str(cert_id), action="cert_source_keygen",
+        diff={"public_key": pub}, request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return {"public_key": pub}
 
 
 @router.post("/{cert_id}/self-signed", response_model=CertVersionRead, status_code=201)

@@ -103,6 +103,14 @@ export async function fetchCertNow(id: string): Promise<{ status: string; error?
   const { data } = await apiClient.post(`/api/v1/certificates/${id}/fetch-now`);
   return data;
 }
+export async function testCertSource(id: string, payload: CertSourcePayload): Promise<{ ok: boolean; message: string }> {
+  const { data } = await apiClient.post(`/api/v1/certificates/${id}/source/test`, payload);
+  return data;
+}
+export async function genCertSourceSshKey(id: string): Promise<{ public_key: string }> {
+  const { data } = await apiClient.post(`/api/v1/certificates/${id}/source/ssh-keypair`);
+  return data;
+}
 
 // ── 派送代理 ──
 export async function listCertAgents(): Promise<Paginated<CertAgent>> {

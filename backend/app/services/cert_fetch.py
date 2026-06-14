@@ -149,6 +149,73 @@ async def _fetch_sftp(session: AsyncSession, cert: Certificate,
         raise FetchError(f"SFTP 失敗:{exc.__class__.__name__}: {exc}") from exc
 
 
+def generate_source_ssh_keypair(comment: str = "jt-ipam-cert-source") -> tuple[str, str]:
+    """產生 jt-ipam 端用來登入 SFTP 來源的 SSH 金鑰對。
+
+    回 (private_openssh_pem, public_openssh)。私鑰由呼叫端加密存成 source_private_key,
+    公鑰回給使用者貼到 SFTP 主機的 authorized_keys。
+    """
+    key = asyncssh.generate_private_key("ssh-ed25519", comment=comment)
+    priv = key.export_private_key().decode("utf-8")
+    pub = key.export_public_key().decode("utf-8").strip()
+    return priv, pub
+
+
+async def probe_source_connection(
+    cfg: dict[str, Any], *, source_type: str,
+    password: str | None = None, private_key: str | None = None,
+) -> str:
+    """嘗試連線來源(不存檔、不抓整包)。成功回可讀訊息,失敗 raise FetchError。
+
+    secrets 由呼叫端決定:表單有填就用填的,沒填就帶入已存的(沿用)。
+    """
+    if source_type == "url":
+        cert_url = cfg.get("cert_url")
+        if not cert_url:
+            raise FetchError("URL 來源需要 cert_url")
+        text = await _get_url(cert_url)
+        if "BEGIN CERTIFICATE" not in text:
+            raise FetchError("cert_url 取得的內容不是 PEM 憑證")
+        if cfg.get("chain_url"):
+            await _get_url(cfg["chain_url"])
+        if cfg.get("key_url"):
+            await _get_url(cfg["key_url"])
+        return "URL 連線成功,cert_url 可取得 PEM 憑證"
+    if source_type == "sftp":
+        host = cfg.get("host")
+        username = cfg.get("username")
+        if not host or not username:
+            raise FetchError("SFTP 來源需要 host + username")
+        _check_host_safe(host)
+        kw: dict[str, Any] = {"host": host, "port": int(cfg.get("port", 22)),
+                              "username": username, "known_hosts": None}
+        try:
+            if private_key:
+                kw["client_keys"] = [asyncssh.import_private_key(private_key)]
+            elif password:
+                kw["password"] = password
+            else:
+                raise FetchError("SFTP 來源需要密碼或私鑰")
+        except FetchError:
+            raise
+        except Exception as exc:
+            raise FetchError(f"私鑰格式無法解析:{exc.__class__.__name__}") from exc
+        cert_path = cfg.get("cert_path")
+
+        async def _probe() -> str:
+            async with asyncssh.connect(**kw) as conn, conn.start_sftp_client() as sftp:
+                if cert_path and not await sftp.exists(cert_path):
+                    raise FetchError(f"登入成功,但找不到 cert_path:{cert_path}")
+            return "SFTP 登入成功" + (f",cert_path 存在:{cert_path}" if cert_path else "")
+        try:
+            return await asyncio.wait_for(_probe(), timeout=30)
+        except FetchError:
+            raise
+        except Exception as exc:
+            raise FetchError(f"SFTP 連線失敗:{exc.__class__.__name__}: {exc}") from exc
+    raise FetchError("此來源類型不需測試連線")
+
+
 async def _current_version(session: AsyncSession, cert_id: Any) -> CertVersion | None:
     return (await session.execute(select(CertVersion).where(
         CertVersion.certificate_id == cert_id, CertVersion.is_current.is_(True),

@@ -111,6 +111,47 @@ async def test_generate_self_signed_version(client, auth_headers):
     assert item["current_fingerprint"] == body["fingerprint_sha256"]
 
 
+async def test_set_source_returns_200(client, auth_headers):
+    """設定 SFTP 來源（含密碼/私鑰）要回 200 — 回歸 commit 後 model_validate MissingGreenlet 500。"""
+    cid = await _create_cert(client, auth_headers)
+    r = await client.put(f"/api/v1/certificates/{cid}/source", headers=auth_headers, json={
+        "source_type": "sftp",
+        "source_config": {"host": "ca.example.com", "port": 22, "username": "svc",
+                          "cert_path": "/etc/ssl/cert.pem"},
+        "fetch_interval_seconds": 86400,
+        "source_password": "s3cret",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["source_type"] == "sftp"
+    assert r.json()["source_config"]["host"] == "ca.example.com"
+    # 機敏不外洩
+    assert "source_password" not in r.json()
+
+
+async def test_source_test_connection_blocked_host(client, auth_headers):
+    """測試連線端點：SSRF 封鎖主機 → ok:false（不真的連外、快速失敗）。"""
+    cid = await _create_cert(client, auth_headers)
+    r = await client.post(f"/api/v1/certificates/{cid}/source/test", headers=auth_headers, json={
+        "source_type": "sftp",
+        "source_config": {"host": "169.254.169.254", "username": "svc", "cert_path": "/x"},
+        "source_password": "pw",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is False
+    assert r.json()["message"]
+
+
+async def test_gen_source_ssh_keypair(client, auth_headers):
+    """自動產生 SSH 金鑰：回 ed25519 公鑰，私鑰只加密存、不外洩明文。"""
+    cid = await _create_cert(client, auth_headers)
+    r = await client.post(f"/api/v1/certificates/{cid}/source/ssh-keypair", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    pub = r.json()["public_key"]
+    assert pub.startswith("ssh-ed25519 ")
+    assert "private" not in r.json()
+    assert "BEGIN" not in str(r.json())
+
+
 async def test_requires_admin(client, db_session):
     u = User(username=f"na-{uuid.uuid4().hex[:6]}", email=f"{uuid.uuid4().hex[:6]}@t.local",
              display_name="NA", password_hash=hash_password("TestPassword2026!"),

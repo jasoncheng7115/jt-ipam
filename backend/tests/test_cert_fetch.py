@@ -101,3 +101,14 @@ async def test_fetch_error_recorded(db_session, monkeypatch):
     assert res["status"] == "error"
     await db_session.refresh(c)
     assert c.last_fetch_error == "連線失敗"
+
+
+def test_generate_source_ssh_keypair():
+    """產生的 SSH 金鑰對：公鑰 ed25519、私鑰 OpenSSH PEM、彼此相符可被 asyncssh 解析。"""
+    import asyncssh
+    priv, pub = cert_fetch.generate_source_ssh_keypair("unit-test")
+    assert pub.startswith("ssh-ed25519 ")
+    assert "OPENSSH PRIVATE KEY" in priv
+    # 私鑰可被解析，且其公鑰與回傳公鑰一致
+    k = asyncssh.import_private_key(priv)
+    assert k.export_public_key().decode().split()[1] == pub.split()[1]
