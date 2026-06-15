@@ -4,6 +4,14 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.171] — 2026-06-15
+
+### 變更
+- 派送代理對 Zimbra 的慢步驟即使沒加 `--debug` 也會印進度（「驗證中… / 部署中… / 重啟 Zimbra
+  （zmcontrol restart，可能要幾分鐘）…」），正常執行時不再像當機卡住（zmcontrol restart 本來就要數分鐘）。
+- 安裝程式產生的 nginx 站台設定檔（`deploy/nginx/*.conf` → `/etc/nginx/sites-enabled/jt-ipam`）
+  註解全部改成**純英文**（在客戶端落地的設定檔不應有中文）。
+
 ## [0.4.170] — 2026-06-15
 
 ### 修正

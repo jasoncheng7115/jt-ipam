@@ -39,7 +39,7 @@
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
-AGENT_VERSION=0.4.170
+AGENT_VERSION=0.4.171
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -269,6 +269,7 @@ deploy_zimbra() {  # cert fp not_after
   chown -R zimbra:zimbra "$work" 2>/dev/null || true
   chmod 600 "$work/key.pem" 2>/dev/null || true
   # verifycrt comm <key> <leaf cert> <ca chain> — must run as the zimbra user.
+  log "[$cert/zimbra] verifying with zmcertmgr (as zimbra)…"
   if ! run_q "su - zimbra -c '$zmcert verifycrt comm $work/key.pem $work/cert.crt $work/chain.crt'"; then
     log "[$cert/zimbra] zmcertmgr verifycrt failed — the chain must contain the intermediate(s) AND the root CA, and the key must match (re-run with --debug for zmcertmgr's message)"
     rm -f "$work/key.pem"; add_report "$cert" zimbra failed "$fp" "$na" "verifycrt failed"; return 1
@@ -278,6 +279,7 @@ deploy_zimbra() {  # cert fp not_after
   cp -f "$work/key.pem" "$zssl/commercial.key"
   chown zimbra:zimbra "$zssl/commercial.key" 2>/dev/null || true
   chmod 600 "$zssl/commercial.key" 2>/dev/null || true
+  log "[$cert/zimbra] deploying with zmcertmgr deploycrt…"
   if ! run_q "su - zimbra -c '$zmcert deploycrt comm $work/cert.crt $work/chain.crt'"; then
     log "[$cert/zimbra] zmcertmgr deploycrt failed"
     rm -f "$work/key.pem"; add_report "$cert" zimbra failed "$fp" "$na" "deploycrt failed"; return 1
@@ -285,6 +287,7 @@ deploy_zimbra() {  # cert fp not_after
   rm -f "$work/key.pem"
   # zmcontrol restart is heavy but is the documented way to load a new cert; the
   # fingerprint guard means this only runs when the certificate actually changed.
+  log "[$cert/zimbra] restarting Zimbra (zmcontrol restart — can take a few minutes)…"
   if ! run_q "su - zimbra -c 'zmcontrol restart'"; then
     log "[$cert/zimbra] deployed, but 'zmcontrol restart' failed — restart Zimbra manually to load the new cert"
     add_report "$cert" zimbra ok "$fp" "$na" "deployed (manual restart needed)"; return 0

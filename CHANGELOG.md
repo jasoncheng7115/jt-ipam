@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.171] — 2026-06-15
+
+### Changed
+- The cert agent now prints progress lines for the slow Zimbra steps even without `--debug`
+  ("verifying… / deploying… / restarting Zimbra (zmcontrol restart — can take a few minutes)…"),
+  so a normal run no longer looks hung during the multi-minute `zmcontrol restart`.
+- The installer-generated nginx site config (`deploy/nginx/*.conf` → `/etc/nginx/sites-enabled/jt-ipam`)
+  now has **English-only comments** (customer-facing deployed files should not contain Chinese).
+
 ## [0.4.170] — 2026-06-15
 
 ### Fixed
