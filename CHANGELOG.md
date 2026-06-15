@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.164] — 2026-06-15
+
+### Added — certificate tools for AI chat / MCP
+- Two read-only MCP tools so the AI chat (and external MCP clients) can answer about certificates:
+  - `list_certificates` — managed cert metadata: name, domains, current fingerprint, expiry, days
+    remaining, version count, self-signed flag, auto-fetch source; `expiring_within_days` filters to
+    soon-to-expire certs.
+  - `list_cert_distribution` — distribution agents and their per-site deployment status (cert/profile,
+    up-to-date vs drift, expiry, agent version, and whether one key is shared by multiple hosts).
+- Both are **read-only and never expose private keys / PEM bodies**, and are gated as global-read
+  infrastructure data (admin or a universal-read viewer), consistent with the cert-status page.
+
 ## [0.4.163] — 2026-06-15
 
 ### Added

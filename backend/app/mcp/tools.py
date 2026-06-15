@@ -1215,6 +1215,91 @@ async def list_scan_agents(session: AsyncSession, *, user: User, limit: int = 20
     } for a in rows]}
 
 
+async def list_certificates(
+    session: AsyncSession, *, user: User,
+    expiring_within_days: int | None = None, limit: int = 200,
+) -> dict[str, Any]:
+    """集中保管的 TLS 憑證（僅中繼資料，永不回私鑰/PEM）：名稱、網域、目前版本指紋、
+    到期日、剩餘天數、版本數、是否自簽、自動抓取來源。expiring_within_days 可只列即將到期的。"""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func
+
+    from app.models.certificate import Certificate, CertVersion
+    now = datetime.now(UTC)
+    rows = (await session.execute(
+        select(Certificate).order_by(Certificate.name).limit(limit))).scalars().all()
+    out: list[dict[str, Any]] = []
+    for c in rows:
+        cur = (await session.execute(select(CertVersion).where(
+            CertVersion.certificate_id == c.id, CertVersion.is_current.is_(True)).limit(1)
+        )).scalar_one_or_none()
+        days = (cur.not_after - now).days if cur else None
+        if expiring_within_days is not None and (days is None or days > expiring_within_days):
+            continue
+        count = int((await session.execute(select(func.count()).select_from(CertVersion).where(
+            CertVersion.certificate_id == c.id))).scalar_one())
+        out.append({
+            "id": str(c.id), "name": c.name,
+            "domains": list((cur.domains if cur else c.domains) or []),
+            "current_fingerprint": (cur.fingerprint_sha256[:16] + "…") if cur else None,
+            "not_after": cur.not_after if cur else None,
+            "days_remaining": days,
+            "version_count": count,
+            "self_signed": bool(cur and cur.subject and cur.issuer and cur.subject == cur.issuer),
+            "source_type": c.source_type,
+            "last_fetch_error": c.last_fetch_error,
+            "has_current_version": cur is not None,
+        })
+    return {"certificates": out}
+
+
+async def list_cert_distribution(
+    session: AsyncSession, *, user: User, limit: int = 200,
+) -> dict[str, Any]:
+    """憑證派送代理與各站台部署現況（無私鑰）：每個代理部署了哪張憑證/服務、是否為最新
+    （up_to_date）或飄移、到期日/剩餘天數、代理版本，以及同一把 Key 是否近期被多台主機共用。"""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.certificate import CertAgent, Certificate, CertVersion
+    now = datetime.now(UTC)
+    cur_rows = (await session.execute(
+        select(Certificate, CertVersion)
+        .join(CertVersion, CertVersion.certificate_id == Certificate.id)
+        .where(CertVersion.is_current.is_(True)))).all()
+    cur = {cert.name: ver for cert, ver in cur_rows}
+    cutoff = now - timedelta(days=7)
+    agents = (await session.execute(
+        select(CertAgent).order_by(CertAgent.name).limit(limit))).scalars().all()
+    out: list[dict[str, Any]] = []
+    for a in agents:
+        recent_ips: list[str] = []
+        for e in (a.recent_sources or []):
+            try:
+                if datetime.fromisoformat(e["at"]) >= cutoff and e["ip"] not in recent_ips:
+                    recent_ips.append(e["ip"])
+            except (KeyError, TypeError, ValueError):
+                continue
+        deps: list[dict[str, Any]] = []
+        for d in (a.reported or []):
+            if not isinstance(d, dict):
+                continue
+            ver = cur.get(d.get("cert"))
+            na = ver.not_after if ver else None
+            deps.append({
+                "cert": d.get("cert"), "profile": d.get("profile"), "status": d.get("status"),
+                "up_to_date": bool(ver and d.get("fingerprint") == ver.fingerprint_sha256),
+                "not_after": na, "days_remaining": (na - now).days if na else None,
+            })
+        out.append({
+            "agent": a.name, "enabled": a.enabled, "last_seen_at": a.last_seen_at,
+            "last_source_ip": a.last_source_ip, "agent_version": a.agent_version,
+            "recent_source_ips": recent_ips, "multi_source_recent": len(recent_ips) > 1,
+            "deployments": deps,
+        })
+    return {"agents": out}
+
+
 async def list_arp(
     session: AsyncSession, *, user: User,
     ip: str | None = None, mac: str | None = None, limit: int = 100,
@@ -2078,6 +2163,22 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "List scan agents and their status.",
         "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}}},
     },
+    "list_certificates": {
+        "fn": list_certificates,
+        "description": "List managed TLS certificates (metadata only, never private keys): name, domains, "
+                       "current fingerprint, expiry date, days remaining, version count, self-signed flag and "
+                       "auto-fetch source. Pass expiring_within_days to list only certs expiring within N days.",
+        "parameters": {"type": "object", "properties": {
+            "expiring_within_days": {"type": "integer", "minimum": 0, "maximum": 3650},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200}}},
+    },
+    "list_cert_distribution": {
+        "fn": list_cert_distribution,
+        "description": "Certificate distribution agents and their per-site deployment status: which cert/profile "
+                       "each agent deployed, whether it is up to date or drifted, expiry/days-remaining, agent "
+                       "version, and whether one enrollment key is shared by multiple hosts (multi_source_recent).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}}},
+    },
     "list_arp": {
         "fn": list_arp,
         "description": "ARP entries (IP↔MAC seen by which device/interface). Filter by ip or mac.",
@@ -2344,6 +2445,7 @@ GLOBAL_READ_TOOLS: frozenset[str] = frozenset({
     "list_arp", "list_fdb", "list_circuits", "list_providers", "list_asns",
     "list_tenants", "list_contacts", "list_ssids", "list_cables", "cable_trace",
     "list_power", "list_wazuh_agents", "wazuh_missing_agents", "get_topology",
+    "list_certificates", "list_cert_distribution",
 })
 
 

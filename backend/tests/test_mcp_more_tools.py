@@ -76,6 +76,27 @@ async def test_readonly_lists_run(db_session, admin_user):
     assert "edges" in topo and "node_count" in topo
 
 
+async def test_cert_tools_metadata_no_keys(db_session, admin_user):
+    """憑證 MCP 工具回中繼資料 + 派送現況，且絕不外洩私鑰 / PEM。"""
+    from app.models.certificate import CertAgent, Certificate
+    c = Certificate(name=f"cert-{uuid.uuid4().hex[:6]}", domains=["a.example.com"], source_type="none")
+    db_session.add(c)
+    a = CertAgent(name=f"ag-{uuid.uuid4().hex[:6]}", enabled=True, scope_cert_ids=[],
+                  reported=[{"cert": c.name, "profile": "nginx", "status": "ok", "fingerprint": "x"}])
+    db_session.add(a)
+    await db_session.flush()
+
+    rc = await T.list_certificates(db_session, user=admin_user)
+    item = next(x for x in rc["certificates"] if x["name"] == c.name)
+    assert item["has_current_version"] is False and item["source_type"] == "none"
+    assert not any(k in item for k in ("key", "key_pem", "cert_pem", "key_enc", "key_nonce"))
+
+    rd = await T.list_cert_distribution(db_session, user=admin_user)
+    ag = next(x for x in rd["agents"] if x["agent"] == a.name)
+    assert ag["multi_source_recent"] is False
+    assert ag["deployments"][0]["cert"] == c.name
+
+
 async def test_customer_summary(db_session, admin_user):
     c = Customer(name=f"cust-{uuid.uuid4().hex[:6]}")
     db_session.add(c)

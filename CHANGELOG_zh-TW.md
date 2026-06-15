@@ -4,6 +4,17 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.164] — 2026-06-15
+
+### 新增 — 憑證的 AI 對話 / MCP 工具
+- 新增兩個唯讀 MCP 工具,讓 AI 對話(與外部 MCP 客戶端)能回答憑證相關問題:
+  - `list_certificates` — 憑證中繼資料:名稱、網域、目前版本指紋、到期日、剩餘天數、版本數、是否自簽、
+    自動抓取來源;`expiring_within_days` 可只列即將到期的。
+  - `list_cert_distribution` — 派送代理與各站台部署現況(憑證/服務、是否最新或飄移、到期日、代理版本,
+    以及同一把 Key 是否被多台主機共用)。
+- 兩者皆**唯讀、絕不回傳私鑰 / PEM**,並比照憑證派送現況頁歸為全域基礎設施資料(僅管理員或具全域讀取權限者),
+  零權限/部門帳號預設看不到。
+
 ## [0.4.163] — 2026-06-15
 
 ### 新增
