@@ -47,6 +47,8 @@ const msg = useMessage();
 const rows = ref<ScanAgent[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const loading = ref(false);
 const show = ref(false);
 const showHelp = ref(false);
@@ -303,7 +305,7 @@ onMounted(() => { void refresh(); });
                     @update:visible="saSet" @reset="saReset" />
       <ExportButton :columns="cols" :rows="rows" filename="scan-agents" :title="t('nav.scan_agents')" />
     </n-space>
-    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1058" />
+    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1058" :pagination="pg" />
 
     <!-- 建立 / 編輯 -->
     <n-modal v-model:show="show" preset="card" style="width: 460px">

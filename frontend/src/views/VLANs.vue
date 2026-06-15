@@ -36,6 +36,8 @@ const domains = ref<VLANDomain[]>([]);
 const vlans = ref<VLAN[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: vlanFilterQ, filtered: vlansFiltered } = useTableQuickFilter(vlans);
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const loading = ref(false);
 
 const showVLAN = ref(false);
@@ -380,7 +382,7 @@ onMounted(() => {
         </n-space>
         <n-data-table
           :columns="vlanCols" :data="vlansFiltered" :loading="loading" :bordered="false"
-          :scroll-x="992"
+          :scroll-x="992" :pagination="pg"
           :row-key="(row: VLAN) => row.id"
           :checked-row-keys="vlanChecked"
           @update:checked-row-keys="(keys: DataTableRowKey[]) => vlanChecked = keys"
@@ -413,7 +415,7 @@ onMounted(() => {
         </n-space>
         <n-data-table
           :columns="domCols" :data="domains" :loading="loading" :bordered="false"
-          :scroll-x="556"
+          :scroll-x="556" :pagination="pg"
           :row-key="(row: VLANDomain) => row.id"
           :checked-row-keys="domChecked"
           @update:checked-row-keys="(keys: DataTableRowKey[]) => domChecked = keys"

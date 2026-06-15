@@ -15,6 +15,8 @@ import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 import { useAuthStore } from "@/stores/auth";
 const _authBtn = useAuthStore();
 const canEdit = computed(() => _authBtn.me?.can_edit !== false);
@@ -360,7 +362,7 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
     </n-space>
 
     <n-data-table v-if="mode === 'cabling'"
-      :columns="cableCols" :data="filteredCables" :loading="loading" :bordered="false" :scroll-x="900" />
+      :columns="cableCols" :data="filteredCables" :loading="loading" :bordered="false" :scroll-x="900" :pagination="pg" />
 
     <!-- 電力：配電盤 / 供電迴路 / 插座 三表拆內層頁籤（比照防火牆規則/別名：type=line + icon） -->
     <n-tabs v-else-if="mode === 'power'" type="line">
@@ -380,7 +382,7 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
                         @update:visible="panelP.setVisible" @reset="panelP.reset" />
           <ExportButton :columns="panelP.visibleCols" :rows="panelP.filtered" filename="power-panels" :title="t('physical.panels')" />
         </n-space>
-        <n-data-table :columns="panelP.visibleCols" :data="panelP.filtered" :loading="loading" :bordered="false" />
+        <n-data-table :columns="panelP.visibleCols" :data="panelP.filtered" :loading="loading" :bordered="false" :pagination="pg" />
       </n-tab-pane>
       <n-tab-pane name="feeds">
         <template #tab>
@@ -398,7 +400,7 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
                         @update:visible="feedP.setVisible" @reset="feedP.reset" />
           <ExportButton :columns="feedP.visibleCols" :rows="feedP.filtered" filename="power-feeds" :title="t('physical.feeds')" />
         </n-space>
-        <n-data-table :columns="feedP.visibleCols" :data="feedP.filtered" :loading="loading" :bordered="false" />
+        <n-data-table :columns="feedP.visibleCols" :data="feedP.filtered" :loading="loading" :bordered="false" :pagination="pg" />
       </n-tab-pane>
       <n-tab-pane name="outlets">
         <template #tab>
@@ -416,12 +418,12 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
                         @update:visible="outletP.setVisible" @reset="outletP.reset" />
           <ExportButton :columns="outletP.visibleCols" :rows="outletP.filtered" filename="power-outlets" :title="t('physical.outlets')" />
         </n-space>
-        <n-data-table :columns="outletP.visibleCols" :data="outletP.filtered" :loading="loading" :bordered="false" />
+        <n-data-table :columns="outletP.visibleCols" :data="outletP.filtered" :loading="loading" :bordered="false" :pagination="pg" />
       </n-tab-pane>
     </n-tabs>
 
     <n-data-table v-else
-      :columns="vpnCols" :data="vpns" :loading="loading" :bordered="false" />
+      :columns="vpnCols" :data="vpns" :loading="loading" :bordered="false" :pagination="pg" />
 
     <!-- 新增纜線 -->
     <n-modal v-model:show="showCable" preset="card" style="max-width:520px">

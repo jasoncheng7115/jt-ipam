@@ -23,9 +23,11 @@ import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useRoute } from "vue-router";
+import { useTablePagination } from "@/composables/useTablePagination";
 
 const { t } = useI18n();
 const route = useRoute();
+const pg = useTablePagination();
 // 管理區（virt_admin）：只放 Proxmox 連線；功能/進階區（virt）：叢集 + VM
 const adminMode = computed(() => route.name === "virt_admin");
 const { options: customerOptions, ensureLoaded: ensureCustomerOptsLoaded } = useCustomers();
@@ -347,7 +349,7 @@ onMounted(() => {
                         @update:visible="clusterP.setVisible" @reset="clusterP.reset" />
           <ExportButton :columns="clusterP.visibleCols" :rows="clusterP.filtered" filename="virt-clusters" :title="t('virt.clusters')" />
         </n-space>
-        <n-data-table :columns="clusterP.visibleCols" :data="clusterP.filtered" :loading="loading" :bordered="false" />
+        <n-data-table :columns="clusterP.visibleCols" :data="clusterP.filtered" :loading="loading" :bordered="false" :pagination="pg" />
       </n-tab-pane>
       <n-tab-pane v-if="!adminMode" name="vms">
         <template #tab>
@@ -362,7 +364,7 @@ onMounted(() => {
                         @update:visible="vmP.setVisible" @reset="vmP.reset" />
           <ExportButton :columns="vmP.visibleCols" :rows="vmP.filtered" filename="virt-vms" :title="t('virt.vms')" />
         </n-space>
-        <n-data-table :columns="vmP.visibleCols" :data="vmP.filtered" :loading="loading" :bordered="false" />
+        <n-data-table :columns="vmP.visibleCols" :data="vmP.filtered" :loading="loading" :bordered="false" :pagination="pg" />
       </n-tab-pane>
       <n-tab-pane v-if="adminMode" name="proxmox">
         <template #tab>

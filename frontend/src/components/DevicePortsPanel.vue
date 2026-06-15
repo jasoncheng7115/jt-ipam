@@ -9,9 +9,11 @@ import { Physical, type DevicePort, type PortTrace } from "@/api/phase3";
 import { listDevices } from "@/api/basic";
 import { PlusIcon, EditIcon, DeleteIcon, LinkIcon, RefreshIcon, PhysicalIcon, ExportIcon } from "@/icons";
 
+import { useTablePagination } from "@/composables/useTablePagination";
 const props = defineProps<{ deviceId: string; deviceName: string; admin: boolean }>();
 const { t } = useI18n();
 const msg = useMessage();
+const pg = useTablePagination();
 
 const ports = ref<DevicePort[]>([]);
 const loading = ref(false);
@@ -305,7 +307,7 @@ onMounted(() => { void refresh(); });
         </n-button>
       </n-space>
     </template>
-    <n-data-table :columns="cols" :data="ports" :loading="loading" size="small" :bordered="false">
+    <n-data-table :columns="cols" :data="ports" :loading="loading" size="small" :bordered="false" :pagination="pg">
       <template #empty><div style="text-align:center;opacity:.5;padding:12px">{{ t("ports.empty") }}</div></template>
     </n-data-table>
 

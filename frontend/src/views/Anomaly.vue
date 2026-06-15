@@ -12,8 +12,10 @@ import {
   AnomalyIcon, TestIcon, InfoIcon,
 } from "@/icons";
 
+import { useTablePagination } from "@/composables/useTablePagination";
 const { t } = useI18n();
 const msg = useMessage();
+const pg = useTablePagination();
 const loading = ref(false);
 const report = ref<AnomalyReport | null>(null);
 const lastRunAt = ref<string | null>(null);
@@ -152,7 +154,7 @@ async function run() {
         <n-card v-if="(report?.[c.key]?.length ?? 0) > 0" size="small" style="margin-bottom: 12px"
                 :title="`${c.label()} (${report?.[c.key]?.length ?? 0})`">
           <n-data-table :columns="colsFor(report?.[c.key] ?? [])" :data="report?.[c.key] ?? []"
-                        :bordered="false" size="small" :scroll-x="600" />
+                        :bordered="false" size="small" :scroll-x="600" :pagination="pg" />
         </n-card>
       </template>
     </template>

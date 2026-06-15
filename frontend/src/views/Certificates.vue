@@ -15,6 +15,7 @@ import {
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTablePagination } from "@/composables/useTablePagination";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import {
   listCertificates, createCertificate, deleteCertificate, uploadVersion, generateSelfSigned,
@@ -475,6 +476,8 @@ function actBtn(icon: any, label: string, onClick: () => void, props: Record<str
 
 // ── 憑證表格欄位 + 顯示偏好 ──
 const CERT_KEYS = ["name", "domains", "exp_date", "days_left", "version_count", "source", "actions"];
+const certPg = useTablePagination();
+const agentPg = useTablePagination();
 const certPrefs = useColumnPrefs("certificates", CERT_KEYS, CERT_KEYS);
 const certPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
@@ -632,7 +635,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             <n-button type="primary" size="small" @click="showNew = true">
               <template #icon><n-icon :component="PlusIcon" /></template>{{ t("certs.new") }}
             </n-button>
-            <n-input v-model:value="certFilter" size="small" clearable
+            <n-input v-model:value="certFilter" clearable
                      :placeholder="t('certs.filter_name')" style="width: 220px">
               <template #prefix><n-icon :component="SearchIcon" /></template>
             </n-input>
@@ -646,7 +649,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
           </n-space>
         </n-space>
         <n-data-table :columns="certCols" :data="certsFiltered" :loading="loading" size="small"
-                      :scroll-x="1008" :row-key="(r:Certificate) => r.id" />
+                      :scroll-x="1008" :pagination="certPg" :row-key="(r:Certificate) => r.id" />
       </n-tab-pane>
 
       <!-- 派送代理 -->
@@ -660,7 +663,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             <n-button size="small" @click="showHelp = true">
               <template #icon><n-icon :component="InfoIcon" /></template>{{ t("certHelp.button") }}
             </n-button>
-            <n-input v-model:value="agentFilter" size="small" clearable
+            <n-input v-model:value="agentFilter" clearable
                      :placeholder="t('certs.filter_agent')" style="width: 200px">
               <template #prefix><n-icon :component="SearchIcon" /></template>
             </n-input>
@@ -676,7 +679,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </n-button>
           </n-space>
         </n-space>
-        <n-data-table :columns="agentCols" :data="agentsFiltered" size="small" :scroll-x="1041" :row-key="(r:CertAgent) => r.id" />
+        <n-data-table :columns="agentCols" :data="agentsFiltered" size="small" :scroll-x="1041" :pagination="agentPg" :row-key="(r:CertAgent) => r.id" />
       </n-tab-pane>
     </n-tabs>
   </n-card>

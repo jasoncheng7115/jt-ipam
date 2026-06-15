@@ -19,7 +19,9 @@ import {
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTablePagination } from "@/composables/useTablePagination";
 const { t } = useI18n();
+const pg = useTablePagination();
 
 const { visibleKeys: grpVis, setVisible: grpSet, reset: grpReset } = useColumnPrefs(
   "groups",
@@ -192,7 +194,7 @@ onMounted(() => { void refresh(); });
                     @update:visible="grpSet" @reset="grpReset" />
       <span style="opacity: 0.6">{{ t("common.total_n", { n: total }) }}</span>
     </n-space>
-    <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :scroll-x="716">
+    <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :scroll-x="716" :pagination="pg">
       <template #empty>
         <n-space justify="center">{{ t("common.no_data") }}</n-space>
       </template>

@@ -27,6 +27,7 @@ import { UsersIcon, DeleteIcon, PlusIcon, AdminIcon } from "@/icons";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import { useTablePagination } from "@/composables/useTablePagination";
 const pg = useTablePagination();
+const grantPg = useTablePagination();
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -243,7 +244,7 @@ onMounted(async () => {
                   <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.create") }}
                 </n-button>
               </n-space>
-              <n-data-table :columns="grantCols" :data="grants" :bordered="false" :scroll-x="380" size="small" />
+              <n-data-table :columns="grantCols" :data="grants" :bordered="false" :scroll-x="380" size="small" :pagination="grantPg" />
               <p style="opacity:.55;font-size:11px;margin:8px 0 0">{{ t("perm.cascade_hint") }}</p>
             </n-collapse-item>
           </n-collapse>

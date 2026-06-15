@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.165] — 2026-06-15
+
+### Changed — consistent table pagination + filter alignment
+- Applied the shared `useTablePagination` (page-size bound to the user preference, cross-device) to all
+  client-side list tables that were still missing it — the certificate + distribution-agent tables, the
+  read-only cert-status page, and a sweep across Advanced resources, Physical (cabling/power/VPN),
+  Virtualization, VLANs/VRFs, NAT, Devices, Scan agents, Groups, Permissions, Wazuh, Anomaly, firewall
+  alias mappings, customer sub-tables and device ports. Server-paginated tables (addresses, audit, users,
+  tasks, IP changes) and small fixed config/instance panels are intentionally left unpaginated.
+- Fixed the certificate/agent/cert-status **filter inputs** rendering shorter than the toolbar buttons
+  (toolbar buttons are forced to 34px; the inputs now use the default size to match).
+
 ## [0.4.164] — 2026-06-15
 
 ### Added — certificate tools for AI chat / MCP

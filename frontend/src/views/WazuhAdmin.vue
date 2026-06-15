@@ -55,6 +55,8 @@ const insts = ref<WazuhInstance[]>([]);
 const agents = ref<WazuhAgent[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: agentFilterQ, filtered: agentsFiltered } = useTableQuickFilter(agents);
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const missing = ref<MissingAgent[]>([]);
 const loading = ref(false);
 
@@ -288,7 +290,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
                         @update:visible="wzAg.setVisible" @reset="wzAg.reset" />
           <ExportButton :columns="agentCols" :rows="agents" filename="wazuh-agents" :title="t('wazuh_admin.agents_count')" />
         </n-space>
-        <n-data-table :columns="agentCols" :data="agentsFiltered" :loading="loading" :bordered="false" :scroll-x="960" />
+        <n-data-table :columns="agentCols" :data="agentsFiltered" :loading="loading" :bordered="false" :scroll-x="960" :pagination="pg" />
       </n-tab-pane>
       <n-tab-pane name="missing">
         <template #tab>
@@ -303,7 +305,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
                         @update:visible="wzMiss.setVisible" @reset="wzMiss.reset" />
           <ExportButton :columns="missCols" :rows="missing" filename="wazuh-missing-agents" :title="t('wazuh_admin.missing_agents')" />
         </n-space>
-        <n-data-table :columns="missCols" :data="missing" :loading="loading" :bordered="false" :scroll-x="402" />
+        <n-data-table :columns="missCols" :data="missing" :loading="loading" :bordered="false" :scroll-x="402" :pagination="pg" />
       </n-tab-pane>
     </n-tabs>
 

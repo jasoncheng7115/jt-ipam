@@ -53,6 +53,8 @@ const msg = useMessage();
 const rows = ref<Device[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const locations = ref<Location[]>([]);
 const racks = ref<Rack[]>([]);
 const loading = ref(false);
@@ -445,6 +447,7 @@ onMounted(async () => {
       :loading="loading"
       :bordered="false"
       :scroll-x="1116"
+      :pagination="pg"
       :row-key="(row: Device) => row.id"
       :checked-row-keys="checkedKeys"
       @update:checked-row-keys="(keys: DataTableRowKey[]) => checkedKeys = keys"

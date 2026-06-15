@@ -9,6 +9,7 @@ import {
 import { RefreshIcon, LockIcon, SearchIcon, WarnIcon, UpgradeIcon } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTablePagination } from "@/composables/useTablePagination";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import { getCertAgentStatus, type CertStatusDeployment } from "@/api/certificates";
 
@@ -16,6 +17,7 @@ const { t } = useI18n();
 const msg = useMessage();
 const loading = ref(false);
 const filter = ref("");
+const pg = useTablePagination();
 
 interface Row extends CertStatusDeployment {
   agent: string;
@@ -153,7 +155,7 @@ const cols = computed<DataTableColumns<Row>>(() =>
       <n-space align="center" :size="8"><n-icon :component="LockIcon" /> {{ t("nav.cert_status") }}</n-space>
     </template>
     <n-space justify="space-between" style="margin-bottom: 10px">
-      <n-input v-model:value="filter" size="small" clearable
+      <n-input v-model:value="filter" clearable
                :placeholder="t('certStatus.filter')" style="width: 240px">
         <template #prefix><n-icon :component="SearchIcon" /></template>
       </n-input>
@@ -166,6 +168,6 @@ const cols = computed<DataTableColumns<Row>>(() =>
       </n-space>
     </n-space>
     <n-data-table :columns="cols" :data="rowsFiltered" :loading="loading" size="small" :scroll-x="1100"
-                  :row-key="(r:Row) => r.agent + (r.cert ?? '') + (r.profile ?? '')" />
+                  :pagination="pg" :row-key="(r:Row) => r.agent + (r.cert ?? '') + (r.profile ?? '')" />
   </n-card>
 </template>

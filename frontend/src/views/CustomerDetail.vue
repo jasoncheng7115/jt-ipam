@@ -130,15 +130,15 @@ onMounted(() => {
       </n-card>
 
       <n-card v-if="data?.sections?.length" :title="`${t('sections.title')} (${data.counts.sections})`">
-        <n-data-table :columns="sectionCols" :data="data.sections" :bordered="false" size="small" />
+        <n-data-table :columns="sectionCols" :data="data.sections" :bordered="false" size="small" :pagination="pg" />
       </n-card>
 
       <n-card v-if="data?.subnets?.length" :title="`${t('subnets.title')} (${data.counts.subnets})`">
-        <n-data-table :columns="subnetCols" :data="data.subnets" :bordered="false" size="small" />
+        <n-data-table :columns="subnetCols" :data="data.subnets" :bordered="false" size="small" :pagination="pg" />
       </n-card>
 
       <n-card v-if="data?.devices?.length" :title="`${t('nav.devices')} (${data.counts.devices})`">
-        <n-data-table :columns="deviceCols" :data="data.devices" :bordered="false" size="small" />
+        <n-data-table :columns="deviceCols" :data="data.devices" :bordered="false" size="small" :pagination="pg" />
       </n-card>
 
       <n-card v-if="data?.ip_addresses?.length" :title="`IP (${data.counts.ip_addresses})`">

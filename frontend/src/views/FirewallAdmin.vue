@@ -584,7 +584,7 @@ onMounted(() => {
                         @update:visible="mapPrefs.setVisible" @reset="mapPrefs.reset" />
           <ExportButton :columns="mapCols" :rows="mappings" filename="firewall-alias-mappings" :title="t('firewall_admin.alias_mappings')" />
         </n-space>
-        <n-data-table :columns="mapCols" :data="mappings" :loading="loading" :bordered="false" :scroll-x="946" />
+        <n-data-table :columns="mapCols" :data="mappings" :loading="loading" :bordered="false" :scroll-x="946" :pagination="pg" />
       </n-tab-pane>
       <n-tab-pane v-if="!adminMode" name="rules">
         <template #tab>

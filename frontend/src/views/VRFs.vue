@@ -15,9 +15,11 @@ import {
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTablePagination } from "@/composables/useTablePagination";
 
 const { t } = useI18n();
 const msg = useMessage();
+const pg = useTablePagination();
 const rows = ref<VRF[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
@@ -163,7 +165,7 @@ onMounted(() => { void refresh(); });
     </n-space>
     <n-data-table
       :columns="cols" :data="filteredRows" :loading="loading" :bordered="false"
-      :scroll-x="796"
+      :scroll-x="796" :pagination="pg"
       :row-key="(row: VRF) => row.id"
       :checked-row-keys="checkedKeys"
       @update:checked-row-keys="(keys: DataTableRowKey[]) => checkedKeys = keys"

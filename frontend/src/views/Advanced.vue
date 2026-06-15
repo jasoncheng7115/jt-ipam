@@ -19,9 +19,11 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
+import { useTablePagination } from "@/composables/useTablePagination";
 
 const { t } = useI18n();
 const msg = useMessage();
+const pg = useTablePagination();
 // 每個頁籤拆成獨立頁面：由路由帶 mode 進來，設定初始頁籤並隱藏頁籤列
 const props = defineProps<{ mode?: "tenancy" | "asn" | "circuits" | "contacts" | "wireless" }>();
 const tab = ref<"tenancy" | "asn" | "circuits" | "contacts" | "wireless">(props.mode ?? "tenancy");
@@ -333,7 +335,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="tenantP.setVisible" @reset="tenantP.reset" />
               <ExportButton :columns="tenantP.visibleCols" :rows="tenantP.filtered" filename="tenants" :title="t('advanced.tenants')" />
             </n-space>
-            <n-data-table :columns="tenantP.visibleCols" :data="tenantP.filtered" :loading="loading" :bordered="false" :scroll-x="596" />
+            <n-data-table :columns="tenantP.visibleCols" :data="tenantP.filtered" :loading="loading" :bordered="false" :scroll-x="596" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="tenant_groups">
             <template #tab>
@@ -352,7 +354,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="tenantGroupP.setVisible" @reset="tenantGroupP.reset" />
               <ExportButton :columns="tenantGroupP.visibleCols" :rows="tenantGroupP.filtered" filename="tenant-groups" :title="t('advanced.tenant_groups')" />
             </n-space>
-            <n-data-table :columns="tenantGroupP.visibleCols" :data="tenantGroupP.filtered" :loading="loading" :bordered="false" :scroll-x="456" />
+            <n-data-table :columns="tenantGroupP.visibleCols" :data="tenantGroupP.filtered" :loading="loading" :bordered="false" :scroll-x="456" :pagination="pg" />
           </n-tab-pane>
         </n-tabs>
       </n-tab-pane>
@@ -374,7 +376,7 @@ onMounted(() => { void loadAll(); });
                         @update:visible="asnP.setVisible" @reset="asnP.reset" />
           <ExportButton :columns="asnP.visibleCols" :rows="asnP.filtered" filename="asns" title="ASN" />
         </n-space>
-        <n-data-table :columns="asnP.visibleCols" :data="asnP.filtered" :loading="loading" :bordered="false" :scroll-x="536" />
+        <n-data-table :columns="asnP.visibleCols" :data="asnP.filtered" :loading="loading" :bordered="false" :scroll-x="536" :pagination="pg" />
       </n-tab-pane>
 
       <n-tab-pane name="circuits">
@@ -399,7 +401,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="providerP.setVisible" @reset="providerP.reset" />
               <ExportButton :columns="providerP.visibleCols" :rows="providerP.filtered" filename="providers" :title="t('circuits.providers')" />
             </n-space>
-            <n-data-table :columns="providerP.visibleCols" :data="providerP.filtered" :loading="loading" :bordered="false" :scroll-x="596" />
+            <n-data-table :columns="providerP.visibleCols" :data="providerP.filtered" :loading="loading" :bordered="false" :scroll-x="596" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="circuits">
             <template #tab>
@@ -418,7 +420,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="circuitP.setVisible" @reset="circuitP.reset" />
               <ExportButton :columns="circuitP.visibleCols" :rows="circuitP.filtered" filename="circuits" :title="t('advanced.circuits')" />
             </n-space>
-            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="1000" />
+            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="1000" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="circuit_types">
             <template #tab>
@@ -438,7 +440,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="circuitTypeP.setVisible" @reset="circuitTypeP.reset" />
               <ExportButton :columns="circuitTypeP.visibleCols" :rows="circuitTypeP.filtered" filename="circuit-types" :title="t('circuits.types')" />
             </n-space>
-            <n-data-table :columns="circuitTypeP.visibleCols" :data="circuitTypeP.filtered" :loading="loading" :bordered="false" :scroll-x="472" />
+            <n-data-table :columns="circuitTypeP.visibleCols" :data="circuitTypeP.filtered" :loading="loading" :bordered="false" :scroll-x="472" :pagination="pg" />
           </n-tab-pane>
         </n-tabs>
       </n-tab-pane>
@@ -465,7 +467,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="contactP.setVisible" @reset="contactP.reset" />
               <ExportButton :columns="contactP.visibleCols" :rows="contactP.filtered" filename="contacts" :title="t('advanced.contacts')" />
             </n-space>
-            <n-data-table :columns="contactP.visibleCols" :data="contactP.filtered" :loading="loading" :bordered="false" :scroll-x="696" />
+            <n-data-table :columns="contactP.visibleCols" :data="contactP.filtered" :loading="loading" :bordered="false" :scroll-x="696" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="contact_groups">
             <template #tab>
@@ -484,7 +486,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="contactGroupP.setVisible" @reset="contactGroupP.reset" />
               <ExportButton :columns="contactGroupP.visibleCols" :rows="contactGroupP.filtered" filename="contact-groups" :title="t('advanced.contact_groups')" />
             </n-space>
-            <n-data-table :columns="contactGroupP.visibleCols" :data="contactGroupP.filtered" :loading="loading" :bordered="false" :scroll-x="456" />
+            <n-data-table :columns="contactGroupP.visibleCols" :data="contactGroupP.filtered" :loading="loading" :bordered="false" :scroll-x="456" :pagination="pg" />
           </n-tab-pane>
         </n-tabs>
       </n-tab-pane>
@@ -506,7 +508,7 @@ onMounted(() => { void loadAll(); });
                         @update:visible="ssidP.setVisible" @reset="ssidP.reset" />
           <ExportButton :columns="ssidP.visibleCols" :rows="ssidP.filtered" filename="ssids" title="SSID" />
         </n-space>
-        <n-data-table :columns="ssidP.visibleCols" :data="ssidP.filtered" :loading="loading" :bordered="false" :scroll-x="456" />
+        <n-data-table :columns="ssidP.visibleCols" :data="ssidP.filtered" :loading="loading" :bordered="false" :scroll-x="456" :pagination="pg" />
       </n-tab-pane>
     </n-tabs>
 

@@ -53,6 +53,8 @@ const msg = useMessage();
 const rows = ref<NAT[]>([]);
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const checkedKeys = ref<DataTableRowKey[]>([]);
 const bulkBusy = ref(false);
 
@@ -452,6 +454,7 @@ onMounted(() => { void refresh(); void loadOpts(); });
       :loading="loading"
       :bordered="false"
       :scroll-x="1656"
+      :pagination="pg"
       :row-key="(r: NAT) => r.id"
       :checked-row-keys="checkedKeys"
       @update:checked-row-keys="(keys: DataTableRowKey[]) => checkedKeys = keys"
