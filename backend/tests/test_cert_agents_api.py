@@ -156,6 +156,11 @@ async def test_bundle_raw_parts(client, auth_headers):
     assert "PRIVATE KEY" in rk.text
     rf = await client.get(f"/api/v1/cert-agents/bundle/raw?cert={name}&part=fullchain", headers=h)
     assert "BEGIN CERTIFICATE" in rf.text
+    # pkcs12（jetty 用）回 binary keystore + 指紋 header
+    rp = await client.get(f"/api/v1/cert-agents/bundle/raw?cert={name}&part=pkcs12", headers=h)
+    assert rp.status_code == 200, rp.text
+    assert rp.headers["x-cert-fingerprint"] == fp
+    assert rp.content[:4] == b"\x30\x82\x0a"[:2] or rp.content[0] == 0x30  # DER SEQUENCE
     # 不在 scope 回 404
     other = await _make_agent(client, auth_headers, [])
     r404 = await client.get(f"/api/v1/cert-agents/bundle/raw?cert={name}&part=cert",

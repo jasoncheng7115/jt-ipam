@@ -25,10 +25,10 @@
 #   #     haproxy  combined <base>/<cert>.pem (cert+chain+key)                     reload: systemctl reload haproxy
 #   #     postfix  cert+chain <base>/<cert>.fullchain.pem  key .key                reload: systemctl reload postfix
 #   #     dovecot  cert+chain <base>/<cert>.fullchain.pem  key .key                reload: systemctl reload dovecot
-#   #     pve      /etc/pve/local/pveproxy-ssl.pem + .key      reload: systemctl restart pveproxy
-#   #     pmg      /etc/pmg/pmg-api.pem (cert+chain+key)       reload: systemctl restart pmgproxy
-#   #     pbs      /etc/proxmox-backup/proxy.pem + .key        reload: systemctl reload proxmox-backup-proxy
-#   #     zimbra   Zimbra cert deployment
+#   #     pve      /etc/pve/local/pveproxy-ssl.pem + .key (root:www-data 640)  reload: systemctl restart pveproxy
+#   #     pmg      /etc/pmg/pmg-api.pem (root:www-data 640) + pmg-tls.pem (root:root 600)  reload: systemctl restart pmgproxy + pmgdaemon restart
+#   #     pbs      /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload|restart proxmox-backup-proxy
+#   #     zimbra   commercial cert via zmcertmgr deploycrt comm + zmcontrol restart (needs intermediate/root in chain)
 #   #   Then point your service config at the path(s) above.
 #   #
 #   # MANUAL MODE: choose exactly where each file goes (set RELOAD yourself or keep PROFILE for its reload):
@@ -37,7 +37,7 @@
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--version]
-AGENT_VERSION=0.4.154
+AGENT_VERSION=0.4.162
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -94,16 +94,22 @@ key|$base/$cert.key|600"
       PFILES="combined|$base/$cert.pem|600"
       PTEST="haproxy -c -f /etc/haproxy/haproxy.cfg"; PRELOAD="systemctl reload haproxy" ;;
     pve)
-      PFILES="fullchain|/etc/pve/local/pveproxy-ssl.pem|640
-key|/etc/pve/local/pveproxy-ssl.key|600"
+      # /etc/pve is pmxcfs (FUSE): chmod/chown are not permitted but the fs already
+      # serves these files as root:www-data 0640, so the requested owner/mode are a
+      # best-effort no-op there (and correct on any non-pmxcfs path).
+      PFILES="fullchain|/etc/pve/local/pveproxy-ssl.pem|640|root:www-data
+key|/etc/pve/local/pveproxy-ssl.key|640|root:www-data"
       PRELOAD="systemctl restart pveproxy" ;;
     pmg)
-      PFILES="combined|/etc/pmg/pmg-api.pem|600"
-      PRELOAD="systemctl restart pmgproxy" ;;
+      # pmgproxy runs as www-data and reads pmg-api.pem; pmg-tls.pem (postfix) stays root:root 0600.
+      PFILES="combined|/etc/pmg/pmg-api.pem|640|root:www-data
+combined|/etc/pmg/pmg-tls.pem|600|root:root"
+      PRELOAD="systemctl restart pmgproxy; command -v pmgdaemon >/dev/null 2>&1 && pmgdaemon restart || true" ;;
     pbs)
-      PFILES="fullchain|/etc/proxmox-backup/proxy.pem|640
-key|/etc/proxmox-backup/proxy.key|600"
-      PRELOAD="systemctl reload proxmox-backup-proxy" ;;
+      # proxmox-backup-proxy runs as the 'backup' user and must be able to read proxy.key.
+      PFILES="fullchain|/etc/proxmox-backup/proxy.pem|640|root:backup
+key|/etc/proxmox-backup/proxy.key|640|root:backup"
+      PRELOAD="systemctl reload proxmox-backup-proxy 2>/dev/null || systemctl restart proxmox-backup-proxy" ;;
     postfix)
       PFILES="fullchain|$base/$cert.fullchain.pem|644
 key|$base/$cert.key|600"
@@ -112,6 +118,41 @@ key|$base/$cert.key|600"
       PFILES="fullchain|$base/$cert.fullchain.pem|644
 key|$base/$cert.key|600"
       PRELOAD="systemctl reload dovecot" ;;
+    caddy)
+      PFILES="fullchain|$base/$cert.fullchain.pem|644
+key|$base/$cert.key|600"
+      PRELOAD="systemctl reload caddy" ;;
+    traefik)
+      # Traefik file provider watches the files; no reload needed.
+      PFILES="fullchain|$base/$cert.fullchain.pem|644
+key|$base/$cert.key|600" ;;
+    lighttpd)
+      PFILES="combined|$base/$cert.pem|600"
+      PTEST="lighttpd -tt -f /etc/lighttpd/lighttpd.conf"; PRELOAD="systemctl reload lighttpd" ;;
+    exim4)
+      PFILES="fullchain|$base/$cert.fullchain.pem|644
+key|$base/$cert.key|640"
+      PRELOAD="systemctl reload exim4 2>/dev/null || systemctl reload exim" ;;
+    mosquitto)
+      PFILES="cert|$base/$cert.crt|644
+chain|$base/$cert.chain.pem|644
+key|$base/$cert.key|600"
+      PRELOAD="systemctl restart mosquitto" ;;
+    cockpit)
+      PFILES="combined|/etc/cockpit/ws-certs.d/$cert.cert|640"
+      PRELOAD="systemctl try-restart cockpit.service 2>/dev/null || true" ;;
+    webmin)
+      PFILES="combined|/etc/webmin/miniserv.pem|600"
+      PRELOAD="systemctl restart webmin" ;;
+    zoraxy)
+      # Zoraxy hot-reloads certs from disk; restart only if needed.
+      PFILES="fullchain|$base/$cert.crt|644
+key|$base/$cert.key|600"
+      PRELOAD="systemctl restart zoraxy 2>/dev/null || true" ;;
+    jetty)
+      # Jetty uses a PKCS#12 keystore (no password); point jetty's SslContextFactory at it.
+      PFILES="pkcs12|$base/$cert.p12|640"
+      PRELOAD="systemctl reload jetty 2>/dev/null || systemctl restart jetty" ;;
     zimbra)
       PSPECIAL="zimbra" ;;
     generic)
@@ -138,33 +179,84 @@ add_report() {  # cert profile status fp not_after message
   REPORT_LINES+=("$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$1" "$2" "$3" "$4" "$5" "$DRY_RUN" "$msg")")
 }
 
+# Zimbra deploys commercial certs through zmcertmgr (not a plain file copy):
+#   stage the key, verifycrt comm, deploycrt comm, then 'zmcontrol restart' as the zimbra user.
+# The certificate's chain must contain the intermediate (and root) CA for zmcertmgr to verify.
+deploy_zimbra() {  # cert fp not_after
+  local cert="$1" fp="$2" na="$3"
+  local zmcert=/opt/zimbra/bin/zmcertmgr
+  local zssl=/opt/zimbra/ssl/zimbra/commercial
+  if [ ! -x "$zmcert" ]; then
+    log "[$cert/zimbra] $zmcert not found — is this a Zimbra host?"
+    add_report "$cert" zimbra failed "$fp" "$na" "zmcertmgr not found"; return 1
+  fi
+  if [ "$DRY_RUN" = 1 ]; then
+    log "[$cert/zimbra] (dry-run) would deploy the commercial cert via zmcertmgr:"
+    log "    key  -> $zssl/commercial.key (zimbra:zimbra 600)"
+    log "    verify+deploy: $zmcert verifycrt comm <key> <crt> <ca_chain> && $zmcert deploycrt comm <crt> <ca_chain>"
+    log "    restart: su - zimbra -c 'zmcontrol restart'"
+    add_report "$cert" zimbra dry-run "$fp" "$na" "planned"; return 0
+  fi
+  local tmpd; tmpd="$(mktemp -d)"
+  if ! fetch_part "$cert" cert "$tmpd/commercial.crt" \
+     || ! fetch_part "$cert" chain "$tmpd/commercial_ca.crt" \
+     || ! fetch_part "$cert" key "$tmpd/commercial.key"; then
+    log "[$cert/zimbra] download failed"; rm -rf "$tmpd"
+    add_report "$cert" zimbra failed "$fp" "$na" "download failed"; return 1
+  fi
+  # Zimbra wants the private key staged at the commercial path before verify/deploy.
+  mkdir -p "$zssl"
+  cp -f "$tmpd/commercial.key" "$zssl/commercial.key"
+  chown zimbra:zimbra "$zssl/commercial.key" 2>/dev/null || true
+  chmod 600 "$zssl/commercial.key" 2>/dev/null || true
+  if ! "$zmcert" verifycrt comm "$zssl/commercial.key" "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt" >/dev/null 2>&1; then
+    log "[$cert/zimbra] zmcertmgr verifycrt failed (key/cert mismatch, or the chain is missing the intermediate/root CA)"
+    rm -rf "$tmpd"; add_report "$cert" zimbra failed "$fp" "$na" "verifycrt failed"; return 1
+  fi
+  if ! "$zmcert" deploycrt comm "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt" >/dev/null 2>&1; then
+    log "[$cert/zimbra] zmcertmgr deploycrt failed"
+    rm -rf "$tmpd"; add_report "$cert" zimbra failed "$fp" "$na" "deploycrt failed"; return 1
+  fi
+  rm -rf "$tmpd"
+  # zmcontrol restart is heavy but is the documented way to load a new cert; the
+  # fingerprint guard means this only runs when the certificate actually changed.
+  if ! su - zimbra -c "zmcontrol restart" >/dev/null 2>&1; then
+    log "[$cert/zimbra] deployed, but 'zmcontrol restart' failed — restart Zimbra manually to load the new cert"
+    add_report "$cert" zimbra ok "$fp" "$na" "deployed (manual restart needed)"; return 0
+  fi
+  log "[$cert/zimbra] applied (${fp:0:12}…)"
+  add_report "$cert" zimbra ok "$fp" "$na" "applied"; return 0
+}
+
 apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
   local cert="$1" profile="$2" fp="$3" na="$4"
   local base="$TLS_BASE"
   if ! profile_spec "$profile" "$cert" "$base"; then
     log "[$cert/$profile] unknown profile"; add_report "$cert" "$profile" failed "$fp" "$na" "unknown profile"; return 1
   fi
+  # Special deployment handlers that don't fit the file-copy model.
+  if [ "${PSPECIAL:-}" = zimbra ]; then deploy_zimbra "$cert" "$fp" "$na"; return $?; fi
 
   # config overrides: reload / test / <kind>_path
   [ -n "${D_reload:-}" ] && PRELOAD="$D_reload"
   [ -n "${D_test:-}" ] && PTEST="$D_test"
-  local files="$PFILES" line kind path mode
-  # override each kind's path (generic relies on these too)
+  local files="$PFILES" line kind path mode owner
+  # override each kind's path (generic relies on these too); preserve the owner column
   local newfiles="" ov
   if [ -n "$files" ]; then
-    while IFS='|' read -r kind path mode; do
+    while IFS='|' read -r kind path mode owner; do
       [ -z "$kind" ] && continue
       ov="D_${kind}_path"
       [ -n "${!ov:-}" ] && path="${!ov}"
-      newfiles+="$kind|$path|$mode"$'\n'
+      newfiles+="$kind|$path|$mode|$owner"$'\n'
     done <<< "$files"
   fi
-  # generic / overrides: add kinds not in the profile defaults
-  for kind in cert key chain fullchain combined; do
+  # generic / overrides: add kinds not in the profile defaults (no owner override)
+  for kind in cert key chain fullchain combined pkcs12; do
     ov="D_${kind}_path"
     if [ -n "${!ov:-}" ] && ! printf '%s' "$newfiles" | grep -q "^$kind|"; then
-      local m=644; [ "$kind" = key ] || [ "$kind" = combined ] && m=600
-      newfiles+="$kind|${!ov}|$m"$'\n'
+      local m=644; { [ "$kind" = key ] || [ "$kind" = combined ] || [ "$kind" = pkcs12 ]; } && m=600
+      newfiles+="$kind|${!ov}|$m|"$'\n'
     fi
   done
   files="$(printf '%s' "$newfiles")"
@@ -176,7 +268,7 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
   # dry-run: just print the plan
   if [ "$DRY_RUN" = 1 ]; then
     log "[$cert/$profile] (dry-run) would write:"
-    while IFS='|' read -r kind path mode; do [ -n "$kind" ] && log "    $kind -> $path ($mode)"; done <<< "$files"
+    while IFS='|' read -r kind path mode owner; do [ -n "$kind" ] && log "    $kind -> $path ($mode${owner:+, $owner})"; done <<< "$files"
     [ -n "$PRELOAD" ] && log "    reload: $PRELOAD"
     add_report "$cert" "$profile" dry-run "$fp" "$na" "planned"
     return 0
@@ -189,7 +281,7 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
     for p in "${written[@]}"; do rm -f "$p"; done
     for p in "${backed[@]}"; do mv -f "$p.jtbak" "$p" 2>/dev/null; done
   }
-  while IFS='|' read -r kind path mode; do
+  while IFS='|' read -r kind path mode owner; do
     [ -z "$kind" ] && continue
     if ! fetch_part "$cert" "$kind" "$tmpd/f"; then
       log "[$cert/$profile] download $kind failed"; rollback; rm -rf "$tmpd"
@@ -197,7 +289,14 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
     fi
     mkdir -p "$(dirname "$path")"
     if [ -e "$path" ]; then cp -p "$path" "$path.jtbak"; backed+=("$path"); else written+=("$path"); fi
-    install -m "$mode" "$tmpd/f" "$path"
+    # Write content into place, then set mode/owner best-effort. Proxmox pmxcfs (/etc/pve)
+    # forbids chmod/chown ("Operation not permitted") — the content still lands and the
+    # filesystem manages the permissions itself, so we don't treat that as a failure.
+    cp -f "$tmpd/f" "$path.jtnew" && mv -f "$path.jtnew" "$path"
+    chmod "$mode" "$path" 2>/dev/null \
+      || log "[$cert/$profile] note: kept filesystem-managed permissions for $path (chmod not permitted — normal on Proxmox /etc/pve)"
+    [ -n "$owner" ] && { chown "$owner" "$path" 2>/dev/null \
+      || log "[$cert/$profile] note: kept filesystem-managed owner for $path (chown not permitted — normal on Proxmox /etc/pve)"; }
   done <<< "$files"
   rm -rf "$tmpd"
 

@@ -4,9 +4,10 @@
 # Supported: Debian 11/12/13, Ubuntu 22.04/24.04/26.04, RHEL/Rocky/AlmaLinux/CentOS, Fedora,
 #            openSUSE/SLES (apt / dnf / yum / zypper auto-detected; all use systemd).
 # The agent itself depends only on curl + coreutils (no Python / jq / YAML).
-# Target-site profiles: nginx / apache(httpd) / haproxy / postfix / dovecot /
-#                       Proxmox VE(pve) / Proxmox Mail Gateway(pmg) / Proxmox Backup Server(pbs) /
-#                       Zimbra / generic (custom paths + reload).
+# Target-site profiles: nginx / apache(httpd) / caddy / traefik / lighttpd / haproxy /
+#                       zoraxy / jetty / postfix / dovecot / exim4 / mosquitto /
+#                       cockpit / webmin / Proxmox VE(pve) / Proxmox Mail Gateway(pmg) /
+#                       Proxmox Backup Server(pbs) / Zimbra / generic (custom paths + reload).
 #
 # Usage:
 #   sudo JT_IPAM_URL=https://ipam.example.com JT_IPAM_AGENT_KEY=<key> ./jt-ipam-cert-agent-installer.sh
@@ -134,10 +135,19 @@ ${CERT_HINT}
 #   dovecot
 #     cert+chain : /etc/ssl/jt-ipam/<cert>.fullchain.pem    key: /etc/ssl/jt-ipam/<cert>.key
 #     reload     : systemctl reload dovecot
-#   pve   -> /etc/pve/local/pveproxy-ssl.pem + .key   reload: systemctl restart pveproxy   (no config change)
-#   pmg   -> /etc/pmg/pmg-api.pem (cert+chain+key)     reload: systemctl restart pmgproxy   (no config change)
-#   pbs   -> /etc/proxmox-backup/proxy.pem + .key      reload: systemctl reload proxmox-backup-proxy (no config change)
-#   zimbra-> Zimbra cert deployment
+#   caddy -> <cert>.fullchain.pem + <cert>.key   reload: systemctl reload caddy   (point: tls .../<cert>.fullchain.pem .../<cert>.key)
+#   traefik-> <cert>.fullchain.pem + <cert>.key  no reload (file provider watches; certFile/keyFile in dynamic config)
+#   lighttpd-> <cert>.pem (cert+chain+key)        reload: systemctl reload lighttpd  (point: ssl.pemfile = ".../<cert>.pem")
+#   zoraxy-> <cert>.crt + <cert>.key             reload: systemctl restart zoraxy   (managed via zoraxy UI)
+#   jetty -> <cert>.p12 (PKCS#12 keystore)        reload: systemctl reload jetty     (point SslContextFactory KeyStorePath at it)
+#   exim4 -> <cert>.fullchain.pem + <cert>.key    reload: systemctl reload exim4     (tls_certificate / tls_privatekey)
+#   mosquitto-> <cert>.crt + <cert>.chain.pem + <cert>.key  reload: systemctl restart mosquitto (certfile/cafile/keyfile)
+#   cockpit-> /etc/cockpit/ws-certs.d/<cert>.cert (cert+chain+key)  reload: systemctl try-restart cockpit (no config change)
+#   webmin-> /etc/webmin/miniserv.pem (cert+chain+key)             reload: systemctl restart webmin (no config change)
+#   pve   -> /etc/pve/local/pveproxy-ssl.pem + .key (root:www-data 640)  reload: systemctl restart pveproxy  (no config change; /etc/pve is pmxcfs so perms are fs-managed)
+#   pmg   -> /etc/pmg/pmg-api.pem (root:www-data 640) + /etc/pmg/pmg-tls.pem (root:root 600)  reload: systemctl restart pmgproxy + pmgdaemon restart (no config change)
+#   pbs   -> /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload/restart proxmox-backup-proxy (no config change)
+#   zimbra-> commercial cert via zmcertmgr deploycrt comm  reload: su - zimbra -c 'zmcontrol restart' (chain must include intermediate/root)
 #
 # ══════════════════════════════════════════════════════════════════════════════
 #  MANUAL MODE - you choose exactly where each file goes (set RELOAD yourself,
@@ -173,6 +183,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+SyslogIdentifier=${SVC}
 ExecStart=/usr/bin/env bash ${AGENT} --config ${CONF}
 EOF
 
@@ -198,3 +209,5 @@ echo "  1) Edit DEPLOY_N in ${CONF}"
 echo "  2) Dry-run first (no changes): bash ${AGENT} --config ${CONF} --dry-run"
 echo "  3) Run once for real:          bash ${AGENT} --config ${CONF}"
 echo "  Schedule: ${SVC}.timer (${JT_IPAM_ONCALENDAR}); status: systemctl status ${SVC}.timer"
+echo "  Logs (scheduled runs): journalctl -u ${SVC}.service -n 50 --no-pager   (follow: -f)"
+echo "  Last result per deployment: ${STATEDIR}/state   (also reported back to jt-ipam)"

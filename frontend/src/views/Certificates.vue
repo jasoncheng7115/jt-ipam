@@ -48,8 +48,17 @@ async function loadServerVersion() {
 }
 onMounted(() => { loadCerts(); loadAgents(); loadServerVersion(); });
 
+// 安裝說明：支援的 OS / 發行版（醒目標籤呈現）
+const SUPPORTED_OS = [
+  "Debian 11 / 12 / 13", "Ubuntu 22.04 / 24.04 / 26.04",
+  "RHEL / Rocky / AlmaLinux / CentOS", "Fedora", "openSUSE / SLES",
+];
+
 // ── 設定檔產生器 ──
-const PROFILE_OPTIONS = ["nginx", "apache", "haproxy", "postfix", "dovecot", "pve", "pmg", "pbs", "zimbra"];
+const PROFILE_OPTIONS = [
+  "nginx", "apache", "caddy", "traefik", "lighttpd", "haproxy", "zoraxy", "jetty",
+  "postfix", "dovecot", "exim4", "mosquitto", "cockpit", "webmin", "pve", "pmg", "pbs", "zimbra",
+];
 const dryRunCmd = "sudo bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run";
 const runCmd = "sudo bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config";
 const showGen = ref(false);
@@ -73,13 +82,18 @@ const TLS_BASE = "/etc/ssl/jt-ipam";
 function profileFiles(profile: string, cert: string): { kind: string; path: string }[] {
   const b = TLS_BASE;
   switch (profile) {
-    case "nginx": return [{ kind: "cert+chain", path: `${b}/${cert}.fullchain.pem` }, { kind: "key", path: `${b}/${cert}.key` }];
-    case "apache": return [{ kind: "cert", path: `${b}/${cert}.crt` }, { kind: "chain", path: `${b}/${cert}.chain.pem` }, { kind: "key", path: `${b}/${cert}.key` }];
-    case "haproxy": return [{ kind: "cert+chain+key", path: `${b}/${cert}.pem` }];
-    case "postfix": case "dovecot": return [{ kind: "cert+chain", path: `${b}/${cert}.fullchain.pem` }, { kind: "key", path: `${b}/${cert}.key` }];
-    case "pve": return [{ kind: "cert+chain", path: "/etc/pve/local/pveproxy-ssl.pem" }, { kind: "key", path: "/etc/pve/local/pveproxy-ssl.key" }];
-    case "pmg": return [{ kind: "cert+chain+key", path: "/etc/pmg/pmg-api.pem" }];
-    case "pbs": return [{ kind: "cert+chain", path: "/etc/proxmox-backup/proxy.pem" }, { kind: "key", path: "/etc/proxmox-backup/proxy.key" }];
+    case "nginx": case "caddy": case "traefik": return [{ kind: "cert+chain", path: `${b}/${cert}.fullchain.pem` }, { kind: "key", path: `${b}/${cert}.key` }];
+    case "apache": case "mosquitto": return [{ kind: "cert", path: `${b}/${cert}.crt` }, { kind: "chain", path: `${b}/${cert}.chain.pem` }, { kind: "key", path: `${b}/${cert}.key` }];
+    case "haproxy": case "lighttpd": return [{ kind: "cert+chain+key", path: `${b}/${cert}.pem` }];
+    case "postfix": case "dovecot": case "exim4": return [{ kind: "cert+chain", path: `${b}/${cert}.fullchain.pem` }, { kind: "key", path: `${b}/${cert}.key` }];
+    case "zoraxy": return [{ kind: "cert+chain", path: `${b}/${cert}.crt` }, { kind: "key", path: `${b}/${cert}.key` }];
+    case "jetty": return [{ kind: "PKCS#12 keystore", path: `${b}/${cert}.p12` }];
+    case "cockpit": return [{ kind: "cert+chain+key", path: `/etc/cockpit/ws-certs.d/${cert}.cert` }];
+    case "webmin": return [{ kind: "cert+chain+key", path: "/etc/webmin/miniserv.pem" }];
+    case "pve": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/pve/local/pveproxy-ssl.pem" }, { kind: "key (root:www-data 640)", path: "/etc/pve/local/pveproxy-ssl.key" }];
+    case "pmg": return [{ kind: "cert+chain+key (root:www-data 640)", path: "/etc/pmg/pmg-api.pem" }, { kind: "cert+chain+key (root:root 600)", path: "/etc/pmg/pmg-tls.pem" }];
+    case "pbs": return [{ kind: "cert+chain (root:backup 640)", path: "/etc/proxmox-backup/proxy.pem" }, { kind: "key (root:backup 640)", path: "/etc/proxmox-backup/proxy.key" }];
+    case "zimbra": return [{ kind: "zmcertmgr deploycrt comm + zmcontrol restart", path: "/opt/zimbra/ssl/zimbra/commercial/commercial.{key,crt}" }];
     default: return [];
   }
 }
@@ -89,10 +103,16 @@ function serviceSnippet(profile: string, cert: string): string {
   switch (profile) {
     case "nginx": return `ssl_certificate     ${b}/${cert}.fullchain.pem;\nssl_certificate_key ${b}/${cert}.key;`;
     case "apache": return `SSLCertificateFile      ${b}/${cert}.crt\nSSLCertificateKeyFile   ${b}/${cert}.key\nSSLCertificateChainFile ${b}/${cert}.chain.pem`;
+    case "caddy": return `tls ${b}/${cert}.fullchain.pem ${b}/${cert}.key`;
+    case "traefik": return `tls:\n  certificates:\n    - certFile: ${b}/${cert}.fullchain.pem\n      keyFile: ${b}/${cert}.key`;
+    case "lighttpd": return `ssl.pemfile = "${b}/${cert}.pem"`;
     case "haproxy": return `bind *:443 ssl crt ${b}/${cert}.pem`;
+    case "jetty": return `# jetty SslContextFactory:\nKeyStorePath=${b}/${cert}.p12\nKeyStoreType=PKCS12\nKeyStorePassword=`;
     case "postfix": return `smtpd_tls_cert_file = ${b}/${cert}.fullchain.pem\nsmtpd_tls_key_file  = ${b}/${cert}.key`;
     case "dovecot": return `ssl_cert = <${b}/${cert}.fullchain.pem\nssl_key  = <${b}/${cert}.key`;
-    default: return "";  // pve/pmg/pbs/zimbra：讀固定路徑，不需改設定檔
+    case "exim4": return `tls_certificate = ${b}/${cert}.fullchain.pem\ntls_privatekey  = ${b}/${cert}.key`;
+    case "mosquitto": return `certfile ${b}/${cert}.crt\nkeyfile  ${b}/${cert}.key\ncafile   ${b}/${cert}.chain.pem`;
+    default: return "";  // zoraxy/cockpit/webmin/pve/pmg/pbs/zimbra：固定路徑或由各自 UI 管理，不需手改設定檔
   }
 }
 const genServiceBlocks = computed(() =>
@@ -808,7 +828,15 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
           <template #icon><n-icon :component="CopyIcon" /></template>{{ t("certHelp.copy") }}
         </n-button>
       </n-space>
-      <div class="help-note">{{ t("certHelp.distros") }}</div>
+      <div class="help-subtle" style="margin-top:10px;margin-bottom:5px">{{ t("certHelp.distros_title") }}</div>
+      <n-space :size="[6, 6]">
+        <n-tag v-for="os in SUPPORTED_OS" :key="os" size="small" type="success" :bordered="false" round>{{ os }}</n-tag>
+      </n-space>
+      <div class="help-note" style="margin-top:6px">{{ t("certHelp.distros_note") }}</div>
+      <n-alert type="info" :bordered="false" :show-icon="true" style="margin-top:12px">
+        <template #icon><n-icon :component="ToolsIcon" /></template>
+        {{ t("certHelp.after_install_gen") }}
+      </n-alert>
     </template>
     <n-form v-if="!newKey">
       <n-form-item :label="t('cols.name')">
@@ -876,7 +904,11 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             <template #icon><n-icon :component="CopyIcon" /></template>{{ t("certHelp.copy") }}
           </n-button>
         </n-space>
-        <div class="help-note">{{ t("certHelp.distros") }}</div>
+        <div class="help-subtle" style="margin-top:10px;margin-bottom:5px">{{ t("certHelp.distros_title") }}</div>
+        <n-space :size="[6, 6]">
+          <n-tag v-for="os in SUPPORTED_OS" :key="os" size="small" type="success" :bordered="false" round>{{ os }}</n-tag>
+        </n-space>
+        <div class="help-note" style="margin-top:6px">{{ t("certHelp.distros_note") }}</div>
       </div>
     </div>
 
@@ -1044,6 +1076,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 .help-step-body { flex: 1; min-width: 0; }
 .help-step-title { font-weight: 600; line-height: 1.6; }
 .help-code {
+  display: block;            /* 改 block：padding 對每一行一致，第一行不再被縮排 */
   flex: 1; min-width: 0; word-break: break-all;
   background: var(--n-color-embedded, rgba(0,0,0,.05)); padding: 9px 10px;
   border-radius: 6px; font-size: 12px; line-height: 1.5;

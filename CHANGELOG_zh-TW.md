@@ -4,6 +4,21 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.162] — 2026-06-15
+
+### 新增 — 派送代理支援更多網頁伺服器／服務 profile
+- 憑證派送代理（以及**產生設定檔**工具與安裝腳本）新增 9 個 profile：
+  **caddy / traefik / lighttpd / zoraxy / jetty / exim4 / mosquitto / cockpit / webmin**（原有
+  nginx / apache / haproxy / postfix / dovecot / pve / pmg / pbs / zimbra 之外）。每個 profile 都提供固定
+  寫入路徑與重載指令；**jetty** 會收到 **PKCS#12 keystore**（`<cert>.p12`），由 `GET /cert-agents/bundle/raw`
+  新增的 `part=pkcs12` 提供。
+
+### 變更 — 安裝說明 UX
+- 支援的作業系統／發行版以醒目標籤呈現（Debian／Ubuntu／RHEL 家族／Fedora／SUSE）。
+- 修正 curl 一行式指令第一行開頭被縮排一格的問題（行內 `<code>` 改 `display: block`）。
+- 隱藏工具列獨立的**設定檔說明**按鈕 — 設定檔產生改由各代理操作欄的**產生設定檔**功能負責；安裝說明第 3 步
+  指向它（並附上該按鈕圖示）。
+
 ## [0.4.161] — 2026-06-15
 
 ### 新增 — 憑證檔案檢視與多格式下載

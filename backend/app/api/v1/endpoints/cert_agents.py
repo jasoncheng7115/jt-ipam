@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +35,7 @@ from app.schemas.certificate import (
     CertAgentRead,
     CertAgentUpdate,
 )
+from app.services.cert_service import export_cert_file
 
 router = APIRouter(prefix="/cert-agents", tags=["cert-agents"])
 
@@ -417,15 +418,15 @@ async def agent_bundle_raw(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     cert: Annotated[str, Query(description="憑證名稱或 id")],
-    part: Annotated[str, Query(description="cert|key|chain|fullchain|combined")] = "fullchain",
+    part: Annotated[str, Query(description="cert|key|chain|fullchain|combined|pkcs12")] = "fullchain",
     x_agent_key: Annotated[str | None, Header()] = None,
-) -> PlainTextResponse:
-    """純 bash 代理用：直接回某一段的原始 PEM（text/plain），代理 `curl -o` 直接寫檔免解 JSON。
+) -> Response:
+    """純 bash 代理用：直接回某一段的原始檔（text/plain 或 binary），代理 `curl -o` 直接寫檔免解 JSON。
 
-    part：cert=葉、chain=中繼、fullchain=cert+chain、key=私鑰、combined=cert+chain+key。
-    scope 限定 + 每次下載稽核（key/combined 視為取私鑰）。
+    part：cert=葉、chain=中繼、fullchain=cert+chain、key=私鑰、combined=cert+chain+key、pkcs12=PKCS#12 keystore（jetty 用）。
+    scope 限定 + 每次下載稽核（key/combined/pkcs12 視為取私鑰）。
     """
-    if part not in ("cert", "key", "chain", "fullchain", "combined"):
+    if part not in ("cert", "key", "chain", "fullchain", "combined", "pkcs12"):
         raise HTTPException(400, detail="invalid part")
     agent = await _agent_from_key(session, x_agent_key)
     obj, ver = await _resolve_current_version(session, agent, cert)
@@ -434,20 +435,27 @@ async def agent_bundle_raw(
     def _nl(s: str) -> str:
         return s if not s or s.endswith("\n") else s + "\n"
 
+    body: bytes
+    media = "application/x-pem-file"
     if part == "cert":
-        out = _nl(ver.cert_pem)
+        body = _nl(ver.cert_pem).encode()
     elif part == "chain":
-        out = _nl(chain)
+        body = _nl(chain).encode()
     elif part == "fullchain":
-        out = _nl(ver.cert_pem) + _nl(chain)
-    else:  # key / combined → 需解密私鑰
+        body = (_nl(ver.cert_pem) + _nl(chain)).encode()
+    else:  # key / combined / pkcs12 → 需解密私鑰
         key_pem = decrypt_secret(ver.key_enc, ver.key_nonce,
                                  aad=_key_aad(obj.id, ver.fingerprint_sha256)).decode("utf-8")
-        out = _nl(key_pem) if part == "key" else _nl(ver.cert_pem) + _nl(chain) + _nl(key_pem)
+        if part == "key":
+            body = _nl(key_pem).encode()
+        elif part == "combined":
+            body = (_nl(ver.cert_pem) + _nl(chain) + _nl(key_pem)).encode()
+        else:  # pkcs12
+            body, media, _ = export_cert_file(ver.cert_pem, key_pem, chain, "pfx", name=obj.name)
 
     await _audit_bundle(session, request, agent, obj, ver, extra=part)
     await session.commit()
-    resp = PlainTextResponse(out, media_type="application/x-pem-file")
+    resp = Response(content=body, media_type=media)
     resp.headers["X-Cert-Fingerprint"] = ver.fingerprint_sha256
     resp.headers["X-Cert-Not-After"] = ver.not_after.isoformat()
     return resp

@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.162] — 2026-06-15
+
+### Added — more web-server / service profiles for the distribution agent
+- The cert distribution agent (and the **Generate config** tool + installer) now ship 9 more profiles:
+  **caddy / traefik / lighttpd / zoraxy / jetty / exim4 / mosquitto / cockpit / webmin** (on top of
+  nginx / apache / haproxy / postfix / dovecot / pve / pmg / pbs / zimbra). Each provides its fixed
+  write paths + reload command; **jetty** receives a **PKCS#12 keystore** (`<cert>.p12`), served via a
+  new `part=pkcs12` on `GET /cert-agents/bundle/raw`.
+
+### Changed — install-help UX
+- Supported OS / distributions are shown as prominent tags (Debian / Ubuntu / RHEL family / Fedora / SUSE).
+- Fixed the leading-space indent on the first line of the curl one-liner (inline `<code>` now `display: block`).
+- The standalone **Config help** toolbar button is hidden — config generation lives in the per-agent
+  **Generate config** action; step 3 of the install help points to it (with its tool icon).
+
 ## [0.4.161] — 2026-06-15
 
 ### Added — certificate file viewer & multi-format download
