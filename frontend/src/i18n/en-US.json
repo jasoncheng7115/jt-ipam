@@ -167,6 +167,7 @@
     "renew_hint": "Re-issue a new self-signed certificate reusing the current CN and SANs, set as the current version (distribution agents auto-update each site on the next fingerprint change). Adjust the validity days if needed.",
     "filter_name": "Filter by name / domain",
     "filter_agent": "Filter by name / IP",
+    "filter_by_cert": "Filter by certificate",
     "multi_ip_badge": "Multi-IP",
     "multi_ip_hint": "Multiple hosts recently reported with the same key ({ips}). Use one key per host, otherwise source IP / version / report status overwrite each other.",
     "one_key_per_host": "Use one key per host. Sharing a key across hosts works, but the source IP / version / report status shown here only reflect the most recent host; if recent reports from different IPs share one key, the list flags a warning next to the source IP.",
@@ -194,7 +195,8 @@
     "agent_info": "Distribution agent info",
     "view_key": "View agent connection key & install command",
     "scope_certs": "Certificates this agent may fetch",
-    "scope_hint": "Pick the certificates this agent distributes (empty = none)"
+    "scope_hint": "Pick the certificates this agent distributes (empty = none)",
+    "cert_deleted": "certificate deleted"
   },
   "nav": {
     "dashboard": "Dashboard",

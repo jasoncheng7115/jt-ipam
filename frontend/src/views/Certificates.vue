@@ -32,9 +32,10 @@ const certs = ref<Certificate[]>([]);
 const agents = ref<CertAgent[]>([]);
 const loading = ref(false);
 
-// ── 名稱篩選 ──
+// ── 篩選 ──
 const certFilter = ref("");
 const agentFilter = ref("");
+const agentCertFilter = ref<string | null>(null);  // 依「可取憑證」篩選代理
 const certsFiltered = computed(() => {
   const q = certFilter.value.trim().toLowerCase();
   if (!q) return certs.value;
@@ -43,9 +44,12 @@ const certsFiltered = computed(() => {
 });
 const agentsFiltered = computed(() => {
   const q = agentFilter.value.trim().toLowerCase();
-  if (!q) return agents.value;
-  return agents.value.filter((a) =>
-    a.name.toLowerCase().includes(q) || (a.last_source_ip ?? "").includes(q));
+  const cid = agentCertFilter.value;
+  return agents.value.filter((a) => {
+    if (cid && !(a.scope_cert_ids ?? []).map(String).includes(cid)) return false;
+    if (q && !(a.name.toLowerCase().includes(q) || (a.last_source_ip ?? "").includes(q))) return false;
+    return true;
+  });
 });
 
 async function loadCerts() {
@@ -74,7 +78,8 @@ const SUPPORTED_OS = [
 // ── 設定檔產生器 ──
 const PROFILE_OPTIONS = [
   "nginx", "apache", "caddy", "traefik", "lighttpd", "haproxy", "zoraxy", "jetty",
-  "postfix", "dovecot", "exim4", "mosquitto", "cockpit", "webmin", "pve", "pmg", "pbs", "zimbra",
+  "postfix", "dovecot", "exim4", "mosquitto", "cockpit", "webmin", "wazuh-dashboard",
+  "pve", "pmg", "pbs", "pdm", "zimbra",
 ];
 const dryRunCmd = "sudo bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run";
 const runCmd = "sudo bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config";
@@ -110,6 +115,8 @@ function profileFiles(profile: string, cert: string): { kind: string; path: stri
     case "pve": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/pve/local/pveproxy-ssl.pem" }, { kind: "key (root:www-data 640)", path: "/etc/pve/local/pveproxy-ssl.key" }];
     case "pmg": return [{ kind: "cert+chain+key (root:www-data 640)", path: "/etc/pmg/pmg-api.pem" }, { kind: "cert+chain+key (root:root 600)", path: "/etc/pmg/pmg-tls.pem" }];
     case "pbs": return [{ kind: "cert+chain (root:backup 640)", path: "/etc/proxmox-backup/proxy.pem" }, { kind: "key (root:backup 640)", path: "/etc/proxmox-backup/proxy.key" }];
+    case "pdm": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/proxy.pem" }, { kind: "key (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/proxy.key" }];
+    case "wazuh-dashboard": return [{ kind: "cert+chain (wazuh-dashboard 640)", path: "/etc/wazuh-dashboard/certs/dashboard.pem" }, { kind: "key (wazuh-dashboard 640)", path: "/etc/wazuh-dashboard/certs/dashboard-key.pem" }];
     case "zimbra": return [{ kind: "zmcertmgr deploycrt comm + zmcontrol restart", path: "/opt/zimbra/ssl/zimbra/commercial/commercial.{key,crt}" }];
     default: return [];
   }
@@ -129,7 +136,8 @@ function serviceSnippet(profile: string, cert: string): string {
     case "dovecot": return `ssl_cert = <${b}/${cert}.fullchain.pem\nssl_key  = <${b}/${cert}.key`;
     case "exim4": return `tls_certificate = ${b}/${cert}.fullchain.pem\ntls_privatekey  = ${b}/${cert}.key`;
     case "mosquitto": return `certfile ${b}/${cert}.crt\nkeyfile  ${b}/${cert}.key\ncafile   ${b}/${cert}.chain.pem`;
-    default: return "";  // zoraxy/cockpit/webmin/pve/pmg/pbs/zimbra：固定路徑或由各自 UI 管理，不需手改設定檔
+    case "wazuh-dashboard": return `# /etc/wazuh-dashboard/opensearch_dashboards.yml\nserver.ssl.certificate: "/etc/wazuh-dashboard/certs/dashboard.pem"\nserver.ssl.key:         "/etc/wazuh-dashboard/certs/dashboard-key.pem"`;
+    default: return "";  // zoraxy/cockpit/webmin/pve/pmg/pbs/pdm/zimbra：固定路徑或由各自 UI 管理，不需手改設定檔
   }
 }
 const genServiceBlocks = computed(() =>
@@ -380,6 +388,14 @@ const newKey = ref<string | null>(null);
 const viewMode = ref(false);  // true＝檢視既有代理（非剛建立）
 const viewAgentName = ref("");
 const certOptions = computed(() => certs.value.map(c => ({ label: c.name, value: c.id })));
+// 編輯既有代理時，scope 內若有已被刪除的憑證（孤兒 UUID），用可讀標籤顯示而非裸 UUID，方便移除
+const editCertOptions = computed(() => {
+  const known = new Set(certs.value.map(c => c.id));
+  const orphans = editForm.value.scope_cert_ids
+    .filter(id => !known.has(id))
+    .map(id => ({ label: `${id.slice(0, 8)}…（${t("certs.cert_deleted")}）`, value: id }));
+  return [...certOptions.value, ...orphans];
+});
 async function viewAgent(a: CertAgent) {
   try {
     const r = await getCertAgentKey(a.id);
@@ -602,7 +618,22 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
       default: () => t("certs.deployed_hint"),
     }),
     sorter: (a, b) => (a.reported ?? []).length - (b.reported ?? []).length,
-    render: (a) => `${(a.reported ?? []).filter(d => (d as any).status === "ok").length} / ${(a.reported ?? []).length}` },
+    render: (a) => {
+      const reps = (a.reported ?? []) as any[];
+      const ok = reps.filter(d => d.status === "ok").length;
+      const label = `${ok} / ${reps.length}`;
+      if (!reps.length) return label;
+      // hover 顯示實際派送了哪些憑證 / 服務與狀態
+      return h(NTooltip, null, {
+        trigger: () => h("span", { style: "border-bottom:1px dotted currentColor;cursor:help" }, label),
+        default: () => h("div", { style: "display:flex;flex-direction:column;gap:3px" },
+          reps.map(d => h("div", { style: "display:flex;align-items:center;gap:6px;white-space:nowrap" }, [
+            h(NTag, { size: "tiny", type: d.status === "ok" ? "success" : "warning", bordered: false },
+              () => d.status ?? "?"),
+            h("span", `${d.cert ?? "?"} / ${d.profile ?? "?"}`),
+          ]))),
+      });
+    } },
   { title: t("cols.actions"), key: "actions", className: "col-actions", width: 213, fixed: "right",
     render: (a) => h("div", { style: "padding-right:8px" }, h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       actBtn(ToolsIcon, t("certGen.title"), () => openGen(a), { type: "primary", ghost: true }),
@@ -667,6 +698,8 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
                      :placeholder="t('certs.filter_agent')" style="width: 200px">
               <template #prefix><n-icon :component="SearchIcon" /></template>
             </n-input>
+            <n-select v-model:value="agentCertFilter" :options="certOptions" clearable filterable
+                      :placeholder="t('certs.filter_by_cert')" style="width: 200px" />
             <span v-if="serverAgentVersion" style="font-size:12px;opacity:.7">
               {{ t("certs.latest_agent_version") }}：<n-tag size="small" type="info" :bordered="false">v{{ serverAgentVersion }}</n-tag>
             </span>
@@ -926,7 +959,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
         <n-input v-model:value="editForm.name" />
       </n-form-item>
       <n-form-item :label="t('certs.scope_certs')">
-        <n-select v-model:value="editForm.scope_cert_ids" multiple filterable :options="certOptions"
+        <n-select v-model:value="editForm.scope_cert_ids" multiple filterable :options="editCertOptions"
                   :placeholder="t('certs.scope_hint')" />
       </n-form-item>
       <n-form-item :label="t('cols.enabled')">

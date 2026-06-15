@@ -29,7 +29,7 @@ from app.api.v1.dependencies import CurrentUser, require_admin
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.security import decrypt_secret, encrypt_secret
-from app.models.certificate import Certificate, CertVersion
+from app.models.certificate import CertAgent, Certificate, CertVersion
 from app.schemas.base import Paginated
 from app.schemas.certificate import (
     CertificateCreate,
@@ -213,6 +213,17 @@ async def delete_certificate(
     obj = await session.get(Certificate, cert_id)
     if obj is None:
         raise HTTPException(404, detail="Not found")
+    # 防止刪除仍被派送代理選用的憑證（否則代理的 scope_cert_ids 會殘留孤兒 UUID）
+    used_by = (await session.execute(
+        select(CertAgent.name).where(CertAgent.scope_cert_ids.contains([str(cert_id)]))
+        .order_by(CertAgent.name)
+    )).scalars().all()
+    if used_by:
+        raise HTTPException(
+            409,
+            detail=f"此憑證仍被派送代理使用（{'、'.join(used_by)}），"
+                   f"請先到這些代理的「可取憑證」移除它，再刪除憑證。",
+        )
     await append_audit(
         session, actor_user_id=str(user.id),
         actor_ip=request.client.host if request.client else None,

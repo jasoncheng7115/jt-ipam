@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.166] — 2026-06-15
+
+### Fixed
+- **Deleting a certificate that a distribution agent still references is now blocked** (409 with the
+  agent names) instead of leaving an orphan UUID in the agent's scope. The edit-agent dialog also now
+  shows any already-orphaned scope entries as "<id>… (certificate deleted)" so they can be removed,
+  rather than a bare UUID.
+
+### Added
+- New distribution profiles: **`pdm`** (Proxmox Datacenter Manager) and **`wazuh-dashboard`**
+  (OpenSearch Dashboards). Univention UCS was evaluated and intentionally left to manual mode (its
+  cert path is FQDN-specific and managed by the UCS internal CA).
+- **Filter the distribution-agent list by certificate** (which cert an agent is scoped to), alongside
+  the existing name/IP filter.
+
+### Changed
+- The distribution-agent **"deployed / reported" count** now shows the actual deployments on hover
+  (each cert / profile and its status).
+- **Tidied the cert-agent installer's post-install output** — one compact summary (timer, config status,
+  deployable certs, test/apply commands, logs) instead of a long multi-line dump.
+
 ## [0.4.165] — 2026-06-15
 
 ### Changed — consistent table pagination + filter alignment

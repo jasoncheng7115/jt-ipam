@@ -167,6 +167,7 @@
     "renew_hint": "沿用目前的 CN 與 SAN 重新簽發一張新的自簽憑證，並設為目前版本（派送代理下次比對指紋不同就會自動更新各站台）。可調整效期天數。",
     "filter_name": "篩選名稱 / 網域",
     "filter_agent": "篩選名稱 / IP",
+    "filter_by_cert": "依憑證篩選",
     "multi_ip_badge": "多 IP",
     "multi_ip_hint": "近期有多台主機用同一把 Key 回報（{ips}）。建議一台主機一把 Key，否則來源 IP／版本／回報狀態會互相覆蓋。",
     "one_key_per_host": "建議一台主機一把 Key。多台主機共用同一把 Key 雖能運作，但管理頁的「來源 IP／版本／回報狀態」只會顯示最後回報的那一台；若偵測到近期有不同 IP 共用同一把 Key，列表會在來源 IP 旁標示警告。",
@@ -194,7 +195,8 @@
     "agent_info": "派送代理資訊",
     "view_key": "檢視代理連線 Key 與安裝指令",
     "scope_certs": "此代理可取哪些憑證",
-    "scope_hint": "選擇此代理負責派送的憑證（留空＝不可取任何）"
+    "scope_hint": "選擇此代理負責派送的憑證（留空＝不可取任何）",
+    "cert_deleted": "憑證已刪除"
   },
   "nav": {
     "dashboard": "儀表板",

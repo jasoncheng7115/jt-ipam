@@ -115,6 +115,23 @@ async def test_generate_self_signed_version(client, auth_headers):
     assert set(item["current_sans"]) == {"lab.lan", "x.lan"}
 
 
+async def test_delete_cert_blocked_when_used_by_agent(client, auth_headers):
+    """憑證仍被派送代理選用時不可刪（避免代理 scope 殘留孤兒 UUID）；移除後可刪。"""
+    cid = await _create_cert(client, auth_headers)
+    ra = await client.post("/api/v1/cert-agents", headers=auth_headers,
+                           json={"name": f"ag-{uuid.uuid4().hex[:6]}", "scope_cert_ids": [cid]})
+    assert ra.status_code == 201, ra.text
+    aid = ra.json()["id"]
+    rd = await client.delete(f"/api/v1/certificates/{cid}", headers=auth_headers)
+    assert rd.status_code == 409, rd.text
+    # 從代理的可取憑證移除後即可刪除
+    rp = await client.patch(f"/api/v1/cert-agents/{aid}", headers=auth_headers,
+                            json={"scope_cert_ids": []})
+    assert rp.status_code == 200, rp.text
+    rd2 = await client.delete(f"/api/v1/certificates/{cid}", headers=auth_headers)
+    assert rd2.status_code == 204, rd2.text
+
+
 async def test_self_signed_renew_creates_new_version(client, auth_headers):
     """續簽＝沿用 CN/SAN 再呼叫 self-signed，產生第二個版本並成為目前版本。"""
     cid = await _create_cert(client, auth_headers)

@@ -6,8 +6,9 @@
 # The agent itself depends only on curl + coreutils (no Python / jq / YAML).
 # Target-site profiles: nginx / apache(httpd) / caddy / traefik / lighttpd / haproxy /
 #                       zoraxy / jetty / postfix / dovecot / exim4 / mosquitto /
-#                       cockpit / webmin / Proxmox VE(pve) / Proxmox Mail Gateway(pmg) /
-#                       Proxmox Backup Server(pbs) / Zimbra / generic (custom paths + reload).
+#                       cockpit / webmin / wazuh-dashboard / Proxmox VE(pve) /
+#                       Proxmox Mail Gateway(pmg) / Proxmox Backup Server(pbs) /
+#                       Proxmox Datacenter Manager(pdm) / Zimbra / generic (custom paths + reload).
 #
 # Usage:
 #   sudo JT_IPAM_URL=https://ipam.example.com JT_IPAM_AGENT_KEY=<key> ./jt-ipam-cert-agent-installer.sh
@@ -147,6 +148,8 @@ ${CERT_HINT}
 #   pve   -> /etc/pve/local/pveproxy-ssl.pem + .key (root:www-data 640)  reload: systemctl restart pveproxy  (no config change; /etc/pve is pmxcfs so perms are fs-managed)
 #   pmg   -> /etc/pmg/pmg-api.pem (root:www-data 640) + /etc/pmg/pmg-tls.pem (root:root 600)  reload: systemctl restart pmgproxy + pmgdaemon restart (no config change)
 #   pbs   -> /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload/restart proxmox-backup-proxy (no config change)
+#   pdm   -> /etc/proxmox-datacenter-manager/proxy.pem + .key (root:www-data 640)  reload: systemctl reload/restart proxmox-datacenter-manager-proxy (no config change)
+#   wazuh-dashboard -> /etc/wazuh-dashboard/certs/dashboard.pem + dashboard-key.pem  reload: systemctl restart wazuh-dashboard (point server.ssl.* in opensearch_dashboards.yml at these)
 #   zimbra-> commercial cert via zmcertmgr deploycrt comm  reload: su - zimbra -c 'zmcontrol restart' (chain must include intermediate/root)
 #
 # ══════════════════════════════════════════════════════════════════════════════
@@ -161,17 +164,16 @@ ${CERT_HINT}
 # DEPLOY_1_TEST= config-test command run before reload
 EOF
     chmod 0600 "$CONF"
-    echo "Created config template: $CONF (edit DEPLOY_1_* before enabling)"
+    CONF_STATUS="created (template - edit DEPLOY_1_* to enable)"
 else
-    echo "Config already exists, leaving it untouched: $CONF"
+    CONF_STATUS="kept (existing config left untouched)"
 fi
 
-# Show which certificates this agent can deploy (valid DEPLOY_<N>_CERT values).
+# Compact one-line list of certs this agent can deploy (valid DEPLOY_<N>_CERT values).
 if [[ -n "$CERTS" ]]; then
-    echo "Certificates this agent can deploy (use as DEPLOY_<N>_CERT):"
-    printf '  %s\n' $CERTS
+    CERT_LINE="$(printf '%s, ' $CERTS)"; CERT_LINE="${CERT_LINE%, }"
 else
-    echo "Note: this agent has no certificates in scope yet - add some in jt-ipam (the agent's scope)."
+    CERT_LINE="(none yet - add certificates to this agent's scope in jt-ipam)"
 fi
 
 # ── systemd service + timer (all distros use systemd) ──
@@ -204,10 +206,17 @@ systemctl daemon-reload
 systemctl enable "${SVC}.timer" >/dev/null 2>&1 || true
 systemctl start "${SVC}.timer"
 
-echo "Done (package manager: ${PM:-unknown}). Next steps:"
-echo "  1) Edit DEPLOY_N in ${CONF}"
-echo "  2) Dry-run first (no changes): bash ${AGENT} --config ${CONF} --dry-run"
-echo "  3) Run once for real:          bash ${AGENT} --config ${CONF}"
-echo "  Schedule: ${SVC}.timer (${JT_IPAM_ONCALENDAR}); status: systemctl status ${SVC}.timer"
-echo "  Logs (scheduled runs): journalctl -u ${SVC}.service -n 50 --no-pager   (follow: -f)"
-echo "  Last result per deployment: ${STATEDIR}/state   (also reported back to jt-ipam)"
+RUN="bash ${AGENT} --config ${CONF}"
+cat <<EOF
+
+  jt-ipam cert agent installed - runs on a ${SVC}.timer (${JT_IPAM_ONCALENDAR}).
+
+  Next: edit your deployments in ${CONF}
+        config: ${CONF_STATUS}
+        certs you can deploy: ${CERT_LINE}
+
+    test:   ${RUN} --dry-run
+    apply:  ${RUN}
+
+  Logs: journalctl -u ${SVC}.service -f   |   Help: bash ${AGENT} --help
+EOF

@@ -4,6 +4,22 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.166] — 2026-06-15
+
+### 修正
+- **刪除仍被派送代理選用的憑證會被擋下**(409,並列出使用它的代理名稱),不再讓代理的可取憑證殘留孤兒 UUID。
+  編輯代理視窗對已經是孤兒的項目也改顯示「<id>…（憑證已刪除）」方便移除,不再顯示裸 UUID。
+
+### 新增
+- 新增派送 profile:**`pdm`**(Proxmox Datacenter Manager)與 **`wazuh-dashboard`**(OpenSearch Dashboards)。
+  Univention UCS 評估後刻意留給手動模式(憑證路徑含 FQDN、且由 UCS 內部 CA 管理,內建固定路徑不適合)。
+- 派送代理清單可**依憑證篩選**(篩出可取某張憑證的代理),與既有的名稱/IP 篩選並列。
+
+### 變更
+- 派送代理的**「已部署／回報」數字**改為 hover 顯示實際派送了哪些憑證／服務與狀態。
+- **精簡派送代理 installer 安裝完成後的輸出** — 改成一段精簡摘要(timer、設定檔狀態、可派送憑證、測試/套用指令、記錄),
+  不再一長串。
+
 ## [0.4.165] — 2026-06-15
 
 ### 變更 — 表格分頁一致化 + 篩選框對齊

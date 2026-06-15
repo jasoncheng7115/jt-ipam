@@ -28,6 +28,8 @@
 #   #     pve      /etc/pve/local/pveproxy-ssl.pem + .key (root:www-data 640)  reload: systemctl restart pveproxy
 #   #     pmg      /etc/pmg/pmg-api.pem (root:www-data 640) + pmg-tls.pem (root:root 600)  reload: systemctl restart pmgproxy + pmgdaemon restart
 #   #     pbs      /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload|restart proxmox-backup-proxy
+#   #     pdm      /etc/proxmox-datacenter-manager/proxy.pem + .key (root:www-data 640)  reload: systemctl reload|restart proxmox-datacenter-manager-proxy
+#   #     wazuh-dashboard  /etc/wazuh-dashboard/certs/dashboard.pem + dashboard-key.pem  reload: systemctl restart wazuh-dashboard
 #   #     zimbra   commercial cert via zmcertmgr deploycrt comm + zmcontrol restart (needs intermediate/root in chain)
 #   #   Then point your service config at the path(s) above.
 #   #
@@ -37,7 +39,7 @@
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--version]
-AGENT_VERSION=0.4.163
+AGENT_VERSION=0.4.166
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -137,6 +139,17 @@ combined|/etc/pmg/pmg-tls.pem|600|root:root"
       PFILES="fullchain|/etc/proxmox-backup/proxy.pem|640|root:backup
 key|/etc/proxmox-backup/proxy.key|640|root:backup"
       PRELOAD="systemctl reload proxmox-backup-proxy 2>/dev/null || systemctl restart proxmox-backup-proxy" ;;
+    pdm)
+      # Proxmox Datacenter Manager (same proxmox-rest-server framework as PBS).
+      PFILES="fullchain|/etc/proxmox-datacenter-manager/proxy.pem|640|root:www-data
+key|/etc/proxmox-datacenter-manager/proxy.key|640|root:www-data"
+      PRELOAD="systemctl reload proxmox-datacenter-manager-proxy 2>/dev/null || systemctl restart proxmox-datacenter-manager-proxy" ;;
+    wazuh-dashboard)
+      # Wazuh dashboard (OpenSearch Dashboards). opensearch_dashboards.yml must point
+      # server.ssl.certificate / server.ssl.key at these files (the Wazuh default paths).
+      PFILES="fullchain|/etc/wazuh-dashboard/certs/dashboard.pem|640|wazuh-dashboard:wazuh-dashboard
+key|/etc/wazuh-dashboard/certs/dashboard-key.pem|640|wazuh-dashboard:wazuh-dashboard"
+      PRELOAD="systemctl restart wazuh-dashboard" ;;
     postfix)
       PFILES="fullchain|$base/$cert.fullchain.pem|644
 key|$base/$cert.key|600"
