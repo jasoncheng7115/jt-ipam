@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.safe_http import UnsafeOutboundURL, safe_request
@@ -325,20 +325,27 @@ async def sync_mapping(
 async def _stamp_ip_seen(
     session: AsyncSession, ip: str,
     *, mac: str | None = None, hostname: str | None = None,
+    subnet_ids: list[uuid.UUID] | None = None, dhcp: bool = False,
 ) -> bool:
     """找到 jt-ipam IPAddress 就 stamp last_seen_scanner，回傳是否找到。
 
     OPNsense 給的資料相當於我們自己 scanner 的證據，所以塞 last_seen_scanner。
     DHCP/ARP 是當下事實 → 有 MAC / hostname 就覆寫舊值。
+    dhcp=True（來自 DHCP lease）→ 自動標記 in_dhcp_lease。
+    subnet_ids 給定時只在該防火牆關聯的子網路內找 IP（避免重疊網段同 IP 撈到別人，
+    也避免 .scalar_one_or_none() 在多筆同 IP 時 MultipleResultsFound 炸掉整批 sync）。
     """
     if not ip:
         return False
-    ipa = (
-        await session.execute(select(IPAddress).where(IPAddress.ip == ip))
-    ).scalar_one_or_none()
+    stmt = select(IPAddress).where(IPAddress.ip == ip)
+    if subnet_ids:
+        stmt = stmt.where(IPAddress.subnet_id.in_(subnet_ids))
+    ipa = (await session.execute(stmt.limit(1))).scalars().first()
     if ipa is None:
         return False
     ipa.last_seen_scanner = datetime.now(UTC)
+    if dhcp:
+        ipa.in_dhcp_lease = True
     if mac:
         from app.services.arp_precedence import consider_mac
         await consider_mac(session, ip=ipa, mac=mac, source="opnsense")
@@ -410,6 +417,8 @@ async def sync_dhcp_leases(
     seen = matched = 0
     used_sources: list[str] = []
     errors: list[str] = []
+    scope_ids = list(fw.scope_subnet_ids) if fw.scope_subnet_ids else None
+    leased_ips: set[str] = set()
 
     for path, kind in sources:
         try:
@@ -433,8 +442,22 @@ async def sync_dhcp_leases(
             if not ip:
                 continue
             seen += 1
-            if await _stamp_ip_seen(session, ip, mac=mac, hostname=host):
+            leased_ips.add(ip)
+            if await _stamp_ip_seen(session, ip, mac=mac, hostname=host,
+                                    subnet_ids=scope_ids, dhcp=True):
                 matched += 1
+
+    # 撤銷：此防火牆關聯子網路內、原本標 in_dhcp_lease 但這次租約已消失的 IP → 清旗標。
+    # 只在有設定關聯子網路範圍時做，避免多台 OPNsense（全域範圍）互相清掉對方的租約標記。
+    if scope_ids and used_sources:
+        from sqlalchemy import update as _update
+        stmt = (
+            _update(IPAddress)
+            .where(IPAddress.subnet_id.in_(scope_ids), IPAddress.in_dhcp_lease.is_(True))
+        )
+        if leased_ips:
+            stmt = stmt.where(func.host(IPAddress.ip).notin_(leased_ips))
+        await session.execute(stmt.values(in_dhcp_lease=False))
 
     out: dict[str, int] = {"seen": seen, "matched": matched}
     if used_sources:
@@ -460,13 +483,14 @@ async def sync_arp_table(
     if isinstance(data, list):
         rows = data
     seen = matched = 0
+    scope_ids = list(fw.scope_subnet_ids) if fw.scope_subnet_ids else None
     for r in rows:
         ip = (r.get("ip") or "").strip()
         mac = (r.get("mac") or "").strip() or None
         if not ip:
             continue
         seen += 1
-        if await _stamp_ip_seen(session, ip, mac=mac):
+        if await _stamp_ip_seen(session, ip, mac=mac, subnet_ids=scope_ids):
             matched += 1
     return {"seen": seen, "matched": matched}
 
@@ -609,6 +633,33 @@ async def sync_nat_rules(
         ("/api/firewall/source_nat/searchRule", "many_to_one"),
     ]
 
+    # ── 關聯範圍（NAT 對應）：多台防火牆共用 RFC1918 子網時，限定此防火牆的
+    #    NAT 規則只對應到範圍內子網的 IP。allowed_subnet_ids 為空 → 沿用全域比對。
+    from app.models.subnet import Subnet
+
+    allowed_subnet_ids: set[uuid.UUID] = set()
+    if fw.scope_subnet_ids:
+        allowed_subnet_ids.update(fw.scope_subnet_ids)
+    if fw.iface_subnet_map:
+        for _sid in fw.iface_subnet_map.values():
+            try:
+                allowed_subnet_ids.add(uuid.UUID(str(_sid)))
+            except (ValueError, AttributeError, TypeError):
+                continue
+    _derived_conds = []
+    if fw.scope_location_id is not None:
+        _derived_conds.append(Subnet.location_id == fw.scope_location_id)
+    if fw.scope_customer_id is not None:
+        _derived_conds.append(Subnet.customer_id == fw.scope_customer_id)
+    if _derived_conds:
+        derived = (
+            await session.execute(
+                select(Subnet.id).where(or_(*_derived_conds))
+            )
+        ).scalars().all()
+        allowed_subnet_ids.update(derived)
+    scoped = len(allowed_subnet_ids) > 0
+
     # IP 文字 → jt-ipam ip uuid 的小 cache
     _ip_cache: dict[str, str | None] = {}
 
@@ -624,11 +675,17 @@ async def sync_nat_rules(
         key = str(addr)
         if key in _ip_cache:
             return _ip_cache[key]
-        row = (
-            await session.execute(
-                select(IPAddress.id).where(func.host(IPAddress.ip) == key).limit(1)
+        if scoped:
+            # 限定範圍內子網：找不到就回 None，不退回全域（這正是 scope 的目的）
+            stmt = (
+                select(IPAddress.id).where(
+                    func.host(IPAddress.ip) == key,
+                    IPAddress.subnet_id.in_(allowed_subnet_ids),
+                ).limit(1)
             )
-        ).scalar_one_or_none()
+        else:
+            stmt = select(IPAddress.id).where(func.host(IPAddress.ip) == key).limit(1)
+        row = (await session.execute(stmt)).scalar_one_or_none()
         _ip_cache[key] = str(row) if row else None
         return _ip_cache[key]
 

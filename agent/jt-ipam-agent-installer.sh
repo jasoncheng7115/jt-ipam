@@ -23,6 +23,17 @@ if [[ $EUID -ne 0 ]]; then echo "Please run as root / sudo" >&2; exit 1; fi
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
 command -v ping >/dev/null || { echo "ping is required (iputils-ping)" >&2; exit 1; }
 
+# Optional probe tooling — unlocks extra probes the agent can run (capability auto-detected):
+#   nmap            → OS detection      | samba-common-bin → NetBIOS (nmblookup)
+#   avahi-utils     → mDNS (avahi-resolve)
+# Best-effort: skipped if apt-get is unavailable or offline; install manually otherwise.
+if [[ -z "${JT_IPAM_SKIP_PROBE_TOOLS:-}" ]] && command -v apt-get >/dev/null; then
+  echo "==> Installing optional probe tools (nmap / samba-common-bin / avahi-utils)…"
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nmap samba-common-bin avahi-utils || \
+    echo "    (some probe tools failed to install; NetBIOS/mDNS/OS probes may stay unavailable)"
+fi
+
 echo "==> Installing agent program to ${DEST}"
 mkdir -p "$DEST"
 INSECURE_FLAG=""

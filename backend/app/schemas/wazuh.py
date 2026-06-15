@@ -19,6 +19,7 @@ class WazuhInstanceBase(StrictModel):
     verify_tls: bool = True
     sync_interval_seconds: Annotated[int, Field(ge=30, le=86400)] = 300
     description: Annotated[str | None, Field(max_length=2048)] = None
+    scope_subnet_ids: list[str] | None = None
 
 
 class WazuhInstanceCreate(WazuhInstanceBase):
@@ -34,6 +35,7 @@ class WazuhInstanceUpdate(StrictModel):
     verify_tls: bool | None = None
     sync_interval_seconds: Annotated[int | None, Field(ge=30, le=86400)] = None
     description: Annotated[str | None, Field(max_length=2048)] = None
+    scope_subnet_ids: list[str] | None = None
 
 
 class WazuhInstanceRead(WazuhInstanceBase):

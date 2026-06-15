@@ -79,6 +79,7 @@ class SubnetCreate(SubnetBase):
 
 class SubnetUpdate(StrictModel):
     section_id: uuid.UUID | None = None
+    master_subnet_id: uuid.UUID | None = None  # 上層子網路（前端「上層子網路」選單）
     description: Annotated[str | None, Field(max_length=1024)] = None
     vlan_id: uuid.UUID | None = None
     vrf_id: uuid.UUID | None = None

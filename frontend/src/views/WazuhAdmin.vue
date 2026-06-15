@@ -3,11 +3,13 @@ import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
-  NInput, NSwitch, NTabs, NTabPane, NTag, NPopconfirm, NAlert, NTooltip,
+  NInput, NSwitch, NSelect, NTabs, NTabPane, NTag, NPopconfirm, NAlert, NTooltip,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import { listSubnets } from "@/api/subnets";
 import {
   WazuhIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, MissingIcon, DevicesIcon, EyeIcon,
 } from "@/icons";
@@ -62,12 +64,22 @@ const newInst = ref({
   name: "", api_url: "",
   api_user: "", api_password: "",
   verify_tls: true,
+  scope_subnet_ids: [] as string[],
 });
+
+const subnetOptions = ref<{ label: string; value: string }[]>([]);
+async function loadSubnetOptions() {
+  try {
+    const r = await listSubnets({ page: 1, pageSize: 500 });
+    subnetOptions.value = r.items.map((s) => ({
+      label: s.description ? `${s.cidr} — ${s.description}` : s.cidr, value: s.id }));
+  } catch { /* silent */ }
+}
 
 function openCreate() {
   editing.value = null;
   newInst.value = { name: "", api_url: "",
-    api_user: "", api_password: "", verify_tls: true };
+    api_user: "", api_password: "", verify_tls: true, scope_subnet_ids: [] };
   showInst.value = true;
 }
 function openEdit(r: WazuhInstance) {
@@ -75,6 +87,7 @@ function openEdit(r: WazuhInstance) {
   newInst.value = {
     name: r.name, api_url: r.api_url, api_user: r.api_user,
     api_password: "", verify_tls: r.verify_tls,
+    scope_subnet_ids: r.scope_subnet_ids ?? [],
   };
   showInst.value = true;
 }
@@ -98,6 +111,7 @@ async function submit() {
       const payload: any = {
         name: newInst.value.name, api_url: newInst.value.api_url,
         api_user: newInst.value.api_user, verify_tls: newInst.value.verify_tls,
+        scope_subnet_ids: newInst.value.scope_subnet_ids,
       };
       if (newInst.value.api_password) payload.api_password = newInst.value.api_password;
       await updateWazuh(editing.value.id, payload);
@@ -106,6 +120,7 @@ async function submit() {
         name: newInst.value.name, api_url: newInst.value.api_url,
         api_user: newInst.value.api_user, api_password: newInst.value.api_password,
         verify_tls: newInst.value.verify_tls,
+        scope_subnet_ids: newInst.value.scope_subnet_ids,
       });
     }
     showInst.value = false;
@@ -232,7 +247,7 @@ const agentCols = computed<DataTableColumns<WazuhAgent>>(() =>
 const missCols = computed<DataTableColumns<MissingAgent>>(() =>
   allMissCols.value.filter((c: any) => wzMiss.visibleKeys.value.includes(c.key)));
 
-onMounted(() => { void refresh(); });
+onMounted(() => { void refresh(); void loadSubnetOptions(); });
 </script>
 
 <template>
@@ -308,6 +323,14 @@ onMounted(() => { void refresh(); });
           <n-input v-model:value="newInst.api_password" type="password" show-password-on="click" />
         </n-form-item>
         <n-form-item label="Verify TLS"><n-switch v-model:value="newInst.verify_tls" /></n-form-item>
+        <n-form-item :label="t('wazuh_admin.scope_subnets')">
+          <n-select v-model:value="newInst.scope_subnet_ids" :options="subnetOptions"
+                    multiple filterable clearable :placeholder="t('wazuh_admin.scope_all')" />
+          <ScopeOverlapWarning :scope-empty="!newInst.scope_subnet_ids?.length" />
+        </n-form-item>
+        <div style="margin: -8px 0 4px">
+          <span style="font-size: 11px; opacity: .7">{{ t("wazuh_admin.scope_hint") }}</span>
+        </div>
       </n-form>
       <n-space justify="end">
         <n-button @click="showInst = false">{{ t("common.cancel") }}</n-button>

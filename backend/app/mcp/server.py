@@ -32,8 +32,8 @@ DEFAULT_PROTOCOL_VERSION = "2025-03-26"
 _SUPPORTED_PROTOCOLS = {"2024-11-05", "2025-03-26", "2025-06-18"}
 
 
-def _build_tool_list() -> list[dict[str, Any]]:
-    """產生 MCP `tools/list` 回應。"""
+def _build_tool_list(allowed: set[str] | None = None) -> list[dict[str, Any]]:
+    """產生 MCP `tools/list` 回應；allowed 給定時依 RBAC 過濾。"""
     return [
         {
             "name": name,
@@ -41,6 +41,7 @@ def _build_tool_list() -> list[dict[str, Any]]:
             "inputSchema": meta["parameters"],
         }
         for name, meta in TOOLS.items()
+        if allowed is None or name in allowed
     ]
 
 
@@ -70,6 +71,11 @@ async def resolve_token(token: str):  # type: ignore[no-untyped-def]
 async def _dispatch_call(name: str, arguments: dict[str, Any], user, session):  # type: ignore[no-untyped-def]
     if name not in TOOLS:
         raise IPAMToolError(f"unknown tool: {name}")
+    # RBAC 閘（與 NL chat 共用）：零權限擋全部、全域基礎設施需萬用讀取、異動需 admin
+    from app.mcp.tools import authorize_tool
+    denied = await authorize_tool(session, user, name)
+    if denied is not None:
+        raise IPAMToolError(denied)
     fn = TOOLS[name]["fn"]
     return await fn(session, user=user, **arguments)
 
@@ -102,7 +108,10 @@ async def process_message(body: dict[str, Any], user) -> dict[str, Any] | None: 
         elif method == "ping":
             result = {}
         elif method == "tools/list":
-            result = {"tools": _build_tool_list()}
+            from app.mcp.tools import allowed_tool_names
+            async with SessionLocal() as s:
+                allowed = await allowed_tool_names(s, user)
+            result = {"tools": _build_tool_list(allowed)}
         elif method == "tools/call":
             name = params.get("name")
             arguments = params.get("arguments") or {}

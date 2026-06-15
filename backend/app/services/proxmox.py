@@ -38,6 +38,17 @@ class ProxmoxError(Exception):
     pass
 
 
+def _scope_subnet_uuids(instance: ProxmoxInstance) -> set[Any]:
+    """instance.scope_subnet_ids（JSONB 字串陣列）→ UUID set；空回空 set（不限範圍）。"""
+    out: set[Any] = set()
+    for s in (instance.scope_subnet_ids or []):
+        try:
+            out.add(uuid.UUID(str(s)))
+        except (ValueError, TypeError):
+            pass
+    return out
+
+
 def _aad(instance_id) -> bytes:  # type: ignore[no-untyped-def]
     return f"proxmox_instance:{instance_id}:token_secret".encode()
 
@@ -252,6 +263,7 @@ _NODE_IFACE_TYPES = ("eth", "bridge", "bond", "vlan", "ovs")   # 實體NIC / bri
 
 async def _sync_node_ports(
     session: AsyncSession, node_name: str, node_ip: str | None, host_ifaces: list[dict[str, Any]],
+    scope_ids: set[Any] | None = None,
 ) -> int:
     """把 PVE node 的網路介面（bridge / 實體NIC / bond / vlan）建成該節點裝置的連接埠。
 
@@ -266,9 +278,11 @@ async def _sync_node_ports(
 
     dev_id = None
     if node_ip:
-        ipa = (await session.execute(
-            select(IPAddress).where(func.host(IPAddress.ip) == node_ip)
-        )).scalars().first()
+        # 重疊網段：若 instance 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
+        ip_stmt = select(IPAddress).where(func.host(IPAddress.ip) == node_ip)
+        if scope_ids:
+            ip_stmt = ip_stmt.where(IPAddress.subnet_id.in_(scope_ids))
+        ipa = (await session.execute(ip_stmt)).scalars().first()
         if ipa is not None:
             dev_id = ipa.device_id
             if dev_id is None:
@@ -431,6 +445,8 @@ async def sync_instance(
     instance.cluster_id 於每次同步自動指派/校正。
     """
     summary = SyncSummary()
+    # 重疊網段：若 instance 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
+    scope_ids = _scope_subnet_uuids(instance)
     try:
         base = await _resolve_base(session, instance)
         cl_name, standalone = await _derive_cluster(session, instance, base)
@@ -487,7 +503,7 @@ async def sync_instance(
                 if addr and await _link_ip_to_ipam(session, addr, hw, node_name):
                     summary.ipam_linked += 1
             # 把節點網路介面（bridge / 實體NIC / bond / vlan）建成該節點裝置的連接埠
-            await _sync_node_ports(session, node_name, nip, host_ifaces)
+            await _sync_node_ports(session, node_name, nip, host_ifaces, scope_ids)
         except ProxmoxError:
             pass
         # VMs (qemu)

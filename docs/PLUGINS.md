@@ -1,14 +1,14 @@
-# jt-ipam Plugin 開發指南
+# jt-ipam Plugin Development Guide
 
-> English: [PLUGINS.en.md](PLUGINS.en.md)
+> 繁體中文版：[PLUGINS_zh-TW.md](PLUGINS_zh-TW.md)
 
-第三方套件可透過 `entry_points` 擴充 jt-ipam，無需 fork 主 repo。
+Third-party packages can extend jt-ipam via `entry_points`, without forking the main repo.
 
 ---
 
-## 最小可運作 plugin
+## Minimal working plugin
 
-`my_plugin/__init__.py`：
+`my_plugin/__init__.py`:
 
 ```python
 from fastapi import APIRouter, Depends
@@ -31,12 +31,12 @@ def _on_load(app):
 plugin = JtIpamPlugin(
     name="my-plugin",
     version="1.0.0",
-    description="範例 plugin",
+    description="Example plugin",
     on_load=_on_load,
 )
 ```
 
-`pyproject.toml`：
+`pyproject.toml`:
 
 ```toml
 [project]
@@ -47,7 +47,7 @@ version = "1.0.0"
 my_plugin = "my_plugin:plugin"
 ```
 
-安裝後 jt-ipam 啟動即會載入：
+Once installed, jt-ipam loads it on startup:
 
 ```bash
 cd /opt/jt-ipam/backend
@@ -55,7 +55,7 @@ cd /opt/jt-ipam/backend
 sudo systemctl restart jt-ipam-backend
 ```
 
-驗證：
+Verify:
 
 ```bash
 curl -fsS https://ipam.example.com/api/v1/plugins -H "Authorization: Bearer ..."
@@ -64,37 +64,37 @@ curl -fsS https://ipam.example.com/api/v1/plugins -H "Authorization: Bearer ..."
 
 ---
 
-## 可註冊內容
+## What you can register
 
-`on_load(app)` 收到 FastAPI app 物件，可：
+`on_load(app)` receives the FastAPI app object, where you can:
 
-- `app.include_router(...)` 加 REST endpoint
-- `app.middleware(...)` 加 middleware
-- 啟動 background task（`asyncio.create_task`）
-- 註冊 GraphQL types（取 `app.state.graphql_schema` 後組合）
+- `app.include_router(...)` to add REST endpoints
+- `app.middleware(...)` to add middleware
+- Start background tasks (`asyncio.create_task`)
+- Register GraphQL types (compose after reading `app.state.graphql_schema`)
 
-`on_shutdown(app)` 對應的 cleanup hook。
-
----
-
-## 安全須知（OWASP）
-
-- **A01**：plugin endpoint **務必**用 `Depends(get_current_user)` 或
-  `Depends(require_admin)`；不要繞過 RBAC。
-- **A02**：plugin 自有 secret 走 `app.models.encrypted_secret.EncryptedSecret`，
-  不要用環境變數或 plain DB 欄位。
-- **A09**：寫入操作呼叫 `app.core.audit.append_audit()` 寫稽核鏈。
-- **A10**：對外連線用 `app.core.safe_http.safe_request`，不直接 `httpx.get()`。
-- **A06**：plugin pyproject 鎖定依賴版本；release 走 SBOM 流程。
+`on_shutdown(app)` is the matching cleanup hook.
 
 ---
 
-## 限制（目前 Phase 4）
+## Security notes (OWASP)
 
-- 沒有資料庫 migration 託管：plugin 自有資料表需自行管理 alembic（建議放
-  自己的 alembic env，與 jt-ipam 主 alembic 分流）。
-- 沒有自動 OpenAPI schema 合併：plugin endpoint 會出現在 `/openapi.json` 內，
-  但 GraphQL union schema 需要手動處理。
-- 沒有 plugin uninstall 熱拔除；目前停用 = `pip uninstall && systemctl restart`。
+- **A01**: plugin endpoints **must** use `Depends(get_current_user)` or
+  `Depends(require_admin)`; do not bypass RBAC.
+- **A02**: plugin-owned secrets go through `app.models.encrypted_secret.EncryptedSecret`,
+  not environment variables or plain DB columns.
+- **A09**: write operations should call `app.core.audit.append_audit()` to append to the audit chain.
+- **A10**: outbound connections use `app.core.safe_http.safe_request`, never `httpx.get()` directly.
+- **A06**: pin dependency versions in the plugin's pyproject; releases follow the SBOM flow.
 
-這些限制將在 Phase 4.x 改善。
+---
+
+## Limitations (current Phase 4)
+
+- No managed database migrations: a plugin's own tables must be managed with its own
+  alembic (recommended: a separate alembic env, kept apart from jt-ipam's main alembic).
+- No automatic OpenAPI schema merge: plugin endpoints appear in `/openapi.json`,
+  but the GraphQL union schema must be handled manually.
+- No hot plugin uninstall; disabling currently means `pip uninstall && systemctl restart`.
+
+These limitations will be improved in Phase 4.x.

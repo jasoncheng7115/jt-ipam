@@ -48,25 +48,52 @@ function objLine(o: Record<string, any>): string {
     .map(([k, v]) => `${typeof COLLBL[k] === "string" ? COLLBL[k] : k}：${pretty(k, v)}`)
     .join("　·　");
 }
+// 單一格子：淡色標籤 + 值
+function cell(label: string, val: string) {
+  return h("span", { style: "white-space:nowrap;overflow:hidden;text-overflow:ellipsis" }, [
+    h("span", { style: "opacity:.55;margin-right:4px" }, label),
+    h("span", val || "—"),
+  ]);
+}
+// 出現位置（MAC 漂移）：裝置 / 埠 / 最後出現 三欄對齊；裝置優先顯示友善名，無名才退回短 id
+function renderLocation(o: Record<string, any>) {
+  const dev = o.device_name || (o.device_id ? String(o.device_id).slice(0, 8) : "—");
+  return h("div", {
+    style: "display:grid;grid-template-columns:minmax(0,1fr) 110px 132px;gap:14px;font-size:12.5px;align-items:baseline",
+  }, [
+    cell(COLLBL.device_id, dev),
+    cell(COLLBL.port, o.port ?? "—"),
+    cell(COLLBL.last_seen_at, pretty("last_seen_at", o.last_seen_at)),
+  ]);
+}
 // 依資料 keys 動態產生欄位，把偵測結果以表格呈現（取代難讀的原始 JSON）
 function colsFor(rows: Record<string, any>[]): DataTableColumns<any> {
   const keys: string[] = [];
   for (const r of rows) for (const k of Object.keys(r)) if (!keys.includes(k)) keys.push(k);
-  return keys.map((k) => ({
-    title: typeof COLLBL[k] === "string" ? (COLLBL[k] as string) : k,
-    key: k, minWidth: 140, ellipsis: { tooltip: true },
-    render: (r: any) => {
-      const v = r[k];
-      if (v == null || v === "") return "—";
-      if (Array.isArray(v)) {
-        return h("div", { style: "display:flex;flex-direction:column;gap:2px" },
-          v.map((it) => h("div", { style: "font-size:12.5px" },
-            it && typeof it === "object" ? objLine(it) : String(it))));
-      }
-      if (typeof v === "object") return objLine(v);
-      return pretty(k, v);
-    },
-  }));
+  return keys.map((k) => {
+    const isArr = rows.some((r) => Array.isArray(r[k]));
+    return {
+      title: typeof COLLBL[k] === "string" ? (COLLBL[k] as string) : k,
+      key: k,
+      minWidth: isArr ? 420 : 140,
+      ellipsis: isArr ? false : { tooltip: true },
+      render: (r: any) => {
+        const v = r[k];
+        if (v == null || v === "") return "—";
+        if (Array.isArray(v)) {
+          // 位置物件（含 port/last_seen_at）→ 對齊網格；其餘陣列退回精簡描述
+          const loc = v.length > 0 && v[0] && typeof v[0] === "object" && ("port" in v[0] || "last_seen_at" in v[0]);
+          return h("div", { style: "display:flex;flex-direction:column;gap:3px" },
+            v.map((it) => loc
+              ? renderLocation(it)
+              : h("div", { style: "font-size:12.5px" },
+                  it && typeof it === "object" ? objLine(it) : String(it))));
+        }
+        if (typeof v === "object") return objLine(v);
+        return pretty(k, v);
+      },
+    };
+  });
 }
 
 async function run() {

@@ -17,8 +17,11 @@ export const useUiStore = defineStore("ui", () => {
     (import.meta.env.VITE_DEFAULT_LOCALE as Locale | undefined) ??
     "zh-TW";
 
+  const storedPageSize = Number(localStorage.getItem("page_size")) || 50;
+
   const theme = ref<Theme>(storedTheme);
   const locale = ref<Locale>(storedLocale);
+  const pageSize = ref<number>(storedPageSize);
   const systemDark = ref<boolean>(detectSystemDark());
 
   if (typeof window !== "undefined") {
@@ -62,6 +65,14 @@ export const useUiStore = defineStore("ui", () => {
     if (persist) void persistPref({ locale: value });
   }
 
+  // 表格每頁筆數偏好（全站共用，跨裝置同步）。size picker 改值會呼叫此函式。
+  function setPageSize(value: number, persist = true) {
+    if (!value || value < 1) return;
+    pageSize.value = value;
+    localStorage.setItem("page_size", String(value));
+    if (persist) void persistPref({ page_size: value });
+  }
+
   // 啟動 / 登入後呼叫：用後端偏好覆寫本地（跨裝置同步），不回寫。
   async function hydrateFromServer() {
     if (!localStorage.getItem("access_token")) return;
@@ -70,6 +81,7 @@ export const useUiStore = defineStore("ui", () => {
       const p = await getPreferences();
       if (p?.theme) setTheme(p.theme as Theme, false);
       if (p?.locale) setLocale(p.locale as Locale, false);
+      if (p?.page_size) setPageSize(p.page_size, false);
     } catch { /* ignore */ }
   }
 
@@ -84,5 +96,5 @@ export const useUiStore = defineStore("ui", () => {
     { immediate: true },
   );
 
-  return { theme, locale, effectiveTheme, setTheme, setLocale, hydrateFromServer };
+  return { theme, locale, pageSize, effectiveTheme, setTheme, setLocale, setPageSize, hydrateFromServer };
 });

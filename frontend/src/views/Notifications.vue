@@ -48,9 +48,13 @@ async function clickItem(n: Notification) {
 }
 
 async function clearAll() {
-  await markAllRead();
-  message.success(t("notifications.mark_all_read"));
-  await load();
+  try {
+    await markAllRead();
+    message.success(t("notifications.mark_all_read"));
+    await load();
+  } catch (e: any) {
+    message.error(e?.response?.data?.detail ?? t("errors.network"));
+  }
 }
 
 function onPage(p: number) {

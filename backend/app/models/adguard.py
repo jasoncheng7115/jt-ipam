@@ -6,8 +6,10 @@ AdGuard 走 HTTP Basic Auth；密碼以 AES-GCM 加密儲存（aad 綁 instance 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Integer, LargeBinary, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -29,6 +31,9 @@ class AdGuardInstance(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # 拉哪些資料
     sync_clients: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sync_rewrites: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # 限定 sync 解析 IP 的子網路範圍（解決重疊網段）。空 = 全域比對。存 subnet UUID 字串陣列。
+    scope_subnet_ids: Mapped[list[Any] | None] = mapped_column(JSONB)
 
     sync_interval_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

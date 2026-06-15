@@ -2,6 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip,
   NModal, NForm, NFormItem, NInput, NInputNumber, NSwitch, NPopconfirm, NSelect,
@@ -269,6 +270,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <n-form-item :label="t('librenms_admin.scope_subnets')">
           <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
                     multiple filterable clearable :placeholder="t('librenms_admin.scope_all')" />
+          <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
           <template #feedback>
             <span style="font-size: 11px; opacity: .7">{{ t("librenms_admin.scope_hint") }}</span>
           </template>

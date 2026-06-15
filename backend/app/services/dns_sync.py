@@ -24,6 +24,18 @@ from app.services.dns import DNSAdapterError, get_adapter
 from app.services.dns.base import DNSRecordOp
 from app.services.hostname import apply_observation
 
+
+def _scope_subnet_uuids(server: DNSServer) -> set[uuid.UUID]:
+    """server.scope_subnet_ids（JSONB 字串陣列）→ UUID set；空回空 set（不限範圍）。"""
+    out: set[uuid.UUID] = set()
+    for s in (server.scope_subnet_ids or []):
+        try:
+            out.add(uuid.UUID(str(s)))
+        except (ValueError, TypeError):
+            pass
+    return out
+
+
 # ─────────────────── 反解 zone 計算 ───────────────────
 
 
@@ -218,6 +230,10 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
             seen: set[tuple[str, str, str]] = set()
 
             for op in records:
+                # 只保留與「IP↔名稱對應」相關的型別：正向 A/AAAA + 反向 PTR；
+                # CNAME/MX/TXT/NS/SOA/SRV/CAA 等對 IPAM 無對應價值，不取也不存。
+                if op.type not in ("A", "AAAA", "PTR"):
+                    continue
                 key = (op.name, op.type, op.value)
                 seen.add(key)
                 summary["pulled_records"] += 1
@@ -255,10 +271,13 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
             zone.last_sync_at = datetime.now(UTC)
 
         # 每個 IP 只套用一個穩定的 DNS 名稱（字母序最小），避免多筆 A 記錄造成跳動
+        # 重疊網段：若 server 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
+        scope_ids = _scope_subnet_uuids(server)
         for ip_val, names in dns_ip_names.items():
-            ipa = (await session.execute(
-                select(IPAddress).where(IPAddress.ip == ip_val)
-            )).scalars().first()
+            ip_stmt = select(IPAddress).where(IPAddress.ip == ip_val)
+            if scope_ids:
+                ip_stmt = ip_stmt.where(IPAddress.subnet_id.in_(scope_ids))
+            ipa = (await session.execute(ip_stmt)).scalars().first()
             if ipa is not None and names:
                 await apply_observation(session, ip=ipa, source="dns", hostname=sorted(names)[0])
                 summary["hostname_obs"] = summary.get("hostname_obs", 0) + 1

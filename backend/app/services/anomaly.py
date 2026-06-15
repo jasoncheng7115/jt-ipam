@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -20,7 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.address import IPAddress
-from app.models.librenms import ARPEntry, FDBEntry
+from app.models.librenms import ARPEntry, FDBEntry, LibreNMSDevice
 from app.models.user import User
 from app.services.notification import deliver_event, push_notification
 
@@ -92,6 +93,19 @@ async def detect_mac_drifts(
     for mac, did, port, last in rows:
         by_mac[mac].append((str(did) if did else None, port, last))
 
+    # device_id 是 librenms_devices.id → 解析成交換器友善名（sysname / hostname）供前端顯示
+    dev_ids = {d for locs in by_mac.values() for d, _, _ in locs if d}
+    name_by_id: dict[str, str] = {}
+    if dev_ids:
+        drows = (
+            await session.execute(
+                select(LibreNMSDevice.id, LibreNMSDevice.sysname, LibreNMSDevice.hostname)
+                .where(LibreNMSDevice.id.in_([uuid.UUID(x) for x in dev_ids]))
+            )
+        ).all()
+        for did, sysname, hostname in drows:
+            name_by_id[str(did)] = sysname or hostname or str(did)[:8]
+
     out: list[dict[str, Any]] = []
     for mac, locs in by_mac.items():
         unique = {(d, p) for d, p, _ in locs}
@@ -101,7 +115,10 @@ async def detect_mac_drifts(
             "mac": mac,
             "locations": [
                 {
-                    "device_id": d, "port": p, "last_seen_at": dt.isoformat(),
+                    "device_id": d,
+                    "device_name": name_by_id.get(d) if d else None,
+                    "port": p,
+                    "last_seen_at": dt.isoformat(),
                 }
                 for d, p, dt in sorted(locs, key=lambda x: x[2], reverse=True)
             ],

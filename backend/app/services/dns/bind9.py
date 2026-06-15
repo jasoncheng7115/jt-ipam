@@ -106,7 +106,7 @@ class Bind9Adapter(DNSAdapter):
 
         try:
             resp = await asyncio.to_thread(_go)
-        except DNSException as exc:
+        except (DNSException, OSError) as exc:
             raise DNSAdapterError(f"BIND 9 SOA query failed: {exc}") from exc
         return {"server": self.server_address, "rcode": dns.rcode.to_text(resp.rcode())}
 
@@ -138,7 +138,7 @@ class Bind9Adapter(DNSAdapter):
                         timeout=self.timeout,
                     )
                 )
-            except DNSException as exc:
+            except (DNSException, OSError) as exc:
                 raise DNSAdapterError(f"AXFR {zone_name} failed: {exc}") from exc
 
             out: list[DNSRecordOp] = []
@@ -187,7 +187,7 @@ class Bind9Adapter(DNSAdapter):
                 resp = dns.query.tcp(
                     upd, self.server_address, port=self.port, timeout=self.timeout,
                 )
-            except DNSException as exc:
+            except (DNSException, OSError) as exc:
                 raise DNSAdapterError(f"nsupdate replace failed: {exc}") from exc
             if resp.rcode() != dns.rcode.NOERROR:
                 raise DNSAdapterError(
@@ -206,7 +206,7 @@ class Bind9Adapter(DNSAdapter):
                 resp = dns.query.tcp(
                     upd, self.server_address, port=self.port, timeout=self.timeout,
                 )
-            except DNSException as exc:
+            except (DNSException, OSError) as exc:
                 raise DNSAdapterError(f"nsupdate delete failed: {exc}") from exc
             if resp.rcode() != dns.rcode.NOERROR:
                 raise DNSAdapterError(

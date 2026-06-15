@@ -20,7 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -56,6 +56,23 @@ class OPNsenseFirewall(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Boolean, default=True, server_default="true", nullable=False)
 
     description: Mapped[str | None] = mapped_column(Text)
+
+    # 關聯範圍（NAT 對應）：多台防火牆共用 RFC1918 子網時，限定此防火牆的 NAT
+    # 規則只對應到範圍內子網的 IP。全部 nullable；留空 = 沿用全域 IP 字串比對。
+    scope_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("locations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    scope_customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    scope_subnet_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), nullable=True,
+    )
+    iface_subnet_map: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # type: ignore[type-arg]
 
 
 class OPNsenseAliasMapping(Base, UUIDPrimaryKeyMixin, TimestampMixin):

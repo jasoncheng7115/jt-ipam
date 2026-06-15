@@ -8,6 +8,7 @@
 import { h, onMounted, onUnmounted } from "vue";
 import { useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
+import { RefreshIcon } from "@/icons";
 
 let prompted = false; // 全分頁只提醒一次，避免洗版
 
@@ -30,18 +31,26 @@ export function useVersionCheck() {
           duration: 0,
           closable: true,
           render: () =>
-            h("span", { style: "display:inline-flex;align-items:center;gap:10px" }, [
-              h("span", t("update.new_version", { v: deployed })),
-              h(
-                "a",
-                {
-                  href: "#",
-                  style: "color:var(--primary-color,#18a058);font-weight:600;text-decoration:none",
-                  onClick: (e: MouseEvent) => { e.preventDefault(); window.location.reload(); },
-                },
-                t("update.reload"),
-              ),
-            ]),
+            h(
+              "div",
+              {
+                title: t("update.new_version_v", { v: deployed }),
+                style:
+                  "display:inline-flex;align-items:center;gap:8px;cursor:pointer;line-height:1;"
+                  + "border:1px solid var(--primary-color,#18a058);border-radius:10px;"
+                  + "padding:8px 16px;background:rgba(24,160,88,.1);"
+                  + "box-shadow:0 4px 14px rgba(0,0,0,.15);"
+                  + "font-weight:600;color:var(--primary-color,#18a058);white-space:nowrap",
+                onClick: () => window.location.reload(),
+              },
+              [
+                h("span", {
+                  style: "display:inline-flex;align-items:center;justify-content:center;"
+                    + "width:16px;height:16px;flex:0 0 auto",
+                }, h(RefreshIcon, { width: 16, height: 16, style: "display:block" })),
+                h("span", { style: "line-height:1" }, t("update.banner")),
+              ],
+            ),
         });
       }
     } catch { /* 離線 / 尚未部署 version.json → 略過 */ }

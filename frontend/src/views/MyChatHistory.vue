@@ -17,6 +17,8 @@ import { renderMarkdown } from "@/utils/markdown";
 import { fmtDateTime } from "@/utils/datetime";
 import { autoSort } from "@/composables/useTableSort";
 import { ChatHistoryIcon, EyeIcon, DeleteIcon, RefreshIcon } from "@/icons";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -96,7 +98,7 @@ const columns = computed<DataTableColumns<ConversationSummary>>(() => autoSort<C
 
     <n-spin :show="loading">
       <n-data-table :columns="columns" :data="rows" :bordered="false" :scroll-x="640"
-        :pagination="{ pageSize: 20 }" />
+        :pagination="pg" />
     </n-spin>
   </n-card>
 

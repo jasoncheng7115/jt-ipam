@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy import true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -199,6 +199,7 @@ def _infer_device_type(ldev: LibreNMSDevice) -> str:
 
 async def link_librenms_device(
     session: AsyncSession, ldev: LibreNMSDevice, *, create: bool = True,
+    scope_ids: set[Any] | None = None,
 ) -> tuple[uuid.UUID | None, bool]:
     """把一台 LibreNMS device 連到 jt-ipam Device（feature D）。
 
@@ -214,8 +215,11 @@ async def link_librenms_device(
     ipa = None
     if ldev.primary_ip:
         ipa = (await session.execute(
-            select(IPAddress).where(IPAddress.ip == ldev.primary_ip)
-        )).scalar_one_or_none()
+            select(IPAddress)
+            .where(IPAddress.ip == ldev.primary_ip)
+            .where(IPAddress.subnet_id.in_(scope_ids) if scope_ids else sa_true())
+            .limit(1)
+        )).scalars().first()
         if ipa is not None and ipa.device_id is not None:
             ldev.jt_ipam_device_id = ipa.device_id
             return ipa.device_id, False
@@ -269,6 +273,9 @@ async def sync_devices(
     data = await _api_get(instance, "/api/v0/devices")
     devices = data.get("devices") or []
     seen = inserted = updated = 0
+    # 重疊網段：同一 IP 可能存在多個子網路。限定 instance 的 scope_subnet_ids
+    # （留空＝全域）並一律取第一筆，避免 scalar_one_or_none 在重複 IP 上炸掉整個 sync。
+    scope_ids = _scope_uuids(instance)
 
     for d in devices:
         legacy = int(d.get("device_id"))
@@ -285,13 +292,21 @@ async def sync_devices(
         primary_ip = d.get("ip") or d.get("ip_address") or d.get("snmp_ip")
         status_raw = d.get("status")
         is_up = status_raw in (1, "1", True, "up", "ok")
+        # status 字串：明確區分 up / down / unknown（status_raw=0 是「離線」不是「未知」，
+        # 別讓 `0 or "unknown"` 把離線誤標成未知）
+        status_str = "unknown" if status_raw is None else ("up" if is_up else "down")
 
         # 若 LibreNMS device 上線 + primary_ip 對得到 jt-ipam IPAddress，
         # stamp last_seen_librenms 讓 effective_status 計算抓得到證據。
         if primary_ip:
             ipa = (
-                await session.execute(select(IPAddress).where(IPAddress.ip == primary_ip))
-            ).scalar_one_or_none()
+                await session.execute(
+                    select(IPAddress)
+                    .where(IPAddress.ip == primary_ip)
+                    .where(IPAddress.subnet_id.in_(scope_ids) if scope_ids else sa_true())
+                    .limit(1)
+                )
+            ).scalars().first()
             if ipa is not None:
                 if is_up:
                     ipa.last_seen_librenms = datetime.now(UTC)
@@ -321,7 +336,7 @@ async def sync_devices(
                 serial=d.get("serial"),
                 sysObjectID=d.get("sysObjectID"),
                 uptime=int(d.get("uptime") or 0) or None,
-                status=str(d.get("status") or "unknown")[:16],
+                status=status_str,
                 last_seen_at=datetime.now(UTC),
             )
             session.add(obj)
@@ -337,14 +352,14 @@ async def sync_devices(
             existing.serial = d.get("serial")
             existing.sysObjectID = d.get("sysObjectID")
             existing.uptime = int(d.get("uptime") or 0) or None
-            existing.status = str(d.get("status") or "unknown")[:16]
+            existing.status = status_str
             existing.last_seen_at = datetime.now(UTC)
             updated += 1
 
         # feature D：開了 auto_add_devices 就 match-or-create jt-ipam Device
         if instance.auto_add_devices:
             ldev = obj if existing is None else existing
-            await link_librenms_device(session, ldev, create=True)
+            await link_librenms_device(session, ldev, create=True, scope_ids=scope_ids)
 
     return seen, inserted, updated
 
@@ -425,6 +440,23 @@ async def sync_arp(
                     )
 
     return seen, inserted, updated, filled
+
+
+async def prune_stale_arp(session: AsyncSession, *, max_age_days: int = 30) -> int:
+    """刪除 last_seen_at 超過 max_age_days 的 ARP 紀錄，回傳刪除筆數。
+
+    ARP 是「曾經看過」的歷史紀錄（sync_arp 只新增/更新、從不刪）；MAC 換 IP、IP 換 MAC、
+    甚至來源 device 被刪（device_id→NULL 的孤兒）都會各留一筆，靠 last_seen_at 區分新舊。
+    若不回收，arp_entries 會無限累積。此函式定期把過期的整批刪除（含孤兒 row）。
+    max_age_days<=0 視為停用（不刪）。
+    """
+    if max_age_days <= 0:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+    result = await session.execute(
+        delete(ARPEntry).where(ARPEntry.last_seen_at < cutoff)
+    )
+    return int(result.rowcount or 0)
 
 
 # ─────────────────── 同步：FDB ───────────────────
@@ -685,6 +717,31 @@ async def sync_vlans(
 
 
 # ─────────────────── effective_status 計算 ───────────────────
+
+
+async def mark_scanner_seen(
+    session: AsyncSession, ip: IPAddress, now: datetime,
+) -> None:
+    """掃描代理回報某 IP 存活時，立即更新其 effective_status（不必等下次 LibreNMS sync）。
+
+    與 recompute_effective_status 的判定一致：scanner 證據在 30 分鐘窗內 → online；
+    若 LibreNMS 也在窗內則標 "online"，否則 "online (scanner)"。並記錄 offline→online 翻轉。
+    呼叫前 caller 應已把 ip.last_seen_scanner 設為 now。
+    """
+    from datetime import timedelta
+    cutoff = now - timedelta(minutes=30)
+    l_seen = ip.last_seen_librenms
+    new_status = "online" if (l_seen and l_seen >= cutoff) else "online (scanner)"
+    if ip.effective_status != new_status:
+        prev = ip.effective_status
+        ip.effective_status = new_status
+        # 只記真正的 offline/unknown → online 翻轉（避開 online→online 細分變動噪音）
+        if prev is not None and not prev.startswith("online"):
+            await log_change(
+                session, ip=ip, event_type="online",
+                field="effective_status", old=prev, new=new_status,
+                source="scanner",
+            )
 
 
 async def recompute_effective_status(

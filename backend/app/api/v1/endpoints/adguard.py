@@ -54,6 +54,7 @@ async def create_instance(
         sync_rewrites=payload.sync_rewrites,
         sync_interval_seconds=payload.sync_interval_seconds,
         description=payload.description,
+        scope_subnet_ids=payload.scope_subnet_ids,
         api_password_enc=b"placeholder",
         api_password_nonce=b"placeholder",
     )

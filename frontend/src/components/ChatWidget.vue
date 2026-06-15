@@ -145,6 +145,14 @@ const historyLoading = ref(false);
 const msg = useMessage();
 const scrollEl = ref<HTMLDivElement | null>(null);
 
+// Ollama 未啟用 / 連不上 / 設定錯時，後端回的是 "Ollama is disabled" / "transport: …" /
+// "stream failed: …" 這類訊息 → 換成可行動的友善提示（指向 管理 → LLM / AI 設定）。
+function friendlyChatError(raw?: string | null): string {
+  const d = String(raw || "");
+  if (/disabled|transport|stream failed|Ollama|connect|timeout/i.test(d)) return t("chat.err_llm");
+  return d || t("chat.err_generic");
+}
+
 const visibleMessages = computed(() =>
   messages.value.filter((m) => m.role === "user" || m.role === "assistant"),
 );
@@ -201,7 +209,7 @@ async function send() {
           partial.value = "";
           toolStatus.value = "";
         } else if (ev.type === "error") {
-          msg.error(ev.detail || "Chat failed");
+          msg.error(friendlyChatError(ev.detail));
         }
       },
       undefined,
@@ -209,7 +217,7 @@ async function send() {
       conversationId.value,
     );
   } catch (e: any) {
-    msg.error(e?.message ?? "Chat failed");
+    msg.error(friendlyChatError(e?.message));
   } finally {
     loading.value = false;
     partial.value = "";
@@ -654,6 +662,13 @@ async function removeConversation(id: string) {
 }
 .bubble .md pre code { background: none; padding: 0; }
 .bubble .md a { color: var(--primary-color, #18a058); }
+.bubble .md table {
+  border-collapse: collapse; margin: 6px 0; font-size: 12px; display: block; overflow-x: auto;
+}
+.bubble .md th, .bubble .md td {
+  border: 1px solid rgba(127, 127, 127, 0.4); padding: 4px 8px; text-align: left;
+}
+.bubble .md th { background: rgba(127, 127, 127, 0.12); font-weight: 600; }
 .trace pre {
   font-size: 10px;
   max-height: 240px;

@@ -5,14 +5,17 @@ import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NButton, NModal, NForm, NFormItem,
-  NInput, NSelect, NInputNumber, NPopconfirm, NTag, NIcon, NTooltip,
+  NInput, NSelect, NInputNumber, NPopconfirm, NTag, NIcon, NTooltip, NPopover, NSpin,
   NSwitch, NDivider,
   useMessage, type DataTableColumns, type DataTableRowKey,
 } from "naive-ui";
 import {
   listNATs, createNAT, updateNAT, deleteNAT, bulkDeleteNATs, type NAT,
 } from "@/api/phase3";
-import { listAddresses } from "@/api/addresses";
+import { listAddresses, getAddress } from "@/api/addresses";
+import { listSubnets } from "@/api/subnets";
+import { useCustomers } from "@/composables/useCustomers";
+import type { IPAddress } from "@/types";
 import { listDevices } from "@/api/basic";
 import { listFirewalls, type OPNsenseFirewall } from "@/api/integrations";
 import { useRouter } from "vue-router";
@@ -42,7 +45,7 @@ const columnPickerItems = computed(() => [
   { key: "actions", label: t("cols.actions") },
 ]);
 import {
-  NatIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+  NatIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, EyeIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 
@@ -72,6 +75,7 @@ async function doBulkDelete() {
 const loading = ref(false);
 const show = ref(false);
 const editing = ref<NAT | null>(null);
+const viewOnly = ref(false);   // 點列＝唯讀檢視；點編輯鈕＝可編輯
 function blankForm() {
   return {
     name: "", type: "many_to_one", protocol: "any",
@@ -98,6 +102,8 @@ const form = ref(blankForm());
 
 const addrOpts = ref<{ label: string; value: string }[]>([]);
 const deviceOpts = ref<{ label: string; value: string }[]>([]);
+const subnetCidr = ref<Record<string, string>>({});   // subnet_id → cidr，給 IP 細節彈窗顯示子網路
+const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 const firewalls = ref<OPNsenseFirewall[]>([]);
 
 const sourceKindFilter = ref<string[]>([]);
@@ -128,19 +134,63 @@ const natReflectionOpts = [
 const filterDeviceId = ref<string | null>(null);
 
 // 用 link 元件渲染一個可點選的 cell
+// 滑過關聯到 jt-ipam 的 IP 時，即時彈出該 IP 的細節（懶載入 + 快取）
+const ipDetailCache = ref<Record<string, IPAddress | "loading" | "error">>({});
+async function loadIpDetail(ipId: string) {
+  const cur = ipDetailCache.value[ipId];
+  if (cur && cur !== "error") return;  // 已載入或載入中
+  ipDetailCache.value = { ...ipDetailCache.value, [ipId]: "loading" };
+  try {
+    const a = await getAddress(ipId);
+    ipDetailCache.value = { ...ipDetailCache.value, [ipId]: a };
+  } catch {
+    ipDetailCache.value = { ...ipDetailCache.value, [ipId]: "error" };
+  }
+}
+function ipDetailRow(label: string, value: unknown) {
+  if (value == null || value === "") return null;
+  return h("div", { style: "display:flex; gap:8px; font-size:12.5px; line-height:1.7" }, [
+    h("span", { style: "opacity:.55; min-width:64px" }, label),
+    h("span", { style: "word-break:break-all" }, String(value)),
+  ]);
+}
+function ipDetailCard(ipId: string) {
+  const d = ipDetailCache.value[ipId];
+  if (!d || d === "loading") return h(NSpin, { size: "small" });
+  if (d === "error") return h("span", { style: "font-size:12.5px;opacity:.6" }, t("errors.network"));
+  const stateLabel = d.state === "used" ? t("addresses.state_used")
+    : d.state === "reserved" ? t("addresses.state_reserved") : (d.state ?? "—");
+  return h("div", { style: "min-width:200px; max-width:320px" }, [
+    h("div", { style: "font-weight:600; margin-bottom:4px; font-family:monospace" }, d.ip),
+    ipDetailRow(t("addresses.hostname"), d.hostname),
+    ipDetailRow(t("common.status"), stateLabel),
+    ipDetailRow(t("addresses.mac"), d.mac),
+    ipDetailRow(t("cols.vendor"), d.mac_vendor),
+    ipDetailRow(t("subnets.cidr"), d.subnet_id ? subnetCidr.value[d.subnet_id] : null),
+    ipDetailRow(t("nav.customers"), d.customer_id ? customerLabelFor(d.customer_id) : null),
+    ipDetailRow(t("cols.device"), d.device_name),
+    ipDetailRow(t("addresses.owner"), d.owner),
+    ipDetailRow(t("addresses.switch_port"), d.switch_port),
+    ipDetailRow(t("common.description"), d.description),
+  ].filter(Boolean));
+}
 function ipLinkCell(ipId: string | null) {
   if (!ipId) return "—";
   const label = addrOpts.value.find((o) => o.value === ipId)?.label ?? ipId.slice(0, 8) + "…";
-  // IP 沒有專屬 detail 頁；改成搜尋導頁 /addresses?q=<ip>
   const ipText = label.split(" — ")[0];
-  return h("a", {
+  const link = h("a", {
     href: "#",
     style: "color: var(--primary-color, #18a058); text-decoration: none;",
     onClick: (e: MouseEvent) => {
       e.preventDefault();
-      void router.push({ name: "addresses", query: { q: ipText } });
+      void router.push({ name: "address-detail", params: { id: ipId } });
     },
   }, label);
+  // hover 即時彈出該 IP 細節
+  return h(NPopover, {
+    trigger: "hover", delay: 150, placement: "top",
+    onUpdateShow: (s: boolean) => { if (s) void loadIpDetail(ipId); },
+  }, { trigger: () => link, default: () => ipDetailCard(ipId) });
 }
 
 // alias 參考 → 可點的 tag，導到防火牆頁的「Aliases」分頁並以該名稱篩選（看 alias 成員內容）
@@ -176,11 +226,14 @@ function deviceLinkCell(devId: string | null) {
 
 async function loadOpts() {
   try {
-    const [addr, dev, fws] = await Promise.all([
+    void ensureCustomersLoaded();
+    const [addr, dev, fws, subs] = await Promise.all([
       listAddresses({ pageSize: 500 }),
       listDevices(),
       listFirewalls().catch(() => ({ items: [] as OPNsenseFirewall[] })),
+      listSubnets({ page: 1, pageSize: 500 }).catch(() => ({ items: [] as any[] })),
     ]);
+    subnetCidr.value = Object.fromEntries((subs.items ?? []).map((s: any) => [s.id, s.cidr]));
     addrOpts.value = addr.items.map((a: any) => ({
       label: `${a.ip}${a.hostname ? " — " + a.hostname : ""}`,
       value: a.id,
@@ -211,11 +264,13 @@ async function refresh() {
 import { watch } from "vue";
 watch([filterDeviceId, sourceKindFilter, sourceFwFilter], () => { void refresh(); });
 function openCreate() {
+  viewOnly.value = false;
   editing.value = null;
   form.value = blankForm();
   show.value = true;
 }
-function openEdit(r: NAT) {
+function openEdit(r: NAT, view = false) {
+  viewOnly.value = view;
   editing.value = r;
   form.value = {
     name: r.name, type: r.type, protocol: r.protocol,
@@ -400,103 +455,115 @@ onMounted(() => { void refresh(); void loadOpts(); });
       :row-key="(r: NAT) => r.id"
       :checked-row-keys="checkedKeys"
       @update:checked-row-keys="(keys: DataTableRowKey[]) => checkedKeys = keys"
+      :row-props="(row: NAT) => ({
+        style: 'cursor: pointer',
+        onClick: (e: MouseEvent) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('a') || target.closest('.n-button') || target.closest('.n-checkbox') || target.closest('.n-tag')) return;
+          openEdit(row, true);
+        },
+      })"
     />
 
     <n-modal v-model:show="show" preset="card" style="width: 540px">
       <template #header>
         <n-space align="center">
           <n-icon :size="20">
-            <component :is="editing ? EditIcon : PlusIcon" />
+            <component :is="viewOnly ? EyeIcon : editing ? EditIcon : PlusIcon" />
           </n-icon>
-          <span>{{ editing ? t("common.edit") : t("common.create") }}</span>
+          <span>{{ viewOnly ? t("common.view") : editing ? t("common.edit") : t("common.create") }}</span>
         </n-space>
       </template>
-      <n-form>
-        <n-form-item :label="t('common.name')"><n-input v-model:value="form.name" /></n-form-item>
+      <n-form :style="viewOnly ? 'pointer-events:none; opacity:.92' : ''">
+        <n-form-item :label="t('common.name')"><n-input :disabled="viewOnly" v-model:value="form.name" /></n-form-item>
         <n-form-item :label="t('nat.type')">
-          <n-select v-model:value="form.type" :options="typeOpts" />
+          <n-select :disabled="viewOnly" v-model:value="form.type" :options="typeOpts" />
         </n-form-item>
         <n-form-item :label="t('nat.protocol')">
-          <n-select v-model:value="form.protocol" :options="protoOpts" />
+          <n-select :disabled="viewOnly" v-model:value="form.protocol" :options="protoOpts" />
         </n-form-item>
         <n-form-item :label="t('nat.ip_version')">
-          <n-select v-model:value="form.ip_version" :options="ipVersionOpts" />
+          <n-select :disabled="viewOnly" v-model:value="form.ip_version" :options="ipVersionOpts" />
         </n-form-item>
         <n-space :size="20" style="margin-bottom: 6px">
           <n-form-item :label="t('nat.disabled')" :show-feedback="false">
-            <n-switch v-model:value="form.disabled" />
+            <n-switch :disabled="viewOnly" v-model:value="form.disabled" />
           </n-form-item>
           <n-form-item :label="t('nat.no_rdr')" :show-feedback="false">
-            <n-switch v-model:value="form.no_rdr" />
+            <n-switch :disabled="viewOnly" v-model:value="form.no_rdr" />
           </n-form-item>
           <n-form-item :label="t('nat.log')" :show-feedback="false">
-            <n-switch v-model:value="form.log" />
+            <n-switch :disabled="viewOnly" v-model:value="form.log" />
           </n-form-item>
         </n-space>
         <n-form-item :label="t('nat.device')">
-          <n-select v-model:value="form.device_id" :options="deviceOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.device_id" :options="deviceOpts" filterable clearable
                     :placeholder="t('nat.device_placeholder')" />
         </n-form-item>
         <!-- 來源相關欄位放一起 -->
         <n-form-item :label="t('nat.src_ip')">
-          <n-select v-model:value="form.src_ip_id" :options="addrOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.src_ip_id" :options="addrOpts" filterable clearable
                     :placeholder="t('nat.src_ip_placeholder')" />
         </n-form-item>
         <n-form-item :label="t('nat.src_interface')">
-          <n-input v-model:value="form.src_interface" placeholder="wan / lan / opt2 …" />
+          <n-input :disabled="viewOnly" v-model:value="form.src_interface" placeholder="wan / lan / opt2 …" />
         </n-form-item>
         <n-space :size="12" align="end">
           <n-form-item :label="t('nat.src_port')" :show-feedback="false">
-            <n-input-number v-model:value="form.src_port" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.src_port" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.port_to')" :show-feedback="false">
-            <n-input-number v-model:value="form.src_port_to" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.src_port_to" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.invert')" :show-feedback="false">
-            <n-switch v-model:value="form.src_not" />
+            <n-switch :disabled="viewOnly" v-model:value="form.src_not" />
           </n-form-item>
         </n-space>
         <!-- 目的相關欄位放一起 -->
         <n-form-item :label="t('nat.dst_ip')">
-          <n-select v-model:value="form.dst_ip_id" :options="addrOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.dst_ip_id" :options="addrOpts" filterable clearable
                     :placeholder="t('nat.dst_ip_placeholder')" />
         </n-form-item>
         <n-space :size="12" align="end">
           <n-form-item :label="t('nat.dst_port')" :show-feedback="false">
-            <n-input-number v-model:value="form.dst_port" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.dst_port" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.port_to')" :show-feedback="false">
-            <n-input-number v-model:value="form.dst_port_to" :min="1" :max="65535" clearable style="width: 120px" />
+            <n-input-number :disabled="viewOnly" v-model:value="form.dst_port_to" :min="1" :max="65535" clearable style="width: 120px" />
           </n-form-item>
           <n-form-item :label="t('nat.invert')" :show-feedback="false">
-            <n-switch v-model:value="form.dst_not" />
+            <n-switch :disabled="viewOnly" v-model:value="form.dst_not" />
           </n-form-item>
         </n-space>
         <n-divider style="margin: 8px 0" />
         <n-space :size="12">
           <n-form-item :label="t('nat.nat_reflection')" :show-feedback="false">
-            <n-select v-model:value="form.nat_reflection" :options="natReflectionOpts" style="width: 140px" />
+            <n-select :disabled="viewOnly" v-model:value="form.nat_reflection" :options="natReflectionOpts" style="width: 140px" />
           </n-form-item>
           <n-form-item :label="t('nat.pool_options')" :show-feedback="false">
-            <n-input v-model:value="form.pool_options" placeholder="default" style="width: 160px" />
+            <n-input :disabled="viewOnly" v-model:value="form.pool_options" placeholder="default" style="width: 160px" />
           </n-form-item>
           <n-form-item :label="t('nat.category')" :show-feedback="false">
-            <n-input v-model:value="form.category" style="width: 160px" />
+            <n-input :disabled="viewOnly" v-model:value="form.category" style="width: 160px" />
           </n-form-item>
         </n-space>
         <n-form-item :label="t('nat.filter_rule')">
-          <n-input v-model:value="form.filter_rule" :placeholder="t('nat.filter_rule_ph')" />
+          <n-input :disabled="viewOnly" v-model:value="form.filter_rule" :placeholder="t('nat.filter_rule_ph')" />
         </n-form-item>
         <n-form-item :label="t('sections.description')">
-          <n-input v-model:value="form.description" type="textarea" :rows="2" />
+          <n-input :disabled="viewOnly" v-model:value="form.description" type="textarea" :rows="2" />
         </n-form-item>
       </n-form>
       <n-space justify="end">
         <n-button @click="show = false">
           <template #icon><n-icon><CancelIcon /></n-icon></template>
-          {{ t("common.cancel") }}
+          {{ viewOnly ? t("common.close") : t("common.cancel") }}
         </n-button>
-        <n-button type="primary" @click="submit">
+        <n-button v-if="viewOnly && _authBtn.me?.can_edit !== false" @click="openEdit(editing!, false)">
+          <template #icon><n-icon><EditIcon /></n-icon></template>
+          {{ t("common.edit") }}
+        </n-button>
+        <n-button v-if="!viewOnly" type="primary" @click="submit">
           <template #icon><n-icon><SaveIcon /></n-icon></template>
           {{ t("common.save") }}
         </n-button>

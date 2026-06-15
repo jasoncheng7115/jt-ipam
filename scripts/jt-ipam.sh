@@ -24,6 +24,69 @@ log()  { echo -e "\033[1;32m[jt-ipam]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[warn]\033[0m $*" >&2; }
 die()  { echo -e "\033[1;31mFATAL:\033[0m $*" >&2; exit 1; }
 
+# Ensure a modern Node.js (>=18) is available to root. Three cases this handles:
+#  - distro 'nodejs' on Ubuntu 22.04 is v12 (too old for pnpm/vite)
+#  - invoked via sudo: an nvm-managed node in the caller's home is not on root's PATH
+#  - no node at all
+ensure_node() {
+    local ver
+    if command -v node >/dev/null 2>&1; then
+        ver=$(node -v 2>/dev/null | sed 's/^v//; s/\..*//')
+        if [[ "${ver:-0}" -ge 18 ]]; then return 0; fi
+    fi
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        local h nb
+        h=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        nb=$(find "$h/.nvm/versions/node" -maxdepth 2 -name node -type f 2>/dev/null | sort -Vr | head -1)
+        if [[ -n "$nb" ]] && [[ "$("$nb" -v 2>/dev/null | sed 's/^v//; s/\..*//')" -ge 18 ]]; then
+            ln -sf "$nb" /usr/local/bin/node
+            ln -sf "$(dirname "$nb")/npm" /usr/local/bin/npm 2>/dev/null || true
+            hash -r
+            log "Using nvm Node.js $("$nb" -v) from \$SUDO_USER ($SUDO_USER)"
+            return 0
+        fi
+    fi
+    log "Installing Node.js 20 (NodeSource)…"
+    # NOTE: errors are NOT silenced here — a failed Node install must be visible, not
+    # swallowed (a silent failure leaves the frontend unbuilt yet the install "looks" OK).
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+        || warn "NodeSource setup script returned non-zero (see output above)"
+    if ! apt-get install -y nodejs; then
+        # Likely the distro libnode-dev/headers (e.g. Ubuntu 22.04 v12) conflict with the
+        # NodeSource package files → purge the distro node stack and retry once.
+        warn "nodejs install hit a conflict; purging distro node packages and retrying…"
+        apt-get purge -y nodejs npm libnode-dev 2>/dev/null || true
+        apt-get autoremove -y 2>/dev/null || true
+        apt-get install -y nodejs || true
+    fi
+    hash -r
+    # Verify: Node must be >= 18, otherwise stop NOW with a clear, debuggable error —
+    # don't let the frontend build silently fail later while the install appears successful.
+    ver=$(command -v node >/dev/null 2>&1 && node -v 2>/dev/null | sed 's/^v//; s/\..*//' || echo 0)
+    if [[ "${ver:-0}" -lt 18 ]]; then
+        die "Node.js install failed or too old (need >= 18; got '$(command -v node >/dev/null 2>&1 && node -v || echo none)').\n  Install Node 20 manually, then re-run install:\n  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && sudo apt-get install -y nodejs"
+    fi
+    log "Using Node.js $(node -v)"
+}
+
+# Build the frontend as root with a clean toolchain, then hand ownership back to $2.
+# Why as root: avoids (a) stale corepack pnpm shims pinned to an old /usr/bin/node, and
+# (b) sudo -u / PAM failures when the owner is a nologin system account on restrictive hosts.
+# $1 = frontend dir, $2 = owner (user:group)
+build_frontend() {
+    local fdir="$1" owner="$2" pnpm_bin
+    ensure_node
+    cd "$fdir"
+    # drop stale corepack pnpm shims (they may hardcode an old node path → v12 errors)
+    rm -f /usr/bin/pnpm /usr/local/bin/pnpm 2>/dev/null || true
+    npm install -g --prefix /usr/local pnpm@9 >/dev/null 2>&1 || true
+    pnpm_bin="$(command -v pnpm || echo /usr/local/bin/pnpm)"
+    HOME=/var/lib/jt-ipam "$pnpm_bin" install --frozen-lockfile \
+        || HOME=/var/lib/jt-ipam "$pnpm_bin" install
+    HOME=/var/lib/jt-ipam "$pnpm_bin" run build
+    chown -R "$owner" node_modules dist 2>/dev/null || true
+}
+
 # -- root guard (used by install/upgrade/uninstall; not by help/usage) --
 require_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -114,12 +177,19 @@ cmd_install() {
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
 
+    # 最小化容器（如乾淨 Debian 12 / Ubuntu LXC）常缺這些基礎工具：
+    #  - curl / gpg / ca-certificates：「加 PGDG repo」那步（curl | gpg）在裝主要套件清單前就會用到；
+    #    Debian 12 預設無 PG16、必走 PGDG，不先補齊會在加 repo 時直接失敗。
+    #  - sudo：後面 PostgreSQL 設定全用 `sudo -u postgres psql …`，最小化 Debian 容器常無 sudo
+    #    → `sudo: command not found`（客戶回報手動補 PG 後卡住的第二關多半是這個）。
+    apt-get install -y -qq ca-certificates curl gnupg sudo
+
     # Detect available Python (newest to oldest, needs >= 3.11).
     # Use apt-cache madison: only counts if actually installable (apt-cache show matches Provides, unreliable).
     local PYTHON_BIN=""
     local PYTHON_PKGS=()
     local ver
-    for ver in python3.13 python3.12 python3.11; do
+    for ver in python3.14 python3.13 python3.12 python3.11; do
         if apt-cache madison "${ver}-venv" 2>/dev/null | grep -q .; then
             PYTHON_BIN="$ver"
             PYTHON_PKGS=("$ver" "${ver}-venv" "${ver}-dev")
@@ -138,44 +208,66 @@ cmd_install() {
     fi
     log "Using $PYTHON_BIN for backend venv"
 
+    # PostgreSQL：不寫死版本。優先用發行版「預設庫裡已有」的 postgresql-NN（>=16）。
+    # 為何不一律用 16：Ubuntu 26.04 預設是 PG 17/18、預設庫沒有 postgresql-16，舊版會去
+    # 加 PGDG 的 16；但 PGDG 對「剛發布的 Ubuntu codename」常延遲數月才上架 → apt-get update
+    # 直接 404、整個安裝中斷（客戶回報的「ubuntu26 裝不起來」即此）。改成優先用發行版自帶的
+    # PG（app 對 16/17/18 皆相容），都沒有才退回 PGDG 裝 16。pgvector 用對應版本套件。
+    _add_pgdg_repo() {
+        # keyring 放 /etc/apt/keyrings（自有檔名），**不要**用
+        # /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg：那是 postgresql-common
+        # 套件自己的檔，已存在時 gpg --dearmor 會跳 "File exists. Overwrite?" 去開 /dev/tty，
+        # 非互動下直接 dearmoring failed → 金鑰沒寫成 → PGDG 簽章無效 → pgvector 抓不到（客戶
+        # 回報 Debian 12 卡在這）。`--yes` 確保可覆寫、整支腳本可重入。
+        local keyring=/etc/apt/keyrings/jt-ipam-pgdg.gpg
+        install -d /etc/apt/keyrings
+        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | gpg --dearmor --yes -o "$keyring"
+        echo "deb [signed-by=$keyring] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list
+        apt-get update -qq
+    }
+    local PG_VER="" v
+    for v in 16 17 18 19 20; do
+        if apt-cache madison "postgresql-$v" 2>/dev/null | grep -q .; then PG_VER="$v"; break; fi
+    done
+    if [[ -z "$PG_VER" ]]; then
+        warn "no postgresql-NN (>=16) in default repos; adding PGDG repo for postgresql-16…"
+        _add_pgdg_repo || die "apt-get update failed after adding the PGDG repo for codename '$(lsb_release -cs)'. PGDG may not carry this Ubuntu release yet — install PostgreSQL >= 16 + matching pgvector manually, then re-run install."
+        PG_VER=16
+    fi
+    log "Using PostgreSQL $PG_VER"
+
+    local PG_PKGS=("postgresql-$PG_VER" "postgresql-contrib-$PG_VER")
+    if apt-cache madison "postgresql-$PG_VER-pgvector" 2>/dev/null | grep -q .; then
+        PG_PKGS+=("postgresql-$PG_VER-pgvector")
+    else
+        warn "postgresql-$PG_VER-pgvector not in current repos; adding PGDG repo for pgvector…"
+        _add_pgdg_repo || true
+        if apt-cache madison "postgresql-$PG_VER-pgvector" 2>/dev/null | grep -q .; then
+            PG_PKGS+=("postgresql-$PG_VER-pgvector")
+        else
+            die "pgvector for PostgreSQL $PG_VER not installable (package postgresql-$PG_VER-pgvector). Install it manually, then re-run install."
+        fi
+    fi
+
     local PKGS=(
-        postgresql-16 postgresql-contrib-16
-        postgresql-16-pgvector
+        "${PG_PKGS[@]}"
         redis-server
         "${PYTHON_PKGS[@]}"
         build-essential libpq-dev pkg-config
         curl ca-certificates gnupg openssl
     )
 
-    # Node: if nodejs is already installed (e.g. nodesource v20), leave it alone; otherwise install distro nodejs+npm
-    if ! command -v node >/dev/null 2>&1; then
-        PKGS+=(nodejs npm)
-    fi
+    # Node.js is handled by ensure_node() right before the frontend build — distro 'nodejs'
+    # on Ubuntu 22.04 is v12 (too old), so we install NodeSource 20 / reuse a modern node instead.
     # only install nginx in nginx mode
     if [[ "$TLS_MODE" == "nginx" ]]; then
         PKGS+=(nginx)
     fi
 
-    # Ubuntu < 24.04 / Debian < 13 lack postgresql-16; check first and add the PGDG repo if needed
-    if ! apt-cache show postgresql-16 >/dev/null 2>&1; then
-        warn "postgresql-16 not in default repos; adding PGDG repo…"
-        install -d /usr/share/postgresql-common/pgdg
-        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
-        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] \
-              https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            > /etc/apt/sources.list.d/pgdg.list
-        apt-get update -qq
-    fi
-
     apt-get install -y "${PKGS[@]}"
 
-    # corepack enables pnpm (for the frontend build)
-    if ! command -v pnpm >/dev/null 2>&1; then
-        log "Enabling corepack + pnpm…"
-        corepack enable || npm install -g pnpm@9
-        corepack prepare pnpm@9 --activate || true
-    fi
 
     # -- 2. system user --
     if ! id -u "$JTIPAM_USER" >/dev/null 2>&1; then
@@ -360,11 +452,26 @@ EOF
     sudo -u "$JTIPAM_USER" --preserve-env=PATH \
         bash -c "set -a; source $ENV_FILE; set +a; .venv/bin/alembic upgrade head"
 
-    # -- 8. frontend build --
+    # -- 7b. first admin (only if none yet): generate a random password and show it once --
+    ADMIN_PW_RECORD="$ETC_DIR/.admin-initial-password"
+    INITIAL_ADMIN_PW=""
+    if [[ ! -f "$ADMIN_PW_RECORD" ]]; then
+        local _gen_pw _tmp_pw
+        _gen_pw="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
+        _tmp_pw="$(mktemp)"; chmod 600 "$_tmp_pw"; printf '%s' "$_gen_pw" > "$_tmp_pw"; chown "$JTIPAM_USER" "$_tmp_pw"
+        # create-admin errors (non-zero) if an admin already exists → then we just skip silently
+        if sudo -u "$JTIPAM_USER" --preserve-env=PATH bash -c \
+            "set -a; source $ENV_FILE; set +a; .venv/bin/python -m app.cli.bootstrap create-admin --username admin --email admin@localhost --password-stdin < '$_tmp_pw'" >/dev/null 2>&1; then
+            install -m 0600 -o root -g root /dev/null "$ADMIN_PW_RECORD"
+            printf '%s' "$_gen_pw" > "$ADMIN_PW_RECORD"
+            INITIAL_ADMIN_PW="$_gen_pw"
+        fi
+        rm -f "$_tmp_pw"
+    fi
+
+    # -- 8. frontend build (as root with a clean toolchain, then chown back) --
     log "Building frontend…"
-    cd "$FRONTEND_DIR"
-    sudo -u "$JTIPAM_USER" pnpm install --frozen-lockfile || sudo -u "$JTIPAM_USER" pnpm install
-    sudo -u "$JTIPAM_USER" pnpm build
+    build_frontend "$FRONTEND_DIR" "$JTIPAM_USER:$JTIPAM_GROUP"
 
     # -- 9. TLS certificate --
     # Unified cert paths: /etc/jt-ipam/tls/server.{crt,key}
@@ -463,6 +570,22 @@ EOF
             ;;
     esac
     log "Review /etc/jt-ipam/backend.env (especially APP_PUBLIC_URL / CORS_ORIGINS)"
+
+    # -- first-admin credentials --
+    if [[ -n "$INITIAL_ADMIN_PW" ]]; then
+        echo
+        echo "  ============================================================"
+        echo "   First admin account created — change this password after login:"
+        echo "     username: admin"
+        echo "     password: ${INITIAL_ADMIN_PW}"
+        echo "   (also saved to ${ADMIN_PW_RECORD}, root-only)"
+        echo "   Reset later: sudo -u ${JTIPAM_USER} bash -c 'cd ${BACKEND_DIR}; set -a; source ${ENV_FILE}; set +a; .venv/bin/python -m app.cli.bootstrap create-admin --username admin --email admin@localhost --password-stdin --force-update'"
+        echo "  ============================================================"
+        echo
+    else
+        log "An admin account already exists; skipped creating one. To reset its password:"
+        log "  sudo -u ${JTIPAM_USER} bash -c 'cd ${BACKEND_DIR}; set -a; source ${ENV_FILE}; set +a; .venv/bin/python -m app.cli.bootstrap create-admin --username admin --email admin@localhost --password-stdin --force-update'"
+    fi
 }
 
 # =============================================================================
@@ -544,16 +667,9 @@ cmd_upgrade() {
     # env must be sourced inside the sudo subshell (sudo does not carry parent environment by default)
     as_user bash -c "cd '$ROOT/backend'; set -a; source '$ENV_FILE'; set +a; .venv/bin/alembic upgrade head"
 
-    # -- 6. frontend build (prefer pnpm, fall back to npm) --
+    # -- 6. frontend build (as root with a clean toolchain, then chown back) --
     log "Building frontend…"
-    cd "$ROOT/frontend"
-    if command -v pnpm >/dev/null 2>&1; then
-      as_user pnpm install --frozen-lockfile || as_user pnpm install
-      as_user pnpm build
-    else
-      as_user npm ci || as_user npm install
-      as_user npm run build
-    fi
+    build_frontend "$ROOT/frontend" "$JTIPAM_USER:$JTIPAM_USER"
 
     # -- 7. restart backend --
     log "Restarting $SVC…"

@@ -25,11 +25,15 @@ from app.models.user import User
 
 async def _create_admin(username: str, email: str, password: str, force: bool) -> int:
     async with SessionLocal() as session:
-        existing = (
-            await session.execute(
-                select(User).where((User.username == username) | (User.email == email))
-            )
-        ).scalar_one_or_none()
+        # 分開查 username / email（各自唯一），避免 OR 同時命中兩筆不同帳號時
+        # scalar_one_or_none 直接炸 MultipleResultsFound。
+        by_name = (
+            await session.execute(select(User).where(User.username == username).limit(1))
+        ).scalars().first()
+        by_email = (
+            await session.execute(select(User).where(User.email == email).limit(1))
+        ).scalars().first()
+        existing = by_name or by_email
         if existing is not None:
             if not force:
                 print(
@@ -39,13 +43,27 @@ async def _create_admin(username: str, email: str, password: str, force: bool) -
                 )
                 print("        use --force-update to reset password and grant admin", file=sys.stderr)
                 return 1
-            existing.password_hash = hash_password(password)
-            existing.is_admin = True
-            existing.is_active = True
-            existing.failed_login_count = 0
-            existing.locked_until = None
+            # 衝突：要設定的 username 與 email 分屬兩個不同帳號 → 無法安全合併
+            if by_name is not None and by_email is not None and by_name.id != by_email.id:
+                print(
+                    f"[error] cannot update: username '{username}' belongs to id={by_name.id} but "
+                    f"email '{email}' belongs to a different account id={by_email.id} "
+                    f"(username={by_email.username}). Use a matching username/email pair.",
+                    file=sys.stderr,
+                )
+                return 1
+            target = by_name or by_email
+            target.password_hash = hash_password(password)
+            target.is_admin = True
+            target.is_active = True
+            target.failed_login_count = 0
+            target.locked_until = None
+            # force-update 視為「把此帳號設定成指定的 username/email」→ 同步更新識別資訊，
+            # 否則使用者明明帶了新 email，卻看到舊 email 沒變。
+            target.username = username
+            target.email = email
             await session.commit()
-            print(f"[ok] updated existing user → admin: {existing.username} ({existing.email})")
+            print(f"[ok] updated existing user → admin: {target.username} ({target.email})")
             return 0
 
         user = User(

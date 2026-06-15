@@ -63,6 +63,9 @@ import {
   Puzzle,
   Cloud,
   Globe,
+  Language,
+  HalfMoon,
+  SunLight,
   Database,
   Send,
   Antenna,
@@ -141,6 +144,10 @@ export const SettingsIcon = Settings;
 export const AdminIcon = ShieldCheck;
 export const AuditIcon = Reports;
 export const UsersIcon = User;
+export const AccountIcon = User;
+export const LanguageIcon = Language;
+export const ThemeDarkIcon = HalfMoon;
+export const ThemeLightIcon = SunLight;
 export const GroupsIcon = Group;
 export const CustomFieldsIcon = Page;
 export const AnomalyIcon = ShieldAlert;

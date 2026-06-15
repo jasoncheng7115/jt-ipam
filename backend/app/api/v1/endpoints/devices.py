@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.device import Device
@@ -30,7 +30,10 @@ class DeviceVLANRead(StrictModel):
     last_seen_at: Any
 
 
-@router.get("/{device_id}/librenms")
+@router.get(
+    "/{device_id}/librenms",
+    dependencies=[Depends(require_object_perm("device", "read", path_param="device_id"))],
+)
 async def get_device_librenms(
     device_id: uuid.UUID,
     _user: CurrentUser,
@@ -52,7 +55,10 @@ async def get_device_librenms(
     }
 
 
-@router.get("/{device_id}/integrations")
+@router.get(
+    "/{device_id}/integrations",
+    dependencies=[Depends(require_object_perm("device", "read", path_param="device_id"))],
+)
 async def get_device_integrations(
     device_id: uuid.UUID,
     _user: CurrentUser,
@@ -111,7 +117,11 @@ async def get_device_integrations(
     return out
 
 
-@router.get("/{device_id}/vlans", response_model=list[DeviceVLANRead])
+@router.get(
+    "/{device_id}/vlans",
+    response_model=list[DeviceVLANRead],
+    dependencies=[Depends(require_object_perm("device", "read", path_param="device_id"))],
+)
 async def get_device_vlans(
     device_id: uuid.UUID,
     _user: CurrentUser,
@@ -243,7 +253,10 @@ async def list_devices(
     )
 
 
-@router.get("/{device_id}/relations")
+@router.get(
+    "/{device_id}/relations",
+    dependencies=[Depends(require_object_perm("device", "read", path_param="device_id"))],
+)
 async def get_device_relations(
     device_id: uuid.UUID,
     _user: CurrentUser,
@@ -291,7 +304,11 @@ async def get_device_relations(
     return {"chain": chain}
 
 
-@router.get("/{device_id}", response_model=DeviceRead)
+@router.get(
+    "/{device_id}",
+    response_model=DeviceRead,
+    dependencies=[Depends(require_object_perm("device", "read", path_param="device_id"))],
+)
 async def get_device(
     device_id: uuid.UUID,
     _user: CurrentUser,

@@ -11,6 +11,7 @@ import {
   getArpPrecedence, setArpPrecedence,
   getDevNamePrecedence, setDevNamePrecedence,
   getModelPrecedence, setModelPrecedence,
+  getOsPrecedence, setOsPrecedence,
 } from "@/api/hostname";
 
 const { t } = useI18n();
@@ -130,6 +131,34 @@ async function saveModel() {
   } finally { modelSaving.value = false; }
 }
 
+// ── OS 來源順序（無停用清單）──
+const osOrder = ref<string[]>([]);
+const osSaving = ref(false);
+const osDragIndex = ref<number | null>(null);
+function osSrcLabel(s: string): string {
+  const key = `os_precedence.src_${s}`;
+  const out = t(key);
+  return out === key ? s : out;
+}
+function onOsDrop(i: number) {
+  if (osDragIndex.value === null || osDragIndex.value === i) return;
+  const arr = [...osOrder.value];
+  const [moved] = arr.splice(osDragIndex.value, 1);
+  arr.splice(i, 0, moved);
+  osOrder.value = arr;
+  osDragIndex.value = null;
+}
+async function saveOs() {
+  osSaving.value = true;
+  try {
+    const r = await setOsPrecedence(osOrder.value);
+    osOrder.value = r.order;
+    msg.success(t("hostnameSrc.saved"));
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? "save failed");
+  } finally { osSaving.value = false; }
+}
+
 function srcLabel(s: string): string {
   const key = `hostnameSrc.src.${s}`;
   const out = t(key);
@@ -145,8 +174,9 @@ function setEnabled(s: string, on: boolean) {
 async function load() {
   loading.value = true;
   try {
-    const [p, a, d, m] = await Promise.all([
+    const [p, a, d, m, o] = await Promise.all([
       getHostnamePrecedence(), getArpPrecedence(), getDevNamePrecedence(), getModelPrecedence(),
+      getOsPrecedence(),
     ]);
     order.value = p.order;
     disabled.value = p.disabled ?? [];
@@ -156,6 +186,7 @@ async function load() {
     devDisabled.value = d.disabled ?? [];
     modelOrder.value = m.order;
     modelDisabled.value = m.disabled ?? [];
+    osOrder.value = o.order;
   } finally {
     loading.value = false;
   }
@@ -334,6 +365,32 @@ onMounted(load);
           </li>
         </ul>
         <n-button type="primary" :loading="modelSaving" style="margin-top: 16px" @click="saveModel">
+          {{ t("hostnameSrc.save") }}
+        </n-button>
+    </n-card>
+
+    <n-card :title="t('os_precedence.title')">
+        <n-text depth="3" style="display: block; font-size: 13px; margin-bottom: 8px">
+          {{ t("os_precedence.hint") }}
+        </n-text>
+        <ul class="rank-list">
+          <li
+            v-for="(s, i) in osOrder" :key="s"
+            class="rank-item"
+            :class="{ dragging: osDragIndex === i }"
+            draggable="true"
+            @dragstart="osDragIndex = i"
+            @dragover="onDragOver"
+            @drop="onOsDrop(i)"
+            @dragend="osDragIndex = null"
+          >
+            <span class="rank-num">{{ i + 1 }}</span>
+            <span class="rank-handle">⠿</span>
+            <span class="rank-label">{{ osSrcLabel(s) }}</span>
+            <span class="rank-key">{{ s }}</span>
+          </li>
+        </ul>
+        <n-button type="primary" :loading="osSaving" style="margin-top: 16px" @click="saveOs">
           {{ t("hostnameSrc.save") }}
         </n-button>
     </n-card>

@@ -144,6 +144,11 @@ function go(name: string, params?: Record<string, string>) {
   router.push({ name, params }).catch(() => {});
 }
 
+// 區段熱度：使用率 → 顏色（與 n-progress status 對齊）
+function heatColor(p: number): string {
+  return p >= 90 ? "#d03050" : p >= 75 ? "#f0a020" : "#18a058";
+}
+
 // ── 常用機房 / 常用機櫃（localStorage 釘選）──
 const locPin = usePinned("locations");
 const rackPin = usePinned("racks");
@@ -446,24 +451,41 @@ onMounted(() => { void load(); void loadPins(); });
         </n-space>
       </n-card>
 
-      <!-- Section heat -->
+      <!-- Section heat：以「平均子網路使用率」為熱度（避免單一大網段把整體拉到 0），
+           並列出各子網路使用率分布，讓卡片資訊更充實 -->
       <n-card :title="t('dashboard.card_section_heat')">
-        <n-space vertical :size="8">
+        <n-space vertical :size="16">
           <div
             v-for="row in data.section_heat"
             :key="row.section_id"
-            class="row-line"
+            class="heat-block"
           >
-            <div class="row-cidr">{{ row.name }}</div>
-            <div class="row-bar">
-              <n-progress
-                type="line"
-                :percentage="row.used_pct"
-                :status="row.used_pct >= 90 ? 'error' : row.used_pct >= 75 ? 'warning' : 'success'"
-              />
+            <div class="heat-head">
+              <span class="heat-name">
+                <n-icon :component="SectionsIcon" class="heat-ic" />{{ row.name }}
+              </span>
+              <span class="heat-pct" :style="{ color: heatColor(row.avg_subnet_pct) }">
+                {{ row.avg_subnet_pct }}%
+              </span>
             </div>
-            <div class="row-num">
-              {{ t("dashboard.heat_summary", { subnets: row.subnet_count, used: row.used, total: row.total_hosts }) }}
+            <n-progress
+              type="line"
+              :percentage="row.avg_subnet_pct"
+              :show-indicator="false"
+              :height="10"
+              :status="row.avg_subnet_pct >= 90 ? 'error' : row.avg_subnet_pct >= 75 ? 'warning' : 'success'"
+            />
+            <div class="heat-foot">
+              <span class="heat-tags">
+                <span v-if="row.bands.full" class="band-tag band-full">{{ t("dashboard.heat_band_full") }} {{ row.bands.full }}</span>
+                <span v-if="row.bands.high" class="band-tag band-high">{{ t("dashboard.heat_band_high") }} {{ row.bands.high }}</span>
+                <span v-if="row.bands.mid" class="band-tag band-mid">{{ t("dashboard.heat_band_mid") }} {{ row.bands.mid }}</span>
+                <span v-if="row.bands.low" class="band-tag band-low">{{ t("dashboard.heat_band_low") }} {{ row.bands.low }}</span>
+              </span>
+              <span class="heat-meta">
+                {{ t("dashboard.heat_subnets_n", { n: row.subnet_count }) }}
+                · {{ t("dashboard.heat_used_n", { n: row.used }) }} / {{ row.total_hosts }}
+              </span>
             </div>
           </div>
         </n-space>
@@ -691,6 +713,49 @@ onMounted(() => { void load(); void loadPins(); });
   font-weight: 600;
   font-family: monospace;
 }
+/* 區段熱度 block：標題 + 平均使用率條 + 子網路分布 / 摘要 */
+.heat-block {
+  padding: 10px 12px;
+  border: 1px solid rgba(127, 127, 127, 0.16);
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.03);
+}
+.heat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.heat-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.heat-ic { font-size: 16px; opacity: 0.7; }
+.heat-pct { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
+.heat-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.heat-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.band-tag {
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.band-full { background: rgba(208, 48, 80, 0.14); color: #d03050; }
+.band-high { background: rgba(240, 160, 32, 0.16); color: #c47d0a; }
+.band-mid  { background: rgba(32, 128, 240, 0.14); color: #2080f0; }
+.band-low  { background: rgba(24, 160, 88, 0.14); color: #18a058; }
+.heat-meta { font-size: 12.5px; opacity: 0.7; font-variant-numeric: tabular-nums; margin-left: auto; }
 .row-line {
   display: grid;
   grid-template-columns: 140px 160px 1fr 120px;

@@ -36,7 +36,11 @@ class PowerDNSAdapter(DNSAdapter):
             raise DNSAdapterError(f"transport: {exc.__class__.__name__}") from exc
         if resp.status_code != 200:
             raise DNSAdapterError(f"PowerDNS returned {resp.status_code}")
-        return resp.json()  # type: ignore[no-any-return]
+        try:
+            return resp.json()  # type: ignore[no-any-return]
+        except ValueError as exc:
+            # 認證失敗 / 反代登入頁可能回 200 + 非 JSON → 給可懂訊息而非 500
+            raise DNSAdapterError("PowerDNS returned non-JSON (check API key / URL)") from exc
 
     async def list_zones(self) -> list[DNSZoneInfo]:
         url = f"{self.api_url}/api/v1/servers/{self.server_id}/zones"

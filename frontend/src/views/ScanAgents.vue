@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSwitch, NPopconfirm, NTag, NInputGroup, NAlert, NSelect, NTooltip,
-  NCheckbox, NCheckboxGroup, NInputNumber,
+  NCheckbox, NCheckboxGroup, NInputNumber, NPopover,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
@@ -59,6 +59,19 @@ const probeIntervals = ref<Record<string, number>>({});
 const availProbes = computed<string[] | null>(() => editing.value?.available_probes ?? null);
 function probeAvailable(key: string): boolean {
   return availProbes.value === null || availProbes.value.includes(key);
+}
+// 探測所需的工具 / 安裝指令（代理主機上安裝後，下次回報即解鎖該探測）
+const PROBE_INSTALL: Record<string, string> = {
+  os: "sudo apt install nmap",
+  ports: "sudo apt install nmap",
+  netbios: "sudo apt install samba-common-bin   # 提供 nmblookup",
+  mdns: "sudo apt install avahi-utils   # 提供 avahi-resolve",
+};
+function probeInstall(key: string): string {
+  return (
+    PROBE_INSTALL[key] ??
+    "請確認掃描代理主機具備該探測所需的系統工具與權限（例如 root / cap_net_raw、可連到 DNS 等）。"
+  );
 }
 // 已勾選的重型探測（需顯示間隔輸入）
 const heavyChecked = computed(() =>
@@ -201,19 +214,19 @@ function iconAction(icon: any, label: string, onClick: () => void, type?: any) {
   });
 }
 const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
-  { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
+  { title: t("common.name"), key: "name", minWidth: 140, ellipsis: { tooltip: true } },
   {
-    title: t("common.enabled"), key: "enabled", width: 100,
+    title: t("common.enabled"), key: "enabled", width: 76,
     render: (r) => h(NTag, { size: "small", type: r.enabled ? "success" : "default" },
       () => r.enabled ? t("common.enabled") : t("common.disabled")),
   },
   {
-    title: t("scanAgentHelp.col_key"), key: "has_key", width: 120,
+    title: t("scanAgentHelp.col_key"), key: "has_key", width: 82,
     render: (r) => h(NTag, { size: "small", type: r.has_key ? "info" : "warning" },
       () => r.has_key ? t("scanAgentHelp.key_set") : t("scanAgentHelp.key_none")),
   },
   {
-    title: t("scanAgentHelp.col_version"), key: "agent_version", width: 132,
+    title: t("scanAgentHelp.col_version"), key: "agent_version", width: 110,
     render: (r) => {
       if (!r.agent_version) return "—";
       const outdated = !!r.server_agent_version && r.agent_version !== r.server_agent_version;
@@ -230,18 +243,19 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
     },
   },
   {
-    title: t("cols.source_ip"), key: "source_ip", width: 140,
+    title: t("cols.source_ip"), key: "source_ip", width: 128,
     render: (r) => r.last_source_ip
       ? h("span", { style: "font-family:monospace" }, r.last_source_ip) : "—",
   },
   {
-    title: t("scanAgentHelp.col_subnets"), key: "subnet_count", width: 90,
+    title: t("scanAgentHelp.col_subnets"), key: "subnet_count", width: 64,
     render: (r) => r.subnet_count ?? 0,
   },
-  { title: t("scanAgentHelp.col_last_seen"), key: "last_seen_at", width: 170, render: (r) => fmtDateTime(r.last_seen_at) },
-  { title: t("scanAgentHelp.col_last_error"), key: "last_error", minWidth: 160, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
+  { title: t("scanAgentHelp.col_last_seen"), key: "last_seen_at", width: 168,
+    render: (r) => h("span", { style: "white-space:nowrap" }, fmtDateTime(r.last_seen_at)) },
+  { title: t("scanAgentHelp.col_last_error"), key: "last_error", width: 150, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
   {
-    title: t("common.actions"), key: "actions", className: "col-actions", width: 172,
+    title: t("common.actions"), key: "actions", className: "col-actions", width: 140,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       h(NPopconfirm, { onPositiveClick: () => scanNow(r) }, {
         trigger: () => iconAction(SyncIcon, t("scan_agent.scan_now"), () => {}, "primary"),
@@ -289,7 +303,7 @@ onMounted(() => { void refresh(); });
                     @update:visible="saSet" @reset="saReset" />
       <ExportButton :columns="cols" :rows="rows" filename="scan-agents" :title="t('nav.scan_agents')" />
     </n-space>
-    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1046" />
+    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1058" />
 
     <!-- 建立 / 編輯 -->
     <n-modal v-model:show="show" preset="card" style="width: 460px">
@@ -331,6 +345,17 @@ onMounted(() => { void refresh(); });
                   <n-checkbox v-else :value="p.key">
                     {{ probeLabel(p, locale) }}
                   </n-checkbox>
+                  <n-popover v-if="!probeAvailable(p.key)" trigger="click" placement="right">
+                    <template #trigger>
+                      <n-button text size="tiny" type="primary" class="probe-help-btn">
+                        {{ t("scan_probes.install_help") }}
+                      </n-button>
+                    </template>
+                    <div class="probe-help-pop">
+                      <div class="probe-help-intro">{{ t("scan_probes.install_help_intro") }}</div>
+                      <code class="probe-help-cmd">{{ probeInstall(p.key) }}</code>
+                    </div>
+                  </n-popover>
                   <n-tooltip v-if="p.intrusive" trigger="hover">
                     <template #trigger>
                       <n-tag size="small" type="warning" :bordered="false" round>
@@ -485,4 +510,16 @@ onMounted(() => { void refresh(); });
 .agent-help .paths-note { margin-top: 8px; font-size: 12px; opacity: .6; }
 .probe-hint { font-size: 12px; opacity: .65; line-height: 1.5; }
 .probe-row { display: flex; align-items: center; gap: 6px; }
+.probe-help-btn { font-size: 12px; }
+.probe-help-pop { max-width: 320px; }
+.probe-help-intro { font-size: 12.5px; line-height: 1.6; margin-bottom: 6px; }
+.probe-help-cmd {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--n-code-color, rgba(0, 0, 0, 0.05));
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
 </style>

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -20,7 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import INET, MACADDR, UUID
+from sqlalchemy.dialects.postgresql import INET, JSONB, MACADDR, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -143,6 +144,8 @@ class ProxmoxInstance(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # token secret 走 EncryptedSecret 表，這裡只放索引欄位
     verify_tls: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # 限定 sync 解析 IP 的子網路範圍（解決重疊網段）。空 = 全域比對。存 subnet UUID 字串陣列。
+    scope_subnet_ids: Mapped[list[Any] | None] = mapped_column(JSONB)
     sync_interval_seconds: Mapped[int] = mapped_column(Integer, default=600, nullable=False)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)

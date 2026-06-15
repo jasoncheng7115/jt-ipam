@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -19,7 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import INET, UUID
+from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -37,6 +38,9 @@ class WazuhInstance(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     verify_tls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # 限定 sync 解析 IP 的子網路範圍（解決重疊網段）。空 = 全域比對。存 subnet UUID 字串陣列。
+    scope_subnet_ids: Mapped[list[Any] | None] = mapped_column(JSONB)
 
     sync_interval_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

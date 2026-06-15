@@ -22,6 +22,8 @@ import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import { useCustomers } from "@/composables/useCustomers";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { computed } from "vue";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 
 const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 
@@ -239,7 +241,7 @@ onMounted(() => {
       :columns="columns"
       :data="filteredRows"
       :loading="loading"
-      :pagination="{ pageSize: 50 }"
+      :pagination="pg"
       :bordered="false"
       :scroll-x="896"
       :row-key="(row: Section) => row.id"

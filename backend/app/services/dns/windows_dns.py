@@ -93,8 +93,17 @@ class WindowsDNSAdapter(DNSAdapter):
         )
 
     def _run_ps(self, script: str) -> str:
-        sess = self._session()
-        result = sess.run_ps(script)
+        try:
+            sess = self._session()
+            result = sess.run_ps(script)
+        except DNSAdapterError:
+            raise
+        except Exception as exc:  # winrm/requests 連線/認證/TLS/timeout 都不是 DNSAdapterError
+            # 不轉成 DNSAdapterError 的話，dns.py 端點只 except DNSAdapterError →
+            # 連線測試一失敗就變未處理的 500、且無可讀訊息。
+            raise DNSAdapterError(
+                f"Windows DNS WinRM connection failed: {exc.__class__.__name__}: {exc}"
+            ) from exc
         if result.status_code != 0:
             raise DNSAdapterError(
                 f"Windows DNS PS error (rc={result.status_code}): "

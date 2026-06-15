@@ -50,6 +50,10 @@ export function renderMarkdown(src: string): string {
   };
   const closeList = () => { while (stack.length) out.push(`</${stack.pop()!.type}>`); };
   const indentOf = (s: string): number => (/^(\s*)/.exec(s)?.[1] ?? "").replace(/\t/g, "  ").length;
+  // GFM 表格：拆列成 cells（去頭尾 | 後以 | 切，trim 每格）；分隔列只由 | - : 空白組成且含 -
+  const splitRow = (s: string): string[] =>
+    s.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+  const isTableSep = (s: string): boolean => /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(s) && s.includes("-") && s.includes("|");
   const listItem = (indent: number, type: "ul" | "ol", content: string) => {
     flushPara();
     while (stack.length && stack[stack.length - 1].indent > indent) {
@@ -64,8 +68,8 @@ export function renderMarkdown(src: string): string {
     out.push(`<li>${inline(content)}</li>`);
   };
 
-  for (const raw of lines) {
-    const line = raw;
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
 
     // code fence
     if (/^\s*```/.test(line)) {
@@ -78,6 +82,26 @@ export function renderMarkdown(src: string): string {
       continue;
     }
     if (inCode) { codeBuf.push(line); continue; }
+
+    // GFM 表格：含 | 的表頭列 + 下一列是分隔列（|---|---|）→ 整段吃成 <table>
+    if (line.includes("|") && li + 1 < lines.length && isTableSep(lines[li + 1])) {
+      flushPara(); closeList();
+      const headers = splitRow(line);
+      li += 2; // 跳過表頭與分隔列
+      const bodyRows: string[][] = [];
+      while (li < lines.length && lines[li].trim() && lines[li].includes("|")) {
+        bodyRows.push(splitRow(lines[li]));
+        li++;
+      }
+      li--; // 修正：for 迴圈會再 ++
+      const th = headers.map((c) => `<th>${inline(c)}</th>`).join("");
+      const body = bodyRows.map((cells) => {
+        const tds = headers.map((_, ci) => `<td>${inline(cells[ci] ?? "")}</td>`).join("");
+        return `<tr>${tds}</tr>`;
+      }).join("");
+      out.push(`<table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`);
+      continue;
+    }
 
     // 空行 → 段落 / 清單分界
     if (!line.trim()) { flushPara(); closeList(); continue; }

@@ -37,6 +37,17 @@ class WazuhError(RuntimeError):
     pass
 
 
+def _scope_subnet_uuids(obj: WazuhInstance) -> set[Any]:
+    """obj.scope_subnet_ids（JSONB 字串陣列）→ UUID set；空回空 set（不限範圍）。"""
+    out: set[Any] = set()
+    for s in (obj.scope_subnet_ids or []):
+        try:
+            out.add(uuid.UUID(str(s)))
+        except (ValueError, TypeError):
+            pass
+    return out
+
+
 # ─────────────────── 加解密 ───────────────────
 
 
@@ -196,9 +207,17 @@ async def sync_agents(session: AsyncSession, inst: WazuhInstance) -> dict[str, A
     upd_count = 0
 
     # 預先把 IPAddress 的 IP → id 撈出來（小型部署足夠；大型可改 chunk）
+    # 重疊網段：若 instance 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
+    scope_ids = _scope_subnet_uuids(inst)
+    ip_stmt = select(IPAddress.id, IPAddress.ip)
+    if scope_ids:
+        ip_stmt = ip_stmt.where(IPAddress.subnet_id.in_(scope_ids))
     ip_rows = (
-        await session.execute(select(IPAddress.id, IPAddress.ip))
+        await session.execute(ip_stmt)
     ).all()
+    # 注意：未設 scope_subnet_ids 時，重疊網段的同一 IP 字串會在此 dict 互相覆寫，
+    # 只留最後一筆 → hostname/agent 可能掛到任一同 IP 的 IPAddress。有重疊網段的
+    # 部署應在該 Wazuh instance 設 scope_subnet_ids 把比對限定在正確子網路內。
     ip_map: dict[str, Any] = {str(ip).split("/", 1)[0]: aid for aid, ip in ip_rows}
 
     for raw in agents_raw:

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>jt-ipam — 為整合而生的 IPAM</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-<meta name="description" content="jt-ipam：可自架、以整合為核心的 IP 位址管理系統，整合 DNS / LibreNMS / OPNsense / Wazuh / Proxmox VE / Ollama LLM，並可從 phpIPAM 匯入資料、無痛遷移。systemd 部署、強制 HTTPS、OWASP Top 10:2025。" />
+<meta name="description" content="jt-ipam：可自架、以整合為核心的 IP 位址管理系統，整合 DNS / LibreNMS / OPNsense / Wazuh / Proxmox VE / LLM Server，並可從 phpIPAM 匯入資料、無痛遷移。systemd 部署、強制 HTTPS、OWASP Top 10:2025。" />
 <style>
   :root{
     --green:#18a058; --green-h:#36ad6a; --green-d:#0c7a43;
@@ -100,7 +100,7 @@
   #model .card p{margin-bottom:0}
   /* 多單位 / MSP 強調帶 */
   .callout-sec{background:linear-gradient(135deg,#0c7a43,#18a058,#36ad6a)}
-  .callout{display:flex;align-items:center;gap:26px}
+  .callout{display:flex;align-items:center;justify-content:center;gap:26px}
   .callout .ci{flex:0 0 auto;width:58px;height:58px;border-radius:15px;background:rgba(255,255,255,.16);
     display:grid;place-items:center;color:#fff}
   .callout h3{color:#fff;margin:0 0 6px;font-size:clamp(20px,3vw,27px);letter-spacing:.3px}
@@ -185,6 +185,10 @@
   .foot-in{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
   .disclaimer{font-size:13px;color:var(--muted);background:#fff;border:1px dashed var(--line);
     border-radius:12px;padding:16px 20px}
+  /* 系統需求：與「首次登入密碼」白底虛線框區隔 → 綠色淡底 + 左側強調邊 */
+  .sysreq{font-size:13px;color:#1f3a2e;background:linear-gradient(135deg,#eafaf0,#f3fbf7);
+    border:1px solid #cbe8d6;border-left:4px solid #18a058;border-radius:12px;padding:16px 20px}
+  .sysreq strong{color:#0c7a43}
   /* 卡片 icon / badge 配色輪替：綠為主體，輔以多色，避免整頁只有綠+白 */
   .grid .card .ic{color:var(--green);background:rgba(24,160,88,.12)}
   .grid .card:nth-child(6n+2) .ic{color:#6366f1;background:rgba(99,102,241,.13)}
@@ -299,8 +303,8 @@
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="zh">全域搜尋</span><span class="en">Global search</span></h3><p><span class="zh">主機名稱 / IP / CIDR / MAC 一處搜尋，OUI 廠商比對每月自動更新。</span><span class="en">Search hostname / IP / CIDR / MAC in one place; monthly OUI vendor refresh.</span></p></div>
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h6a2 2 0 0 1 2 2v2M8 18h6a2 2 0 0 0 2-2v-2"/></svg></span><span class="zh">NAT / VLAN / VRF</span><span class="en">NAT / VLAN / VRF</span></h3><p><span class="zh">對齊 OPNsense 的 NAT 規則、電路頻寬、VLAN/VRF 與客戶/單位歸屬。</span><span class="en">OPNsense-aligned NAT, circuit bandwidth, VLAN/VRF and customer/tenant ownership.</span></p></div>
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="zh">IP 異動記錄</span><span class="en">IP change log</span></h3><p><span class="zh">主機名稱多來源優先序、逐欄人為編輯記錄、上線/離線判定、失聯 IP 篩選與批次回收。</span><span class="en">Multi-source hostname precedence, per-field edit log, liveness classification, stale-IP filtering &amp; bulk reclaim.</span></p></div>
-      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M4 12h16"/></svg></span><span class="zh">內建掃描代理</span><span class="en">Built-in scan agent</span></h3><p><span class="zh">內建主機上線偵測與 ARP / 鄰居掃描，可直接在主機上跑；也能把掃描代理部署到其他網段或站點，透過金鑰安全回報，集中發現新上線與失聯 IP，不必每段網路各裝一套工具。</span><span class="en">Built-in host liveness and ARP / neighbor scanning runs on the server itself — or deploy remote agents to other segments and sites that report back securely over a key, so new and stale IPs are discovered centrally without a separate tool per network.</span></p></div>
-      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg></span><span class="zh">本地 AI 助理</span><span class="en">Local AI assistant</span></h3><p><span class="zh">以 Ollama 在自家機房跑自然語言查詢與語意搜尋，資料不外送；並提供 MCP server，讓外部 LLM 客戶端直接操作 IPAM。</span><span class="en">Natural-language queries and semantic search via Ollama, all on-prem (data never leaves); plus an MCP server so external LLM clients can drive the IPAM directly.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M4 12h16"/></svg></span><span class="zh">內建掃描代理</span><span class="en">Built-in scan agent</span></h3><p><span class="zh">內建主機上線與作業系統偵測（ICMP / ARP / 反查 / NetBIOS / mDNS / OS，可逐代理 / 子網路 / IP 設定要跑哪些探測），可直接在主機上跑；也能把掃描代理部署到其他網段或站點，透過金鑰安全回報、支援立即執行與自動更新，集中探索新上線與失聯 IP，不必每段網路各裝一套工具。</span><span class="en">Built-in host liveness and OS detection (ICMP / ARP / rDNS / NetBIOS / mDNS / OS, with per-agent/subnet/IP control over which probes run) runs on the server itself — or deploy remote agents to other segments and sites that report back securely over a key, with run-now &amp; self-update, so new and stale IPs are discovered centrally without a separate tool per network.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg></span><span class="zh">本地 AI 助理</span><span class="en">Local AI assistant</span></h3><p><span class="zh">結合 LLM Server 在自家機房跑自然語言查詢與語意搜尋，資料不外送；並提供 MCP server，讓外部 LLM 客戶端直接操作 IPAM。</span><span class="en">Natural-language queries and semantic search via LLM Server, all on-prem (data never leaves); plus an MCP server so external LLM clients can drive the IPAM directly.</span></p></div>
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.4 7.5 8 9 4.6-1.5 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></span><span class="zh">權限與多單位</span><span class="en">Access control &amp; multi-tenant</span></h3><p><span class="zh">物件級 RBAC（7 種物件、階層繼承、5 個內建角色），子網路 / 裝置 / IP 皆可歸屬單位或客戶：一套系統就能分隔管理多家公司、集團與站點。</span><span class="en">Object-level RBAC (7 object types, cascading inheritance, 5 built-in roles); subnets / devices / IPs all belong to a tenant or client — one system manages many companies, groups and sites with isolation.</span></p></div>
     </div>
   </div>
@@ -348,6 +352,16 @@
   </div>
 </section>
 
+<section class="callout-sec">
+  <div class="wrap callout">
+    <span class="ci"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+    <div>
+      <h3><span class="zh">定位：集中記錄與管理，不是網路管控 / 執法工具</span><span class="en">What it is: documentation and central management — not a network-control or enforcement tool</span></h3>
+      <p><span class="zh">jt-ipam 的核心是把 IP、子網路、裝置與整合進來的網路狀態集中記錄、管理，作為你的「事實來源」與稽核依據。它<b>不會</b>主動發放或回收實體位址、不會攔截流量、也不會推送 DHCP 拒絕或防火牆封鎖規則去阻止未登錄的裝置上線。像「IP 申請審核」這類功能屬於<b>管理簽核紀錄</b>：核准或駁回只影響系統內的登錄與授權，不會在網路層面強制阻擋——實際的位址發放與封鎖，仍由你的 DHCP、防火牆、NAC 等系統負責。</span><span class="en">jt-ipam's job is to centrally record and manage IPs, subnets, devices and the network state it integrates — your source of truth and audit trail. It does <b>not</b> hand out or revoke real addresses, intercept traffic, or push DHCP-deny / firewall-block rules to stop unregistered devices from getting online. Workflows like "IP request approval" are <b>administrative sign-off records</b>: approving or rejecting only affects records and authorization inside the system, never enforcement on the wire — actual address assignment and blocking remain the job of your DHCP, firewall and NAC.</span></p>
+    </div>
+  </div>
+</section>
+
 <section id="integrations" class="alt">
   <div class="wrap">
     <div class="sec-head">
@@ -378,7 +392,7 @@
           <g transform="translate(450,75)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#0ea5e9"/><text y="5" fill="#fff">LibreNMS</text></g>
           <g transform="translate(662,129)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#f59e0b"/><text y="5" fill="#fff">OPNsense</text></g>
           <g transform="translate(750,260)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#8b5cf6"/><text y="5" fill="#fff">Proxmox VE</text></g>
-          <g transform="translate(662,391)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#ef4444"/><text y="5" fill="#fff">Ollama LLM</text></g>
+          <g transform="translate(662,391)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#ef4444"/><text y="5" fill="#fff">LLM Server</text></g>
           <g transform="translate(450,445)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#0891b2"/><text y="5" fill="#fff">Graylog</text></g>
           <g transform="translate(238,391)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#14b8a6"/><text y="5" fill="#fff">Wazuh</text></g>
           <g transform="translate(150,260)"><rect x="-72" y="-19" width="144" height="38" rx="10" fill="#f43f5e"/><text y="5" fill="#fff">phpIPAM</text></g>
@@ -403,7 +417,7 @@
       <span class="chip"><i></i>OPNsense</span>
       <span class="chip"><i></i>Wazuh</span>
       <span class="chip"><i></i>Proxmox VE</span>
-      <span class="chip"><i></i>Ollama</span>
+      <span class="chip"><i></i>LLM Server</span>
       <span class="chip"><i></i>RIPE</span>
       <span class="chip"><i></i>TWNIC</span>
       <span class="chip"><i></i>MaxMind GeoIP</span>
@@ -492,7 +506,7 @@
       <div class="screen-txt">
         <span class="num">08</span>
         <h3><span class="zh">本地 AI 智慧助理</span><span class="en">Local AI assistant</span></h3>
-        <p><span class="zh">用自然語言就能查 IP、子網路、裝置：「列出 192.168.1.0/24 的使用率」「找一段三個連續 IP」之類的問題直接問。它透過 jt-ipam 內建的 MCP 直接讀你的即時資料，搭配語意搜尋（embedding + pgvector）與異常偵測，全程在自家機房的 Ollama 上推論，資料完全不外流。</span><span class="en">Query IPs, subnets and devices in plain language — “show utilization for 192.168.1.0/24”, “find three consecutive free IPs”, and so on. It reads your live data through jt-ipam's built-in MCP, with semantic search (embeddings + pgvector) and anomaly detection, all inferred on a local Ollama — your data never leaves the network.</span></p>
+        <p><span class="zh">用自然語言就能查 IP、子網路、裝置：「列出 192.168.1.0/24 的使用率」「找一段三個連續 IP」之類的問題直接問。它透過 jt-ipam 內建的 MCP 直接讀你的即時資料，搭配語意搜尋（embedding + pgvector）與異常偵測，全程在自家機房的 LLM Server 上推論，資料完全不外流。</span><span class="en">Query IPs, subnets and devices in plain language — “show utilization for 192.168.1.0/24”, “find three consecutive free IPs”, and so on. It reads your live data through jt-ipam's built-in MCP, with semantic search (embeddings + pgvector) and anomaly detection, all inferred on a local LLM Server — your data never leaves the network.</span></p>
       </div>
     </div>
 
@@ -501,7 +515,7 @@
       <div class="screen-txt">
         <span class="num">09</span>
         <h3><span class="zh">AI 也懂你的機房</span><span class="en">AI that knows your infra</span></h3>
-        <p><span class="zh">讓 AI 助你快速掌握機房狀況：AI 真的看得懂你的基礎設施，問「R1 機櫃還剩幾 U」「這段子網路幫我找三個連續 IP」「192.168.1.87 被誰占用」，它會直接讀實際資料回答，省去自己翻表對照。全部跑在本地 Ollama，實測搭配 gemma4:26b 效果良好，回應快又準。</span><span class="en">The assistant genuinely understands your infrastructure: ask “how many U are left in rack R1”, “find three consecutive free IPs here” or “who's using 192.168.1.87”, and it answers from real data instead of making you dig through tables. It all runs on local Ollama — gemma4:26b works well in our testing, fast and accurate.</span></p>
+        <p><span class="zh">讓 AI 助你快速掌握機房狀況：AI 真的看得懂你的基礎設施，問「R1 機櫃還剩幾 U」「這段子網路幫我找三個連續 IP」「192.168.1.87 被誰占用」，它會直接讀實際資料回答，省去自己翻表對照。全部跑在本地 LLM Server，實測搭配 gemma4:26b 效果良好，回應快又準。</span><span class="en">The assistant genuinely understands your infrastructure: ask “how many U are left in rack R1”, “find three consecutive free IPs here” or “who's using 192.168.1.87”, and it answers from real data instead of making you dig through tables. It all runs on local LLM Server — gemma4:26b works well in our testing, fast and accurate.</span></p>
       </div>
     </div>
 
@@ -528,7 +542,7 @@
       <div class="screen-txt">
         <span class="num">12</span>
         <h3><span class="zh">主機名稱 / ARP 來源優先順序</span><span class="en">Source precedence</span></h3>
-        <p><span class="zh">同一個 IP 或裝置，可能同時被掃描代理、DNS、LibreNMS、OPNsense、Proxmox VE、Wazuh、AdGuard 回報不同的值，到底以誰為準？<b>主機名稱、ARP / MAC、裝置名稱、裝置型號</b>各自都有一份來源優先順序，用拖拉排序自訂、可個別停用；系統據此自動解析出最可信的結果，不再每次同步互相蓋來蓋去。</span><span class="en">The same IP or device may be reported with different values by the scan agent, DNS, LibreNMS, OPNsense, Proxmox VE, Wazuh and AdGuard — which one wins? <b>Hostname, ARP / MAC, device name and device model</b> each have their own source-precedence list you reorder by drag (and can disable individually); jt-ipam resolves the most trustworthy value accordingly, so syncs stop overwriting one another.</span></p>
+        <p><span class="zh">同一個 IP 或裝置，可能同時被掃描代理、DNS、LibreNMS、OPNsense、Proxmox VE、Wazuh、AdGuard 回報不同的值，到底以誰為準？<b>主機名稱、ARP / MAC、裝置名稱、裝置型號與作業系統</b>各自都有一份來源優先順序，用拖拉排序自訂、可個別停用；系統據此自動解析出最可信的結果，不再每次同步互相蓋來蓋去。</span><span class="en">The same IP or device may be reported with different values by the scan agent, DNS, LibreNMS, OPNsense, Proxmox VE, Wazuh and AdGuard — which one wins? <b>Hostname, ARP / MAC, device name, device model and OS</b> each have their own source-precedence list you reorder by drag (and can disable individually); jt-ipam resolves the most trustworthy value accordingly, so syncs stop overwriting one another.</span></p>
       </div>
     </div>
   </div>
@@ -555,15 +569,15 @@
   <div class="wrap">
     <div class="sec-head">
       <h2><span class="zh">本地 AI 加值</span><span class="en">Local AI value</span></h2>
-      <p><span class="zh">走自架 Ollama，資料不外流。問答、摘要、異常偵測都在自家機房完成。</span><span class="en">Powered by self-hosted Ollama — data never leaves your network. Q&A, summaries and anomaly detection, all on-prem.</span></p>
+      <p><span class="zh">走自架 LLM Server，資料不外流。問答、摘要、異常偵測都在自家機房完成。</span><span class="en">Powered by self-hosted LLM Server — data never leaves your network. Q&A, summaries and anomaly detection, all on-prem.</span></p>
     </div>
     <div class="grid g3">
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"/></svg></span><span class="zh">智慧助理</span><span class="en">Smart assistant</span></h3><p><span class="zh">用自然語言查 IP / 子網路 / 裝置，透過 jt-ipam 內建的 MCP 工具直接讀取你的 IPAM 資料。</span><span class="en">Ask about IPs / subnets / devices in natural language; jt-ipam's built-in MCP tools read your live IPAM data.</span></p></div>
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M7 15l3-4 3 2 5-7"/></svg></span><span class="zh">異常偵測</span><span class="en">Anomaly detection</span></h3><p><span class="zh">標記異常使用模式與失聯 IP，協助提前發現問題。</span><span class="en">Flags unusual usage patterns and unreachable IPs to surface issues early.</span></p></div>
-      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg></span><span class="zh">語意搜尋</span><span class="en">Semantic search</span></h3><p><span class="zh">以 embedding 向量 (Ollama 嵌入模型 + pgvector) 找相關物件，不只關鍵字比對；要用哪個模型由你自選。</span><span class="en">Vector search over embeddings (your chosen Ollama model + pgvector) finds related objects, beyond keyword matching.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg></span><span class="zh">語意搜尋</span><span class="en">Semantic search</span></h3><p><span class="zh">以 embedding 向量 (LLM Server 嵌入模型 + pgvector) 找相關物件，不只關鍵字比對；要用哪個模型由你自選。</span><span class="en">Vector search over embeddings (your chosen LLM Server model + pgvector) finds related objects, beyond keyword matching.</span></p></div>
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><span class="zh">MCP 伺服器</span><span class="en">MCP server</span></h3><p><span class="zh">內建 MCP 伺服器 (stdio 與 Streamable HTTP)，讓外部 LLM 客戶端也能直接操作 IPAM。</span><span class="en">Built-in MCP server (stdio &amp; Streamable HTTP) lets external LLM clients drive the IPAM too.</span></p></div>
       <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="zh">對話歷程</span><span class="en">Chat history</span></h3><p><span class="zh">助理對話自動持久化，可回溯、管理與稽核歷次問答。</span><span class="en">Assistant conversations are persisted — review, manage and audit past Q&amp;A.</span></p></div>
-      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 2h-5l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5L3 11a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 2.5h5l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg></span><span class="zh">全域 LLM 設定</span><span class="en">Global LLM settings</span></h3><p><span class="zh">自由切換 chat / embedding 模型，直接列出 Ollama 已安裝標籤，全域一處設定。</span><span class="en">Switch chat / embedding models freely, list installed Ollama tags, configured in one place.</span></p></div>
+      <div class="card"><h3><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 2h-5l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5L3 11a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 2.5h5l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg></span><span class="zh">全域 LLM 設定</span><span class="en">Global LLM settings</span></h3><p><span class="zh">自由切換 chat / embedding 模型，直接列出 LLM Server 已安裝標籤，全域一處設定。</span><span class="en">Switch chat / embedding models freely, list installed LLM Server tags, configured in one place.</span></p></div>
     </div>
   </div>
 </section>
@@ -574,18 +588,22 @@
       <h2><span class="zh">部署</span><span class="en">Deployment</span></h2>
       <p><span class="zh">以 systemd 託管、預設強制 HTTPS：可選 nginx 反向代理或 uvicorn 自簽憑證，內網、對外都能安心上線。</span><span class="en">Runs under systemd with HTTPS enforced by default — choose an nginx reverse proxy or a self-signed uvicorn, secure whether on an intranet or the public internet.</span></p>
     </div>
+    <p style="margin:0 0 14px" class="sysreq">
+      <span class="zh"><strong>系統需求：</strong>Debian 12+ 或 Ubuntu 22.04+（64 位元）。<br><strong>硬體：</strong>最低 2 核心 CPU / 4 GB 記憶體 / 20 GB 磁碟；建議 4 核心 / 8 GB / 40 GB 以上（保留給資料庫與備份成長）。選用的本地 LLM 請另跑於獨立主機、依模型自行配足記憶體 / 顯示記憶體，不含在此。<br><strong>自動安裝：</strong>安裝腳本會自動裝好並設定 PostgreSQL 16、Python 3.11+、Node 20+、nginx 等相依套件，並自動產生所有金鑰。<br><strong>更多：</strong>完整步驟與環境變數見 GitHub 上的 README 與 <code>scripts/</code>。</span>
+      <span class="en"><strong>Requirements:</strong> Debian 12+ or Ubuntu 22.04+ (64-bit).<br><strong>Hardware:</strong> minimum 2 vCPU / 4 GB RAM / 20 GB disk; recommended 4 vCPU / 8 GB / 40 GB+ (headroom for the database and backups). The optional local LLM runs on a separate host with its own RAM/VRAM and is not included here.<br><strong>Auto-setup:</strong> the install script installs and configures PostgreSQL 16, Python 3.11+, Node 20+ and nginx, and generates all keys for you.<br><strong>More:</strong> see the README and <code>scripts/</code> on GitHub for full steps and env vars.</span>
+    </p>
     <h3 style="margin:20px 0 8px"><span class="zh">安裝</span><span class="en">Install</span></h3>
     <pre>curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts/bootstrap.sh | sudo <span class="g">bash</span></pre>
+    <p style="margin:10px 0 0" class="disclaimer">
+      <span class="zh"><strong>首次登入密碼：</strong>安裝程式會自動建立管理員帳號 <code>admin</code> 並產生一組隨機密碼，於安裝結束時印出一次（同時存到 <code>/etc/jt-ipam/.admin-initial-password</code>，僅 root 可讀；該檔在 <code>/etc</code> 之下、不在 web root 內，無法透過 HTTP 連到）。請登入後立即更換，之後即可安全刪除此檔（<code>sudo rm /etc/jt-ipam/.admin-initial-password</code>）；日後可用 <code>create-admin --force-update</code> CLI 重置（詳見 README）。</span>
+      <span class="en"><strong>First-login password:</strong> the installer creates the <code>admin</code> account with a random password and prints it once at the end (also saved to <code>/etc/jt-ipam/.admin-initial-password</code>, root-only — under <code>/etc</code>, outside the web root, so never reachable over HTTP). Change it right after logging in, then you can safely delete the file (<code>sudo rm /etc/jt-ipam/.admin-initial-password</code>); reset later with the <code>create-admin --force-update</code> CLI (see the README).</span>
+    </p>
 
     <h3 style="margin:22px 0 8px"><span class="zh">升級</span><span class="en">Upgrade</span></h3>
     <pre>sudo <span class="g">bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade</span></pre>
 
     <h3 style="margin:22px 0 8px"><span class="zh">移除</span><span class="en">Uninstall</span></h3>
     <pre>sudo <span class="g">bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall</span></pre>
-    <p style="margin-top:20px" class="disclaimer">
-      <span class="zh"><strong>系統需求：</strong>Debian 12+ 或 Ubuntu 22.04+（64 位元）。<br><strong>自動安裝：</strong>安裝腳本會自動裝好並設定 PostgreSQL 16、Python 3.11+、Node 20+、nginx 等相依套件，並自動產生所有金鑰。<br><strong>更多：</strong>完整步驟與環境變數見 GitHub 上的 README 與 <code>scripts/</code>。</span>
-      <span class="en"><strong>Requirements:</strong> Debian 12+ or Ubuntu 22.04+ (64-bit).<br><strong>Auto-setup:</strong> the install script installs and configures PostgreSQL 16, Python 3.11+, Node 20+ and nginx, and generates all keys for you.<br><strong>More:</strong> see the README and <code>scripts/</code> on GitHub for full steps and env vars.</span>
-    </p>
   </div>
 </section>
 

@@ -1,4 +1,13 @@
-# jt-ipam
+# jt-ipam v0.4.162
+
+[![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
+[![Stars](https://img.shields.io/github/stars/jasoncheng7115/jt-ipam?style=flat)](https://github.com/jasoncheng7115/jt-ipam/stargazers)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![OWASP](https://img.shields.io/badge/OWASP-Top%2010%3A2025-000000)
 
 **🌐 [Project site / 專案介紹網站 →](https://jasoncheng7115.github.io/jt-ipam/)**
 
@@ -16,9 +25,9 @@ Familiar to phpIPAM users so they are productive from day one, but built from sc
 - **LibreNMS** — device sync, ARP / FDB harvesting, online-status reconciliation, auto-onboarding to monitoring
 - **Infrastructure** — Proxmox VE, Wazuh, OPNsense (alias / rule / NAT sync)
 - **Graylog** — exposes an IP→hostname/FQDN DSV lookup endpoint for Graylog's "DSV File from HTTP" data adapter
-- **Local AI** — natural-language queries and semantic search over Ollama (data never leaves the host), plus an MCP server (stdio and Streamable HTTP transports) so external LLM clients can drive the IPAM; `gemma4:26b` works well in our testing
+- **Local AI** — natural-language queries and semantic search over LLM Server (data never leaves the host), plus an MCP server (stdio and Streamable HTTP transports) so external LLM clients can drive the IPAM; `gemma4:26b` works well in our testing
 
-Full spec in [`docs/SPEC.md`](docs/SPEC.md).
+Also built in: an **IP request approval workflow** (configurable multi-stage / parallel sign-off, with in-app + email notifications), **DNS record review** (find records with no matching IPAM address), a **scan agent** (ICMP/ARP/rDNS/NetBIOS/mDNS/OS probes), **floor plans + rack U-diagrams** (half-U, front/rear, SVG/PNG/draw.io export), **cable tracing** (multi-hop), an IP change log with stale-IP reclaim, and a universal table column-picker + multi-format export.
 
 ## Graylog log enrichment (DSV lookup)
 
@@ -52,7 +61,7 @@ Object-level permissions across **7 object types** (customer / section / subnet 
 
 ## Security (OWASP Top 10:2025)
 
-Security is a day-one requirement; every module and PR is checked against **OWASP Top 10:2025**. See [`docs/SECURITY.md`](docs/SECURITY.md).
+Security is a day-one requirement; every module and PR is checked against **OWASP Top 10:2025**. See [`SECURITY.md`](SECURITY.md).
 
 - **TLS enforced** — pick one: nginx reverse-proxy termination (`BACKEND_TLS_MODE=nginx`) or uvicorn serving a self-signed cert directly (`BACKEND_TLS_MODE=direct`)
 - A01 — deny-by-default RBAC with object-level checks (above)
@@ -72,12 +81,16 @@ Security is a day-one requirement; every module and PR is checked against **OWAS
 | Database | PostgreSQL 16 (native `inet`/`cidr`/`macaddr`) + pgvector |
 | Frontend | Vue 3 · TypeScript · Vite · Naive UI · Pinia · vue-i18n |
 | Auth | argon2id · TOTP · short-lived JWT + refresh |
-| AI | Ollama (local) · pgvector · MCP server |
-| Deploy | systemd + nginx + apt packages — **no containers** (Proxmox VE LXC / bare-metal friendly) |
+| AI | LLM Server (local) · pgvector · MCP server |
+| Deploy | systemd + nginx + apt packages — **no Docker image needed** (VM / container friendly) |
 
-## Install (single host / Proxmox VE LXC)
+## Install (single host / VM / container)
 
-> Debian 12 / Ubuntu 22.04+, 2 vCPU / 4 GB RAM minimum. TLS is mandatory.
+> Debian 12 / Ubuntu 22.04+ (64-bit). TLS is mandatory.
+>
+> **Minimum:** 2 vCPU · 4 GB RAM · 20 GB disk. **Recommended:** 4 vCPU · 8 GB RAM · 40 GB+ disk (room for the PostgreSQL database, GeoIP/OUI data, and backups to grow).
+>
+> The optional local LLM (Ollama) is **not** included in these figures — run it on a separate host; it needs its own RAM/VRAM sized to the chosen model.
 
 ```bash
 # One line — auto-clones to /opt/jt-ipam and installs (no manual git needed):
@@ -87,6 +100,21 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts
 The script installs `postgresql-16` / `python3.12` / `nginx` / `redis`, creates the `jtipam` system account and PG role, generates keys into `/etc/jt-ipam/backend.env`, runs `alembic upgrade head`, builds the frontend, and enables `jt-ipam-backend.service`.
 
 Upgrade an existing install with `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade` — **the script runs `git pull` itself**, then backup → deps → alembic → build → restart. See [`docs/INSTALL.md`](docs/INSTALL.md).
+
+### First login & resetting the admin password
+
+On a fresh install the script **creates an `admin` account with a random password and prints it once** at the end (also saved to `/etc/jt-ipam/.admin-initial-password`, root-only — it lives under `/etc`, outside the web root, so it is never reachable over HTTP). Log in and change it immediately, then you can safely delete the file: `sudo rm /etc/jt-ipam/.admin-initial-password`.
+
+To reset the admin password (or create the first admin if none exists), run on the server:
+
+```bash
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; source /etc/jt-ipam/backend.env; set +a; \
+  .venv/bin/python -m app.cli.bootstrap create-admin \
+    --username admin --email admin@example.com --password-stdin --force-update'
+# then type the new password on stdin (≥ 12 chars)
+```
+
+Omit `--force-update` to create a brand-new admin instead of resetting an existing one.
 
 ## TLS / HTTPS
 
@@ -130,6 +158,20 @@ systemctl restart jt-ipam-backend
 
 > Both modes use the same cert paths (`/etc/jt-ipam/tls/server.{crt,key}`); the only difference is who terminates TLS — Mode A reloads nginx, Mode B restarts the backend.
 
+**Mode C — behind your own external reverse proxy** (a separate nginx / LB terminates TLS)
+The local nginx serves plain HTTP; apply the external-proxy templates:
+
+```bash
+sudo cp deploy/nginx/jt-ipam-external-proxy.conf         /etc/nginx/sites-available/jt-ipam
+sudo cp deploy/nginx/jt-ipam-external-proxy-snippet.conf /etc/nginx/snippets/jt-ipam-proxy.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+An external proxy does **not** break OIDC / M365 (Entra ID) login, but three things must be right or you'll be redirected to `ipam.example.com` or stuck on the login page:
+1. Set `APP_PUBLIC_URL` / `API_PUBLIC_URL` / `CORS_ORIGINS` in `/etc/jt-ipam/backend.env` to your public domain (not the default `ipam.example.com`), then `systemctl restart jt-ipam-backend`.
+2. The external proxy must forward `X-Forwarded-Proto $scheme` (=https) and `Host $host`; the template passes them through so the backend sees https (Secure cookies work).
+3. Set the OIDC Redirect URI to `https://your-domain/api/v1/auth/oidc/callback` in both the IdP and the jt-ipam UI — note the **UI/DB value overrides .env**, so re-save it in the UI after editing .env.
+
 ## Project layout
 
 ```
@@ -154,16 +196,7 @@ jt-ipam/
 - **Phase 1 (done)** — phpIPAM-equivalent features + improvements (Section/Subnet/IP/VLAN/VRF/NAT/Devices/Racks/Locations/IP-Requests, TOTP/API-Token/RBAC, phpIPAM import, CSV/RIPE/TWNIC, visual subnet grid, forced TLS)
 - **Phase 2 (done)** — multi-vendor DNS + deep LibreNMS integration (device/ARP/FDB/effective-status) + anomaly detection + SHA-256 audit chain + pgvector AI semantic search
 - **Phase 3 (done)** — Tenancy/Contacts/Cabling/Power/VPN/Virtualization + Proxmox VE sync + Cytoscape topology + OIDC/SAML SSO + OPNsense firewall sync + Wazuh agent inventory
-- **Phase 4 (done, scoped)** — MCP server + local-LLM natural language (Ollama) + plugin mechanism
-
-**Out of scope:** HA deployment, Ansible Collection, Terraform Provider, Zimbra/Odoo integration, Docker/Helm/K8s.
-
-## Contributing
-
-1. Every PR passes the OWASP Top 10:2025 mental checklist in [`docs/SECURITY.md`](docs/SECURITY.md)
-2. Backend: `ruff`, `mypy`, `pytest`, `pip-audit`
-3. Frontend: `npm run lint`, `npm run type-check`, `npm run build`
-4. Changes to sensitive files (auth / crypto / SSRF / migrations) get an extra review
+- **Phase 4 (done, scoped)** — MCP server + local-LLM natural language (LLM Server) + plugin mechanism
 
 ## License
 

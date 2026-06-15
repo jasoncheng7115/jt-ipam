@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useFloatingHScroll } from "@/composables/useFloatingHScroll";
@@ -23,6 +23,7 @@ import { useUiStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import { listSubnets } from "@/api/subnets";
 import { useCustomers } from "@/composables/useCustomers";
+import { useSubnetTree } from "@/composables/useSubnetTree";
 import type { Subnet } from "@/types";
 import NotificationBell from "@/components/NotificationBell.vue";
 import GlobalSearch from "@/components/GlobalSearch.vue";
@@ -35,10 +36,10 @@ import {
   // Phase 3 / Admin
   Phase3Icon, VirtualizationIcon, PhysicalIcon, PowerIcon, VpnIcon,
   AdminIcon, AuditIcon, UsersIcon, GroupsIcon, CustomFieldsIcon, CustomersIcon, AnomalyIcon, ChatHistoryIcon,
-  DnsIcon, LibreNMSIcon, FirewallIcon, WazuhIcon, ScanAgentsIcon, WebhooksIcon,
+  DnsIcon, LibreNMSIcon, FirewallIcon, WazuhIcon, ScanAgentsIcon, WebhooksIcon, LockIcon,
   MigrationIcon, ImportIcon, PluginsIcon, ExportIcon,
   // topbar / user menu
-  LogoutIcon,
+  LogoutIcon, AccountIcon, LanguageIcon, ThemeDarkIcon, ThemeLightIcon,
   renderIcon,
 } from "@/icons";
 import { User as UserOutline } from "@iconoir/vue";
@@ -66,8 +67,8 @@ const accountLabel = computed(() => {
 const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 const navSubnets = ref<Subnet[]>([]);
 let navSubnetsLoaded = false;
-async function loadNavSubnets() {
-  if (navSubnetsLoaded) return;
+async function loadNavSubnets(force = false) {
+  if (navSubnetsLoaded && !force) return;
   navSubnetsLoaded = true;
   void ensureCustomersLoaded();
   try {
@@ -75,6 +76,9 @@ async function loadNavSubnets() {
     navSubnets.value = res.items;
   } catch { navSubnetsLoaded = false; }
 }
+// 子網路新增/編輯/刪除後 → 強制重載左選單子網路樹
+const { version: subnetTreeVersion } = useSubnetTree();
+watch(subnetTreeVersion, () => { if (inSubnetContext.value) void loadNavSubnets(true); });
 
 const currentSubnetId = computed(() =>
   route.name === "subnet-detail" ? (route.params.id as string) : null,
@@ -83,6 +87,44 @@ const currentSubnetId = computed(() =>
 const inSubnetContext = computed(() =>
   route.name === "subnets" || route.name === "subnet-detail",
 );
+
+// 在同一個單位群組內，依 master_subnet_id 建出「真正的巢狀選單」：
+// 有下層的子網段 → n-submenu（可展開、由 n-menu 畫出虛線連接），點標題本身會進入該網段；
+// 無下層的 → 一般 leaf。
+function buildSubnetMenu(items: Subnet[]): MenuOption[] {
+  const ids = new Set(items.map((x) => x.id));
+  const childrenBy = new Map<string, Subnet[]>();
+  const roots: Subnet[] = [];
+  for (const s of items) {
+    const pid = (s as any).master_subnet_id as string | null | undefined;
+    if (pid && ids.has(pid)) {
+      (childrenBy.get(pid) ?? childrenBy.set(pid, []).get(pid)!).push(s);
+    } else {
+      roots.push(s);
+    }
+  }
+  const cmp = (a: Subnet, b: Subnet) => a.cidr.localeCompare(b.cidr, undefined, { numeric: true });
+  const mk = (s: Subnet): MenuOption => {
+    const text = s.description ? `${s.cidr} (${s.description})` : s.cidr;
+    const kids = (childrenBy.get(s.id) ?? []).slice().sort(cmp);
+    if (kids.length) {
+      // 有下層 → 可展開節點；標題做成可點連結（點文字進入該網段、點箭頭展開）
+      return {
+        key: `subnet:${s.id}`,
+        label: () => h("a", {
+          class: "subnet-node-link",
+          onClick: (e: MouseEvent) => {
+            e.stopPropagation();
+            router.push({ name: "subnet-detail", params: { id: s.id } }).catch(() => {});
+          },
+        }, text),
+        children: kids.map(mk),
+      };
+    }
+    return { key: `subnet:${s.id}`, label: text };
+  };
+  return roots.slice().sort(cmp).map(mk);
+}
 
 const subnetTreeChildren = computed<MenuOption[] | undefined>(() => {
   if (!inSubnetContext.value || !navSubnets.value.length) return undefined;
@@ -105,13 +147,8 @@ const subnetTreeChildren = computed<MenuOption[] | undefined>(() => {
       key: `subnetgrp:${cid}`,
       label: g.label,
       icon: renderIcon(CustomersIcon),
-      children: g.items
-        .slice()
-        .sort((x, y) => x.cidr.localeCompare(y.cidr, undefined, { numeric: true }))
-        .map((s) => ({
-          key: `subnet:${s.id}`,
-          label: s.description ? `${s.cidr} (${s.description})` : s.cidr,
-        })),
+      // 依 master_subnet_id 建巢狀選單：有下層者成為可展開節點（n-menu 畫虛線連接）
+      children: buildSubnetMenu(g.items),
     }));
   return [
     { key: "subnets-all", label: () => t("nav.subnet_all"), icon: renderIcon(SubnetsIcon) },
@@ -146,7 +183,6 @@ const menuOptions = computed<MenuOption[]>(() => {
     { label: () => t("nav.ip_changes"),  key: "ip_changes", icon: renderIcon(IPChangesIcon) },
     { label: () => t("nav.vlans"),       key: "vlans",      icon: renderIcon(VlansIcon) },
     { label: () => t("nav.vrfs"),        key: "vrfs",       icon: renderIcon(VrfsIcon) },
-    { label: () => t("nav.nat"),         key: "nat",        icon: renderIcon(NatIcon) },
     { label: () => t("nav.devices"),     key: "devices",    icon: renderIcon(DevicesIcon) },
     { label: () => t("nav.racks"),       key: "racks",      icon: renderIcon(RacksIcon) },
     { label: () => t("nav.locations"),   key: "locations",  icon: renderIcon(LocationsIcon) },
@@ -165,8 +201,11 @@ const menuOptions = computed<MenuOption[]>(() => {
         { label: () => t("advanced.circuits"),   key: "adv-circuits", icon: renderIcon(PhysicalIcon) },
         { label: () => t("advanced.contacts"),   key: "adv-contacts", icon: renderIcon(UsersIcon) },
         { label: () => t("advanced.wireless"),   key: "adv-wireless", icon: renderIcon(ScanAgentsIcon) },
+        { label: () => t("nav.dns_records"),     key: "adv-dns-records", icon: renderIcon(DnsIcon) },
+        { label: () => t("nav.cert_status"),     key: "adv-cert-status", icon: renderIcon(LockIcon) },
         { label: () => t("nav.virtualization"), key: "virt",     icon: renderIcon(VirtualizationIcon) },
         { label: () => t("nav.firewall"),       key: "firewall",    icon: renderIcon(FirewallIcon) },
+        { label: () => t("nav.nat"),            key: "nat",         icon: renderIcon(NatIcon) },
         { label: () => t("nav.cabling"),        key: "cabling",     icon: renderIcon(PhysicalIcon) },
         { label: () => t("nav.power"),          key: "power",       icon: renderIcon(PowerIcon) },
         { label: () => t("nav.vpn_tunnels"),    key: "vpn-tunnels", icon: renderIcon(VpnIcon) },
@@ -199,12 +238,15 @@ const menuOptions = computed<MenuOption[]>(() => {
           { label: () => t("nav.wazuh"),         key: "wazuh",          icon: renderIcon(WazuhIcon) },
           { label: () => t("nav.graylog_dsv"),   key: "graylog_dsv",    icon: renderIcon(ExportIcon) },
           { label: () => t("nav.scan_agents"),   key: "scan_agents",    icon: renderIcon(ScanAgentsIcon) },
+          { label: () => t("nav.certificates"),  key: "certificates",   icon: renderIcon(LockIcon) },
           { label: () => t("nav.webhooks"),      key: "webhooks",       icon: renderIcon(WebhooksIcon) },
           { label: () => t("nav.migration"),     key: "migration",      icon: renderIcon(MigrationIcon) },
           { label: () => t("nav.import"),        key: "import",         icon: renderIcon(ImportIcon) },
           { label: () => t("nav.plugins"),       key: "plugins",        icon: renderIcon(PluginsIcon) },
           { label: () => "LLM / AI",             key: "llm_settings",   icon: renderIcon(SettingsIcon) },
           { label: () => t("nav.system_settings"), key: "system_settings", icon: renderIcon(SettingsIcon) },
+          { label: () => t("nav.notification_channels"), key: "notification_channels", icon: renderIcon(SettingsIcon) },
+          { label: () => t("nav.ip_request_policy"), key: "ip_request_policy", icon: renderIcon(RequestsIcon) },
           { label: () => t("nav.version"),       key: "version",        icon: renderIcon(AdminIcon) },
           { label: () => t("nav.system_logs"),   key: "system_logs",    icon: renderIcon(AuditIcon) },
           { label: () => t("nav.chat_history"),  key: "chat_history",   icon: renderIcon(ChatHistoryIcon) },
@@ -237,6 +279,16 @@ const themeOptions = computed(() => [
   { label: t("topbar.theme.dark"),  value: "dark" },
   { label: t("topbar.theme.auto"),  value: "auto" },
 ]);
+
+// 窄螢幕時語言 / 佈景改用 icon 觸發的下拉（n-dropdown 用 key）
+const localeMenuOptions = computed(() => localeOptions.map((o) => ({ label: o.label, key: o.value })));
+const themeMenuOptions = computed(() => themeOptions.value.map((o) => ({ label: o.label, key: o.value })));
+const currentLocaleLabel = computed(() => localeOptions.find((o) => o.value === locale.value)?.label ?? "");
+const currentThemeLabel = computed(() => themeOptions.value.find((o) => o.value === theme.value)?.label ?? "");
+const currentThemeIcon = computed(() => (theme.value === "light" ? ThemeLightIcon : ThemeDarkIcon));
+// n-dropdown @select 會帶 (key, option)，需包一層只取 key（避免把 option 當成 setLocale 的第二參數）
+function pickLocale(k: string | number) { ui.setLocale(String(k) as "zh-TW" | "en-US"); }
+function pickTheme(k: string | number) { ui.setTheme(String(k) as "light" | "dark" | "auto"); }
 
 const userMenuOptions = computed(() => [
   { label: t("topbar.user_menu.profile"),     key: "profile",     icon: renderIcon(UserOutline, 16) },
@@ -370,7 +422,7 @@ function startDrag(e: MouseEvent) {
           <circle cx="24" cy="24" r="2.6" fill="#18a058" />
         </svg>
         <svg v-else
-             xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" class="brand-logo" aria-label="jt-ipam">
+             xmlns="http://www.w3.org/2000/svg" viewBox="0 0 232 48" class="brand-logo" aria-label="jt-ipam">
           <rect width="48" height="48" rx="10" fill="#18a058" />
           <g stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-opacity="0.9">
             <line x1="13" y1="13" x2="24" y2="24" />
@@ -392,7 +444,7 @@ function startDrag(e: MouseEvent) {
                 letter-spacing="-0.3">jt-ipam</text>
           <text x="150" y="33"
                 font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-                font-size="13" font-weight="500" fill="currentColor" fill-opacity="0.6"
+                font-size="16" font-weight="500" fill="currentColor" fill-opacity="0.72"
                 letter-spacing="0">v{{ appVersion }}</text>
         </svg>
       </div>
@@ -410,40 +462,43 @@ function startDrag(e: MouseEvent) {
     </n-layout-sider>
     <n-layout>
       <n-layout-header bordered class="topbar">
-        <n-space align="center" justify="space-between" :wrap="false" style="width: 100%">
+        <n-space align="center" justify="space-between" :wrap="false" style="width: 100%; min-width: 0">
           <global-search v-if="me" />
           <span v-else />
-          <n-space align="center" :size="10" :wrap="false">
-            <n-select
-              :value="locale"
-              :options="localeOptions"
-              size="small"
-              style="width: 110px; flex-shrink: 0;"
-              @update:value="ui.setLocale"
-            />
-            <n-select
-              :value="theme"
-              :options="themeOptions"
-              size="small"
-              style="width: 90px; flex-shrink: 0;"
-              @update:value="ui.setTheme"
-            />
+          <n-space class="topbar-ctls" align="center" :size="4" :wrap="false">
+            <!-- 語言：寬螢幕顯示名稱，窄螢幕只剩 icon -->
+            <n-dropdown :options="localeMenuOptions" trigger="click" @select="pickLocale">
+              <button type="button" class="topbar-ctl">
+                <n-icon :size="17" :component="LanguageIcon" />
+                <span class="topbar-ctl__label">{{ currentLocaleLabel }}</span>
+              </button>
+            </n-dropdown>
+            <!-- 佈景：寬螢幕顯示名稱，窄螢幕只剩 icon -->
+            <n-dropdown :options="themeMenuOptions" trigger="click" @select="pickTheme">
+              <button type="button" class="topbar-ctl">
+                <n-icon :size="17" :component="currentThemeIcon" />
+                <span class="topbar-ctl__label">{{ currentThemeLabel }}</span>
+              </button>
+            </n-dropdown>
+            <span class="topbar-divider" />
             <notification-bell v-if="me" />
+            <span class="topbar-divider" />
             <n-dropdown
               v-if="me"
               :options="userMenuOptions"
               trigger="click"
               @select="handleUserMenu"
             >
-              <n-button text style="display: flex; gap: 6px; align-items: center">
-                <span>{{ accountLabel }}</span>
+              <button type="button" class="topbar-ctl">
+                <n-icon :size="17" :component="AccountIcon" />
+                <span class="topbar-ctl__label">{{ accountLabel }}</span>
                 <n-tooltip v-if="me.is_admin" :delay="0">
                   <template #trigger>
                     <n-icon :size="15" :component="AdminIcon" style="color: #18a058" />
                   </template>
                   {{ t("nav.system_admin") }}
                 </n-tooltip>
-              </n-button>
+              </button>
             </n-dropdown>
           </n-space>
         </n-space>
@@ -488,6 +543,41 @@ function startDrag(e: MouseEvent) {
   top: 0;
   z-index: 10;
 }
+/* 頂列控制鈕：icon + 文字標籤；窄螢幕由全域 media query 隱藏 .topbar-ctl__label */
+/* 子網路樹：有下層的網段標題做成可點連結（點文字進入該網段、點箭頭展開） */
+.app-sider :deep(.subnet-node-link) { color: inherit; text-decoration: none; display: inline-block; width: 100%; }
+.topbar-ctls { flex-shrink: 0; }
+.topbar-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--n-text-color, inherit);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.topbar-ctl:hover { background: rgba(127, 127, 127, 0.12); }
+.topbar-ctl .n-icon { color: var(--n-text-color-2, #888); }
+.topbar-ctl:hover .n-icon { color: var(--primary-color, #18a058); }
+.topbar-ctl__label { white-space: nowrap; }
+.topbar-caret { font-size: 10px; opacity: 0.5; margin-left: 1px; }
+.topbar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(127, 127, 127, 0.25);
+  margin: 0 4px;
+  flex: none;
+}
+/* 頂列整列與搜尋框垂直置中（避免控制項偏上） */
+.topbar :deep(.n-space) { align-items: center; }
+.topbar-ctls > * { display: inline-flex; align-items: center; }
 
 /* ── 左側選單拖動把手 ── */
 .app-sider { position: relative; }

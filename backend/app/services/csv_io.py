@@ -43,6 +43,14 @@ EXPORT_COLUMNS: list[str] = [
 ]
 
 
+def _csv_safe(value: str) -> str:
+    """CSV 公式注入防護（OWASP A03）：使用者可控字串若以 = + - @ 或 tab/CR 開頭，
+    在 Excel / Google Sheets 開啟時會被當公式執行。前置單引號讓它被當純文字。"""
+    if value and value[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def export_addresses_csv(rows: Iterable[IPAddress]) -> str:
     """將 IPAddress rows 序列化為 CSV 字串。"""
     buf = io.StringIO()
@@ -53,13 +61,13 @@ def export_addresses_csv(rows: Iterable[IPAddress]) -> str:
     for r in rows:
         writer.writerow({
             "ip": str(r.ip).split("/")[0],
-            "hostname": r.hostname or "",
+            "hostname": _csv_safe(r.hostname or ""),
             "mac": str(r.mac) if r.mac else "",
             "state": r.state,
-            "description": r.description or "",
-            "owner": r.owner or "",
-            "switch_port": r.switch_port or "",
-            "note": r.note or "",
+            "description": _csv_safe(r.description or ""),
+            "owner": _csv_safe(r.owner or ""),
+            "switch_port": _csv_safe(r.switch_port or ""),
+            "note": _csv_safe(r.note or ""),
             "discovery_source": r.discovery_source,
             "last_seen_scanner": r.last_seen_scanner.isoformat() if r.last_seen_scanner else "",
             "effective_status": r.effective_status or "",

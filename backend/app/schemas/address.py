@@ -121,10 +121,12 @@ class IPAddressUpdate(StrictModel):
 class IPAddressRead(IPAddressBase):
     id: uuid.UUID
     discovery_source: str
+    in_dhcp_lease: bool = False   # 自動判定：目前有 DHCP 租約（由 OPNsense lease 同步維護）
     hostname_source_pin: str | None = None
     switch_port_confident: bool | None = None
     os_guess: str | None = None
     os_family: str | None = None
+    os_source: str | None = None   # 有效 OS 來自哪個來源（scanner/librenms/wazuh）
     probe_last_run: dict[str, Any] | None = None
     # 此 IP 實際會被執行的探測（subnet.scan_method − excluded − ∩ agent 能力），後端算好
     effective_probes: list[str] | None = None

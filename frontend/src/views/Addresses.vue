@@ -191,9 +191,13 @@ function switchPortCell(r: IPAddress) {
   if (!r.switch_port) return "";
   return h(NTooltip, null, {
     trigger: () => h(SwitchPortLabel, { value: r.switch_port, dim: r.switch_port_confident === false }),
+    // 彈出文字一律含完整 裝置@連接埠 全文；低信心時再附上說明
     default: () => r.switch_port_confident === false
-      ? t("addresses.switch_port_uncertain")
-      : r.switch_port,
+      ? h("div", { style: "max-width:320px;line-height:1.5" }, [
+          h("div", { style: "font-family:monospace;word-break:break-all" }, (r.switch_port ?? "").replace(" / ", "@")),
+          h("div", { style: "margin-top:4px" }, t("addresses.switch_port_uncertain")),
+        ])
+      : h("span", { style: "font-family:monospace;word-break:break-all" }, (r.switch_port ?? "").replace(" / ", "@")),
   });
 }
 
@@ -213,7 +217,7 @@ const allColumns: DataTableColumns<IPAddress> = [
     sorter: true,
   },
   {
-    title: () => t("addresses.hostname"), key: "hostname", minWidth: 180, ellipsis: { tooltip: true },
+    title: () => t("addresses.hostname"), key: "hostname", minWidth: 140, ellipsis: { tooltip: true },
     render: (r) => r.hostname ?? "—",
     sorter: true,
   },
@@ -245,13 +249,17 @@ const allColumns: DataTableColumns<IPAddress> = [
     render: (r) => labelSource(r.discovery_source), sorter: true,
   },
   {
-    title: () => t("cols.os"), key: "os", width: 70,
+    title: () => t("cols.os"), key: "os", width: 110,
     render: (r) => {
       if (!r.os_family) return "—";
       const label = osFamilyLabel(catalog.value.os_families, r.os_family, locale.value);
-      return h("span", { title: r.os_guess ?? undefined }, [
-        h(OsIcon, { family: r.os_family, size: 16 }),
-        label ? h("span", { style: "margin-left:4px" }, label) : null,
+      // 一行顯示，icon 永遠不縮；空間不夠時 label 被裁掉、只剩 icon
+      return h("div", {
+        style: "display:flex;align-items:center;gap:4px;min-width:0;white-space:nowrap",
+        title: r.os_guess ?? label ?? undefined,
+      }, [
+        h("span", { style: "flex:none;display:inline-flex" }, h(OsIcon, { family: r.os_family, size: 16 })),
+        label ? h("span", { style: "overflow:hidden;text-overflow:ellipsis" }, label) : null,
       ]);
     },
   },

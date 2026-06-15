@@ -72,7 +72,15 @@ async def create_firewall(
         sync_openvpn=payload.sync_openvpn,
         sync_rules=payload.sync_rules,
         sync_nat=payload.sync_nat,
+        sync_aliases=payload.sync_aliases,
         description=payload.description,
+        scope_location_id=payload.scope_location_id,
+        scope_customer_id=payload.scope_customer_id,
+        scope_subnet_ids=payload.scope_subnet_ids,
+        iface_subnet_map=(
+            {k: str(v) for k, v in payload.iface_subnet_map.items()}
+            if payload.iface_subnet_map else None
+        ),
         api_key_enc=b"placeholder", api_key_nonce=b"placeholder",
         api_secret_enc=b"placeholder", api_secret_nonce=b"placeholder",
     )

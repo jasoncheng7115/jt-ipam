@@ -48,8 +48,12 @@
 - [ ] **全新安裝**：乾淨 LXC/VM 跑 `scripts/install-debian.sh`，裝完服務起得來、能登入
 - [ ] **舊版升級**：對上一版的環境跑 `scripts/jt-ipam-upgrade.sh`，升完正常、必要時可回滾
 - [ ] 這次若新增了目錄 / 套件 / 服務 / DB extension / env，確認**兩支腳本都已同步**
+- [ ] **(A) 預設管理員帳密**：全新安裝結尾有印出 `admin` 帳號＋隨機密碼，且密碼存到 `/etc/jt-ipam/.admin-initial-password`（root 0600）；用該密碼能登入
+- [ ] **(A) 重置密碼 CLI**：`python -m app.cli.bootstrap create-admin --username admin --password-stdin --force-update` 能重置既有 admin；README 中英都有此段
+- [ ] **(B) 代理探測工具**：`agent/jt-ipam-agent-installer.sh` 裝完，主機上有 `nmap` / `nmblookup`(samba-common-bin) / `avahi-resolve`(avahi-utils)；代理 `available_probes` 回報含 os/netbios/mdns
+- [ ] **(B) 安裝說明 UI**：掃描代理頁與子網路編輯對話框中，不可勾的探測旁有「安裝說明」彈出，內容顯示對應安裝指令
 
-## 5c. headless 瀏覽器冒煙
+## 5c. headless 瀏覽器 smoke 測試
 
 - [ ] `cd frontend && pnpm exec playwright test smoke`（免後端，自起 vite preview）全綠
 - [ ] 對已部署實例（給 `E2E_BASE_URL` + `E2E_ADMIN_PASS`）跑 `pnpm test:e2e` 主路徑（登入/sections/audit）

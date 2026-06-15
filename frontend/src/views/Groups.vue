@@ -92,7 +92,8 @@ async function openMembers(g: Group) {
   showMembers.value = true;
   await loadMembers();
   if (allUsers.value.length === 0) {
-    try { allUsers.value = (await listUsers("", "", 500, 0)).items; } catch {}
+    try { allUsers.value = (await listUsers("", "", 500, 0)).items; }
+    catch { msg.error(t("errors.network")); }
   }
 }
 async function loadMembers() {

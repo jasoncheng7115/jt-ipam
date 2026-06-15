@@ -1,37 +1,38 @@
-# jt-ipam 安裝與運維 SOP
+# jt-ipam Install & Operations SOP
 
-> English: [INSTALL.en.md](INSTALL.en.md)
+> 繁體中文版：[INSTALL_zh-TW.md](INSTALL_zh-TW.md)
 
-針對 **Proxmox LXC、裸機、虛擬機**（Ubuntu 22.04+/Debian 12+）。本專案
-**不使用 Docker**；以 systemd + apt 直裝。
+For **Proxmox LXC, bare metal, and VMs** (Ubuntu 22.04+/Debian 12+). This project
+**does not use Docker**; it installs directly with systemd + apt.
 
-> 安全為 day-one 需求：所有環境強制 HTTPS；憑證可走 nginx 反代或
-> uvicorn 直接吃自簽。SSL 沒設好 backend **不會啟動**（A02）。
+> Security is a day-one requirement: HTTPS is enforced in all environments; the cert can be
+> served via an nginx reverse proxy or a self-signed cert served directly by uvicorn. If SSL
+> isn't set up, the backend **will not start** (A02).
 
 ---
 
-## 1. 系統需求
+## 1. System requirements
 
-| 項目 | 最低 | 建議 | 備註 |
+| Item | Minimum | Recommended | Notes |
 |---|---|---|---|
-| OS | Ubuntu 22.04 / Debian 12 | **Ubuntu 24.04 LTS** | 24.04 內建 Python 3.12 + PG 16 + Node 18，省事 |
-| CPU | 2 vCPU | 4 vCPU | argon2id + pgvector embedding 吃 CPU |
-| RAM | 4 GB | 8 GB | 開 Ollama 還要再加 8 GB |
-| Disk | 20 GB | 50 GB | audit log 累積 |
-| Python | 3.11 | 3.12 | 24.04 預設就是 3.12  |
-| PostgreSQL | 16 + pgvector | — | 22.04 需 PGDG repo（腳本會自動加）|
-| Redis | 7 | — | 24.04 預設 7.0.15  |
-| Node | 20 LTS | 22 LTS | 24.04 預設 18.19；vite 6 跑得動但有 warning |
+| OS | Ubuntu 22.04 / Debian 12 | **Ubuntu 24.04 LTS** | 24.04 ships Python 3.12 + PG 16 + Node 18, saving effort |
+| CPU | 2 vCPU | 4 vCPU | argon2id + pgvector embeddings are CPU-heavy |
+| RAM | 4 GB | 8 GB | add another 8 GB if running LLM Server |
+| Disk | 20 GB | 50 GB | audit log grows |
+| Python | 3.11 | 3.12 | 24.04 defaults to 3.12 |
+| PostgreSQL | 16 + pgvector | — | 22.04 needs the PGDG repo (the script adds it automatically) |
+| Redis | 7 | — | 24.04 defaults to 7.0.15 |
+| Node | 20 LTS | 22 LTS | 24.04 defaults to 18.19; vite 6 runs but warns |
 
-**虛擬化備註**：在 Proxmox VM / LXC 上跑時，剛開機 / 重開後 1-2 分鐘內 load avg 可能飆高（hypervisor 上其他 VM 在搶 CPU，看 `mpstat` 的 `%steal`）；這不是 VM 本身忙，可以直接跑 install。
+**Virtualization note**: on Proxmox VM / LXC, load avg may spike for 1-2 minutes right after boot/reboot (other VMs on the hypervisor contending for CPU — see `%steal` in `mpstat`); this isn't the VM itself being busy, you can just run the install.
 
 ---
 
-## 2. 一鍵安裝
+## 2. One-shot install
 
-### 2.1 預備：apt 系統更新 + reboot（強烈建議）
+### 2.1 Prep: apt update + reboot (strongly recommended)
 
-新機器先把 OS 全更新一次再裝，避免新舊核心 + libc 不一致：
+Fully update the OS on a new machine before installing, to avoid kernel + libc mismatches:
 
 ```bash
 sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
@@ -39,181 +40,183 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq upgrade
 sudo systemctl reboot
 ```
 
-### 2.2 一鍵安裝
+### 2.2 One-shot install
 
-最快：一鍵 bootstrap（自動 clone 到 /opt/jt-ipam 後執行統一部署腳本，可附帶安裝參數）：
+Fastest: one-shot bootstrap (auto-clones to /opt/jt-ipam, then runs the unified deploy script; install flags can be passed through):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts/bootstrap.sh \
   | sudo bash -s -- --tls-mode nginx --public-fqdn ipam.example.com
 ```
 
-或手動 clone 後跑統一部署腳本 `scripts/jt-ipam.sh`：
+Or clone manually and run the unified deploy script `scripts/jt-ipam.sh`:
 
 ```bash
 git clone https://github.com/jasoncheng7115/jt-ipam.git /opt/jt-ipam
 cd /opt/jt-ipam
 
-# 三種 TLS 模式擇一：
+# Pick one of three TLS modes:
 #
-#   nginx         — nginx 終結 HTTPS，後端 loopback；缺憑證時自動產自簽 bootstrap
-#   self-signed   — uvicorn direct 自帶自簽（不裝 nginx；最快上線）
-#   direct        — uvicorn direct，憑證自備（缺則 fallback 產自簽）
+#   nginx         — nginx terminates HTTPS, backend on loopback; auto self-signed bootstrap if cert missing
+#   self-signed   — uvicorn direct with its own self-signed cert (no nginx; fastest to go live)
+#   direct        — uvicorn direct, you provide the cert (falls back to self-signed if missing)
 
-# (A) nginx + 暫用自簽（之後 cp 正式憑證即可）— 推薦生產環境
+# (A) nginx + temporary self-signed (cp a real cert in later) — recommended for production
 sudo ./scripts/jt-ipam.sh install --tls-mode nginx --public-fqdn ipam.example.com
 
-# (B) uvicorn direct 自簽（內網/開發環境最快）
+# (B) uvicorn direct self-signed (fastest for internal/dev)
 sudo ./scripts/jt-ipam.sh install --tls-mode self-signed --public-fqdn ipam.local
 ```
 
-> `scripts/install-debian.sh` 仍保留為相容 shim（會轉呼叫 `jt-ipam.sh install`），舊指令不會壞。
+> `scripts/install-debian.sh` is kept as a compatibility shim (it forwards to `jt-ipam.sh install`), so older commands still work.
 
-腳本會：
+The script will:
 
-1. 安裝 PostgreSQL 16 + pgvector + Redis 7（Ubuntu 22.04 自動加 PGDG repo；Ubuntu 24.04 直接走官方源）
-2. 建立 `jtipam` 系統使用者、`/opt/jt-ipam/backend/.venv`、安裝 Python deps
-3. 建立 DB role/database `jt_ipam`，套 alembic migrations
-4. 產生 `SECRET_KEY` / `ENCRYPTION_KEY` / `AUDIT_CHAIN_GENESIS` 寫入 `/etc/jt-ipam/backend.env`（0640）
-5. 在 `/etc/jt-ipam/tls/` 產自簽憑證 ECDSA P-384 / 5 年；SAN 自動含 `localhost / FQDN / 短 hostname / 127.0.0.1 / ::1 / 主機 IP`
-6. pnpm install + 前端 vite build
-7. 安裝 `jt-ipam-backend.service` + `jt-ipam-sync.timer`（每 5 分鐘）+ `jt-ipam-backup.timer`（每天 03:30）
-8. nginx 模式才裝 nginx site 並 reload
+1. Install PostgreSQL 16 + pgvector + Redis 7 (Ubuntu 22.04 auto-adds the PGDG repo; Ubuntu 24.04 uses the official source directly)
+2. Create the `jtipam` system user, `/opt/jt-ipam/backend/.venv`, install Python deps
+3. Create the `jt_ipam` DB role/database, apply alembic migrations
+4. Generate `SECRET_KEY` / `ENCRYPTION_KEY` / `AUDIT_CHAIN_GENESIS` into `/etc/jt-ipam/backend.env` (0640)
+5. Generate a self-signed cert in `/etc/jt-ipam/tls/` ECDSA P-384 / 5 years; SAN auto-includes `localhost / FQDN / short hostname / 127.0.0.1 / ::1 / host IP`
+6. pnpm install + frontend vite build
+7. Install `jt-ipam-backend.service` + `jt-ipam-sync.timer` (every 5 min) + `jt-ipam-backup.timer` (daily 03:30)
+8. Only in nginx mode: install the nginx site and reload
 
-### 2.3 Bootstrap 第一個 admin
+### 2.3 Bootstrap the first admin
 
 ```bash
-# 隨機產一個強密碼，從 stdin 讀（不留 shell history）
+# generate a random strong password, read from stdin (leaves no shell history)
 ADMIN_PW=$(openssl rand -base64 24)
 sudo -u jtipam env $(grep -v '^#' /etc/jt-ipam/backend.env | xargs) \
     /opt/jt-ipam/backend/.venv/bin/python -m app.cli.bootstrap create-admin \
     --username admin --email admin@your.domain --password-stdin <<<"$ADMIN_PW"
-echo "ADMIN_PASSWORD=$ADMIN_PW"   # 自己保管好
+echo "ADMIN_PASSWORD=$ADMIN_PW"   # keep it safe
 ```
 
-開啟瀏覽器到 `https://<your-fqdn>/` 即可登入。瀏覽器會警告自簽憑證，按進階繼續即可。
+Open `https://<your-fqdn>/` in a browser to log in. The browser warns about the self-signed cert; click Advanced → Continue.
 
-### 2.4 端對端 sanity check
+### 2.4 End-to-end sanity check
 
 ```bash
 # healthz
-curl -kfsS https://127.0.0.1/healthz                       # 應回 ok
+curl -kfsS https://127.0.0.1/healthz                       # should return ok
 
-# login + chain verify（驗 A08）
+# login + chain verify (verifies A08)
 TOKEN=$(curl -kfsS -X POST https://127.0.0.1/api/v1/auth/login \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PW\"}" | jq -r .access_token)
 curl -kfsS -X POST https://127.0.0.1/api/v1/audit/verify \
     -H "Authorization: Bearer $TOKEN" | jq .
-# 應該看到 {"ok": true, "broken_at_id": null, "checked": N}
+# should see {"ok": true, "broken_at_id": null, "checked": N}
 
-# systemd 安全分數
+# systemd security score
 systemd-analyze security jt-ipam-backend | tail -3
-# 目標：≤ 3.5；目前實測 1.3
+# target: ≤ 3.5; currently measured 1.3
 ```
 
-### 2.5 換成正式 TLS 憑證（nginx 模式）
+### 2.5 Switch to a real TLS cert (nginx mode)
 
-安裝時用自簽撐起來，正式憑證到手後**只要 cp 過去 reload nginx**：
+Bootstrapped with self-signed; once you have the real cert, **just cp it over and reload nginx**:
 
 ```bash
-# 把廠商給的 cert + key cp 到固定位置（保留原本權限 root:jtipam）
+# cp the vendor cert + key to the fixed paths (preserve permissions root:jtipam)
 sudo install -m 0644 -o root -g jtipam /path/to/your-cert.pem  /etc/jt-ipam/tls/server.crt
 sudo install -m 0640 -o root -g jtipam /path/to/your-key.pem   /etc/jt-ipam/tls/server.key
 
-# 如果你拿到的是 fullchain（含中繼憑證）+ key，建議用 fullchain
+# if you got a fullchain (with intermediates) + key, prefer the fullchain
 sudo install -m 0644 -o root -g jtipam /path/to/fullchain.pem  /etc/jt-ipam/tls/server.crt
 
-# 驗證 + reload
+# verify + reload
 sudo nginx -t && sudo systemctl reload nginx
 
-# 確認新憑證生效
+# confirm the new cert is live
 openssl s_client -connect ipam.example.com:443 -servername ipam.example.com </dev/null 2>/dev/null \
     | openssl x509 -noout -issuer -subject -dates
 ```
 
-之後要再換，重複上面三步即可，不需重跑 install。
+To replace again later, just repeat the three steps above — no need to re-run install.
 
-走 Let's Encrypt 路線：
+Let's Encrypt route:
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-# certbot 會自動改 ssl_certificate 指到 /etc/letsencrypt/live/...
+# certbot auto-edits ssl_certificate to point at /etc/letsencrypt/live/...
 sudo certbot --nginx -d ipam.example.com
 ```
 
-### 2.6 換成正式 TLS 憑證（uvicorn direct / self-signed 模式）
+### 2.6 Switch to a real TLS cert (uvicorn direct / self-signed mode)
 
-`BACKEND_TLS_MODE=direct`(或 `self-signed`)時是 **uvicorn 自己掛 TLS**，沒有 nginx。憑證路徑跟 nginx 模式相同，差別只在換完要**重啟 backend**(不是 reload nginx)：
+With `BACKEND_TLS_MODE=direct` (or `self-signed`), **uvicorn serves TLS itself**, no nginx. The cert paths are the same as nginx mode; the only difference is you **restart the backend** (not reload nginx) after swapping:
 
 ```bash
-# cp 正式(或自管)憑證 + key 到固定位置
+# cp the real (or self-managed) cert + key to the fixed paths
 sudo install -m 0644 -o root -g jtipam /path/to/fullchain.pem /etc/jt-ipam/tls/server.crt
 sudo install -m 0640 -o root -g jtipam /path/to/your-key.pem  /etc/jt-ipam/tls/server.key
 
-# 重啟服務套用（uvicorn 啟動時讀 --ssl-certfile/--ssl-keyfile）
+# restart the service to apply (uvicorn reads --ssl-certfile/--ssl-keyfile at startup)
 sudo systemctl restart jt-ipam-backend
 
-# 確認新憑證生效（direct 模式 backend 直接聽 443）
+# confirm the new cert is live (in direct mode the backend listens on 443 directly)
 openssl s_client -connect ipam.example.com:443 -servername ipam.example.com </dev/null 2>/dev/null \
     | openssl x509 -noout -issuer -subject -dates
 ```
 
-> 想自己重新產自簽憑證：`sudo bash /opt/jt-ipam/scripts/generate-self-signed-cert.sh` 後 `systemctl restart jt-ipam-backend`。
-> 從 direct 改走 nginx 反代：把 `/etc/jt-ipam/backend.env` 的 `BACKEND_TLS_MODE` 改成 `nginx`、裝好 nginx site，再重啟 backend + reload nginx。
+> To regenerate a self-signed cert yourself: `sudo bash /opt/jt-ipam/scripts/generate-self-signed-cert.sh` then `systemctl restart jt-ipam-backend`.
+> To move from direct to an nginx reverse proxy: set `BACKEND_TLS_MODE=nginx` in `/etc/jt-ipam/backend.env`, install the nginx site, then restart the backend + reload nginx.
 
 ---
 
-## 3. 環境變數
+## 3. Environment variables
 
-主要設定檔：`/etc/jt-ipam/backend.env`（root:jtipam 0640）
+Main config file: `/etc/jt-ipam/backend.env` (root:jtipam 0640)
 
-| 變數 | 必填 | 說明 |
+| Variable | Required | Notes |
 |---|---|---|
-| `SECRET_KEY` |  | JWT 簽章；安裝腳本自動產 64-byte hex |
-| `ENCRYPTION_KEY` |  | AES-256-GCM key（DNS/SNMP/API 憑證加密）|
-| `AUDIT_CHAIN_GENESIS` |  | SHA-256 鏈起始；**永不可改**（A08）|
-| `POSTGRES_*` |  | DB 連線 |
-| `REDIS_PASSWORD` |  | rate limiter / cache |
-| `BACKEND_TLS_MODE` |  | `nginx` 或 `direct` |
-| `APP_PUBLIC_URL` |  | 前端 base URL |
-| `API_PUBLIC_URL` |  | OIDC/SAML callback 用 |
-| `CORS_ORIGINS` |  | 多個用逗號分隔 |
-| `OUTBOUND_ALLOW_CIDRS` | — | safe_http SSRF allowlist；空白 = 只允公網 |
-| `OIDC_*` | — | 啟用 OIDC SSO |
-| `SAML_*` | — | 啟用 SAML SSO |
-| `LDAP_*` | — | LDAP/AD 認證 |
-| `OLLAMA_ENABLED` | — | 開啟 AI 語意搜尋 + chat |
+| `SECRET_KEY` | ✓ | JWT signing; the installer generates a 64-byte hex |
+| `ENCRYPTION_KEY` | ✓ | AES-256-GCM key (encrypts DNS/SNMP/API credentials) |
+| `AUDIT_CHAIN_GENESIS` | ✓ | SHA-256 chain head; **must never change** (A08) |
+| `POSTGRES_*` | ✓ | DB connection |
+| `REDIS_PASSWORD` | ✓ | rate limiter / cache |
+| `BACKEND_TLS_MODE` | ✓ | `nginx` or `direct` |
+| `APP_PUBLIC_URL` | ✓ | frontend base URL |
+| `API_PUBLIC_URL` | ✓ | used for OIDC/SAML callbacks |
+| `CORS_ORIGINS` | ✓ | comma-separated |
+| `OUTBOUND_ALLOW_CIDRS` | — | safe_http SSRF allowlist; blank = public internet only |
+| `OIDC_*` | — | enable OIDC SSO |
+| `SAML_*` | — | enable SAML SSO |
+| `LDAP_*` | — | LDAP/AD auth |
+| `OLLAMA_ENABLED` | — | enable AI semantic search + chat |
 
-完整列表見 `app/core/config.py` Settings class。
+See the Settings class in `app/core/config.py` for the full list.
 
 ---
 
-## 4. 整合設定（裝完後）
+## 4. Integration setup (after install)
 
-所有整合都在 admin 介面 (`/firewall`、`/wazuh`、`/librenms`、`/dns`) 加主機。
-新增後預設每 5 分鐘由 `jt-ipam-sync.timer` 自動同步。
+All integrations are added in the admin UI (`/firewall`, `/wazuh`, `/librenms`, `/dns`).
+Once added, `jt-ipam-sync.timer` syncs them automatically every 5 minutes by default.
 
-### OPNsense 防火牆
+> Note: as of v0.4.76+, OIDC and SAML SSO are also configurable in the web UI under Admin → System Settings (no need to edit env). The env vars below still work as defaults.
 
-1. OPNsense → System → Access → Users → 加 service user → 拿 API key/secret
-2. jt-ipam → 防火牆 → 新增 → 填 `https://opnsense:443`、key、secret
-3. 加 alias mapping（selector JSON 例：`{"type":"section","section_id":"<uuid>"}`）
+### OPNsense firewall
+
+1. OPNsense → System → Access → Users → add a service user → get API key/secret
+2. jt-ipam → Firewall → Add → fill in `https://opnsense:443`, key, secret
+3. Add alias mappings (selector JSON example: `{"type":"section","section_id":"<uuid>"}`)
 
 ### Wazuh
 
-1. Wazuh manager → API user（預設 `wazuh-wui` 或自建）
-2. jt-ipam → Wazuh → 新增 → 填 `https://wazuh:55000`、user、password
-3. 點同步；之後 missing-agent 頁會自動列出沒裝 agent 的 IP
+1. Wazuh manager → API user (default `wazuh-wui` or your own)
+2. jt-ipam → Wazuh → Add → fill in `https://wazuh:55000`, user, password
+3. Click sync; afterwards the missing-agent page lists IPs without an agent
 
 ### LibreNMS
 
-1. LibreNMS → API → 產 token
-2. jt-ipam → LibreNMS → 新增 → 填 URL、token
+1. LibreNMS → API → generate a token
+2. jt-ipam → LibreNMS → Add → fill in URL, token
 
-### OIDC（Keycloak/Azure AD/Google）
+### OIDC (Keycloak/Azure AD/Google)
 
-直接在 `/etc/jt-ipam/backend.env` 加：
+Either configure it in the web UI (Admin → System Settings → Single sign-on — OIDC), or add to `/etc/jt-ipam/backend.env`:
 
 ```
 OIDC_ENABLED=true
@@ -224,9 +227,9 @@ OIDC_REDIRECT_URI=https://ipam.example.com/api/v1/auth/oidc/callback
 OIDC_ADMIN_GROUPS=jt-ipam-admins
 ```
 
-`systemctl restart jt-ipam-backend`。Login 頁會出現「OIDC 單一登入」按鈕。
+`systemctl restart jt-ipam-backend`. The login page shows a "Sign in with OIDC" button.
 
-### SAML（AD FS / Shibboleth）
+### SAML (AD FS / Shibboleth)
 
 ```
 SAML_ENABLED=true
@@ -234,16 +237,16 @@ SAML_IDP_METADATA_URL=https://idp.example.com/FederationMetadata.xml
 SAML_ADMIN_GROUPS=jt-ipam-admins
 ```
 
-或離線環境用 `SAML_IDP_METADATA_XML="<EntityDescriptor>...</EntityDescriptor>"`。
-重啟後 IdP 註冊 SP metadata：`curl https://ipam.example.com/api/v1/auth/saml/metadata`。
+Or for offline environments use `SAML_IDP_METADATA_XML="<EntityDescriptor>...</EntityDescriptor>"`.
+After restart, register the SP metadata with the IdP: `curl https://ipam.example.com/api/v1/auth/saml/metadata`.
 
 ---
 
-## 5. 備份與還原
+## 5. Backup & restore
 
-### 自動備份
+### Automatic backup
 
-安裝腳本不會啟用備份；要手動加 cron 或 systemd timer。最簡單：
+The installer doesn't enable backups; add a cron or systemd timer manually. Simplest:
 
 ```bash
 sudo cp /opt/jt-ipam/scripts/jt-ipam-backup.sh /usr/local/bin/
@@ -253,25 +256,25 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now jt-ipam-backup.timer
 ```
 
-預設每天 03:30 跑，把 `pg_dump -Fc` + `/etc/jt-ipam/backend.env` + TLS 憑證
-打包到 `/var/backups/jt-ipam/`，保留 14 天。
+Runs daily at 03:30 by default, packaging `pg_dump -Fc` + `/etc/jt-ipam/backend.env` + TLS certs
+into `/var/backups/jt-ipam/`, retained for 14 days.
 
-### 異地備份
+### Offsite backup
 
-把 `/var/backups/jt-ipam/` rsync 到 NAS / S3 / 另一台機器：
+rsync `/var/backups/jt-ipam/` to a NAS / S3 / another machine:
 
 ```bash
-# 例：每天 04:00 推到 NAS
+# e.g. push to NAS daily at 04:00
 0 4 * * * rsync -a /var/backups/jt-ipam/ jtipam@nas.local:/backups/jt-ipam/
 ```
 
-### 還原
+### Restore
 
 ```bash
-# 0. 停服務
+# 0. stop services
 sudo systemctl stop jt-ipam-backend jt-ipam-sync.timer
 
-# 1. 重建空 DB
+# 1. recreate an empty DB
 sudo -u postgres dropdb jt_ipam
 sudo -u postgres createdb -O jt_ipam jt_ipam
 sudo -u postgres psql -d jt_ipam -c '
@@ -282,36 +285,36 @@ sudo -u postgres psql -d jt_ipam -c '
     CREATE EXTENSION IF NOT EXISTS vector;
 '
 
-# 2. 還原 dump（注意：必須用相同 ENCRYPTION_KEY 才能解密 DNS/API 憑證等敏感欄）
+# 2. restore the dump (note: you MUST use the same ENCRYPTION_KEY to decrypt sensitive fields like DNS/API credentials)
 sudo -u postgres pg_restore -d jt_ipam \
     /var/backups/jt-ipam/jt-ipam-2026-05-10.dump
 
-# 3. 還原設定檔（如果還在）
+# 3. restore the config file (if still present)
 sudo cp /var/backups/jt-ipam/2026-05-10/backend.env /etc/jt-ipam/
 
-# 4. 啟動
+# 4. start
 sudo systemctl start jt-ipam-backend jt-ipam-sync.timer
 
-# 5. 驗 chain（任何 row 被竄改會立刻看到）
+# 5. verify the chain (any tampered row shows up immediately)
 curl -X POST https://ipam.example.com/api/v1/audit/verify \
     -H "Authorization: Bearer <admin token>"
 ```
 
->  備份檔內含敏感資料（DB 含加密的 API 憑證；env 含 SECRET_KEY/ENCRYPTION_KEY）。
-> 必須以 `0600` 權限儲存，並做加密傳輸（rsync over ssh / s3 server-side encryption）。
+> Backup files contain sensitive data (the DB holds encrypted API credentials; the env holds SECRET_KEY/ENCRYPTION_KEY).
+> Store them with `0600` permissions and transfer encrypted (rsync over ssh / S3 server-side encryption).
 
 ---
 
-## 6. 升級
+## 6. Upgrade
 
-統一腳本一鍵升級（內含 git pull → 備份 → pip → alembic → build → restart）：
+One-shot upgrade via the unified script (git pull → backup → pip → alembic → build → restart):
 
 ```bash
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade
-# 已自行 git pull、不想再拉：  sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade --no-pull
+# already pulled, skip git pull:  sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade --no-pull
 ```
 
-等同的手動步驟（需要時逐步執行）：
+The equivalent manual steps (run individually if needed):
 
 ```bash
 cd /opt/jt-ipam
@@ -325,41 +328,41 @@ sudo systemctl start jt-ipam-backend
 
 ---
 
-## 7. 監控與告警
+## 7. Monitoring & alerting
 
-### Journal 觀察
+### Journal
 
 ```bash
 journalctl -u jt-ipam-backend -f          # backend
-journalctl -u jt-ipam-sync -n 200          # 定期同步
-journalctl -u jt-ipam-backup -n 50         # 備份
+journalctl -u jt-ipam-sync -n 200          # periodic sync
+journalctl -u jt-ipam-backup -n 50         # backup
 ```
 
-### healthcheck
+### Healthcheck
 
-`https://<your-fqdn>/api/v1/healthz` 回 200 = OK。
+`https://<your-fqdn>/api/v1/healthz` returning 200 = OK.
 
-### 推到 SIEM/Slack
+### Push to SIEM/Slack
 
-backend 已支援 webhook subscription：admin → 設定 → notifications 加
-webhook URL。也可在 `BACKEND_*` env 加 Graylog GELF endpoint，全 audit
-log 同步外送。
+The backend supports webhook subscriptions: admin → Settings → notifications, add a
+webhook URL. You can also add a Graylog GELF endpoint in the `BACKEND_*` env to forward
+all audit logs.
 
 ---
 
-## 8. 移除
+## 8. Uninstall
 
-統一腳本移除（預設只停服務、移除 systemd units/timers + nginx site，**保留 DB / 設定 / 原始碼**）：
+Unified-script uninstall (by default only stops services, removes systemd units/timers + the nginx site, and **keeps DB / config / source**):
 
 ```bash
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall
-# 連 DB / 設定 / 上傳檔 / 系統 user 一起刪（會要求確認；--yes 跳過確認）：
+# also drop DB / config / uploads / system user (asks to confirm; --yes skips the prompt):
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh uninstall --purge
 ```
 
-> `uninstall` 永不刪除 `/opt/jt-ipam` 原始碼。
+> `uninstall` never deletes the `/opt/jt-ipam` source.
 
-等同的手動步驟：
+The equivalent manual steps:
 
 ```bash
 sudo systemctl disable --now jt-ipam-backend jt-ipam-sync.timer jt-ipam-backup.timer
@@ -370,63 +373,63 @@ sudo -u postgres dropuser jt_ipam
 sudo userdel -r jtipam
 ```
 
-備份（`/var/backups/jt-ipam/`）需自行決定是否保留。
+Decide for yourself whether to keep the backups (`/var/backups/jt-ipam/`).
 
 ---
 
-## 9. 常見問題
+## 9. FAQ
 
-**Q: backend 起不來，journal 顯示 "ENCRYPTION_KEY: invalid format"？**
-A: ENCRYPTION_KEY 必須是 32-byte 的 base64（44 字元結尾 `=`）。安裝腳本有產；
-若手動設定，用 `python -c 'import base64,os; print(base64.b64encode(os.urandom(32)).decode())'`。
+**Q: backend won't start, journal shows "ENCRYPTION_KEY: invalid format"?**
+A: ENCRYPTION_KEY must be 32-byte base64 (44 chars ending in `=`). The installer generates it;
+if setting manually, use `python -c 'import base64,os; print(base64.b64encode(os.urandom(32)).decode())'`.
 
-**Q: backend OOM？**
-A: argon2id 預設 64 MiB / 4 parallelism；若 RAM 緊（< 2GB），可降 `ARGON2_MEMORY_COST_KIB=32768`。
+**Q: backend OOM?**
+A: argon2id defaults to 64 MiB / 4 parallelism; if RAM is tight (< 2GB), lower `ARGON2_MEMORY_COST_KIB=32768`.
 
-**Q: nginx 502？**
-A: backend bind 預設 `127.0.0.1:8000`；確認 systemctl status jt-ipam-backend
-是 active，且 nginx site 的 upstream 也指 `127.0.0.1:8000`。
+**Q: nginx 502?**
+A: the backend binds `127.0.0.1:8000` by default; confirm `systemctl status jt-ipam-backend`
+is active and that the nginx site's upstream also points at `127.0.0.1:8000`.
 
-**Q: pgvector 找不到？**
-A: Ubuntu 22.04 沒內建；安裝腳本會自動加 PGDG repo + `postgresql-16-pgvector`。
-手動補：`sudo apt install postgresql-16-pgvector` 後 `CREATE EXTENSION vector;`。
+**Q: pgvector not found?**
+A: Ubuntu 22.04 doesn't bundle it; the installer auto-adds the PGDG repo + `postgresql-16-pgvector`.
+Manual fix: `sudo apt install postgresql-16-pgvector` then `CREATE EXTENSION vector;`.
 
-**Q: `/api/v1/audit/verify` 回 `{"ok": false}` chain 斷裂？**
-A: 已知歷史 bug：v0.3.0 之前 nginx 把它的 `$request_id`（32-hex 無 hyphen）
-透傳給 backend，backend 寫進 audit canonical 但 PG 讀回後是 hyphenated UUID，
-verify 時對不上。0.3.1+ middleware 已標準化（見 `app/core/middleware.py`
-`RequestIDMiddleware`）。如果你舊鏈已斷且資料還沒上 production：
+**Q: `/api/v1/audit/verify` returns `{"ok": false}` chain broken?**
+A: Known historical bug: before v0.3.0 nginx passed its `$request_id` (32-hex without hyphens)
+to the backend, which wrote it into the audit canonical, but PG read it back as a hyphenated UUID,
+so verify mismatched. 0.3.1+ middleware normalizes it (see `app/core/middleware.py`
+`RequestIDMiddleware`). If your old chain is already broken and the data isn't in production yet:
 ```bash
-# 重置 chain（會清掉所有 audit_logs；只能對未上線環境做）
+# reset the chain (wipes all audit_logs; only do this on a non-live environment)
 sudo -u postgres psql -d jt_ipam -c "TRUNCATE audit_logs RESTART IDENTITY;"
 sudo systemctl restart jt-ipam-backend
 ```
 
-**Q: 安裝腳本說 `nginx: $request_id` warning `ssl_stapling ignored, issuer certificate not found`？**
-A: 自簽憑證沒有 issuer 鏈所以 OCSP stapling 用不到，無害。換成正式憑證或 Let's Encrypt 後會消失。
+**Q: the installer warns `nginx: ssl_stapling ignored, issuer certificate not found`?**
+A: self-signed certs have no issuer chain so OCSP stapling can't be used — harmless. It disappears once you switch to a real cert or Let's Encrypt.
 
-**Q: 整合測試需要 `JTIPAM_TEST_DATABASE_URL`，正式部署也要嗎？**
-A: 不用。正式部署只需要 `backend.env` 裡的 `POSTGRES_*`。`JTIPAM_TEST_DATABASE_URL` 只是給 pytest 用的另一個 DB（避免污染 prod 資料）。
+**Q: integration tests need `JTIPAM_TEST_DATABASE_URL` — does production too?**
+A: No. Production only needs `POSTGRES_*` in `backend.env`. `JTIPAM_TEST_DATABASE_URL` is just a separate DB for pytest (to avoid polluting prod data).
 
-**Q: 安裝完後預設 IP 訪問會看到 "Welcome to nginx" 而不是 jt-ipam？**
-A: 已知問題（0.3.1 以前）：apt 裝完 nginx 預設啟用 `default` site，會搶 IP-only 訪問。0.3.1+ 的 `install-debian.sh` 會：(1) 自動 `rm /etc/nginx/sites-enabled/default`，(2) jt-ipam site 加 `listen ... default_server`，這樣 IP / FQDN / 任何 hostname 都會走 jt-ipam。舊機可手動：
+**Q: after install, IP-only access shows "Welcome to nginx" instead of jt-ipam?**
+A: Known issue (before 0.3.1): apt enables nginx's `default` site, which grabs IP-only access. 0.3.1+ `install-debian.sh` will: (1) auto `rm /etc/nginx/sites-enabled/default`, (2) add `listen ... default_server` to the jt-ipam site, so IP / FQDN / any hostname goes to jt-ipam. On an old machine, do it manually:
 ```bash
 sudo rm /etc/nginx/sites-enabled/default
 sudo sed -i 's|listen 80;|listen 80 default_server;|; s|listen 443 ssl http2;|listen 443 ssl http2 default_server;|' /etc/nginx/sites-available/jt-ipam
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-**Q: 預設 admin 帳密是什麼？忘了怎麼辦？**
-A: **沒有預設帳密**。安裝完後必須手動 bootstrap（見 §2.3）；密碼由 `openssl rand` 隨機產，**只在 bootstrap 當下印一次**，要自己存好。忘了或要換：
+**Q: what are the default admin credentials? What if I forget?**
+A: **There are no default credentials.** After install you must bootstrap manually (see §2.3); the password is randomly generated by `openssl rand` and **printed only once at bootstrap** — save it. If forgotten or to change it:
 ```bash
-# 方案 A：再開一個 admin（如果原 admin 還能用，先讓另一個 admin 從 UI /users 改密）
+# Option A: create another admin (if the original admin still works, have another admin change the password from UI /users)
 ADMIN_PW=$(openssl rand -base64 24)
 sudo -u jtipam env $(grep -v '^#' /etc/jt-ipam/backend.env | xargs) \
     /opt/jt-ipam/backend/.venv/bin/python -m app.cli.bootstrap create-admin \
     --username admin2 --email admin2@your.domain --password-stdin <<<"$ADMIN_PW"
 echo "$ADMIN_PW"
 
-# 方案 B：原 admin 已鎖死 / 失聯 — 直接改 DB 把它解鎖並重設密碼
+# Option B: original admin locked out / lost — edit the DB directly to unlock and reset the password
 sudo -u jtipam env $(grep -v '^#' /etc/jt-ipam/backend.env | xargs) \
     /opt/jt-ipam/backend/.venv/bin/python -c '
 import asyncio, sys
@@ -450,10 +453,10 @@ asyncio.run(main(sys.argv[1], sys.argv[2]))
 ' admin "MyNewPassword2026!"
 ```
 
-**Q: Ubuntu 24.04 跑前端 build 出現 `Unsupported engine: wanted Node >= 20`？**
-A: 24.04 內建 nodejs 18，vite 6 / vue-tsc 跑得動但有警告。要消警告：用 nvm / nodesource 安裝 Node 20+：
+**Q: Ubuntu 24.04 frontend build shows `Unsupported engine: wanted Node >= 20`?**
+A: 24.04 bundles nodejs 18; vite 6 / vue-tsc run but warn. To silence it: install Node 20+ via nvm / nodesource:
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
 sudo apt install -y nodejs
 ```
-然後在 `/opt/jt-ipam/frontend` 重 `pnpm install && pnpm build`。
+then re-run `pnpm install && pnpm build` in `/opt/jt-ipam/frontend`.

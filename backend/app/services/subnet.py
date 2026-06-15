@@ -71,6 +71,24 @@ async def find_overlapping(
     return list(result.scalars().all())
 
 
+async def has_overlapping_subnets(session: AsyncSession) -> bool:
+    """全庫是否存在「同 VRF（或皆 NULL）下 CIDR 互相重疊」的子網路。
+
+    用於提醒：有重疊網段時，未設 scope_subnet_ids 的整合（LibreNMS/Wazuh/Proxmox/
+    AdGuard/DNS/OPNsense）在比對同一個 IP 字串時可能標到錯誤客戶的那一筆。
+    """
+    sql = """
+        SELECT EXISTS (
+            SELECT 1 FROM subnets a JOIN subnets b
+              ON a.id < b.id
+             AND ((a.vrf_id IS NULL AND b.vrf_id IS NULL) OR a.vrf_id = b.vrf_id)
+             AND a.archived_at IS NULL AND b.archived_at IS NULL
+             AND a.cidr && b.cidr
+        )
+    """
+    return bool((await session.execute(text(sql))).scalar())
+
+
 async def assert_no_overlap(
     session: AsyncSession,
     *,
@@ -158,6 +176,22 @@ async def rebuild_subnet_hierarchy(session: AsyncSession) -> int:
                 {"m": str(master) if master else None, "s": str(sid)},
             )
             changed += 1
+    # 子網段繼承上層「單位」：master 有 customer、子網段 customer 為空時補上。
+    # 由淺到深反覆執行，支援多層串接（祖→父→孫），直到沒有可補的為止。
+    while True:
+        res = await session.execute(text(
+            """
+            UPDATE subnets AS c SET customer_id = p.customer_id
+              FROM subnets AS p
+             WHERE c.master_subnet_id = p.id
+               AND c.customer_id IS NULL
+               AND p.customer_id IS NOT NULL
+            """
+        ))
+        n = res.rowcount or 0
+        if n <= 0:
+            break
+        changed += n
     return changed
 
 

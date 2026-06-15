@@ -33,6 +33,18 @@ class AdGuardError(RuntimeError):
     pass
 
 
+def _scope_subnet_uuids(inst: AdGuardInstance) -> set[Any]:
+    """inst.scope_subnet_ids（JSONB 字串陣列）→ UUID set；空回空 set（不限範圍）。"""
+    import uuid as _uuid
+    out: set[Any] = set()
+    for s in (inst.scope_subnet_ids or []):
+        try:
+            out.add(_uuid.UUID(str(s)))
+        except (ValueError, TypeError):
+            pass
+    return out
+
+
 # ─────────────────── 加解密 ───────────────────
 
 
@@ -109,6 +121,8 @@ async def sync_clients(session: AsyncSession, inst: AdGuardInstance) -> dict[str
     data = await _api_get(inst, "/control/clients")
     clients = (data or {}).get("clients") or []
     seen = matched = 0
+    # 重疊網段：若 instance 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
+    scope_ids = _scope_subnet_uuids(inst)
     for c in clients:
         name = (c.get("name") or "").strip() or None
         ids = c.get("ids") or []
@@ -127,9 +141,14 @@ async def sync_clients(session: AsyncSession, inst: AdGuardInstance) -> dict[str
         primary_mac = macs[0] if macs else None
         for ip in ips:
             seen += 1
+            # 重疊網段：同一 IP 字串可能對到多筆（未設 scope 時尤甚）→ 用 limit(1)+first()
+            # 取代 scalar_one_or_none()，否則 MultipleResultsFound 會炸掉整批 sync
+            ip_stmt = select(IPAddress).where(IPAddress.ip == ip)
+            if scope_ids:
+                ip_stmt = ip_stmt.where(IPAddress.subnet_id.in_(scope_ids))
             ipa = (
-                await session.execute(select(IPAddress).where(IPAddress.ip == ip))
-            ).scalar_one_or_none()
+                await session.execute(ip_stmt.limit(1))
+            ).scalars().first()
             if ipa is None:
                 continue
             ipa.last_seen_dns = datetime.now(UTC)
@@ -154,6 +173,8 @@ async def sync_rewrites(session: AsyncSession, inst: AdGuardInstance) -> dict[st
     data = await _api_get(inst, "/control/rewrite/list")
     rewrites = data or []
     seen = matched = 0
+    # 重疊網段：若 instance 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
+    scope_ids = _scope_subnet_uuids(inst)
     for r in rewrites:
         domain = (r.get("domain") or "").strip()
         answer = (r.get("answer") or "").strip()
@@ -164,9 +185,13 @@ async def sync_rewrites(session: AsyncSession, inst: AdGuardInstance) -> dict[st
         parts = answer.split(".")
         if not (len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)):
             continue
+        # 重疊網段：同 IP 多筆 → limit(1)+first()，避免 MultipleResultsFound 炸掉整批 sync
+        ip_stmt = select(IPAddress).where(IPAddress.ip == answer)
+        if scope_ids:
+            ip_stmt = ip_stmt.where(IPAddress.subnet_id.in_(scope_ids))
         ipa = (
-            await session.execute(select(IPAddress).where(IPAddress.ip == answer))
-        ).scalar_one_or_none()
+            await session.execute(ip_stmt.limit(1))
+        ).scalars().first()
         if ipa is None:
             continue
         ipa.last_seen_dns = datetime.now(UTC)

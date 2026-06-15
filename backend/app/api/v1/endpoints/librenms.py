@@ -6,7 +6,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,6 +101,12 @@ class ARPEntryRead(StrictModel):
     first_seen_at: Any
     last_seen_at: Any
 
+    @field_validator("ip", "mac", mode="before")
+    @classmethod
+    def _coerce_inet(cls, v: object) -> object:
+        # ip 是 INET、mac 是 MACADDR；asyncpg 回 IPv4Address/物件，model_validate 會 500
+        return v if v is None else str(v)
+
 
 class FDBEntryRead(StrictModel):
     id: uuid.UUID
@@ -110,6 +116,11 @@ class FDBEntryRead(StrictModel):
     device_id: uuid.UUID | None
     first_seen_at: Any
     last_seen_at: Any
+
+    @field_validator("mac", mode="before")
+    @classmethod
+    def _coerce_mac(cls, v: object) -> object:
+        return v if v is None else str(v)
 
 
 # ─────────────────── Instance CRUD ───────────────────

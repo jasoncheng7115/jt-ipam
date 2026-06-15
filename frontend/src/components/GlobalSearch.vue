@@ -173,9 +173,12 @@ function navigateTo(value: string) {
     case "nat":
       router.push({ name: "nat" });
       break;
-    case "dns_record":
-      router.push({ name: "dns" });
+    case "dns_record": {
+      // 進「進階 → DNS 記錄」並把該記錄名稱代入搜尋欄（不是 DNS 整合設定頁）
+      const hit = hits.value.find((h) => `${h.type}:${h.id}` === value);
+      router.push({ name: "adv-dns-records", query: hit?.label ? { q: hit.label } : {} });
       break;
+    }
     case "firewall":
       router.push({ name: "firewall" });
       break;

@@ -261,7 +261,9 @@ async def chat(
     if not cfg.enabled:
         raise AINotConfigured("Ollama is disabled")
 
-    ollama_tools, convo = _build_chat_context(messages, locale, page_context)
+    from app.mcp.tools import allowed_tool_names
+    _allowed = await allowed_tool_names(session, user)
+    ollama_tools, convo = _build_chat_context(messages, locale, page_context, _allowed)
     url = f"{cfg.url.rstrip('/')}/api/chat"
     started = time.monotonic()
 
@@ -366,10 +368,12 @@ def _page_context_line(context: dict[str, Any] | None) -> str:
 def _build_chat_context(
     messages: list[dict[str, Any]], locale: str | None,
     page_context: dict[str, Any] | None = None,
+    allowed_tools: set[str] | None = None,
 ) -> Any:
     """共用：把 IPAM tools 轉 Ollama schema + 組 system prompt + 接上對話。
 
     回傳 (ollama_tools, convo)。chat / chat_stream 共用，避免兩份 prompt 漂移。
+    allowed_tools 給定時依 RBAC 過濾掉使用者不可呼叫的工具（避免 LLM 浪費回合）。
     """
     from app.mcp.tools import TOOLS
 
@@ -383,6 +387,7 @@ def _build_chat_context(
             },
         }
         for name, meta in TOOLS.items()
+        if allowed_tools is None or name in allowed_tools
     ]
     convo: list[dict[str, Any]] = [
         {
@@ -399,6 +404,13 @@ def _build_chat_context(
                 "cannot determine something, check whether a relevant tool exists and "
                 "call it (e.g. list_vpn_tunnels for site-to-site VPN, get_topology for "
                 "how things connect, list_firewall_rules for firewall policy). "
+                "When the user asks how many IPs are used / free / available / usable in a "
+                "subnet or CIDR (e.g. '192.168.1.0/24 有多少可用 IP'), you MUST call "
+                "get_subnet_detail (subnet_cidr=...) or get_subnet_usage to report jt-ipam's "
+                "ACTUAL allocated/used/free counts and usage %. Do NOT answer with generic "
+                "CIDR arithmetic (total addresses, usable-hosts = 2^n − 2, network/broadcast) "
+                "— the user wants this IPAM's real data, not subnet math. Only say the subnet "
+                "is not in IPAM if the tool reports no such subnet. "
                 "Tools whose description says 'ADMIN ONLY' only work for admin users; "
                 "do not attempt writes unless the user clearly asks to change data. "
                 "Always cite the IPs / CIDRs / device names returned by tools, and copy "
@@ -458,10 +470,7 @@ def _pending_prompt_text(pending: list[dict[str, Any]]) -> str:
 
 async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """執行 LLM 要求的 tool_calls，回傳要 append 進 convo 的 tool 訊息（含 name）。"""
-    from app.mcp.tools import TOOLS, UTILITY_TOOLS, IPAMToolError, has_no_visibility
-
-    # RBAC 防護：非管理員且完全沒有可見範圍 → 一律不回 IPAM 資料（純計算工具除外）
-    no_vis = await has_no_visibility(session, user)
+    from app.mcp.tools import TOOLS, IPAMToolError, authorize_tool
 
     out: list[dict[str, Any]] = []
     for call in tool_calls:
@@ -473,10 +482,11 @@ async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dic
                 args = json.loads(args)
             except json.JSONDecodeError:
                 args = {}
+        denied = await authorize_tool(session, user, name) if name in TOOLS else None
         if name not in TOOLS:
             tool_result: Any = {"error": f"unknown tool {name!r}"}
-        elif no_vis and name not in UTILITY_TOOLS:
-            tool_result = {"error": "permission_denied: 你目前沒有可檢視的資源權限，請聯絡管理員指派。"}
+        elif denied is not None:
+            tool_result = {"error": denied}
         else:
             try:
                 tool_result = await TOOLS[name]["fn"](session, user=user, **args)
@@ -519,7 +529,9 @@ async def chat_stream(
         yield {"type": "error", "detail": "Ollama is disabled"}
         return
 
-    ollama_tools, convo = _build_chat_context(messages, locale, page_context)
+    from app.mcp.tools import allowed_tool_names
+    _allowed = await allowed_tool_names(session, user)
+    ollama_tools, convo = _build_chat_context(messages, locale, page_context, _allowed)
     url = f"{cfg.url.rstrip('/')}/api/chat"
     started = time.monotonic()
 

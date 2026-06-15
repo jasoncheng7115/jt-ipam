@@ -87,3 +87,49 @@ async def send_email(
         raise EmailNotConfigured("SMTP is not configured (set SMTP_HOST in env)")
     msg = _build_message(to=to, subject=subject, body_text=body_text, body_html=body_html)
     await asyncio.to_thread(_send_sync, msg)
+
+
+# ─────────────────── DB 設定版（管理頁「通知發送設定」用）───────────────────
+def _send_sync_cfg(cfg: dict, msg: EmailMessage) -> None:
+    host = cfg.get("smtp_host")
+    if not host:
+        raise EmailNotConfigured("SMTP host not configured")
+    port = int(cfg.get("smtp_port") or 587)
+    tls = cfg.get("smtp_tls") or "starttls"
+    timeout = 15.0
+    try:
+        if tls == "tls":
+            client = smtplib.SMTP_SSL(host, port, timeout=timeout)
+        else:
+            client = smtplib.SMTP(host, port, timeout=timeout)  # type: ignore[assignment]
+        try:
+            client.ehlo()
+            if tls == "starttls":
+                client.starttls()
+                client.ehlo()
+            if cfg.get("smtp_username") and cfg.get("smtp_password"):
+                client.login(cfg["smtp_username"], cfg["smtp_password"])
+            client.send_message(msg)
+        finally:
+            try:
+                client.quit()
+            except Exception:
+                pass
+    except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+        raise EmailSendError(str(exc)) from exc
+
+
+async def send_email_via_config(
+    cfg: dict, *, to: str, subject: str, body_text: str, body_html: str | None = None,
+) -> None:
+    """用「通知發送設定」DB 設定寄信。cfg 來自 system_config.get_notification_channels。"""
+    if not cfg.get("email_enabled"):
+        raise EmailNotConfigured("email channel disabled")
+    msg = EmailMessage()
+    msg["From"] = cfg.get("smtp_from") or cfg.get("smtp_username") or "jt-ipam@localhost"
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(body_text)
+    if body_html:
+        msg.add_alternative(body_html, subtype="html")
+    await asyncio.to_thread(_send_sync_cfg, cfg, msg)

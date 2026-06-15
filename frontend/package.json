@@ -1,6 +1,6 @@
 {
   "name": "jt-ipam-frontend",
-  "version": "0.4.98",
+  "version": "0.4.162",
   "description": "jt-ipam — 可自架的整合型 IPAM 系統前端",
   "license": "AGPL-3.0-or-later",
   "private": true,
@@ -56,5 +56,10 @@
     "node": ">=20",
     "pnpm": ">=9"
   },
-  "packageManager": "pnpm@9.15.9"
+  "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "overrides": {
+      "esbuild": ">=0.28.1"
+    }
+  }
 }

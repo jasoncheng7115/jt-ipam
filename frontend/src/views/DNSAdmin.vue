@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip, NAlert,
   NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, NPopconfirm,
@@ -10,6 +11,7 @@ import {
   listDNSServers, createDNSServer, updateDNSServer, deleteDNSServer, testDNSServer,
   type DNSServer, type DNSServerType,
 } from "@/api/integrations";
+import { listSubnets } from "@/api/subnets";
 import {
   DnsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, TestIcon, SaveIcon, CancelIcon,
 } from "@/icons";
@@ -52,6 +54,7 @@ interface Form {
   password: string;
   username: string;
   verify_tls: boolean;
+  scope_subnet_ids: string[];
 }
 
 function emptyForm(): Form {
@@ -61,9 +64,19 @@ function emptyForm(): Form {
     enabled: true, sync_interval_seconds: 300,
     api_key: "", api_secret: "", tsig_key: "", password: "",
     username: "", verify_tls: true,
+    scope_subnet_ids: [],
   };
 }
 const form = ref<Form>(emptyForm());
+
+const subnetOptions = ref<{ label: string; value: string }[]>([]);
+async function loadSubnetOptions() {
+  try {
+    const r = await listSubnets({ page: 1, pageSize: 500 });
+    subnetOptions.value = r.items.map((s) => ({
+      label: s.description ? `${s.cidr} — ${s.description}` : s.cidr, value: s.id }));
+  } catch { /* silent */ }
+}
 
 const typeOpts = [
   { label: t("dns_admin.type_powerdns"),         value: "powerdns" },
@@ -105,6 +118,7 @@ function openEdit(r: DNSServer) {
   // api_url / server_address 依類型回填（祕密欄留空＝不變）
   f.api_url = r.api_url ?? "";
   f.server_address = r.server_address ?? "";
+  f.scope_subnet_ids = r.scope_subnet_ids ?? [];
   // extra_config（JSON）回填 username / verify_tls，否則重開會跑回預設值
   if (r.extra_config) {
     try {
@@ -123,6 +137,7 @@ async function submit() {
     type: form.value.type,
     enabled: form.value.enabled,
     sync_interval_seconds: form.value.sync_interval_seconds,
+    scope_subnet_ids: form.value.scope_subnet_ids,
   };
   if (showApiUrl.value && form.value.api_url) payload.api_url = form.value.api_url;
   if (showServerAddr.value && form.value.server_address) payload.server_address = form.value.server_address;
@@ -192,7 +207,7 @@ const cols = computed<DataTableColumns<DNSServer>>(() =>
   allCols.value.filter((c: any) => dnsVis.value.includes(c.key)),
 );
 
-onMounted(() => { void refresh(); });
+onMounted(() => { void refresh(); void loadSubnetOptions(); });
 </script>
 
 <template>
@@ -291,6 +306,14 @@ onMounted(() => { void refresh(); });
         <n-form-item :label="t('librenms_admin.sync_interval')">
           <n-input-number v-model:value="form.sync_interval_seconds" :min="60" :max="86400" />
         </n-form-item>
+        <n-form-item :label="t('dns_admin.scope_subnets')">
+          <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
+                    multiple filterable clearable :placeholder="t('dns_admin.scope_all')" />
+          <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
+        </n-form-item>
+        <div style="margin: -8px 0 4px">
+          <span style="font-size: 11px; opacity: .7">{{ t("dns_admin.scope_hint") }}</span>
+        </div>
       </n-form>
       <n-space justify="end">
         <n-button @click="show = false">

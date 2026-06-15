@@ -149,7 +149,7 @@ function exportDrawio() {
     const fill = colorFor(dev.type);
     const g = partGeom(dev);
     const align = g.half ? "center" : nameAlign.value;
-    cells.push(`<mxCell id="dev${n++}" value="${esc(devLabel(dev))}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=#000000;fontColor=#ffffff;fontStyle=1;align=${align};spacingLeft=6;spacingRight=6;" vertex="1" parent="1"><mxGeometry x="${g.x}" y="${yTop + 1}" width="${g.w}" height="${hgt - 2}" as="geometry"/></mxCell>`);
+    cells.push(`<mxCell id="dev${n++}" value="${esc(devLabel(dev))}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=#000000;fontColor=#ffffff;fontStyle=1;align=${align};spacingLeft=6;spacingRight=6;" vertex="1" parent="1"><mxGeometry x="${g.x}" y="${yTop + 1}" width="${g.w}" height="${hgt - 2}" as="geometry"/></mxCell>`);
   }
   const xml =
     `<mxfile host="jt-ipam"><diagram name="${esc(d.name)}">` +
@@ -205,9 +205,13 @@ interface Props {
   highlightId?: string | null;  // 常駐高亮某裝置（裝置詳情頁標示本機在機櫃的位置）
   compact?: boolean;            // 較小列高（嵌在裝置詳情等空間有限處）
   bare?: boolean;               // 去掉卡片外框與標題（嵌入用）
+  face?: "front" | "rear" | null;  // 外部強制指定檢視面（合併卡共用切換用）；null = 用自身切換
+  controls?: boolean;              // 是否顯示自身的面切換 + 匯出（合併卡傳 false 改由外層統一）
 }
-const props = withDefaults(defineProps<Props>(), { showLegend: true, editable: false, floorAlignTo: 0, highlightId: null, compact: false, bare: false });
+const props = withDefaults(defineProps<Props>(), { showLegend: true, editable: false, floorAlignTo: 0, highlightId: null, compact: false, bare: false, face: null, controls: true });
 const faceView = ref<"front" | "rear">("front");   // 機櫃正面 / 背面切換
+// 實際採用的檢視面：外部有指定就用外部（合併卡共用），否則用自身切換
+const effFace = computed(() => props.face ?? faceView.value);
 const hasRear = computed(() => (props.diagram?.devices || []).some((d: any) => d.rack_face === "rear"));
 const U_PX = 28;   // 每個 U 列高度（與 .u-row / .u-num-out 一致）
 // 落地對齊：比該排最高櫃矮幾 U，就在頂端補幾 U 的空白
@@ -273,7 +277,7 @@ const cells = computed<Cell[]>(() => {
   });
   for (const d of props.diagram.devices) {
     // 只顯示目前檢視面（正/背）的裝置；未標面者視為正面
-    if (((d.rack_face ?? "front") as string) !== faceView.value) continue;
+    if (((d.rack_face ?? "front") as string) !== effFace.value) continue;
     const side = (d.rack_side ?? "full") as "full" | "left" | "right";
     for (let u = d.u_position; u < d.u_position + d.u_size; u++) {
       if (!map[u]) continue;
@@ -309,8 +313,8 @@ const cells = computed<Cell[]>(() => {
 <template>
   <n-card v-if="diagram" class="rack-diagram-card" :class="{ 'rd-compact': compact, 'rd-bare': bare }"
           :bordered="!bare" :title="bare ? undefined : `${t('nav.racks')}: ${diagram.name} (${diagram.u_height}U)`">
-    <template #header-extra>
-      <n-space :size="8" align="center">
+    <template v-if="controls" #header-extra>
+      <div style="display:flex; align-items:center; gap:8px">
         <n-button-group size="tiny">
           <n-button :type="faceView === 'front' ? 'primary' : 'default'" @click="faceView = 'front'">
             {{ t("racks.face_front") }}
@@ -320,12 +324,12 @@ const cells = computed<Cell[]>(() => {
           </n-button>
         </n-button-group>
         <n-dropdown trigger="click" :options="exportOptions" @select="onExport">
-          <n-button size="tiny" quaternary :title="t('rack_diagram.export_svg_hint')">
+          <n-button size="tiny" :title="t('rack_diagram.export_svg_hint')">
             <template #icon><n-icon><ExportIcon /></n-icon></template>
             {{ t("common.export") }}
           </n-button>
         </n-dropdown>
-      </n-space>
+      </div>
     </template>
     <n-space vertical :size="12">
       <n-alert

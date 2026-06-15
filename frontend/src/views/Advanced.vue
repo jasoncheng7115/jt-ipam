@@ -71,7 +71,7 @@ async function loadAll() {
         Advanced.providers(), Advanced.circuitTypes(), Advanced.circuits(),
         Advanced.contactGroups(), Advanced.contacts(), Advanced.ssids(),
       ]);
-    try { devices.value = (await listDevices({ pageSize: 1000 })).items.map((d: any) => ({ id: d.id, name: d.name })); } catch { /* */ }
+    try { devices.value = (await listDevices({ pageSize: 500 })).items.map((d: any) => ({ id: d.id, name: d.name })); } catch { /* */ }
   } catch { msg.error(t("errors.network")); }
   finally { loading.value = false; }
 }
@@ -244,7 +244,12 @@ const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
     render: (r) => providers.value.find((p) => p.id === r.provider_id)?.name ?? "—" },
   { title: t("circuits.type"), key: "type_id", width: 160, ellipsis: { tooltip: true },
     render: (r) => circuitTypes.value.find((p) => p.id === r.type_id)?.name ?? "—" },
-  { title: t("common.status"), key: "status", width: 120 },
+  { title: t("common.status"), key: "status", width: 120,
+    render: (r) => { const k = `circuits.status_${r.status}`; const o = t(k); return o === k ? (r.status ?? "—") : o; } },
+  { title: t("circuits.device"), key: "device_id", width: 160, ellipsis: { tooltip: true },
+    render: (r) => devices.value.find((d) => d.id === r.device_id)?.name ?? "—" },
+  { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true },
+    render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("circuit", "circuits", r) },
 ]));
 const circuitTypeCols = computed<DataTableColumns<any>>(() => autoSort([
@@ -413,7 +418,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="circuitP.setVisible" @reset="circuitP.reset" />
               <ExportButton :columns="circuitP.visibleCols" :rows="circuitP.filtered" filename="circuits" :title="t('advanced.circuits')" />
             </n-space>
-            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="712" />
+            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="1000" />
           </n-tab-pane>
           <n-tab-pane name="circuit_types">
             <template #tab>

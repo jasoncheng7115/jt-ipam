@@ -63,6 +63,17 @@ Release flow: run the checklist → all green → bump version → deploy
   `scripts/jt-ipam-upgrade.sh`; it upgrades cleanly and can roll back if needed
 - [ ] If this release added a directory / package / service / DB extension / env,
   confirm **both scripts are in sync**
+- [ ] **(A) Default admin credentials**: fresh install prints the `admin` account +
+  random password at the end and saves it to `/etc/jt-ipam/.admin-initial-password`
+  (root 0600); that password logs in
+- [ ] **(A) Password-reset CLI**: `python -m app.cli.bootstrap create-admin --username
+  admin --password-stdin --force-update` resets an existing admin; both READMEs
+  document it
+- [ ] **(B) Agent probe tools**: after `agent/jt-ipam-agent-installer.sh`, the host has
+  `nmap` / `nmblookup` (samba-common-bin) / `avahi-resolve` (avahi-utils); the agent's
+  reported `available_probes` includes os/netbios/mdns
+- [ ] **(B) Install-help UI**: on the scan-agent page and the subnet edit dialog,
+  unavailable probes show an "install help" popover with the matching install command
 
 ## 5c. Headless browser smoke
 

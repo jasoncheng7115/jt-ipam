@@ -51,7 +51,13 @@ class UnboundOPNsenseAdapter(DNSAdapter):
             raise DNSAdapterError(
                 f"OPNsense Unbound GET {path}: {resp.status_code} {resp.text[:200]}"
             )
-        return resp.json()  # type: ignore[no-any-return]
+        try:
+            return resp.json()  # type: ignore[no-any-return]
+        except ValueError as exc:
+            # 認證失敗時 OPNsense 常回 200 + 登入頁 HTML → 給可懂訊息而非 500
+            raise DNSAdapterError(
+                "OPNsense Unbound returned non-JSON (check API key/secret / URL)"
+            ) from exc
 
     async def _post(self, path: str, body: dict | None = None) -> dict:  # type: ignore[type-arg]
         url = f"{self.api_url}{path}"
@@ -67,7 +73,12 @@ class UnboundOPNsenseAdapter(DNSAdapter):
             raise DNSAdapterError(
                 f"OPNsense Unbound POST {path}: {resp.status_code} {resp.text[:200]}"
             )
-        return resp.json()  # type: ignore[no-any-return]
+        try:
+            return resp.json()  # type: ignore[no-any-return]
+        except ValueError as exc:
+            raise DNSAdapterError(
+                "OPNsense Unbound returned non-JSON (check API key/secret / URL)"
+            ) from exc
 
     async def healthcheck(self) -> dict[str, object]:
         data = await self._get("/api/unbound/service/status")

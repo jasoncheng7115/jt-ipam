@@ -20,6 +20,7 @@ from app.schemas.base import Paginated
 from app.schemas.dns import (
     ConsistencyReportItem,
     DNSRecordRead,
+    DNSRecordTypeCount,
     DNSServerCreate,
     DNSServerRead,
     DNSServerUpdate,
@@ -104,6 +105,7 @@ async def create_server(
         extra_config=payload.extra_config,
         enabled=payload.enabled,
         sync_interval_seconds=payload.sync_interval_seconds,
+        scope_subnet_ids=payload.scope_subnet_ids,
     )
     session.add(obj)
     try:
@@ -161,6 +163,8 @@ async def update_server(
         obj.enabled = payload.enabled
     if payload.sync_interval_seconds is not None:
         obj.sync_interval_seconds = payload.sync_interval_seconds
+    if payload.scope_subnet_ids is not None:
+        obj.scope_subnet_ids = payload.scope_subnet_ids
     for field in _SECRET_FIELDS:
         v = getattr(payload, field, None)
         if v:
@@ -229,6 +233,10 @@ async def test_server(
         info = await adapter.healthcheck()
     except DNSAdapterError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
+    except Exception as exc:
+        # 安全網：任何 adapter 漏接的連線例外（winrm/dnspython/json…）都轉成可懂的 502，
+        # 不讓連線測試變成無訊息的 500。
+        raise HTTPException(502, detail=f"{exc.__class__.__name__}: {exc}") from exc
     finally:
         await adapter.close()
     return {"ok": True, "server": info}
@@ -312,18 +320,50 @@ async def list_records(
     _user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
     zone_id: uuid.UUID | None = Query(None),
+    server_id: uuid.UUID | None = Query(None, description="只列此 DNS 伺服器的記錄"),
+    rtype: str | None = Query(None, description="只列此型別的記錄（A/AAAA/CNAME/PTR/...）"),
     consistency: str | None = Query(None),
+    q: str | None = Query(None, description="模糊搜尋 name / value"),
+    ip: str | None = Query(None, description="找對應此 IP 的記錄：A/AAAA value 相符或該 IP 的 PTR"),
+    missing_ip: bool = Query(False, description="只列『沒有對應 IPAM IP』的 A/AAAA 記錄"),
     page: int = Query(1, ge=1, le=10_000),
     page_size: int = Query(200, ge=1, le=1000),
 ) -> Paginated[DNSRecordRead]:
-    stmt = select(DNSRecord)
-    cstmt = select(func.count()).select_from(DNSRecord)
-    if zone_id is not None:
-        stmt = stmt.where(DNSRecord.zone_id == zone_id)
-        cstmt = cstmt.where(DNSRecord.zone_id == zone_id)
-    if consistency is not None:
-        stmt = stmt.where(DNSRecord.consistency_state == consistency)
-        cstmt = cstmt.where(DNSRecord.consistency_state == consistency)
+    from sqlalchemy import or_ as _or
+
+    def _apply(s):  # type: ignore[no-untyped-def]
+        if zone_id is not None:
+            s = s.where(DNSRecord.zone_id == zone_id)
+        if server_id is not None:
+            zsub = select(DNSZone.id).where(DNSZone.server_id == server_id)
+            s = s.where(DNSRecord.zone_id.in_(zsub))
+        if rtype:
+            s = s.where(DNSRecord.type == rtype.strip().upper())
+        if consistency is not None:
+            s = s.where(DNSRecord.consistency_state == consistency)
+        if q:
+            pat = f"%{q.strip()}%"
+            s = s.where(_or(DNSRecord.name.ilike(pat), DNSRecord.value.ilike(pat)))
+        if missing_ip:
+            # 「沒有對應 IP」＝ A/AAAA 記錄的 value（IP 值）在 ip_addresses 中查不到
+            from app.models.address import IPAddress as _IPA
+            ip_here = (
+                select(_IPA.id)
+                .where(func.host(_IPA.ip) == DNSRecord.value)
+                .correlate(DNSRecord).exists()
+            )
+            s = s.where(DNSRecord.type.in_(("A", "AAAA")), ~ip_here)
+        if ip:
+            ipx = ip.strip()
+            conds = [(DNSRecord.type.in_(("A", "AAAA"))) & (DNSRecord.value == ipx)]
+            ptr = _reverse_ptr(ipx)
+            if ptr:
+                conds.append((DNSRecord.type == "PTR") & (DNSRecord.name == ptr))
+            s = s.where(_or(*conds))
+        return s
+
+    stmt = _apply(select(DNSRecord))
+    cstmt = _apply(select(func.count()).select_from(DNSRecord))
     rows = list(
         (await session.execute(
             stmt.order_by(DNSRecord.name, DNSRecord.type)
@@ -331,10 +371,81 @@ async def list_records(
         )).scalars().all()
     )
     total = int(await session.scalar(cstmt) or 0)
-    return Paginated[DNSRecordRead](
-        items=[DNSRecordRead.model_validate(r) for r in rows],
-        total=total, page=page, page_size=page_size,
-    )
+    # 依「IP 值」實查 ip_addresses，標記每筆 A/AAAA 記錄是否真的有對應位址
+    from app.models.address import IPAddress as _IPA
+    ip_vals = {r.value for r in rows if r.type in ("A", "AAAA") and r.value}
+    val_to_id: dict[str, uuid.UUID] = {}
+    if ip_vals:
+        for rid, host in (await session.execute(
+            select(_IPA.id, func.host(_IPA.ip)).where(func.host(_IPA.ip).in_(ip_vals))
+        )).all():
+            val_to_id[str(host)] = rid
+    # zone → 來源 DNS 伺服器（名稱 / id）對照（來源欄顯示用）
+    zone_ids = {r.zone_id for r in rows if r.zone_id}
+    zone_to_srv: dict[uuid.UUID, tuple[uuid.UUID, str]] = {}
+    if zone_ids:
+        for zid, sid, sname in (await session.execute(
+            select(DNSZone.id, DNSServer.id, DNSServer.name)
+            .join(DNSServer, DNSServer.id == DNSZone.server_id)
+            .where(DNSZone.id.in_(zone_ids))
+        )).all():
+            zone_to_srv[zid] = (sid, sname)
+    items = []
+    for r in rows:
+        out = DNSRecordRead.model_validate(r)
+        out.matched_ip_id = val_to_id.get(r.value) if r.type in ("A", "AAAA") else None
+        srv = zone_to_srv.get(r.zone_id)
+        if srv:
+            out.server_id, out.server_name = srv
+        items.append(out)
+    return Paginated[DNSRecordRead](items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/records/type-counts", response_model=list[DNSRecordTypeCount])
+async def record_type_counts(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    server_id: uuid.UUID | None = Query(None),
+    q: str | None = Query(None),
+    ip: str | None = Query(None),
+    missing_ip: bool = Query(False),
+) -> list[DNSRecordTypeCount]:
+    """各記錄型別的筆數（套用除「型別」外的相同篩選），供型別下拉顯示 A (12) 統計。"""
+    from sqlalchemy import or_ as _or
+
+    s = select(DNSRecord.type, func.count()).select_from(DNSRecord)
+    if server_id is not None:
+        zsub = select(DNSZone.id).where(DNSZone.server_id == server_id)
+        s = s.where(DNSRecord.zone_id.in_(zsub))
+    if q:
+        pat = f"%{q.strip()}%"
+        s = s.where(_or(DNSRecord.name.ilike(pat), DNSRecord.value.ilike(pat)))
+    if missing_ip:
+        from app.models.address import IPAddress as _IPA
+        ip_here = (
+            select(_IPA.id)
+            .where(func.host(_IPA.ip) == DNSRecord.value)
+            .correlate(DNSRecord).exists()
+        )
+        s = s.where(DNSRecord.type.in_(("A", "AAAA")), ~ip_here)
+    if ip:
+        ipx = ip.strip()
+        conds = [(DNSRecord.type.in_(("A", "AAAA"))) & (DNSRecord.value == ipx)]
+        ptr = _reverse_ptr(ipx)
+        if ptr:
+            conds.append((DNSRecord.type == "PTR") & (DNSRecord.name == ptr))
+        s = s.where(_or(*conds))
+    rows = (await session.execute(s.group_by(DNSRecord.type).order_by(DNSRecord.type))).all()
+    return [DNSRecordTypeCount(type=t, count=int(c)) for t, c in rows]
+
+
+def _reverse_ptr(ip: str) -> str | None:
+    """IPv4/IPv6 → 反解 PTR 名稱（如 1.1.168.192.in-addr.arpa）。無效 IP 回 None。"""
+    import ipaddress as _ipa
+    try:
+        return _ipa.ip_address(ip.strip()).reverse_pointer
+    except ValueError:
+        return None
 
 
 # ─────────────────── 不一致報表 ───────────────────

@@ -50,21 +50,26 @@ async def dsv_lookup(
     )).all()
     is_csv = cfg["fmt"] != "tsv"
     lines: list[str] = []
+    seen: set[str] = set()   # 同一 IP 可能存在於多個（重疊）子網路；Graylog DSV 的 key 必須唯一 → 每個 IP 只輸出一次
     for ip, host in rows:
         if not ip or not host:
             continue
+        ip_s = str(ip)
+        if ip_s in seen:
+            continue
+        seen.add(ip_s)
         h = str(host).strip()
         if "\n" in h or "\r" in h:  # 換行無法安全表達，跳過
             continue
         if is_csv:
             # CSV：每欄都用雙引號包起來，內含的 " 以 "" 跳脫（RFC 4180）
-            qip = '"' + str(ip).replace('"', '""') + '"'
+            qip = '"' + ip_s.replace('"', '""') + '"'
             qh = '"' + h.replace('"', '""') + '"'
             lines.append(f"{qip}{sep}{qh}")
         else:
             if sep in h or '"' in h:  # TSV 不加引號：含分隔符就跳過
                 continue
-            lines.append(f"{ip}{sep}{h}")
+            lines.append(f"{ip_s}{sep}{h}")
     media = "text/tab-separated-values" if cfg["fmt"] == "tsv" else "text/csv"
     return PlainTextResponse("\n".join(lines) + ("\n" if lines else ""),
                              media_type=f"{media}; charset=utf-8")

@@ -525,11 +525,19 @@ async def agent_report(
                 note=(f"此 IP 由掃描代理「{agent.name}」於 "
                       f"{now.astimezone().strftime('%Y-%m-%d %H:%M')} 主動探索時發現並自動建立。"),
                 last_seen_scanner=now,
+                effective_status="online (scanner)",
             )
             session.add(ipa)
+            # ipa.id 由 DB server_default（gen_random_uuid）產生；session 設 autoflush=False，
+            # 不 flush 的話 ipa.id 仍是 None，後面 consider_mac / apply_observation 會用
+            # ip_id=None 建 FK row → NOT NULL 違規 500（rdns/mdns/os 等帶 hostname 的回報才會踩到）。
+            await session.flush()
             created += 1
         else:
             ipa.last_seen_scanner = now
+            # 掃描代理看到回應＝即時上線證據，立刻更新實際狀態（不必等 LibreNMS sync）
+            from app.services.librenms import mark_scanner_seen
+            await mark_scanner_seen(session, ipa, now)
         if item.mac:
             from app.services.arp_precedence import consider_mac
             await consider_mac(session, ip=ipa, mac=item.mac, source="scanner")

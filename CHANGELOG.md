@@ -4,6 +4,755 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.162] — 2026-06-15
+
+### Added — more web-server / service profiles for the distribution agent
+- The cert distribution agent (and the **Generate config** tool + installer) now ship 9 more profiles:
+  **caddy / traefik / lighttpd / zoraxy / jetty / exim4 / mosquitto / cockpit / webmin** (on top of
+  nginx / apache / haproxy / postfix / dovecot / pve / pmg / pbs / zimbra). Each provides its fixed
+  write paths + reload command; **jetty** receives a **PKCS#12 keystore** (`<cert>.p12`), served via a
+  new `part=pkcs12` on `GET /cert-agents/bundle/raw`.
+
+### Changed — install-help UX
+- Supported OS / distributions are shown as prominent tags (Debian / Ubuntu / RHEL family / Fedora / SUSE).
+- Fixed the leading-space indent on the first line of the curl one-liner (inline `<code>` now `display: block`).
+- The standalone **Config help** toolbar button is hidden — config generation lives in the per-agent
+  **Generate config** action; step 3 of the install help points to it (with its tool icon).
+
+## [0.4.161] — 2026-06-15
+
+### Added — certificate file viewer & multi-format download
+- A **Files** button on each certificate row lists every version (fingerprint / expiry / domains / current)
+  and lets you **download** each one in a chosen format: full chain / cert (.crt) / chain / private key
+  (.key) / combined / **DER** / **PKCS#12 (.pfx)** (built server-side via cryptography). Formats containing
+  the private key (key / combined / pfx) are audited (`GET /certificates/{id}/versions/{vid}/file?fmt=`).
+
+## [0.4.160] — 2026-06-15
+
+### Changed
+- Added right padding to the action column (delete button) so it no longer hugs the edge.
+- When a certificate already has a source or a version, the **"Self-signed" button is disabled** (avoids
+  overwriting the existing cert), with a hover explanation.
+- The installer config comments now note you can use the "Generate config" tool in jt-ipam.
+
+### Security
+- Fixed Dependabot alert (GHSA-gv7w-rqvm-qjhr, High): bumped **esbuild to 0.28.1** via a pnpm override
+  (0.25.12 came in through vite; <0.28.1 has a "Deno module binary integrity" issue). It's a build-time
+  dev dependency and this project builds via Node/vite (not esbuild's Deno install path), so it isn't
+  actually reachable; the frontend build passes after the bump.
+
+## [0.4.159] — 2026-06-15
+
+### Changed — richer config generator
+- Each "certificate / service" block now **generates the service's SSL config snippet** (e.g. nginx
+  ssl_certificate / ssl_certificate_key, apache SSLCertificate*), with a **copy button on every write path
+  and on each snippet**. Services that read fixed paths (pve/pmg/pbs) show "no service config change".
+- Added the **full dry-run / real-run commands** (with the complete sudo bash path) plus copy buttons.
+- The service checkboxes are now laid out in a tidy grid.
+
+### Added — edit agent / enable toggle
+- The distribution-agent action column gains an **Edit** button: rename, **adjust the deployable-certificate
+  scope** (add more later for more sites), and toggle enabled.
+- The "Enabled" column is now a **switch** for one-click enable/disable.
+- The "Deployable certs" column shows **which certificates** (names) on hover.
+- "Rotate key" / "View key" tooltips clarify it's the **agent connection key (not the SSL cert)**.
+- Install help step 3 points to the "Generate config" tool (with its icon); the toolbar "Config help"
+  button was removed (reachable from inside the install help).
+
+## [0.4.158] — 2026-06-15
+
+### Added — distribution-agents page improvements
+- **Config generator** (a tool button in the action column): pick certificates (within the agent's scope)
+  and check services (nginx/apache/pve… multiple) to auto-generate the quick-mode config; an "Advanced /
+  manual mode" section lets you fill custom paths. Live preview + one-click copy to paste into the host.
+  It also **lists the full on-host paths/filenames each quick-mode profile writes** (cert / key / chain),
+  so you know where to point your service config.
+- The "Deployed / reported" column gained a tooltip (successful deployments / total reported).
+- **Slimmer install help**: the config-format explanation is split into a separate **"Config help"** button;
+  the install help keeps only the install/uninstall steps.
+- **Latest server agent version** shown in the distribution-agents toolbar (`GET /cert-agents/server-version`).
+- The "Close" button in the agent-info dialog now has an icon.
+
+## [0.4.157] — 2026-06-15
+
+### Changed
+- The installer's `DEPLOY_1_CERT` example now uses the generic placeholder `example.com` (RFC 2606
+  reserved domain) instead of a real certificate name; the real deployable names are still listed in the
+  "This agent is allowed to deploy" comment above for you to substitute.
+
+## [0.4.156] — 2026-06-15
+
+### Changed — installer pre-fills the certificate names this agent can deploy
+- At install time the installer asks the server (with the agent key) which certificates this agent may
+  deploy, and **lists the real names in the config comments and pre-fills the `DEPLOY_1_CERT` example**, so
+  you no longer have to guess what `DEPLOY_<N>_CERT` should be (it's the certificate name from jt-ipam).
+- The installer also prints the deployable certificate list at the end (it won't overwrite an existing
+  config, but still prints the list for reference).
+
+## [0.4.155] — 2026-06-15
+
+### Fixed
+- Distribution-agent table: the version column's "update available" tag now wraps (and the column is
+  wider) instead of overflowing into the source-IP column.
+- Name and last-report columns are both flexible so they share the leftover width — the name column no
+  longer over-stretches on its own.
+
+## [0.4.154] — 2026-06-15
+
+### Changed
+- The agent config template is now split into **QUICK MODE (preferred)** and **MANUAL MODE** sections.
+  The quick-mode comments spell out exactly which cert / key / chain paths and filenames each profile
+  writes, with the matching nginx / apache directives, so you know what to point your service config at.
+
+## [0.4.153] — 2026-06-14
+
+### Changed
+- The agent config template comments now **list every built-in profile** (nginx / apache / haproxy /
+  postfix / dovecot / pve / pmg / pbs / zimbra / generic) with each one's default file paths and reload
+  command, so opening the config file shows exactly what's available.
+
+## [0.4.152] — 2026-06-14
+
+### Changed
+- Distribution-agent config now centers on `DEPLOY_<N>_PROFILE` (the service), which **provides the reload
+  command**, so `DEPLOY_<N>_RELOAD` is no longer needed in the common case. Set just "cert + service", or
+  add custom paths (`FULLCHAIN`/`KEY`…) to override where files go while still using the profile's reload;
+  `DEPLOY_<N>_RELOAD` is demoted to an advanced override for custom services. Template and help updated.
+
+## [0.4.151] — 2026-06-14
+
+### Changed — distribution-agent config is now one setting per line
+- The agent config moved from a single packed line (`DEPLOY_1="cert=..; profile=..; fullchain_path=.."`)
+  to readable, one-setting-per-line `DEPLOY_<N>_*` groups:
+  - `DEPLOY_1_CERT=` (certificate), `DEPLOY_1_FULLCHAIN=` (cert file path), `DEPLOY_1_KEY=` (key path),
+    `DEPLOY_1_RELOAD=` (reload command); optional `DEPLOY_1_CHAIN/CRT/COMBINED/TEST`.
+  - Or just `DEPLOY_1_CERT=` + `DEPLOY_1_PROFILE=nginx` to use a built-in profile (fixed paths).
+- Installer template and the install-help modal example updated. Validated end-to-end against a live
+  server (dry-run + real apply).
+
+## [0.4.150] — 2026-06-14
+
+### Changed
+- The distribution-agent scripts (`jt_ipam_cert_agent.sh` and the installer) are now fully English
+  (comments, terminal output, config template), matching the `scripts/*.sh` convention — scripts that run
+  on customer terminals don't contain Chinese.
+- The installer gains an **uninstall** mode: `JT_IPAM_UNINSTALL=1` stops and removes the timer / service,
+  agent program, config and state (certificate files already deployed to services are kept). The install
+  help modal now includes the uninstall one-liner.
+
+## [0.4.149] — 2026-06-14
+
+### Added — re-viewable agent key & install command
+- A distribution agent's enroll key is now also stored AES-GCM encrypted (alongside the hash), so it can
+  be **retrieved again from the "View" action** in the list (admin only, `GET /cert-agents/{id}/key`). The
+  action column gains a "View" button that shows the key + the one-line install command (with the key) +
+  copy buttons.
+- The create / rotate-key dialog now also shows the one-line install command; "cannot be retrieved later"
+  is replaced with "retrievable later via View".
+- Deleting an agent also removes its encrypted key.
+- Agents created on older versions (no stored plaintext) return a hint to rotate the key instead.
+
+## [0.4.148] — 2026-06-14
+
+### Changed
+- After "Generate & install key", the login-private-key field becomes disabled and shows "Generated and
+  stored by jt-ipam", so users don't think they still need to paste a key.
+
+## [0.4.147] — 2026-06-14
+
+### Fixed
+- Certificate table layout: the action column is now `fixed: "right"` (pinned, never pushed off-screen on
+  narrow widths) and widened to fit all icons; name and domains are flexible and share the leftover width.
+- Traditional-Chinese copy now uses full-width punctuation and Taiwan-localized terms (rollback, one-time,
+  atomic-write wording) across the agent install help, source config, and agent script comments.
+
+## [0.4.146] — 2026-06-14
+
+### Changed — distribution agent is now pure bash (no Python / PyYAML)
+- The distribution agent was rewritten as **pure bash** (`jt_ipam_cert_agent.sh`), depending only on
+  **curl + coreutils** — no Python, jq or YAML. Config is now `KEY=VALUE`
+  (`/etc/jt-ipam-cert-agent/config`, `DEPLOY_N="cert=..; profile=.."`); profiles, atomic write,
+  config-test, reload, rollback, `--dry-run` and self-update are all preserved.
+- Backend support for the bash agent: `GET /cert-agents/check?format=text` (line-based, no JSON to parse),
+  a new `GET /cert-agents/bundle/raw?cert=&part=cert|key|chain|fullchain|combined` (raw PEM straight to
+  `curl -o`, with an `X-Cert-Fingerprint` header), and `POST /report` also accepts TSV. The download route
+  is now `agent.sh` and version/self-update compare against the `.sh`. The installer no longer installs
+  python3-yaml.
+- The install-instructions modal was reorganized (numbered steps + spacing); requirements now read
+  "pure bash, only needs curl + coreutils".
+
+## [0.4.145] — 2026-06-14
+
+### Fixed / Changed
+- Certificate / distribution-agent tables now set `:scroll-x` (matching the rest of the app): the name
+  column no longer over-stretches and the action column is no longer pushed off-screen; narrow viewports
+  scroll horizontally instead of clipping.
+- Source-type selector: the **selected type is now a solid green filled button** (previously only a thin
+  border, making the active choice hard to tell); "Off (manual upload)" shortened to **"Manual upload"**.
+
+## [0.4.144] — 2026-06-14
+
+### Changed
+- Certificate / distribution-agent action-column buttons are now **left-aligned** (centering removed),
+  matching every other list page in the app.
+
+## [0.4.143] — 2026-06-14
+
+### Fixed — a class of post-commit serialization 500s (found via flow review)
+- `updated_at` has a SQL-side `onupdate=func.now()`, so it's expired after an UPDATE flush; several cert
+  endpoints serialized the ORM object right after commit, triggering a sync lazy load → `MissingGreenlet`
+  500. Added `session.refresh` after commit (matching other endpoints): `PATCH /certificates/{id}`,
+  `PATCH /cert-agents/{id}`, `POST /cert-agents/{id}/rotate-key` (v0.4.142 already fixed
+  `PUT /certificates/{id}/source`).
+
+### Changed — generating a key now installs the public key on the host
+- Since jt-ipam already has the SFTP login password, "Generate key" now **logs in with the password and
+  appends the public key to `~/.ssh/authorized_keys`** (idempotent), so you don't have to paste it. On
+  success it shows "installed"; with no password or on failure the key is still generated and the public
+  key is shown for manual install with the reason (`POST /certificates/{id}/source/ssh-keypair` now takes
+  the source config and returns installed/message).
+
+## [0.4.142] — 2026-06-14
+
+### Fixed
+- **500 when saving an SFTP/URL source** (MissingGreenlet): `PUT /certificates/{id}/source` serialized
+  the ORM object after commit, triggering a lazy load in a sync context. Now refreshes the object
+  (`session.refresh`) after commit before serializing.
+
+### Added — Source connection test + auto-generated SSH key
+- Source config gains a **"Test connection"** button: it actually probes the URL / SFTP source using the
+  current form values (blank password/key = reuse stored), returning a success message or a readable
+  failure reason, without saving (`POST /certificates/{id}/source/test`).
+- The SFTP login private key gains a **"Generate key"** button: jt-ipam generates an ed25519 keypair,
+  stores the private key AES-GCM encrypted (never returned), and returns the **public key** to add to the
+  SFTP host's `authorized_keys` (`POST /certificates/{id}/source/ssh-keypair`).
+
+### Changed
+- Certificate / distribution-agent action buttons are now **icon-only with hover tooltips** (matching the
+  rest of the app), with tighter, centered columns — fixing the over-wide left gap, right overflow, and
+  left-aligned icons.
+
+## [0.4.141] — 2026-06-14
+
+### Fixed / Changed
+- The "update available" reload banner had its icon and text misaligned vertically — the icon is now
+  centered in a 16×16 box, with `line-height:1` on the container and text.
+- The certificate table's "Expiry" column is split into two independent columns: **"Expiry date"** and
+  **"Days left"** (each sortable and pickable).
+- Certificate / distribution-agent action-column icons are now centered (column `align:center` +
+  NSpace `justify:center`).
+
+## [0.4.140] — 2026-06-14
+
+### Changed — Certificate auto-fetch source UX
+- SFTP source config clarity: **"Login password" / "Login private key (SSH key, PEM)"** are now a
+  distinct "SFTP login auth" section placed right under the username, with a hint: "Used to log in to
+  the SFTP host. Provide a password OR an SSH private key (key takes precedence). The certificate's own
+  private key is the remote key_path file below — unrelated to this." Remote file paths
+  (cert_path/key_path/chain_path) are grouped separately. (The backend already supported SSH-key login;
+  only the field placement/naming was easy to mistake for the certificate's private key.)
+- The "Off" source type now reads **"Off (manual upload)"** so it's clear upload / paste / self-signed
+  are still available.
+
+### Changed — Certificate / distribution-agent tables match the rest of the app
+- Both tables now have **sortable columns** (autoSort) and a **column picker** (preferences persisted to
+  the backend and synced across devices).
+- Action-column buttons now show **icon + text** and collapse to **icon-only** when the column is too
+  narrow (col-actions container query; the label still shows on hover).
+
+## [0.4.139] — 2026-06-14
+
+### Added — Distribution-agent version display & self-update
+- The admin "Distribution agents" tab now shows the agent **version** (flagged "update available"
+  with a hint when it lags the server) and **source IP**, mirroring the scan agent.
+- The distribution agent now **self-updates**: `/check` returns the sha256 of the server's agent.py;
+  if the running copy differs the agent downloads the new version, atomically replaces itself and
+  re-execs (the download is sha-verified before replacing; a failure is logged and never aborts
+  deployment). Set `auto_update: false` in the config to disable.
+- The read-only "Certificate distribution status" page (`GET /cert-agents/status`) now also returns
+  `last_source_ip` / `server_agent_version`.
+
+## [0.4.138] — 2026-06-13
+
+### Added — Certificate auto-fetch source
+- A certificate can now have an **auto-fetch source** (in addition to upload / paste / self-signed):
+  the system periodically (and on demand via "Fetch now") pulls the renewed bundle from the source,
+  and **only stores a new version if the content actually changed** — if the fingerprint matches the
+  current version it is skipped (no-op). If the source provides no key, the current version's key is
+  reused (common for renewals that keep the same key).
+- Sources: **URL** (fetched via the SSRF-guarded safe_http client) and **SFTP** (asyncssh; the host
+  is checked against the SSRF block-list). Credentials (SFTP password / private key) are AES-GCM
+  encrypted (`encrypted_secret`) and never returned. New migration `0076`.
+- Endpoints: `PUT /certificates/{id}/source`, `POST /certificates/{id}/fetch-now`; the sync timer
+  auto-fetches each source-backed certificate on its own interval. Frontend: per-certificate source
+  config (URL/SFTP) + "Fetch now", with last-fetch error surfaced.
+- CIFS / NFS are out of scope for now (the backend runs non-root and can't mount); use a pre-mounted
+  path or fetch via URL/SFTP.
+
+## [0.4.137] — 2026-06-13
+
+### Fixed
+- **Certificate pages returned 405 / "server error" (regression in the cert API client)** — the
+  `certificates.ts` API calls (and the subnet-overlap check in `integrations.ts`) were missing the
+  `/api/v1` prefix that the shared axios client requires (its baseURL is `/`), so requests hit the
+  SPA paths (`/certificates`, `/cert-agents`) and nginx returned 405 for POST / index.html for GET.
+  All cert API paths are now correctly prefixed. The certificate admin page, agents, self-signed,
+  and the Advanced status view work.
+- Added the missing icon on the certificate/agent "Save" buttons.
+
+## [0.4.136] — 2026-06-13
+
+### Certificate distribution — UX
+- The certificate version upload now supports **pasting PEM text** (certificate / key / chain) as
+  an alternative to uploading files — a toggle in the upload dialog.
+- Renamed the Advanced-menu read-only certificate view label to match the admin one.
+
+## [0.4.135] — 2026-06-13
+
+### Certificate distribution — follow-ups
+- **Cross-distro agent installer** — the cert-agent installer now auto-detects the package
+  manager (apt / dnf / yum / zypper), so it works on Debian 11/12/13, Ubuntu 22.04/24.04/26.04,
+  RHEL / Rocky / AlmaLinux / CentOS, Fedora and openSUSE/SLES (all systemd). PyYAML is installed
+  via the right package name per distro.
+- **More profiles** — added `pbs` (Proxmox Backup Server: `proxy.pem`/`proxy.key`, reloads
+  `proxmox-backup-proxy`). The `apache` profile now reloads `apache2` or `httpd` (whichever exists),
+  so it works on Debian/Ubuntu and RHEL/SUSE.
+- **Install-instructions button** on the Distribution Agents tab (like Scan Agents): one-liner
+  install command, config example, supported distros, and the `--dry-run` hint.
+- **Read-only certificate status under Advanced** — a non-admin viewer with global read can now
+  see each agent's deployment status (last update, valid-from, expiry, days remaining, up-to-date
+  vs drift) via a new Advanced menu entry. New `GET /cert-agents/status` (gated `require_global_read`).
+
+## [0.4.134] — 2026-06-13
+
+### Fixed
+- **PGDG repo setup failed on Debian 12 when the keyring file already existed (customer report)** —
+  the installer ran `gpg --dearmor` onto `/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg`
+  (a file owned by the `postgresql-common` package). When that file already existed, gpg prompted
+  "File exists. Overwrite?" / failed non-interactively, so the key was never written, the PGDG repo
+  signature was invalid, and `postgresql-16-pgvector` was "not installable". Now the key is written
+  to its own `/etc/apt/keyrings/jt-ipam-pgdg.gpg` with `gpg --dearmor --yes` (no collision, idempotent).
+  Verified end-to-end in a Debian 12 container.
+
+### Added — Certificate distribution (commercial certs → push to all sites)
+- Central store for commercial certificates with a pull-based distribution agent. You upload a
+  renewed bundle (crt/key/chain) once; agents on each host pick up the new version, write it to
+  the right paths, run a config-test, reload the service, and roll back on failure.
+- **Backend**: migration `0075` (`certificates` / `cert_versions` / `cert_agents`); the private
+  key is stored AES-GCM encrypted and is never returned by any management API. `/certificates`
+  admin CRUD + `POST /{id}/versions` (validates key↔cert match, SAN/expiry, rejects mismatched/
+  expired/duplicate) + **`POST /{id}/self-signed`** (generate a self-signed cert with a custom
+  CN/SAN/validity — handy while waiting for the commercial cert). `/cert-agents` admin CRUD +
+  key rotate, plus the agent protocol (`X-Agent-Key`): `check` / `bundle` (decrypts the key,
+  scope-limited, audited every time) / `report`.
+- **Agent** (`agent/jt_ipam_cert_agent.py` + installer): pull model, built-in service profiles
+  (nginx / apache / haproxy / pve / pmg / postfix / dovecot / zimbra / generic), atomic write +
+  timestamped backup + config-test gate + rollback, idempotent, and **`--dry-run`**. Config is a
+  small per-host YAML listing which certs deploy via which profile.
+- **Monitoring**: daily expiry alerts and **drift detection** (an agent reporting a fingerprint
+  other than the current version → that site didn't update) via the existing notification/bell.
+- **Frontend**: a Certificates admin page (upload, self-signed, version/expiry status, agents +
+  one-time key, scope).
+
+## [0.4.133] — 2026-06-13
+
+### Fixed
+- **Install on minimal Debian 12 / 13 containers (customer report)** — two gaps surfaced on
+  clean container images:
+  - The PGDG-repo step runs `curl | gpg` and the later PostgreSQL setup uses `sudo -u postgres`,
+    but `ca-certificates` / `curl` / `gnupg` / `sudo` were not guaranteed present (minimal Debian
+    container images often omit them). The PGDG step (which Debian 12 always takes, since its
+    default repo ships PG 15, not 16) failed at `curl`, and the PostgreSQL config step failed with
+    `sudo: command not found`. These four are now installed up-front.
+  - Combined with the v0.4.131 `apt-cache madison` version detection, the matrix is now: Debian 12
+    → PGDG PostgreSQL 16; Debian 13 → native PostgreSQL 17 (+ `postgresql-17-pgvector`, no PGDG);
+    Ubuntu 24.04 → native 16; Ubuntu 26.04 → native 17/18. The app supports PG 16/17/18.
+
+## [0.4.132] — 2026-06-12
+
+### Fixed
+- **CSV import 500 on real import (customer report / issue #4)** — the import endpoint passed
+  `subnet.cidr` (an asyncpg `IPv4Network` object, not a str) as the background task's VARCHAR
+  `target_label` → asyncpg `DataError`. Dry-run was unaffected (no task spawned), which is why
+  preview worked but the actual import 500'd. Now coerced with `str()`.
+- **IP request list 500 when a request has a manually-specified IP (issue #4)** — asyncpg returns
+  `IPv4Address` from the `INET` column, but `IPRequestRead.requested_ip` is typed `str`, so Pydantic
+  validation failed and the whole list page 500'd. Added a `mode="before"` coercion (the same
+  pattern already used for `IPAddressRead.ip` / `SubnetRead.cidr`).
+- **Scan agent could not return hostnames (customer report)** — reports carrying rdns/NetBIOS/mDNS/OS
+  hostnames 500'd for newly-discovered IPs. With `autoflush=False` and a DB-generated UUID, a freshly
+  added `IPAddress` had `id=None` when `apply_observation` built the hostname-observation FK row →
+  `NOT NULL` violation. Now flushes right after creating the IP so its id is populated. (icmp+arp-only
+  reports were unaffected because they never call `apply_observation`.)
+- **Hardened the same asyncpg INET/CIDR-as-str class of bug** across other read schemas that build via
+  `model_validate(ORM)` and were missing coercion: `APITokenRead.last_used_ip`, `VMInterfaceRead`
+  (`primary_ip`/`mac`), and `ARPEntryRead`/`FDBEntryRead` (`ip`/`mac`).
+
+## [0.4.131] — 2026-06-12
+
+### Fixed
+- **Install on Ubuntu 26.04 (customer report)** — the installer hardcoded `postgresql-16`,
+  which isn't in Ubuntu 26.04's default repos (it ships PG 17/18). The old fallback added the
+  PGDG repo for the new release codename, which PGDG often doesn't carry until months after
+  release → `apt-get update` 404'd and the install aborted. The installer now detects the
+  PostgreSQL version already available in the enabled repos (prefers 16, otherwise the distro's
+  native 17/18/…) and installs that plus the matching `postgresql-N-pgvector`; PGDG is only
+  used as a last resort when no `postgresql-N` (>=16) exists at all. The app is compatible with
+  PG 16/17/18. Python detection also now includes `python3.14` (Ubuntu 26.04's default).
+
+### Fixed
+- **ARP table retention** — `arp_entries` was insert/update only and never pruned, so it
+  grew unbounded over time (MAC↔IP churn and orphaned rows from deleted devices each left a
+  row). The sync timer now deletes ARP entries older than `ARP_RETENTION_DAYS` (default 30;
+  set 0 to disable) once per run, including orphan rows.
+
+### Added
+- **Overlapping-subnet warning on integration settings** — when overlapping subnets exist
+  (the same IP can appear in more than one subnet) and an integration (LibreNMS / OPNsense /
+  Wazuh / Proxmox / AdGuard / DNS) has no subnet scope set, the settings form now shows a
+  warning that a sync may stamp liveness / DHCP / MAC onto the wrong tenant's copy of an IP,
+  pointing the admin to set the subnet scope. New `GET /subnets/overlaps/exists` (admin).
+
+### Notes
+- No new duplicate-IP / duplicate-ARP risk: `ip_addresses` is unique on `(subnet_id, ip)`;
+  `arp_entries` is upserted on `(ip, mac, device_id)`; only LibreNMS writes ARP (scanner and
+  OPNsense only stamp existing IPs). Same-IP-string across overlapping subnets remains by design.
+
+## [0.4.129] — 2026-06-11
+
+### Security
+- **RBAC IDOR fixes** — several detail/aggregate endpoints accepted an object id without an
+  object-level visibility check, letting any signed-in account read objects outside its scope:
+  `GET /devices/{id}` and its sub-resources (`/integrations` exposed Wazuh CVE counts + Proxmox
+  VMs, plus `/librenms`, `/vlans`, `/relations`), `GET /customers/{id}` and `/{id}/summary`
+  (full per-customer asset dump), and `GET /racks/{id}/diagram`. All now require object `read`
+  permission (404 on no access). The MCP `get_topology` tool no longer leaks the full topology
+  to scoped accounts (was missing the `user` filter) and is gated as global-read; the REST
+  `GET /topology` is gated with `require_global_read` to match.
+- **OIDC ID Token verification** — the callback previously base64-decoded the ID Token and
+  trusted its claims (including `groups`, which drives admin promotion) without verifying the
+  signature. It now verifies the ID Token against the provider's JWKS (signature + `aud`/`iss`/
+  `nonce`) before trusting any claim; on failure it falls back to userinfo only instead of
+  trusting unverified groups.
+- **CSV export formula injection** — IP address CSV export now escapes cells beginning with
+  `= + - @` / tab / CR so spreadsheets don't execute them as formulas.
+
+### Fixed
+- **Integration sync resilience** — `jt-ipam-sync.py` now rolls back the session before writing
+  `last_error` in every integration's exception handler; a single failing instance (e.g. an
+  AdGuard `MultipleResultsFound` on overlapping subnets) no longer aborts the whole sync run.
+- **Overlapping subnets** — AdGuard sync (`sync_clients` / `sync_rewrites`) and the MCP ARP
+  lookup matched `IPAddress.ip` with `scalar_one_or_none()`; with overlapping subnets the same
+  IP yields multiple rows → `MultipleResultsFound`. Changed to `limit(1)` + `first()`.
+- **Non-UCS DNS server connection tests** — BIND 9 (dnspython `OSError`/connection-refused),
+  Windows DNS (WinRM/`requests` exceptions), PowerDNS and OPNsense Unbound (non-JSON responses
+  on auth failure) leaked raw exceptions that the `/dns/servers/{id}/test` endpoint didn't catch,
+  producing a 500 with no message. Adapters now wrap these as `DNSAdapterError`, and the test
+  endpoint has a safety net that turns any unexpected error into a readable 502.
+
+### UI / Docs
+- Fixed a missing i18n key on the section detail page ("display order" showed the raw key).
+- Added error feedback to the notifications "mark all read" and group-members actions.
+- Terminology: use 「外掛」 (not 「插件」) for "plugin" in zh-TW docs.
+
+## [0.4.128] — 2026-06-10
+
+### Fixed / Improved
+- **External reverse proxy + OIDC / Microsoft 365 (Entra ID) login**: the frontend now parses
+  the token the backend returns in the URL fragment after the OIDC/SAML callback (previously
+  ignored → stuck on the login page); the backend merges **ID Token** claims into userinfo —
+  Entra ID returns `groups` only in the ID Token (not the Graph userinfo endpoint), so admin-
+  group mapping now matches. Added `deploy/nginx/jt-ipam-external-proxy.{conf,snippet}`
+  templates (HTTP-only, no HSTS, `X-Forwarded-Proto` passthrough) and a README "Mode C —
+  external reverse proxy" section (set `APP_PUBLIC_URL`/CORS to your domain, forward the proto).
+- **Install (Ubuntu 24.04)**: `ensure_node` no longer pipes the NodeSource output to `/dev/null`
+  and now **verifies Node ≥ 18** after install, otherwise it stops with a clear remedy — fixes a
+  silent Node-install failure that left the frontend unbuilt while the run "looked" successful.
+- **AI chat**: when Ollama is disabled / unreachable / misconfigured, a **friendly, actionable**
+  error is shown (pointing to Admin → LLM / AI) instead of a cryptic string.
+- **Circuits**: fixed the empty "associated device" dropdown when editing (device query exceeded
+  the backend `page_size` cap); circuit table gains Device / Description columns and a localized
+  Status column.
+- **Tables (scan agents / device detail)**: tightened column widths so the actions column no
+  longer overflows, empty columns no longer hog width, and MAC / timestamps no longer wrap.
+- **NAT rules**: moved under the Advanced menu; clicking a row opens a read-only view (fields
+  disabled), editing is via the pencil action.
+- **Update banner**: a bordered + shadowed clickable box with an SVG icon (not an emoji) and
+  clearer wording.
+- **Per-table page size** now remembers the user preference (`user_preferences.page_size`).
+
+## [0.4.114] — 2026-06-09
+
+### Added / Improved
+- **DNS records page**: filter by server / type (type dropdown shows per-type counts), a source
+  column showing the originating DNS server, IP matching resolved against the **actual IP value**
+  in `ip_addresses` (fixes "the IP is in IPAM but shows no match"), and a column picker. DNS sync
+  now keeps only **A / AAAA / PTR** (IP↔name mapping) — CNAME/MX/TXT etc. are no longer stored.
+- **IP addresses**: new `in_dhcp_lease` (migration 0074) auto-managed by the OPNsense DHCP-lease
+  sync; phpIPAM import now labels `discovery_source='phpipam'` (was mislabeled "manual"); OPNsense
+  DHCP/ARP sync scopes the IP lookup to the firewall's subnets + `limit(1)`, fixing
+  `MultipleResultsFound` on overlapping subnets sharing an IP.
+- **Global search**: matches **partial MAC prefixes** (e.g. `bc:24`); DNS-record hits open
+  Advanced → DNS records with the name pre-filled.
+- **Racks**: the merged single-card view can export **SVG / PNG / draw.io** (all racks side-by-
+  side); draw.io device boxes are now square to match the on-screen diagram.
+- **AI chat**: the zero-dependency Markdown renderer now supports **GFM tables**.
+- **MCP**: new `list_dns_records` tool; AI answers about subnet usage call real data instead of
+  generic CIDR arithmetic.
+- **IP request approval emails** include a **clickable link** (routes through login then back to
+  the approval page if not signed in).
+- The IP change log renders `switch_port` as **device@port**.
+
+## [0.4.113] — 2026-06-09
+
+### Added — IP request approval gate + notifications
+- **Configurable approval policy** (Admin → IP Request Approval) with four modes so
+  each site can pick: `admin only`; `administrators + designated users/groups`
+  (single gate, any one approves); **parallel sign-off** (multiple gates, any order,
+  all must approve); and **sequential multi-stage** (ordered gates, each with its own
+  approvers — must pass gate 1→2→3…). Plus a separation-of-duties self-approval
+  toggle. Per-step approvals are tracked in a new `ip_request_stage_approvals` table
+  (migration 0073). Approve/reject authorize via the policy, not a blanket admin check.
+- The request detail page shows **gate progress** (which gates passed / which is
+  awaiting); each sequential gate's approvers are notified only when it's their turn.
+- **Inline approve / reject** on the IP Requests list for approvers (pending rows),
+  in addition to the request detail page.
+- Request detail: fully localized; shows the subnet CIDR (linked) and, for pending
+  requests, the **IP that will be allocated** — including the auto-picked first-free
+  IP — which the **approver can change** before approving.
+- **Approver notifications**: when a request is submitted, every approver gets an
+  in-app bell notification and (if the Email channel is enabled) an email.
+- **Notification channels settings** (Admin → Notification Channels): an SMTP/email
+  channel (host/port/TLS/credentials/from, encrypted password, test-send button).
+  Telegram / Slack / Teams / Nextcloud / Zulip are shown as "in development".
+
+### Added — DHCP
+- Subnet detail shows a **DHCP ranges** row when OPNsense DHCP pool ranges exist for
+  that subnet (hidden when none), and a **DHCP-only** filter on its IP list.
+
+### Added — DNS records (Advanced → DNS Records)
+- New page listing DNS records pulled from integrated DNS servers, with search, an
+  **IP lookup** (find records matching an IP — forward A/AAAA or the IP's PTR), and a
+  **"no matching IP"** filter (A/AAAA records whose target isn't in IPAM).
+
+## [0.4.112] — 2026-06-09
+
+### Fixed
+- **Manually-edited MAC was not protected from sync overwrite.** Unlike hostname
+  (which records a `manual` observation), editing an IP's MAC in the UI only set
+  `ip.mac` without marking `mac_source="manual"`, so the next scan/ARP sync could
+  clobber it. The IP-edit endpoint now stamps `mac_source="manual"` on manual MAC
+  edits (highest ARP precedence) and clears the source when the MAC is cleared.
+  (Hostname's manual-vs-precedence path was verified correct end-to-end; if a
+  manually-set hostname seems to vanish, hard-refresh — it is usually a stale SPA
+  bundle, not the backend.)
+- IP Requests toolbar: the status filter select was `small` while the buttons next
+  to it were default size, so it sat shorter — aligned to the same height.
+
+## [0.4.111] — 2026-06-08
+
+### Security (MCP per-object RBAC scoping)
+- Several MCP/AI list tools returned data outside the caller's visible scope.
+  `list_racks` / `list_locations` / `list_sections` / `list_customers` now filter
+  rows by per-object visibility; `recent_ip_changes` is scoped to visible subnets;
+  `get_customer_summary` denies non-visible customers; `stats_overview` scales its
+  per-object counts to the caller's scope and omits global-infrastructure counts
+  for users without global read. `dns_lookup` is now treated as global-infra.
+- Added a regression test suite (`test_mcp_rbac_scope.py`) covering zero-visibility
+  denial, partial-visibility blocking global-infra tools, row scoping, and scoped
+  stats counts.
+
+## [0.4.110] — 2026-06-08
+
+### Fixed (create-admin CLI)
+- `create-admin` crashed with `MultipleResultsFound` when the given username matched
+  one account and the email matched a different one (or an email was shared by more
+  than one account). The lookup now queries username and email separately and
+  reports a clear conflict instead of crashing.
+- `--force-update` now also writes the supplied username/email onto the matched
+  account — previously it reset only the password, so a new `--email` was silently
+  ignored and the old address kept showing.
+
+## [0.4.109] — 2026-06-08
+
+### Added (MCP / AI tools)
+- **10 new MCP tools** for entities that had no AI coverage: `list_circuits`,
+  `list_providers`, `list_asns`, `list_tenants`, `list_contacts`, `list_ssids`,
+  `list_cables`, `cable_trace`, `list_power`, `list_wazuh_agents`.
+
+### Changed (MCP field coverage caught up with recent feature growth)
+- `list_subnet_ips` now returns `effective_status` (online/offline) + `os_family`.
+- `list_nat` now resolves real source/destination IPs and adds interface, aliases,
+  disabled/no_rdr, ip_version (was name/proto/ports only).
+- `get_subnet_detail` adds scan_method, scan agent, VRF, parent subnet, archived.
+- `get_device` adds customer, fqdn, location, description, power ports;
+  `list_devices` adds customer + fqdn.
+- `list_vms` adds tenant/primary_ip/device + network interfaces.
+- `get_ip_detail` adds `effective_probes`; `list_customers` adds title/address;
+  `stats_overview` now also counts VMs / circuits / providers / ASNs / tenants /
+  contacts / cables.
+
+### Security (MCP RBAC hardening)
+- The MCP HTTP/stdio dispatch (`tools/call`) previously applied **no** visibility
+  gate. Both the MCP protocol and the NL-chat path now share one `authorize_tool`
+  gate: zero-visibility users are denied all data tools, global-infrastructure
+  tools (VLAN/VRF/NAT/firewall/DNS/VM/VPN/circuits/cables/power/Wazuh…) require
+  admin-or-wildcard read, and mutating tools require admin. `tools/list` and the
+  LLM tool list are filtered to what the caller may actually call.
+
+## [0.4.108] — 2026-06-07
+
+### Fixed
+- **Effective status stuck "offline" after a scan-agent reported the host alive.**
+  The agent `/report` endpoint stamped `last_seen_scanner` but never recomputed
+  `effective_status`, so 實際狀態 reflected the last LibreNMS recompute (which could
+  be stale by days). It now flips the IP to `online (scanner)` / `online` immediately
+  on a fresh agent sighting and logs the offline→online transition.
+
+### Added
+- **Installer auto-creates the first `admin` account with a random password** and
+  prints it once at the end (also saved to `/etc/jt-ipam/.admin-initial-password`,
+  root-only). README documents the `create-admin --force-update` password-reset CLI.
+- **Scan-agent installer now installs optional probe tools** (`nmap`,
+  `samba-common-bin`, `avahi-utils`) so OS / NetBIOS / mDNS probes work out of the
+  box; skip with `JT_IPAM_SKIP_PROBE_TOOLS=1`.
+- **"Install help" popover next to unavailable probes** (scan-agent page and the
+  subnet edit dialog) showing the exact package/command to unlock the probe.
+
+## [0.4.107] — 2026-06-07
+
+### Added
+- **Subnet scope for Wazuh / Proxmox VE / AdGuard / DNS integrations** (migration
+  0072), mirroring LibreNMS: each integration can be limited to specific subnets so
+  syncs only match IPs within those subnets — overlapping subnets from unrelated
+  systems no longer mis-attach hostname / OS / etc. Empty scope = global matching.
+
+### Changed
+- Subnet edit: scan-probe checkboxes are disabled when the selected scan agent
+  can't run that probe (consistent with the scan-agent page).
+- NAT table: clicking a rule row opens its detail (ignores the IP / device links).
+- Subnet list: the tree expand arrow now sits on the CIDR column, not the pin column.
+
+### Fixed
+- switch_port tooltip shows the `device@port` form (not `device / port`).
+
+## [0.4.106] — 2026-06-07
+
+### Added
+- **OPNsense firewall association scope** (migration 0071): each firewall can be
+  scoped by location / customer / explicit subnets / interface→subnet map. Synced
+  NAT rules then resolve their IPs only within the firewall's scope, so multiple
+  firewalls reusing the same RFC1918 subnet no longer cross-attach to the wrong
+  jt-ipam IP. Unscoped firewalls keep the previous global IP-string matching.
+- NAT page: hovering an IP that's linked to a jt-ipam IP shows its details
+  (hostname / status / MAC / vendor / subnet / customer / device / switch port …),
+  lazily loaded; clicking opens that IP's detail page.
+
+### Changed
+- New child subnets inherit the parent subnet's customer (unit); this is now
+  self-healing in `rebuild_subnet_hierarchy` (cascades through levels).
+- Sidebar subnet tree: child subnets render as real nested, expandable nodes with
+  connector lines (instead of a "↳" prefix); the parent label still opens its detail.
+- Sidebar version label enlarged.
+
+### Fixed
+- Light-theme tooltips containing links (e.g. table ellipsis tooltips) used the
+  green link colour on a dark tooltip; links now inherit the tooltip's light text.
+- Firewall scope form: the customer / unit select showed "no data" (options weren't
+  loaded).
+
+## [0.4.105] — 2026-06-07
+
+### Fixed
+- Subnet save returned "Invalid request": the edit form sends `master_subnet_id`
+  but `SubnetUpdate` (a strict, extra-forbid schema) didn't declare it. Added the
+  field so editing a subnet works again.
+- Subnet list: clicking a row's tree expand arrow navigated into the subnet instead
+  of expanding its children; the row-click now ignores the expand trigger.
+
+### Changed
+- **Unified subnet edit**: the subnet list and the subnet-detail page now share one
+  `SubnetEditModal` component, so both edit the same fields (section / VLAN / VRF /
+  parent subnet / per-probe scan options / scan agent …) — they previously diverged.
+- Left sidebar: subnets are nested under their parent (by `master_subnet_id`) within
+  each unit group, indented with a "↳" marker (still clickable to open).
+- Responsive top bar restyle: language / theme / account are pill buttons with hover,
+  dividers around the bell, vertically centered with the search box; dropdown carets
+  removed to save width.
+- Graylog guide: suggested Title / Description / Name (`jt_ipam_adapter` /
+  `jt_ipam_cache` / `jt_ipam_table`); both HTTPS and plain-HTTP (8088) lookup URLs;
+  Line Separator `\n`, Ignore characters `#`, Refresh interval 300s, Expire-after-
+  access 300s, Default single/multi value empty; an IP-field-name box that rewrites
+  the pipeline rule live with Graylog field-name validation; rule named
+  `jt-ipam enrich <field> -> <field>_hostname`; pipeline `lookup_value()` uses the
+  table name; examples use `src_ip_hostname`.
+
+## [0.4.104] — 2026-06-07
+
+### Fixed
+- Graylog DSV lookup endpoint now emits each IP only once. The same IP can exist
+  in multiple (overlapping) subnets, which produced duplicate rows and made
+  Graylog's "DSV File from HTTP" data adapter fail with "Multiple entries with
+  same key". Keys are now de-duplicated (first by IP order).
+
+## [0.4.103] — 2026-06-07
+
+### Changed
+- Top bar is now responsive: on narrow screens the language / theme / account
+  controls collapse to icon-only (icon-triggered dropdowns) and the search box
+  shrinks, instead of wrapping onto multiple rows.
+- New subnets inherit the **customer (unit)** of their containing parent subnet
+  when none is specified, so a child subnet lands under the same sidebar group;
+  the sidebar subnet tree refreshes immediately after create / edit / delete.
+- IP edit dialog: the OS probe now shows the same "intrusive" tag + tooltip as the
+  subnet / scan-agent settings.
+
+## [0.4.102] — 2026-06-07
+
+### Changed
+- Anomaly detection (MAC roaming): the "seen at" location now resolves the switch
+  to its friendly name (LibreNMS sysname / hostname) instead of a raw device UUID,
+  and the device / port / last-seen fields are rendered as an aligned grid.
+
+## [0.4.101] — 2026-06-06
+
+### Changed
+- Dashboard **Section heat** card redesigned: the bar now reflects *average subnet
+  utilization* (no longer diluted to ~0% by a single large sparse subnet), plus a
+  per-section distribution of subnets by utilization band (full / high / medium /
+  low) and a subnet/used summary — the card is far more informative.
+
+### Fixed
+- Racks: the leftmost rack's frame left border was clipped by the horizontal-scroll
+  container; added small side padding so it renders fully.
+- OS source precedence section title wording.
+
+## [0.4.100] — 2026-06-06
+
+### Added
+- **OS source precedence** (scan agent / LibreNMS / Wazuh): a drag-to-reorder list
+  (under Name / ARP source precedence) that decides which source wins when several
+  report an OS; the IP detail OS row shows the resolved source.
+- Racks: the "merged single card" toggle is now a clear two-option switch (separate
+  cards / merged card); the merged card gains a shared front/rear toggle and an
+  export action (combined device list).
+
+### Changed
+- Audit forwarding settings relabelled from "Graylog" to the generic "log server"
+  (GELF / syslog work with any collector).
+- IP list OS column shows on one line (icon never shrinks; label truncates when
+  space is tight); hostname column narrowed to give other columns room.
+- Scan-agent table column widths tuned so "last seen" no longer wraps.
+- switch_port tooltip always shows the full `device@port` text (plus the
+  low-confidence note when applicable).
+
+## [0.4.99] — 2026-06-06
+
+### Changed
+- MCP tools surface the new scan/OS fields: `get_ip_detail` returns OS guess /
+  family / source and excluded probes; `list_scan_agents` returns enabled /
+  available probes and last source IP.
+
 ## [0.4.98] — 2026-06-06
 
 ### Changed

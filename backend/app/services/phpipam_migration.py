@@ -702,7 +702,7 @@ async def _sync_addresses(
                         switch_port=row.get("port"),
                         note=row.get("note"),
                         customer_id=_cust_id(row),
-                        discovery_source="manual",
+                        discovery_source="phpipam",
                     )
                     session.add(obj)
                     await session.flush()

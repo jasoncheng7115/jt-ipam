@@ -21,6 +21,7 @@ class AdGuardBase(StrictModel):
     sync_rewrites: bool = True
     sync_interval_seconds: Annotated[int, Field(ge=30, le=86400)] = 300
     description: Annotated[str | None, Field(max_length=2048)] = None
+    scope_subnet_ids: list[str] | None = None
 
 
 class AdGuardCreate(AdGuardBase):
@@ -38,6 +39,7 @@ class AdGuardUpdate(StrictModel):
     sync_rewrites: bool | None = None
     sync_interval_seconds: Annotated[int | None, Field(ge=30, le=86400)] = None
     description: Annotated[str | None, Field(max_length=2048)] = None
+    scope_subnet_ids: list[str] | None = None
 
 
 class AdGuardRead(AdGuardBase):

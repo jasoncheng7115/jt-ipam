@@ -29,6 +29,8 @@ export interface DashboardOverview {
     total_hosts: number;
     used: number;
     used_pct: number;
+    avg_subnet_pct: number;
+    bands: { full: number; high: number; mid: number; low: number };
   }[];
   audit_24h: number;
   devices: number;

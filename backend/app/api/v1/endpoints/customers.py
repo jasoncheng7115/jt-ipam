@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin
+from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.models.customer import Customer
@@ -65,7 +65,11 @@ async def list_customers(
     )
 
 
-@router.get("/{cid}", response_model=CustomerRead)
+@router.get(
+    "/{cid}",
+    response_model=CustomerRead,
+    dependencies=[Depends(require_object_perm("customer", "read", path_param="cid"))],
+)
 async def get_customer(
     cid: uuid.UUID,
     _user: CurrentUser,
@@ -77,7 +81,10 @@ async def get_customer(
     return CustomerRead.model_validate(obj)
 
 
-@router.get("/{cid}/summary")
+@router.get(
+    "/{cid}/summary",
+    dependencies=[Depends(require_object_perm("customer", "read", path_param="cid"))],
+)
 async def customer_summary(
     cid: uuid.UUID,
     _user: CurrentUser,

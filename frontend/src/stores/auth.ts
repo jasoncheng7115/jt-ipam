@@ -66,6 +66,19 @@ export const useAuthStore = defineStore("auth", () => {
     me.value = data;
   }
 
+  // OIDC / SAML callback：後端把 token 放在 URL fragment 帶回前端，由 Login.vue 解析後呼叫此函式落地
+  async function loginFromSso(access: string, refresh: string): Promise<void> {
+    persistTokens({
+      access_token: access,
+      refresh_token: refresh,
+      token_type: "bearer",
+      expires_in: null,
+      mfa_required: false,
+      mfa_token: null,
+    });
+    await fetchMe();
+  }
+
   async function logout() {
     try {
       await apiClient.post("/api/v1/auth/logout");
@@ -84,6 +97,7 @@ export const useAuthStore = defineStore("auth", () => {
     login,
     verifyMfa,
     fetchMe,
+    loginFromSso,
     logout,
     clearTokens,
   };

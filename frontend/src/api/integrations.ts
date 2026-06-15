@@ -8,6 +8,12 @@ import type { Paginated } from "@/api/admin";
 // 給長時操作 5 分鐘空間。
 const LONG_OP_TIMEOUT_MS = 300_000;
 
+// 是否存在重疊網段（同 IP 可能跨子網路多筆）→ 用來提醒未設 scope 的整合可能標錯筆。
+export async function getSubnetOverlapExists(): Promise<boolean> {
+  const { data } = await apiClient.get<{ has_overlap: boolean }>("/api/v1/subnets/overlaps/exists");
+  return !!data.has_overlap;
+}
+
 // ─────────────────── DNS ───────────────────
 
 export interface DNSServer {
@@ -19,6 +25,7 @@ export interface DNSServer {
   extra_config?: string | null;  // JSON：username / verify_tls 等
   enabled: boolean;
   sync_interval_seconds: number;
+  scope_subnet_ids?: string[] | null;
   last_sync_at?: string | null;
   last_error?: string | null;
   created_at: string;
@@ -40,6 +47,7 @@ export interface DNSServerCreate {
   extra_config?: string | null;
   enabled?: boolean;
   sync_interval_seconds?: number;
+  scope_subnet_ids?: string[] | null;
   api_key?: string | null;
   api_secret?: string | null;
   tsig_key?: string | null;
@@ -177,6 +185,10 @@ export interface OPNsenseFirewall {
   sync_rules: boolean;
   sync_nat: boolean;
   description: string | null;
+  scope_location_id?: string | null;
+  scope_customer_id?: string | null;
+  scope_subnet_ids?: string[] | null;
+  iface_subnet_map?: Record<string, string> | null;
   last_sync_at: string | null;
   last_error: string | null;
   created_at: string;
@@ -196,6 +208,10 @@ export interface OPNsenseFirewallCreate {
   sync_rules?: boolean;
   sync_nat?: boolean;
   description?: string;
+  scope_location_id?: string | null;
+  scope_customer_id?: string | null;
+  scope_subnet_ids?: string[] | null;
+  iface_subnet_map?: Record<string, string> | null;
 }
 
 export interface OPNsenseRule {
@@ -353,6 +369,7 @@ export interface WazuhInstance {
   enabled: boolean;
   verify_tls: boolean;
   sync_interval_seconds: number;
+  scope_subnet_ids?: string[] | null;
   last_sync_at: string | null;
   last_error: string | null;
   description: string | null;
@@ -368,6 +385,7 @@ export interface WazuhInstanceCreate {
   enabled?: boolean;
   verify_tls?: boolean;
   description?: string;
+  scope_subnet_ids?: string[] | null;
 }
 
 export interface WazuhAgent {
@@ -472,6 +490,7 @@ export interface AdGuardInstance {
   sync_clients: boolean;
   sync_rewrites: boolean;
   sync_interval_seconds: number;
+  scope_subnet_ids?: string[] | null;
   description: string | null;
   last_sync_at: string | null;
   last_error: string | null;
@@ -490,6 +509,7 @@ export interface AdGuardCreate {
   sync_rewrites?: boolean;
   sync_interval_seconds?: number;
   description?: string;
+  scope_subnet_ids?: string[] | null;
 }
 
 export async function listAdGuard(): Promise<Paginated<AdGuardInstance>> {
@@ -519,5 +539,55 @@ export async function testAdGuard(id: string): Promise<unknown> {
 export async function syncAdGuard(id: string): Promise<unknown> {
   const { data } = await apiClient.post(`/api/v1/adguard/instances/${id}/sync`, null,
     { timeout: LONG_OP_TIMEOUT_MS });
+  return data;
+}
+
+// ── DNS 記錄（從整合 DNS server 取回）──
+export interface DnsRecord {
+  id: string;
+  zone_id: string;
+  name: string;
+  type: string;
+  value: string;
+  ttl: number;
+  source: string;
+  consistency_state: string;   // consistent / dns_only / ipam_only / mismatch
+  ipam_address_id: string | null;
+  matched_ip_id: string | null;   // 依 IP 值實查 ip_addresses 的對應結果（A/AAAA）
+  server_id: string | null;       // 來源整合 DNS 伺服器
+  server_name: string | null;
+  last_seen_at: string | null;
+}
+
+export async function listDnsRecords(params: {
+  q?: string; ip?: string; missing_ip?: boolean; consistency?: string;
+  server_id?: string; rtype?: string; page?: number; page_size?: number;
+} = {}): Promise<{ items: DnsRecord[]; total: number; page: number; page_size: number }> {
+  const { data } = await apiClient.get("/api/v1/dns/records", {
+    params: {
+      q: params.q || undefined,
+      ip: params.ip || undefined,
+      missing_ip: params.missing_ip || undefined,
+      consistency: params.consistency || undefined,
+      server_id: params.server_id || undefined,
+      rtype: params.rtype || undefined,
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 300,
+    },
+  });
+  return data;
+}
+
+export async function listDnsRecordTypeCounts(params: {
+  q?: string; ip?: string; missing_ip?: boolean; server_id?: string;
+} = {}): Promise<{ type: string; count: number }[]> {
+  const { data } = await apiClient.get("/api/v1/dns/records/type-counts", {
+    params: {
+      q: params.q || undefined,
+      ip: params.ip || undefined,
+      missing_ip: params.missing_ip || undefined,
+      server_id: params.server_id || undefined,
+    },
+  });
   return data;
 }

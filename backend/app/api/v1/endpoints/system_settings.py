@@ -18,6 +18,7 @@ from app.core.db import get_session
 from app.core.safe_http import UnsafeOutboundURL, safe_request
 from app.models.ip_hostname import HOSTNAME_SOURCES
 from app.schemas.base import StrictModel
+from app.services import os_precedence
 from app.services.hostname import (
     get_disabled,
     get_precedence,
@@ -77,6 +78,48 @@ async def put_hostname_precedence(
     )
     await session.commit()
     return HostnamePrecedenceOut(order=order, disabled=disabled, sources=list(HOSTNAME_SOURCES))
+
+
+class OsPrecedenceOut(StrictModel):
+    order: list[str]
+    sources: list[str]
+
+
+class OsPrecedencePatch(StrictModel):
+    order: list[str]
+
+
+@router.get("/os-precedence", response_model=OsPrecedenceOut)
+async def get_os_precedence(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> OsPrecedenceOut:
+    """全域 OS 來源優先序（scanner / librenms / wazuh）。"""
+    return OsPrecedenceOut(
+        order=await os_precedence.get_order(session),
+        sources=list(os_precedence.OS_SOURCES),
+    )
+
+
+@router.put("/os-precedence", response_model=OsPrecedenceOut)
+async def put_os_precedence(
+    payload: OsPrecedencePatch,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> OsPrecedenceOut:
+    order = await os_precedence.set_order(session, order=payload.order, updated_by_user_id=user.id)
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="system", object_id=None, action="update",
+        diff={"target": "os_precedence", "order": order},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return OsPrecedenceOut(order=order, sources=list(os_precedence.OS_SOURCES))
 
 
 class ArpPrecedenceOut(StrictModel):
@@ -725,3 +768,106 @@ async def check_latest_version() -> dict[str, Any]:
         "release_url": f"https://github.com/{_GITHUB_REPO}/releases",
         "error": error,
     }
+
+
+# ─────────────────── 通知發送設定（Email 已實作；其餘開發中）───────────────────
+class NotificationChannelsOut(StrictModel):
+    email_enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_tls: str = "starttls"           # none / starttls / tls
+    smtp_username: str | None = None
+    smtp_from: str | None = None
+    smtp_password_set: bool = False      # 是否已存密碼（不回傳明文）
+    # 規劃中的管道：available=False 前端反灰顯示「開發中」
+    channels: list[dict[str, Any]] = []
+
+
+class NotificationChannelsIn(StrictModel):
+    email_enabled: bool | None = None
+    smtp_host: str | None = None
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_tls: str | None = None
+    smtp_username: str | None = None
+    smtp_from: str | None = None
+    smtp_password: str | None = None     # 給非空才更新；"" 清除；不給保留
+
+
+class TestEmailIn(StrictModel):
+    to: str
+
+
+def _channels_payload(cfg: dict[str, Any]) -> NotificationChannelsOut:
+    from app.services.system_config import NOTIFY_CHANNELS
+    return NotificationChannelsOut(
+        email_enabled=bool(cfg.get("email_enabled")),
+        smtp_host=cfg.get("smtp_host"),
+        smtp_port=int(cfg.get("smtp_port") or 587),
+        smtp_tls=cfg.get("smtp_tls") or "starttls",
+        smtp_username=cfg.get("smtp_username"),
+        smtp_from=cfg.get("smtp_from"),
+        smtp_password_set=bool(cfg.get("smtp_password_enc")),
+        channels=[{"key": k, "available": avail} for k, avail in NOTIFY_CHANNELS],
+    )
+
+
+@router.get("/notification-channels", response_model=NotificationChannelsOut)
+async def get_notification_channels_ep(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> NotificationChannelsOut:
+    from app.services.system_config import get_notification_channels
+    return _channels_payload(await get_notification_channels(session))
+
+
+@router.put("/notification-channels", response_model=NotificationChannelsOut)
+async def put_notification_channels_ep(
+    payload: NotificationChannelsIn,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> NotificationChannelsOut:
+    from app.services.system_config import set_notification_channels
+    if payload.smtp_tls is not None and payload.smtp_tls not in ("none", "starttls", "tls"):
+        from fastapi import HTTPException
+        raise HTTPException(400, detail="smtp_tls must be none/starttls/tls")
+    data = payload.model_dump(exclude_unset=True)
+    cfg = await set_notification_channels(session, data=data, updated_by_user_id=user.id)
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="system_setting", object_id=None, action="update",
+        diff={"notification_channels": {k: v for k, v in data.items() if k != "smtp_password"}},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return _channels_payload(cfg)
+
+
+@router.post("/notification-channels/test-email")
+async def test_notification_email(
+    payload: TestEmailIn,
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    from fastapi import HTTPException
+
+    from app.services.email import EmailNotConfigured, EmailSendError, send_email_via_config
+    from app.services.system_config import get_notification_channels
+    cfg = await get_notification_channels(session)
+    # 測試信不要求「已啟用」——管理員是在啟用前先驗證 SMTP；只要有 host 即可送
+    cfg = {**cfg, "email_enabled": True}
+    if not cfg.get("smtp_host"):
+        raise HTTPException(400, detail="missing_smtp_host")
+    try:
+        await send_email_via_config(
+            cfg, to=payload.to.strip(),
+            subject="[jt-ipam] 測試通知信",
+            body_text="這是一封來自 jt-ipam 的測試通知信。若你收到此信，代表 Email 通知設定正確。",
+        )
+    except EmailNotConfigured:
+        raise HTTPException(400, detail="missing_smtp_host") from None
+    except EmailSendError as exc:
+        raise HTTPException(502, detail=f"SMTP send failed: {exc}") from exc
+    return {"ok": True}

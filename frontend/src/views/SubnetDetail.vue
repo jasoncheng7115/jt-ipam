@@ -21,21 +21,13 @@ import {
   NPopover,
   NPopconfirm,
   NTooltip,
-  NModal,
-  NForm,
-  NFormItem,
-  NInput,
-  NSelect,
-  NSwitch,
-  NInputNumber,
   NSlider,
   NDropdown,
   type UploadCustomRequestOptions,
   type DataTableColumns,
   useMessage,
 } from "naive-ui";
-import { updateSubnet } from "@/api/subnets";
-import { EditIcon, SaveIcon, CancelIcon } from "@/icons";
+import { EditIcon } from "@/icons";
 import { fmtDateTime } from "@/utils/datetime";
 import { autoSort } from "@/composables/useTableSort";
 import { useCustomers } from "@/composables/useCustomers";
@@ -43,79 +35,23 @@ import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
+import SubnetEditModal from "@/components/SubnetEditModal.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 import OsIcon from "@/components/OsIcon.vue";
 import { useScanProbes, osFamilyLabel } from "@/api/scanProbes";
 const { t, locale } = useI18n();
 const { catalog } = useScanProbes();
 
-const { labelFor: customerLabelFor, options: customerOptions, ensureLoaded: ensureCustomersLoaded } = useCustomers();
+const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 
-// 子網路編輯
+// 子網路編輯（表單統一走共用元件 SubnetEditModal.vue）
 const editShow = ref(false);
-const editSaving = ref(false);
-const editForm = ref({
-  description: "", customer_id: null as string | null,
-  is_pool: false, is_full: false, scan_enabled: false,
-  threshold_pct: null as number | null,
-  scan_agent_id: null as string | null,
-  gateway: "" as string, dns_servers: "" as string,
-  location_id: null as string | null,
-});
-const scanAgentOpts = ref<{ label: string; value: string }[]>([]);
-const locationOpts = ref<{ label: string; value: string }[]>([]);
-async function loadScanAgentOpts() {
-  try {
-    const { listScanAgents } = await import("@/api/phase3");
-    const ag = await listScanAgents();
-    scanAgentOpts.value = ag.items.map((a) => ({ label: a.name, value: a.id }));
-  } catch { /* silent */ }
-}
-async function loadLocationOpts() {
-  try {
-    const { listLocations } = await import("@/api/basic");
-    const r = await listLocations();
-    locationOpts.value = r.items.map((l) => ({ label: l.name, value: l.id }));
-  } catch { /* silent */ }
-}
 function openSubnetEdit() {
-  const s: any = subnet.value;
-  if (!s) return;
-  editForm.value = {
-    description: s.description ?? "",
-    customer_id: s.customer_id ?? null,
-    is_pool: !!s.is_pool, is_full: !!s.is_full,
-    scan_enabled: !!s.scan_enabled,
-    threshold_pct: s.threshold_pct ?? null,
-    scan_agent_id: s.scan_agent_id ?? null,
-    gateway: s.gateway ?? "", dns_servers: s.dns_servers ?? "",
-    location_id: s.location_id ?? null,
-  };
-  void loadScanAgentOpts();
-  void loadLocationOpts();
+  if (!subnet.value) return;
   editShow.value = true;
 }
-async function saveSubnetEdit() {
-  if (!subnet.value) return;
-  editSaving.value = true;
-  try {
-    await updateSubnet(subnet.value.id, {
-      description: editForm.value.description || null,
-      customer_id: editForm.value.customer_id ?? null,
-      is_pool: editForm.value.is_pool, is_full: editForm.value.is_full,
-      scan_enabled: editForm.value.scan_enabled,
-      threshold_pct: editForm.value.threshold_pct ?? null,
-      scan_agent_id: editForm.value.scan_agent_id ?? null,
-      gateway: editForm.value.gateway.trim() || null,
-      dns_servers: editForm.value.dns_servers.trim() || null,
-      location_id: editForm.value.location_id ?? null,
-    });
-    editShow.value = false;
-    await load(subnet.value.id);
-    msg.success(t("common.ok"));
-  } catch (e: any) {
-    msg.error(e?.response?.data?.detail ?? t("errors.server"));
-  } finally { editSaving.value = false; }
+function onSubnetSaved() {
+  if (subnet.value) void load(subnet.value.id);
 }
 const { isPinned, toggle: togglePinned, ensureLoaded: ensurePinsLoaded } = usePinnedSubnets();
 
@@ -141,7 +77,7 @@ const ipColumnPickerItems = [
   { key: "stale_days", label: t("stale.col_stale") },
   { key: "note", label: t("cols.note") },
 ];
-import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon, SearchIcon } from "@/icons";
+import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon, SearchIcon, AddressesIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";
@@ -204,6 +140,23 @@ function dhcpInfoForIp(ip: string | null | undefined): DhcpRangeInfo | null {
 function isDhcpIp(ip: string | null | undefined): boolean {
   return dhcpInfoForIp(ip) != null;
 }
+// 只屬於「本子網路」的 DHCP 發放範圍（給資訊欄顯示 + 只看 DHCP 用）；無資料就空
+const subnetDhcpRanges = computed<DhcpRangeInfo[]>(() => {
+  const cidr = subnet.value?.cidr;
+  if (!cidr || cidr.includes(":")) return [];
+  const m = /^(\d+\.\d+\.\d+\.\d+)\/(\d+)$/.exec(cidr);
+  if (!m) return [];
+  const prefix = Number(m[2]);
+  const base = ipv4ToInt(m[1]);
+  if (base == null) return [];
+  const total = prefix >= 32 ? 1 : 2 ** (32 - prefix);
+  const netInt = prefix === 0 ? 0 : (base & ((~0 << (32 - prefix)) >>> 0)) >>> 0;
+  const lo = netInt, hi = netInt + total - 1;
+  return dhcpRanges.value
+    .filter((r) => r.a >= lo && r.a <= hi)
+    .sort((x, y) => x.a - y.a);
+});
+const onlyDhcp = ref(false);
 
 const section = ref<Section | null>(null);
 const vlan = ref<VLAN | null>(null);
@@ -387,7 +340,7 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
     render: (r) => (r as any).__gap
       ? h("div", { style: "text-align: center; color: var(--n-text-color-3, #999); font-style: italic" }, gapLabel(r))
       : r.ip },
-  { title: t("addresses.hostname"), key: "hostname", minWidth: 140,
+  { title: t("addresses.hostname"), key: "hostname", minWidth: 120,
     ellipsis: { tooltip: true }, render: (r) => (r as any).__gap ? "" : (r.hostname ?? "") },
   { title: t("common.status"), key: "state", width: 100,
     render: (r) => (r as any).__gap ? "" : stateTag(r.state) },
@@ -411,13 +364,17 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
   { title: t("addresses.mac"), key: "mac", width: 150, render: (r) => r.mac ?? "" },
   { title: t("cols.vendor"), key: "mac_vendor", width: 140,
     ellipsis: { tooltip: true }, render: (r) => r.mac_vendor ?? "—" },
-  { title: t("cols.os"), key: "os", width: 70,
+  { title: t("cols.os"), key: "os", width: 110,
     render: (r) => {
       if ((r as any).__gap || !r.os_family) return "—";
       const label = osFamilyLabel(catalog.value.os_families, r.os_family, locale.value);
-      return h("span", { title: r.os_guess ?? undefined }, [
-        h(OsIcon, { family: r.os_family, size: 16 }),
-        label ? h("span", { style: "margin-left:4px" }, label) : null,
+      // 一行顯示，icon 永遠不縮；空間不夠時 label 被裁掉、只剩 icon
+      return h("div", {
+        style: "display:flex;align-items:center;gap:4px;min-width:0;white-space:nowrap",
+        title: r.os_guess ?? label ?? undefined,
+      }, [
+        h("span", { style: "flex:none;display:inline-flex" }, h(OsIcon, { family: r.os_family, size: 16 })),
+        label ? h("span", { style: "overflow:hidden;text-overflow:ellipsis" }, label) : null,
       ]);
     } },
   { title: t("addresses.owner"), key: "owner", width: 120,
@@ -427,9 +384,13 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
     render: (r) => !r.switch_port ? ""
       : h(NTooltip, null, {
           trigger: () => h(SwitchPortLabel, { value: r.switch_port, dim: r.switch_port_confident === false }),
+          // 彈出文字一律含完整 裝置@連接埠 全文；低信心時再附上說明
           default: () => r.switch_port_confident === false
-            ? t("addresses.switch_port_uncertain")
-            : r.switch_port }) },
+            ? h("div", { style: "max-width:320px;line-height:1.5" }, [
+                h("div", { style: "font-family:monospace;word-break:break-all" }, (r.switch_port ?? "").replace(" / ", "@")),
+                h("div", { style: "margin-top:4px" }, t("addresses.switch_port_uncertain")),
+              ])
+            : h("span", { style: "font-family:monospace;word-break:break-all" }, (r.switch_port ?? "").replace(" / ", "@")) }) },
   { title: t("cols.device"), key: "device", width: 150, ellipsis: { tooltip: true },
     render: (r) => {
       if ((r as any).__gap || !r.device_id) return "—";
@@ -590,6 +551,8 @@ function ipMatchesFilter(a: IPAddress): boolean {
 const ipRows = computed<any[]>(() => {
   // 失聯篩選開啟時：只列符合的已登記 IP，不插入閒置區間列
   if (staleFilterOn.value) return staleMatches.value.filter(ipMatchesFilter);
+  // 只看 DHCP：只列落在 DHCP 發放範圍內的已登記 IP，不插入閒置區間列
+  if (onlyDhcp.value) return addresses.value.filter((a) => isDhcpIp(a.ip)).filter(ipMatchesFilter);
   // 有搜尋字時：只列符合的已登記 IP，不插入閒置區間列
   if (ipFilterText.value.trim()) return addresses.value.filter(ipMatchesFilter);
   const cidr = subnet.value?.cidr;
@@ -759,6 +722,15 @@ onMounted(() => {
             </span>
           </n-descriptions-item>
           <n-descriptions-item :label="t('subnets.threshold')">{{ subnet.threshold_pct != null ? `${subnet.threshold_pct}%` : "—" }}</n-descriptions-item>
+          <n-descriptions-item v-if="subnetDhcpRanges.length" :label="t('subnets.dhcp_ranges')" :span="3">
+            <div style="display: flex; flex-wrap: wrap; gap: 6px">
+              <n-tag v-for="(r, i) in subnetDhcpRanges" :key="i" size="small" type="warning" :bordered="false"
+                     style="white-space: normal; height: auto; max-width: 100%">
+                <span style="font-family: monospace">{{ r.start }} – {{ r.end }}</span>
+                <span style="opacity: .7; margin-left: 6px">{{ r.server }}{{ r.source ? ` · ${r.source}` : "" }}</span>
+              </n-tag>
+            </div>
+          </n-descriptions-item>
           <n-descriptions-item :label="t('subnets.gateway')">
             <span v-if="subnet.gateway" style="font-family: monospace">{{ subnet.gateway }}</span>
             <span v-else>—</span>
@@ -831,6 +803,12 @@ onMounted(() => {
                       @click="staleFilterOn = !staleFilterOn">
               <template #icon><n-icon><MissingIcon /></n-icon></template>
               {{ t("stale.filter_label") }}
+            </n-button>
+            <n-button v-if="subnetDhcpRanges.length" size="small"
+                      :type="onlyDhcp ? 'warning' : 'default'"
+                      @click="onlyDhcp = !onlyDhcp">
+              <template #icon><n-icon><AddressesIcon /></n-icon></template>
+              {{ t("subnets.only_dhcp") }}
             </n-button>
             <ColumnPicker :all="ipColumnPickerItems" :visible="ipVisibleKeys"
                           @update:visible="setIpVisible" @reset="resetIpVisible" />
@@ -918,54 +896,7 @@ onMounted(() => {
     @created="onCreated"
   />
 
-  <n-modal v-model:show="editShow" preset="card"
-           :title="`${t('common.edit')} ${subnet?.cidr ?? ''}`" style="width: 460px">
-    <n-form label-placement="left" label-width="110">
-      <n-form-item :label="t('common.description')">
-        <n-input v-model:value="editForm.description" />
-      </n-form-item>
-      <n-form-item :label="t('subnets.gateway')">
-        <n-input v-model:value="editForm.gateway" :placeholder="t('subnets.gateway_ph')" />
-      </n-form-item>
-      <n-form-item :label="t('subnets.dns_servers')">
-        <n-input v-model:value="editForm.dns_servers" :placeholder="t('subnets.dns_servers_ph')" />
-      </n-form-item>
-      <n-form-item :label="t('nav.locations')">
-        <n-select v-model:value="editForm.location_id" :options="locationOpts"
-                  clearable :placeholder="t('nav.locations')" />
-      </n-form-item>
-      <n-form-item :label="t('nav.customers')">
-        <n-select v-model:value="editForm.customer_id" :options="customerOptions"
-                  clearable filterable placeholder="—" />
-      </n-form-item>
-      <n-form-item :label="t('subnets.pool_full')">
-        <n-space>
-          <n-checkbox v-model:checked="editForm.is_pool">{{ t("subnets.is_pool") }}</n-checkbox>
-          <n-checkbox v-model:checked="editForm.is_full">{{ t("subnets.is_full") }}</n-checkbox>
-        </n-space>
-      </n-form-item>
-      <n-form-item :label="t('subnets.scan_enable')">
-        <n-switch v-model:value="editForm.scan_enabled" />
-      </n-form-item>
-      <n-form-item v-if="editForm.scan_enabled" :label="t('subnet_detail.scan_agent')">
-        <n-select v-model:value="editForm.scan_agent_id" :options="scanAgentOpts"
-                  clearable :placeholder="t('subnet_detail.scan_agent_ph')" />
-      </n-form-item>
-      <n-form-item :label="t('subnets.threshold_pct')">
-        <n-input-number v-model:value="editForm.threshold_pct" :min="0" :max="100" clearable />
-      </n-form-item>
-    </n-form>
-    <template #footer>
-      <n-space justify="end">
-        <n-button @click="editShow = false">
-          <template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}
-        </n-button>
-        <n-button type="primary" :loading="editSaving" @click="saveSubnetEdit">
-          <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
-        </n-button>
-      </n-space>
-    </template>
-  </n-modal>
+  <SubnetEditModal v-model:show="editShow" :editing="subnet" @saved="onSubnetSaved" />
 </template>
 
 <style scoped>

@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+import jwt
+from jwt import PyJWK
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -151,6 +153,57 @@ async def fetch_userinfo(cfg: Any, access_token: str) -> dict[str, Any]:
     if resp.status_code != 200:
         raise OIDCError(f"userinfo {resp.status_code}: {resp.text[:200]}")
     return resp.json()  # type: ignore[no-any-return]
+
+
+async def verify_id_token(cfg: Any, id_token: str, *, nonce: str | None = None) -> dict[str, Any]:
+    """驗證 ID Token 簽章並回傳其 claims。
+
+    OWASP A07：ID Token 是 IdP 簽發的獨立 artifact，**不可**只 base64 解開就信任其
+    claims（尤其 `groups` 會決定 admin 提權）。這裡用 provider 的 JWKS 驗簽 + 檢查
+    aud/iss/nonce，驗過才回 claims。JWKS 透過 safe_request 取得（保留 SSRF 防護）。
+    """
+    info = await discover(cfg)
+    try:
+        resp = await safe_request("GET", info.jwks_uri, timeout=10.0)
+    except UnsafeOutboundURL as exc:
+        raise OIDCError(f"SSRF guard rejected JWKS URL: {exc}") from exc
+    if resp.status_code != 200:
+        raise OIDCError(f"jwks {resp.status_code}: {resp.text[:200]}")
+    jwks = resp.json()
+
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except jwt.PyJWTError as exc:
+        raise OIDCError(f"ID Token header invalid: {exc}") from exc
+    kid = header.get("kid")
+    alg = header.get("alg") or "RS256"
+
+    signing_key = None
+    for jwk in jwks.get("keys", []):
+        if jwk.get("kid") == kid:
+            try:
+                signing_key = PyJWK.from_dict(jwk).key
+            except Exception as exc:
+                raise OIDCError(f"ID Token signing key parse failed: {exc}") from exc
+            break
+    if signing_key is None:
+        raise OIDCError("ID Token signing key not found in provider JWKS")
+
+    try:
+        claims: dict[str, Any] = jwt.decode(
+            id_token,
+            signing_key,
+            algorithms=[alg],
+            audience=cfg.client_id,
+            issuer=info.issuer,
+            options={"require": ["exp", "iat"], "verify_aud": True, "verify_iss": True},
+        )
+    except jwt.PyJWTError as exc:
+        raise OIDCError(f"ID Token signature verification failed: {exc}") from exc
+
+    if nonce is not None and claims.get("nonce") != nonce:
+        raise OIDCError("ID Token nonce mismatch")
+    return claims
 
 
 # ─────────────────── User mapping ───────────────────

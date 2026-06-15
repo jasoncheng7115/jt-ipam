@@ -13,6 +13,8 @@ from app.api.v1.endpoints import (
     api_tokens,
     audit,
     auth,
+    cert_agents,
+    certificates,
     custom_fields,
     customers,
     dashboard,
@@ -91,6 +93,8 @@ api_v1_router.include_router(rack_diagram.router)
 api_v1_router.include_router(migration.router)
 api_v1_router.include_router(import_external.router)
 api_v1_router.include_router(scan_agents.router)
+api_v1_router.include_router(certificates.router)
+api_v1_router.include_router(cert_agents.router)
 api_v1_router.include_router(dns.router)
 api_v1_router.include_router(librenms.router)
 api_v1_router.include_router(anomaly.router)

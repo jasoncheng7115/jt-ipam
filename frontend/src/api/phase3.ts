@@ -353,12 +353,13 @@ export async function deleteDevicePowerPort(id: string): Promise<void> {
 
 export interface VirtCluster { id: string; name: string; type: string | null; is_standalone: boolean; description: string | null; }
 export interface VirtualMachine { id: string; name: string; cluster_id: string | null; node: string | null; kind: string | null; status: string | null; ips: string[]; macs: string[]; bridges: string[]; }
-export interface ProxmoxInstance { id: string; name: string; api_url: string; extra_api_urls: string[]; node: string | null; auth_username: string; auth_token_id: string; verify_tls: boolean; sync_interval_seconds: number; enabled: boolean; last_sync_at: string | null; last_error: string | null; }
+export interface ProxmoxInstance { id: string; name: string; api_url: string; extra_api_urls: string[]; node: string | null; auth_username: string; auth_token_id: string; verify_tls: boolean; sync_interval_seconds: number; enabled: boolean; scope_subnet_ids?: string[] | null; last_sync_at: string | null; last_error: string | null; }
 
 export interface ProxmoxWrite {
   cluster_id?: string; api_url: string; extra_api_urls?: string[];
   auth_username: string; auth_token_id: string; token_secret?: string;
   verify_tls?: boolean; enabled?: boolean; sync_interval_seconds?: number;
+  scope_subnet_ids?: string[] | null;
 }
 
 export const Virt = {

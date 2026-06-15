@@ -16,6 +16,8 @@ import { apiClient } from "@/api/client";
 import { fmtDateTime } from "@/utils/datetime";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { autoSort } from "@/composables/useTableSort";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 
 interface Summary {
   customer: {
@@ -141,7 +143,7 @@ onMounted(() => {
 
       <n-card v-if="data?.ip_addresses?.length" :title="`IP (${data.counts.ip_addresses})`">
         <n-data-table :columns="ipCols" :data="data.ip_addresses" :bordered="false" size="small"
-                      :pagination="{ pageSize: 50 }" />
+                      :pagination="pg" />
       </n-card>
     </n-space>
   </n-spin>

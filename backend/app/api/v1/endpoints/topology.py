@@ -8,14 +8,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser
+from app.api.v1.dependencies import CurrentUser, require_global_read
 from app.core.db import get_session
 from app.services.topology import build_topology
 
 router = APIRouter(prefix="/topology", tags=["topology"])
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_global_read)])
 async def topology(
     _user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],

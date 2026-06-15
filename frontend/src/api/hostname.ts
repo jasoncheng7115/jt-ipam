@@ -66,6 +66,19 @@ export async function setArpPrecedence(order: string[], disabled: string[] = [])
   return data;
 }
 
+// OS 來源優先序（scanner / librenms / wazuh）— 無 disabled
+export interface OsPrecedence { order: string[]; sources: string[]; }
+
+export async function getOsPrecedence(): Promise<OsPrecedence> {
+  const { data } = await apiClient.get<OsPrecedence>("/api/v1/system/os-precedence");
+  return data;
+}
+
+export async function setOsPrecedence(order: string[]): Promise<OsPrecedence> {
+  const { data } = await apiClient.put<OsPrecedence>("/api/v1/system/os-precedence", { order });
+  return data;
+}
+
 // 裝置名稱來源優先序（與 ARP 同形狀）
 export interface DevNamePrecedence { order: string[]; disabled: string[]; sources: string[]; }
 

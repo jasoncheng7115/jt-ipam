@@ -90,9 +90,9 @@ onUnmounted(() => {
           :class="{ unread: !n.read_at }"
           @click="clickItem(n)"
         >
-          <n-space vertical :size="2">
-            <strong>{{ n.title }}</strong>
-            <n-text v-if="n.body" depth="3" style="font-size: 12px">{{ n.body }}</n-text>
+          <n-space vertical :size="2" style="width: 100%">
+            <strong class="notif-text">{{ n.title }}</strong>
+            <n-text v-if="n.body" depth="3" class="notif-text" style="font-size: 12px">{{ n.body }}</n-text>
             <n-text depth="3" style="font-size: 11px" :title="fmtDateTime(n.created_at)">{{ fmtRelative(n.created_at) }}</n-text>
           </n-space>
         </n-list-item>
@@ -108,6 +108,13 @@ onUnmounted(() => {
 <style scoped>
 .unread {
   background: rgba(64, 128, 255, 0.06);
+}
+/* 標題 / 內容過長時換行，避免撐破彈窗 */
+.notif-text {
+  display: block;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 /* 有未讀時鈴鐺本身也變色（不只紅色數字） */
 .bell-active {

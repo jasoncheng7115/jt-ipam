@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.schemas.base import StrictModel
 
@@ -41,3 +41,9 @@ class APITokenRead(StrictModel):
     last_used_ip: str | None
     revoked_at: datetime | None
     created_at: datetime
+
+    @field_validator("last_used_ip", mode="before")
+    @classmethod
+    def _coerce_last_used_ip(cls, v: object) -> str | None:
+        # INET 欄位 asyncpg 回 IPv4Address；token 用過後列出會 Pydantic 500
+        return None if v is None else str(v)

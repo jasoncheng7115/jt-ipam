@@ -259,6 +259,10 @@ async def get_address(
     out.mac_vendor = await vendor_for_mac(session, obj.mac)
     # 算出此 IP 實際會被執行的探測（子網路要跑 − IP 略過 ∩ 代理能力）給詳情頁顯示
     out.effective_probes = await _effective_probes_for(session, obj)
+    # OS 依來源優先序（scanner/librenms/wazuh）解析有效值 + 來源
+    from app.services.os_precedence import effective_os
+    _os = await effective_os(session, obj)
+    out.os_guess = _os["os_guess"]; out.os_family = _os["os_family"]; out.os_source = _os["os_source"]
     return out
 
 
@@ -624,6 +628,15 @@ async def update_address(
     for key, value in changes.items():
         setattr(obj, key, value)
 
+    # MAC 與 hostname 同屬「多來源優先序」欄位：人工編輯的 MAC 要標記 mac_source="manual"
+    # （ARP 優先序中 manual rank 最高），否則下一次掃描/ARP 同步會用 scanner 等來源把它蓋掉。
+    # 清空 MAC 時一併清掉來源。
+    if "mac" in changes:
+        if obj.mac:
+            obj.mac_source = "manual"
+        else:
+            obj.mac_source = None
+
     # 同步 excluded_probes ⇄ exclude_from_ping：icmp 視為同一件事，保留既有「不掃 ping」行為
     if "excluded_probes" in changes or "exclude_from_ping" in changes:
         from app.core.scan_probes import normalize_probes as _norm_probes
@@ -906,7 +919,9 @@ async def import_csv(
 
     csv_text = text
     subnet_id_val = subnet.id
-    subnet_label = subnet.cidr
+    # subnet.cidr 是 asyncpg 回傳的 IPv4Network 物件（CIDR 欄位），不是 str；
+    # spawn_task 的 target_label 是 VARCHAR，直接塞會 asyncpg DataError（CSV 實際匯入 500）。
+    subnet_label = str(subnet.cidr)
     filename = file.filename
     actor_user_id_str = str(user.id)
     actor_ip = request.client.host if request.client else None

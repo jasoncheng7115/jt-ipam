@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser
+from app.api.v1.dependencies import CurrentUser, require_object_perm
 from app.core.db import get_session
 from app.models.address import IPAddress
 from app.models.device import Device
@@ -43,7 +43,11 @@ class RackDiagram(StrictModel):
     conflicts: list[dict[str, Any]]    # 同一 U 被多 device 佔用 / 越界
 
 
-@router.get("/{rack_id}/diagram", response_model=RackDiagram)
+@router.get(
+    "/{rack_id}/diagram",
+    response_model=RackDiagram,
+    dependencies=[Depends(require_object_perm("rack", "read", path_param="rack_id"))],
+)
 async def rack_diagram(
     rack_id: uuid.UUID,
     _user: CurrentUser,

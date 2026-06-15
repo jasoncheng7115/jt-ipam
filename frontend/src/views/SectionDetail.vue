@@ -20,6 +20,8 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useCustomers } from "@/composables/useCustomers";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import { computed } from "vue";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const { t } = useI18n();
 
 const { visibleKeys: snVis, setVisible: snSet, reset: snReset } = useColumnPrefs(
@@ -176,7 +178,7 @@ onMounted(() => {
           <n-descriptions-item :label="t('common.name')">{{ section.name }}</n-descriptions-item>
           <n-descriptions-item :label="t('common.subnet_count')">{{ section.subnet_count ?? 0 }}</n-descriptions-item>
           <n-descriptions-item :label="t('sections.strict_mode')">{{ section.strict_mode ? "✓" : "—" }}</n-descriptions-item>
-          <n-descriptions-item :label="t('cols.display_order')">{{ section.display_order }}</n-descriptions-item>
+          <n-descriptions-item :label="t('custom_fields.display_order')">{{ section.display_order }}</n-descriptions-item>
           <n-descriptions-item :label="t('common.description')" :span="2">
             {{ section.description ?? "—" }}
           </n-descriptions-item>
@@ -209,7 +211,7 @@ onMounted(() => {
           :columns="columns"
           :data="subnets"
           :loading="loading"
-          :pagination="{ pageSize: 50 }"
+          :pagination="pg"
           :bordered="false"
           :row-props="(row: Subnet) => ({
             style: 'cursor: pointer',
@@ -235,7 +237,7 @@ onMounted(() => {
           <n-select v-model:value="form.customer_id" :options="customerOptions" clearable filterable />
         </n-form-item>
         <n-space :size="24">
-          <n-form-item :label="t('cols.display_order')">
+          <n-form-item :label="t('custom_fields.display_order')">
             <n-input-number v-model:value="form.display_order" :min="0" style="width: 140px" />
           </n-form-item>
           <n-form-item :label="t('sections.strict_mode')">

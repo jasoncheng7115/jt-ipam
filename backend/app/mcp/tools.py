@@ -13,6 +13,7 @@ import ipaddress
 import uuid
 from typing import Any
 
+from sqlalchemy import false as sa_false
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +50,24 @@ def _as_uuid(value: str, field: str = "id") -> uuid.UUID:
         return uuid.UUID(str(value))
     except (ValueError, TypeError) as exc:
         raise IPAMToolError(f"invalid {field}: {value!r}") from exc
+
+
+async def _effective_probes(
+    session: AsyncSession, sub: Subnet | None, obj: IPAddress,
+) -> list[str]:
+    """此 IP 實際會被執行的探測 = 子網路 scan_method − IP excluded ∩ 代理 enabled。"""
+    from app.core.scan_probes import effective_probes
+    from app.models.scan_agent import ScanAgent
+    if sub is None or not sub.scan_enabled:
+        return []
+    agent_enabled: list[str] | None = None
+    if sub.scan_agent_id:
+        ag = await session.get(ScanAgent, sub.scan_agent_id)
+        if ag is not None:
+            agent_enabled = list(ag.enabled_probes or [])
+    return effective_probes(
+        list(sub.scan_method or []), list(obj.excluded_probes or []), agent_enabled,
+    )
 
 
 # ─────────────────── 唯讀工具 ───────────────────
@@ -254,8 +273,9 @@ async def trace_mac(
     vis_sub = await visible_ids(session, user=user, object_type="subnet")
     vis_dev = await visible_ids(session, user=user, object_type="device")
     if arp is not None and vis_sub is not None:
+        # 重疊網段：同 IP 可能多筆 → limit(1)+first()，避免 MultipleResultsFound
         ip_sub = (await session.execute(
-            select(IPAddress.subnet_id).where(IPAddress.ip == arp.ip))).scalar_one_or_none()
+            select(IPAddress.subnet_id).where(IPAddress.ip == arp.ip).limit(1))).scalars().first()
         if ip_sub is None or ip_sub not in vis_sub:
             arp = None
     if fdb is not None and vis_dev is not None and (
@@ -320,20 +340,60 @@ async def check_dns_consistency(
 
 
 async def stats_overview(session: AsyncSession, *, user: User) -> dict[str, Any]:
-    """各類實體的總數（回答「有幾個 X」用：區段/子網路/IP/裝置/機櫃/地點/客戶/VLAN）。"""
-    async def _c(model) -> int:  # type: ignore[no-untyped-def]
+    """各類實體的總數。逐物件計數依使用者可見範圍縮放；全域基礎設施計數僅 admin/萬用讀取者可見。"""
+    async def _all(model) -> int:  # type: ignore[no-untyped-def]
         return int(await session.scalar(select(func.count()).select_from(model)) or 0)
-    return {
-        "sections": await _c(Section),
-        "subnets": await _c(Subnet),
-        "ip_addresses": await _c(IPAddress),
-        "devices": await _c(Device),
-        "racks": await _c(Rack),
-        "locations": await _c(Location),
-        "customers": await _c(Customer),
-        "vlans": await _c(VLAN),
-        "nat_rules": await _c(NATTranslation),
+
+    async def _scoped(model, vis) -> int:  # type: ignore[no-untyped-def]
+        if vis is None:
+            return await _all(model)
+        if not vis:
+            return 0
+        return int(await session.scalar(
+            select(func.count()).select_from(model).where(model.id.in_(vis))) or 0)
+
+    vis_sec = await visible_ids(session, user=user, object_type="section")
+    vis_sub = await visible_ids(session, user=user, object_type="subnet")
+    vis_dev = await visible_ids(session, user=user, object_type="device")
+    vis_rack = await visible_ids(session, user=user, object_type="rack")
+    vis_loc = await visible_ids(session, user=user, object_type="location")
+    vis_cust = await visible_ids(session, user=user, object_type="customer")
+    # IP 數依可見子網路縮放（IPAddress 本身不可逐物件授權，靠所屬子網路）
+    if vis_sub is None:
+        ip_n = await _all(IPAddress)
+    elif not vis_sub:
+        ip_n = 0
+    else:
+        ip_n = int(await session.scalar(
+            select(func.count()).select_from(IPAddress)
+            .where(IPAddress.subnet_id.in_(vis_sub))) or 0)
+
+    out: dict[str, Any] = {
+        "sections": await _scoped(Section, vis_sec),
+        "subnets": await _scoped(Subnet, vis_sub),
+        "ip_addresses": ip_n,
+        "devices": await _scoped(Device, vis_dev),
+        "racks": await _scoped(Rack, vis_rack),
+        "locations": await _scoped(Location, vis_loc),
+        "customers": await _scoped(Customer, vis_cust),
     }
+    # 全域基礎設施計數：僅 admin / 萬用讀取者
+    if await has_global_read(session, user):
+        from app.models.advanced import ASN, Circuit, Contact, Provider, Tenant
+        from app.models.physical import Cable
+        from app.models.virt import VirtualMachine
+        out.update({
+            "vlans": await _all(VLAN),
+            "nat_rules": await _all(NATTranslation),
+            "vms": await _all(VirtualMachine),
+            "circuits": await _all(Circuit),
+            "providers": await _all(Provider),
+            "asns": await _all(ASN),
+            "tenants": await _all(Tenant),
+            "contacts": await _all(Contact),
+            "cables": await _all(Cable),
+        })
+    return out
 
 
 async def list_racks(
@@ -346,8 +406,11 @@ async def list_racks(
         .outerjoin(Location, Location.id == Rack.location_id)
         .order_by(Rack.name).limit(limit)
     )).all()
+    vis = await visible_ids(session, user=user, object_type="rack")
     out = []
     for rack, loc_name in rows:
+        if vis is not None and rack.id not in vis:
+            continue
         devs = list((await session.execute(
             select(Device.name, Device.type, Device.u_position, Device.u_size, Device.rack_face)
             .where(Device.rack_id == rack.id).order_by(Device.u_position)
@@ -384,8 +447,11 @@ async def list_locations(
     rows = list((await session.execute(
         select(Location).order_by(Location.name).limit(limit)
     )).scalars().all())
+    vis = await visible_ids(session, user=user, object_type="location")
     out = []
     for loc in rows:
+        if vis is not None and loc.id not in vis:
+            continue
         rack_count = int(await session.scalar(
             select(func.count()).select_from(Rack).where(Rack.location_id == loc.id)
         ) or 0)
@@ -414,6 +480,7 @@ async def list_devices(
         stmt = stmt.where(Device.type == type)
     rows = list((await session.execute(stmt.order_by(Device.name).limit(limit))).scalars().all())
     vis = await visible_ids(session, user=user, object_type="device")
+    cust_cache: dict[Any, str | None] = {}
     out = []
     for d in rows:
         if vis is not None and d.id not in vis:
@@ -421,9 +488,16 @@ async def list_devices(
         ip_count = int(await session.scalar(
             select(func.count()).select_from(IPAddress).where(IPAddress.device_id == d.id)
         ) or 0)
+        cust_name = None
+        if d.customer_id is not None:
+            if d.customer_id not in cust_cache:
+                c = await session.get(Customer, d.customer_id)
+                cust_cache[d.customer_id] = c.name if c else None
+            cust_name = cust_cache[d.customer_id]
         out.append({
-            "id": str(d.id), "name": d.name, "type": d.type,
+            "id": str(d.id), "name": d.name, "type": d.type, "fqdn": d.fqdn,
             "vendor": d.vendor, "model": d.model, "ip_count": ip_count,
+            "customer": cust_name,
             "u_position": d.u_position, "u_size": d.u_size, "rack_face": d.rack_face,
             "rack_id": str(d.rack_id) if d.rack_id else None,
         })
@@ -464,15 +538,33 @@ async def get_device(
         rk = await session.get(Rack, dev.rack_id)
         if rk is not None:
             rack_info = {"id": str(rk.id), "name": rk.name, "u_height": rk.u_height}
+    cust = await session.get(Customer, dev.customer_id) if dev.customer_id else None
+    loc = await session.get(Location, dev.location_id) if dev.location_id else None
+    # 電源埠 ↔ 插座（NetBox 風）
+    from app.models.physical import DevicePowerPort, PowerOutlet
+    pports = list((await session.execute(
+        select(DevicePowerPort).where(DevicePowerPort.device_id == dev.id)
+    )).scalars().all())
+    power_ports = []
+    for pp in pports:
+        outlet = await session.get(PowerOutlet, pp.outlet_id) if pp.outlet_id else None
+        power_ports.append({
+            "name": pp.name, "max_watts": pp.max_watts,
+            "outlet": outlet.label if outlet else None,
+        })
     return {
-        "id": str(dev.id), "name": dev.name, "type": dev.type,
+        "id": str(dev.id), "name": dev.name, "type": dev.type, "fqdn": dev.fqdn,
         "vendor": dev.vendor, "model": dev.model, "serial": dev.serial,
+        "description": dev.description,
+        "customer": cust.name if cust else None,
+        "location": loc.name if loc else None,
         # 機櫃 U 位資訊（讓 AI 能判斷占位 / 剩餘空間）
         "u_position": dev.u_position, "u_size": dev.u_size, "rack_face": dev.rack_face,
         "rack": rack_info,
         "ips": [{"ip": str(ip), "hostname": hn, "mac": str(m) if m else None}
                 for ip, hn, m in ips],
         "vlans": [{"number": n, "name": nm} for n, nm in vlans],
+        "power_ports": power_ports,
     }
 
 
@@ -484,14 +576,14 @@ async def list_customers(
     rows = list((await session.execute(
         select(Customer).order_by(Customer.name).limit(limit)
     )).scalars().all())
-    return {
-        "customers": [
-            {"id": str(c.id), "name": c.name, "contact": c.contact,
-             "email": c.email, "phone": c.phone}
-            for c in rows
-        ],
-        "count": len(rows),
-    }
+    vis = await visible_ids(session, user=user, object_type="customer")
+    out = [
+        {"id": str(c.id), "name": c.name, "title": c.title, "contact": c.contact,
+         "email": c.email, "phone": c.phone, "address": c.address}
+        for c in rows
+        if vis is None or c.id in vis
+    ]
+    return {"customers": out, "count": len(out)}
 
 
 async def list_nat(
@@ -502,15 +594,31 @@ async def list_nat(
     rows = list((await session.execute(
         select(NATTranslation).order_by(NATTranslation.name).limit(limit)
     )).scalars().all())
-    return {
-        "nat_rules": [
-            {"id": str(r.id), "name": r.name, "type": r.type,
-             "protocol": r.protocol, "src_port": r.src_port, "dst_port": r.dst_port,
-             "description": r.description}
-            for r in rows
-        ],
-        "count": len(rows),
-    }
+    ip_cache: dict[Any, str | None] = {}
+
+    async def _ip(ip_id: Any) -> str | None:
+        if ip_id is None:
+            return None
+        if ip_id not in ip_cache:
+            o = await session.get(IPAddress, ip_id)
+            ip_cache[ip_id] = str(o.ip) if o else None
+        return ip_cache[ip_id]
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": str(r.id), "name": r.name, "type": r.type,
+            "interface": r.src_interface, "protocol": r.protocol,
+            "ip_version": r.ip_version, "disabled": r.disabled, "no_rdr": r.no_rdr,
+            # 來源 / 目的：優先顯示關聯到的 jt-ipam IP，否則顯示 OPNsense 別名
+            "src_ip": await _ip(r.src_ip_id), "src_alias": r.src_alias,
+            "dst_ip": await _ip(r.dst_ip_id), "dst_alias": r.dst_alias,
+            "src_port": r.src_port, "dst_port": r.dst_port,
+            "redirect_alias": r.redirect_alias,
+            "source_origin": r.source_origin,
+            "description": r.description,
+        })
+    return {"nat_rules": out, "count": len(out)}
 
 
 async def list_sections(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
@@ -519,8 +627,11 @@ async def list_sections(session: AsyncSession, *, user: User, limit: int = 200) 
     rows = list((await session.execute(
         select(Section).order_by(Section.name).limit(limit)
     )).scalars().all())
+    vis = await visible_ids(session, user=user, object_type="section")
     out = []
     for s in rows:
+        if vis is not None and s.id not in vis:
+            continue
         sub_n = int(await session.scalar(
             select(func.count()).select_from(Subnet).where(Subnet.section_id == s.id)
         ) or 0)
@@ -605,10 +716,14 @@ async def recent_ip_changes(
     """最近的 IP 異動記錄（可指定某 IP）。"""
     from app.models.ip_change_log import IPChangeLog
     limit = min(int(limit), 100)
-    stmt = select(IPChangeLog).order_by(IPChangeLog.created_at.desc()).limit(limit)
+    stmt = select(IPChangeLog)
     if ip:
-        stmt = select(IPChangeLog).where(IPChangeLog.ip_text == ip).order_by(
-            IPChangeLog.created_at.desc()).limit(limit)
+        stmt = stmt.where(IPChangeLog.ip_text == ip)
+    # RBAC：只回使用者可見子網路內 IP 的異動（限定範圍時 subnet_id 必須落在 vis）
+    vis = await visible_ids(session, user=user, object_type="subnet")
+    if vis is not None:
+        stmt = stmt.where(IPChangeLog.subnet_id.in_(vis)) if vis else stmt.where(sa_false())
+    stmt = stmt.order_by(IPChangeLog.created_at.desc()).limit(limit)
     rows = list((await session.execute(stmt)).scalars().all())
     return {"changes": [
         {"ip": r.ip_text, "event": r.event_type, "field": r.field,
@@ -801,6 +916,8 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
     sub = await session.get(Subnet, obj.subnet_id) if obj.subnet_id else None
     dev = await session.get(Device, obj.device_id) if obj.device_id else None
     cust = await session.get(Customer, obj.customer_id) if obj.customer_id else None
+    from app.services.os_precedence import effective_os
+    _os = await effective_os(session, obj)
     return {
         "found": True,
         "ip": obj.ip,
@@ -823,6 +940,10 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
         "last_seen_scanner": obj.last_seen_scanner,
         "last_seen_librenms": obj.last_seen_librenms,
         "last_seen_dns": obj.last_seen_dns,
+        # OS 偵測（依來源優先序 scanner/librenms/wazuh 解析）+ 探測項目
+        **_os,
+        "effective_probes": await _effective_probes(session, sub, obj),
+        "excluded_probes": list(obj.excluded_probes or []),
     }
 
 
@@ -836,6 +957,17 @@ async def get_subnet_detail(
     sec = await session.get(Section, sub.section_id) if sub.section_id else None
     cust = await session.get(Customer, sub.customer_id) if sub.customer_id else None
     vlan = await session.get(VLAN, sub.vlan_id) if sub.vlan_id else None
+    parent = await session.get(Subnet, sub.master_subnet_id) if sub.master_subnet_id else None
+    vrf_name = None
+    if sub.vrf_id:
+        from app.models.vrf import VRF
+        vrf = await session.get(VRF, sub.vrf_id)
+        vrf_name = vrf.name if vrf else None
+    agent_name = None
+    if sub.scan_agent_id:
+        from app.models.scan_agent import ScanAgent
+        ag = await session.get(ScanAgent, sub.scan_agent_id)
+        agent_name = ag.name if ag else None
     return {
         "id": str(sub.id),
         "cidr": str(sub.cidr),
@@ -845,9 +977,15 @@ async def get_subnet_detail(
         "section": sec.name if sec else None,
         "customer": cust.name if cust else None,
         "vlan": {"number": vlan.number, "name": vlan.name} if vlan else None,
+        "vrf": vrf_name,
+        "parent_subnet": str(parent.cidr) if parent else None,
         "is_pool": sub.is_pool,
         "is_full": sub.is_full,
+        "archived": sub.archived_at is not None,
+        # 掃描設定：是否開啟、會跑哪些探測、指派的掃描代理
         "scan_enabled": sub.scan_enabled,
+        "scan_method": list(sub.scan_method or []),
+        "scan_agent": agent_name,
         "usage": usage,
     }
 
@@ -881,7 +1019,9 @@ async def list_subnet_ips(
         "next_offset": (off + lim) if has_more else None,
         "ips": [{
             "ip": r.ip, "hostname": r.hostname, "state": r.state,
+            "effective_status": r.effective_status,
             "mac": r.mac, "owner": r.owner,
+            "os_family": r.os_family,
             "device_id": str(r.device_id) if r.device_id else None,
         } for r in rows],
     }
@@ -954,7 +1094,7 @@ async def get_topology(
         sub = await _resolve_subnet(session, user=user, subnet_id=None, subnet_cidr=subnet_cidr)
         subnet_ids = [sub.id]
     graph = await build_topology(
-        session, subnet_ids=subnet_ids, include_l3=include_l3, include_vpn=include_vpn,
+        session, user=user, subnet_ids=subnet_ids, include_l3=include_l3, include_vpn=include_vpn,
     )
     labels = {n["data"]["id"]: n["data"].get("label") for n in graph["nodes"]}
     edges = [{
@@ -991,6 +1131,57 @@ async def list_dns_zones(session: AsyncSession, *, user: User, limit: int = 200)
     } for z in rows]}
 
 
+async def list_dns_records(
+    session: AsyncSession, *, user: User,
+    name: str | None = None, rtype: str | None = None,
+    missing_ip: bool = False, limit: int = 200,
+) -> dict[str, Any]:
+    """List DNS records pulled from integrated servers (A/AAAA/PTR — IP↔name mapping).
+    Filter by name/value substring (name) and record type (rtype). missing_ip=true →
+    only A/AAAA records whose target IP has no matching address in IPAM. Each row marks
+    has_ipam_ip (resolved by actual IP value) and the source DNS server."""
+    from sqlalchemy import or_ as _or
+
+    from app.models.address import IPAddress as _IPA
+    from app.models.dns import DNSRecord, DNSServer, DNSZone
+    stmt = select(DNSRecord)
+    if name:
+        pat = f"%{name.strip()}%"
+        stmt = stmt.where(_or(DNSRecord.name.ilike(pat), DNSRecord.value.ilike(pat)))
+    if rtype:
+        stmt = stmt.where(DNSRecord.type == rtype.strip().upper())
+    if missing_ip:
+        ip_here = (
+            select(_IPA.id).where(func.host(_IPA.ip) == DNSRecord.value)
+            .correlate(DNSRecord).exists()
+        )
+        stmt = stmt.where(DNSRecord.type.in_(("A", "AAAA")), ~ip_here)
+    stmt = stmt.order_by(DNSRecord.name, DNSRecord.type).limit(min(limit, 500))
+    rows = list((await session.execute(stmt)).scalars().all())
+    ip_vals = {r.value for r in rows if r.type in ("A", "AAAA") and r.value}
+    have: set[str] = set()
+    if ip_vals:
+        for (host,) in (await session.execute(
+            select(func.host(_IPA.ip)).where(func.host(_IPA.ip).in_(ip_vals))
+        )).all():
+            have.add(str(host))
+    zone_ids = {r.zone_id for r in rows if r.zone_id}
+    zsrv: dict[Any, str] = {}
+    if zone_ids:
+        for zid, sname in (await session.execute(
+            select(DNSZone.id, DNSServer.name)
+            .join(DNSServer, DNSServer.id == DNSZone.server_id)
+            .where(DNSZone.id.in_(zone_ids))
+        )).all():
+            zsrv[zid] = sname
+    return {"records": [{
+        "name": r.name, "type": r.type, "value": r.value,
+        "consistency_state": r.consistency_state,
+        "has_ipam_ip": (r.value in have) if r.type in ("A", "AAAA") else None,
+        "server": zsrv.get(r.zone_id),
+    } for r in rows]}
+
+
 async def list_ip_requests(
     session: AsyncSession, *, user: User, status: str | None = None, limit: int = 200,
 ) -> dict[str, Any]:
@@ -1017,6 +1208,10 @@ async def list_scan_agents(session: AsyncSession, *, user: User, limit: int = 20
     return {"agents": [{
         "id": str(a.id), "name": a.name, "enabled": a.enabled,
         "last_seen_at": a.last_seen_at, "agent_version": a.agent_version, "last_error": a.last_error,
+        "last_source_ip": a.last_source_ip,
+        # 此代理被允許執行的探測 / 實際裝得起的探測（os 需 nmap…）
+        "enabled_probes": list(a.enabled_probes or []),
+        "available_probes": list(a.available_probes) if a.available_probes is not None else None,
     } for a in rows]}
 
 
@@ -1075,6 +1270,10 @@ async def get_customer_summary(
         )).scalars().first()
     if cust is None:
         raise IPAMToolError("customer not found")
+    # RBAC：客戶不在可見範圍 → 當作查無，不洩漏
+    vis = await visible_ids(session, user=user, object_type="customer")
+    if vis is not None and cust.id not in vis:
+        raise IPAMToolError("customer not found")
     from sqlalchemy import func as _f
     n_sec = await session.scalar(select(_f.count()).select_from(Section).where(Section.customer_id == cust.id))
     n_sub = await session.scalar(select(_f.count()).select_from(Subnet).where(Subnet.customer_id == cust.id))
@@ -1089,12 +1288,26 @@ async def get_customer_summary(
 
 async def list_vms(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
     """虛擬機清單（Proxmox VE 等同步回來）。"""
-    from app.models.virt import VirtualMachine
-    rows = (await session.execute(select(VirtualMachine).limit(limit))).scalars().all()
-    return {"vms": [{
-        "id": str(v.id), "name": v.name, "node": v.node, "status": v.status,
-        "vcpus": v.vcpus, "memory_mb": v.memory_mb, "disk_gb": v.disk_gb, "kind": v.kind,
-    } for v in rows]}
+    from app.models.virt import VirtualMachine, VMInterface
+    rows = list((await session.execute(select(VirtualMachine).limit(limit))).scalars().all())
+    out = []
+    for v in rows:
+        ifaces = list((await session.execute(
+            select(VMInterface).where(VMInterface.vm_id == v.id)
+        )).scalars().all())
+        prim = await session.get(IPAddress, v.primary_ip_id) if v.primary_ip_id else None
+        dev = await session.get(Device, v.device_id) if v.device_id else None
+        out.append({
+            "id": str(v.id), "name": v.name, "node": v.node, "status": v.status,
+            "vcpus": v.vcpus, "memory_mb": v.memory_mb, "disk_gb": v.disk_gb, "kind": v.kind,
+            "is_template": v.is_template,
+            "primary_ip": str(prim.ip) if prim else None,
+            "device": dev.name if dev else None,
+            "interfaces": [{
+                "name": i.name, "mac": i.mac, "primary_ip": i.primary_ip, "bridge": i.bridge,
+            } for i in ifaces],
+        })
+    return {"vms": out, "count": len(out)}
 
 
 async def list_wireless_links(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
@@ -1111,6 +1324,151 @@ async def list_wireless_links(session: AsyncSession, *, user: User, limit: int =
             "distance_m": w.distance_m,
         })
     return {"wireless_links": out}
+
+
+async def list_ssids(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """無線 SSID 清單（auth_type / VLAN）。"""
+    from app.models.advanced import WirelessSSID
+    rows = (await session.execute(select(WirelessSSID).limit(min(int(limit), 500)))).scalars().all()
+    out = []
+    for s in rows:
+        vlan = await session.get(VLAN, s.vlan_id) if s.vlan_id else None
+        out.append({"id": str(s.id), "ssid": s.ssid, "auth_type": s.auth_type,
+                    "vlan": vlan.number if vlan else None, "description": s.description})
+    return {"ssids": out, "count": len(out)}
+
+
+async def list_circuits(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """電路 / 線路清單（供應商、頻寬、固定 IP、關聯裝置）。"""
+    from app.models.advanced import Circuit, CircuitType, Provider
+    rows = list((await session.execute(
+        select(Circuit).limit(min(int(limit), 500))
+    )).scalars().all())
+    out = []
+    for c in rows:
+        prov = await session.get(Provider, c.provider_id) if c.provider_id else None
+        ctype = await session.get(CircuitType, c.type_id) if c.type_id else None
+        dev = await session.get(Device, c.device_id) if c.device_id else None
+        out.append({
+            "id": str(c.id), "cid": c.cid, "provider": prov.name if prov else None,
+            "type": ctype.name if ctype else None, "status": c.status,
+            "up_kbps": c.up_kbps, "down_kbps": c.down_kbps, "commit_rate_kbps": c.commit_rate_kbps,
+            "ip_address": c.ip_address, "gateway": c.gateway, "netmask": c.netmask,
+            "device": dev.name if dev else None,
+            "monthly_fee_cents": c.monthly_fee_cents, "description": c.description,
+        })
+    return {"circuits": out, "count": len(out)}
+
+
+async def list_providers(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """電信 / 線路供應商清單。"""
+    from app.models.advanced import Provider
+    rows = (await session.execute(select(Provider).limit(min(int(limit), 500)))).scalars().all()
+    return {"providers": [{
+        "id": str(p.id), "name": p.name, "asn": p.asn, "account_number": p.account_number,
+        "portal_url": p.portal_url, "noc_contact": p.noc_contact, "description": p.description,
+    } for p in rows]}
+
+
+async def list_asns(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """自治系統號碼（ASN）清單。"""
+    from app.models.advanced import ASN
+    rows = (await session.execute(select(ASN).limit(min(int(limit), 500)))).scalars().all()
+    return {"asns": [{
+        "id": str(a.id), "asn": a.asn, "rir": a.rir, "description": a.description,
+    } for a in rows]}
+
+
+async def list_tenants(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """租戶（Tenant）清單。"""
+    from app.models.advanced import Tenant
+    rows = (await session.execute(select(Tenant).limit(min(int(limit), 500)))).scalars().all()
+    return {"tenants": [{
+        "id": str(t.id), "name": t.name, "slug": t.slug, "description": t.description,
+    } for t in rows]}
+
+
+async def list_contacts(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """聯絡人清單（名稱 / 職稱 / 電話 / Email）。"""
+    from app.models.advanced import Contact
+    rows = (await session.execute(select(Contact).limit(min(int(limit), 500)))).scalars().all()
+    return {"contacts": [{
+        "id": str(c.id), "name": c.name, "title": c.title, "phone": c.phone,
+        "email": c.email, "address": c.address,
+    } for c in rows]}
+
+
+async def list_cables(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """佈線 / 纜線清單（線標、類型、長度、兩端 termination）。"""
+    from app.models.physical import Cable, CableTermination
+    rows = list((await session.execute(select(Cable).limit(min(int(limit), 500)))).scalars().all())
+    out = []
+    for c in rows:
+        terms = list((await session.execute(
+            select(CableTermination).where(CableTermination.cable_id == c.id)
+        )).scalars().all())
+        out.append({
+            "id": str(c.id), "label": c.label, "type": c.type, "color": c.color,
+            "length_m": c.length_m, "status": c.status,
+            "terminations": [{
+                "side": t.side, "object_type": t.object_type,
+                "object_id": str(t.object_id), "port_label": t.port_label,
+            } for t in sorted(terms, key=lambda x: x.side)],
+        })
+    return {"cables": out, "count": len(out)}
+
+
+async def cable_trace(session: AsyncSession, *, user: User, cable_id: str) -> dict[str, Any]:
+    """追蹤一條纜線的 A/B 端 termination（接到哪個裝置 / 埠）。"""
+    from app.models.physical import Cable, CableTermination
+    c = await session.get(Cable, _as_uuid(cable_id, "cable_id"))
+    if c is None:
+        raise IPAMToolError("cable not found")
+    terms = list((await session.execute(
+        select(CableTermination).where(CableTermination.cable_id == c.id)
+    )).scalars().all())
+    return {
+        "cable": {"id": str(c.id), "label": c.label, "type": c.type, "status": c.status},
+        "terminations": [{
+            "side": t.side, "object_type": t.object_type,
+            "object_id": str(t.object_id), "port_label": t.port_label,
+        } for t in sorted(terms, key=lambda x: x.side)],
+    }
+
+
+async def list_power(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """電力清單：饋線（電壓/電流/相位）與插座（接到哪台裝置）。"""
+    from app.models.physical import PowerFeed, PowerOutlet
+    feeds = list((await session.execute(select(PowerFeed).limit(min(int(limit), 500)))).scalars().all())
+    outlets = list((await session.execute(select(PowerOutlet).limit(min(int(limit), 500)))).scalars().all())
+    feed_out = [{
+        "id": str(f.id), "name": f.name, "voltage_v": f.voltage_v, "amperage_a": f.amperage_a,
+        "phase": f.phase, "supply_type": f.supply_type,
+        "rack_id": str(f.rack_id) if f.rack_id else None,
+    } for f in feeds]
+    outlet_out = []
+    for o in outlets:
+        dev = await session.get(Device, o.device_id) if o.device_id else None
+        outlet_out.append({
+            "id": str(o.id), "label": o.label, "feed_id": str(o.feed_id) if o.feed_id else None,
+            "device": dev.name if dev else None,
+        })
+    return {"feeds": feed_out, "outlets": outlet_out}
+
+
+async def list_wazuh_agents(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """Wazuh 代理清單（狀態、OS、版本、CVE 數）。"""
+    from app.models.wazuh import WazuhAgent
+    rows = (await session.execute(
+        select(WazuhAgent).order_by(WazuhAgent.name).limit(min(int(limit), 500))
+    )).scalars().all()
+    return {"agents": [{
+        "id": str(a.id), "agent_id": a.agent_id, "name": a.name, "ip": a.ip,
+        "status": a.status, "os_platform": a.os_platform, "os_version": a.os_version,
+        "agent_version": a.agent_version, "group": a.group,
+        "cve_critical": a.cve_critical_count, "cve_high": a.cve_high_count,
+        "last_keep_alive": a.last_keep_alive,
+    } for a in rows]}
 
 
 # ── 寫入類（一律 ADMIN ONLY，與 allocate_ip 同模式） ──
@@ -1699,6 +2057,16 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "List DNS zones.",
         "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
+    "list_dns_records": {
+        "fn": list_dns_records,
+        "description": "List DNS records from integrated servers (A/AAAA/PTR). Filter by name/value "
+                       "substring (name) and type (rtype). missing_ip=true → only A/AAAA whose target IP "
+                       "has no matching IPAM address. Each row marks has_ipam_ip and the source server.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"}, "rtype": {"type": "string"},
+            "missing_ip": {"type": "boolean"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
     "list_ip_requests": {
         "fn": list_ip_requests,
         "description": "List IP allocation requests. Non-admins see only their own. Optional status filter (pending/approved/rejected…).",
@@ -1894,6 +2262,57 @@ TOOLS: dict[str, dict[str, Any]] = {
             "heat_watts": {"type": "number"}, "batt_wh": {"type": "number"},
             "load_w": {"type": "number"}, "pdu_a": {"type": "number"}}},
     },
+    # ─── 進階資源 / 實體層 / 整合（全域基礎設施）───
+    "list_circuits": {
+        "fn": list_circuits,
+        "description": "List circuits / WAN links (供應商、頻寬 up/down kbps、固定 IP、關聯裝置、月費).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_providers": {
+        "fn": list_providers,
+        "description": "List circuit/transit providers (供應商：ASN、帳號、入口網址、NOC).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_asns": {
+        "fn": list_asns,
+        "description": "List autonomous system numbers (ASN) with RIR.",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_tenants": {
+        "fn": list_tenants,
+        "description": "List tenants (租戶).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_contacts": {
+        "fn": list_contacts,
+        "description": "List contacts (聯絡人：職稱 / 電話 / Email).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_ssids": {
+        "fn": list_ssids,
+        "description": "List wireless SSIDs (auth type, VLAN).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_cables": {
+        "fn": list_cables,
+        "description": "List cables (佈線：線標、類型、長度、兩端 termination/裝置/埠).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "cable_trace": {
+        "fn": cable_trace,
+        "description": "Trace one cable's A/B terminations (which device/port each end connects to). Provide cable_id.",
+        "parameters": {"type": "object", "properties": {"cable_id": {"type": "string"}}, "required": ["cable_id"]},
+    },
+    "list_power": {
+        "fn": list_power,
+        "description": "List power feeds (voltage/amperage/phase) and outlets (which device each outlet powers).",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_wazuh_agents": {
+        "fn": list_wazuh_agents,
+        "description": "List Wazuh agents (status, OS, version, CVE critical/high counts). For the coverage GAP use wazuh_missing_agents instead.",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
 }
 
 
@@ -1915,6 +2334,19 @@ UTILITY_TOOLS: frozenset[str] = frozenset({
 })
 
 
+# 全域基礎設施工具（無法逐物件授權）→ 僅 admin 或具萬用讀取權限者可呼叫。
+# 對應 CLAUDE.md 的 require_global_read 分類；只被指派特定物件的部門帳號一律擋。
+GLOBAL_READ_TOOLS: frozenset[str] = frozenset({
+    "list_vlans", "list_vrfs", "list_nat", "list_firewalls", "list_firewall_rules",
+    "list_firewall_aliases", "list_dns_servers", "list_dns_zones", "list_dns_records",
+    "check_dns_consistency", "dns_lookup",
+    "list_vms", "list_wireless_links", "list_vpn_tunnels", "list_scan_agents",
+    "list_arp", "list_fdb", "list_circuits", "list_providers", "list_asns",
+    "list_tenants", "list_contacts", "list_ssids", "list_cables", "cable_trace",
+    "list_power", "list_wazuh_agents", "wazuh_missing_agents", "get_topology",
+})
+
+
 async def has_no_visibility(session: AsyncSession, user: User) -> bool:
     """非管理員且對所有物件類型都無可見範圍 → AI 對話不該回任何 IPAM 資料。"""
     if getattr(user, "is_admin", False):
@@ -1924,6 +2356,44 @@ async def has_no_visibility(session: AsyncSession, user: User) -> bool:
         if v is None or v:   # None=全部可見、或非空集合 → 有可見範圍
             return False
     return True
+
+
+async def has_global_read(session: AsyncSession, user: User) -> bool:
+    """admin 或任一物件類型有「萬用」授權（visible_ids 回 None）→ 可讀全域基礎設施。"""
+    if getattr(user, "is_admin", False):
+        return True
+    for ot in ("subnet", "device", "customer", "section", "rack", "location"):
+        if await visible_ids(session, user=user, object_type=ot) is None:
+            return True
+    return False
+
+
+async def authorize_tool(session: AsyncSession, user: User, name: str) -> str | None:
+    """單一 RBAC 閘（HTTP MCP 與 NL chat 共用）。回 None=放行；回字串=拒絕原因。
+
+    - 純計算工具：永遠放行
+    - 異動工具：需 admin
+    - 全域基礎設施工具：需 admin 或萬用讀取
+    - 其餘（逐物件資料）：需至少有可見範圍；工具內部再依 visible_ids 過濾
+    """
+    if name in UTILITY_TOOLS:
+        return None
+    if name in MUTATING_TOOLS and not getattr(user, "is_admin", False):
+        return "permission_denied: 此操作需要管理員權限。"
+    if await has_no_visibility(session, user):
+        return "permission_denied: 你目前沒有可檢視的資源權限，請聯絡管理員指派。"
+    if name in GLOBAL_READ_TOOLS and not await has_global_read(session, user):
+        return "permission_denied: 此為全域基礎設施資料，僅限管理員或具全域讀取權限者檢視。"
+    return None
+
+
+async def allowed_tool_names(session: AsyncSession, user: User) -> set[str]:
+    """此使用者實際可呼叫的工具名稱集合（給 LLM 工具清單與 MCP tools/list 過濾用）。"""
+    allowed: set[str] = set()
+    for name in TOOLS:
+        if await authorize_tool(session, user, name) is None:
+            allowed.add(name)
+    return allowed
 
 
 def summarize_action(name: str, args: dict[str, Any]) -> str:

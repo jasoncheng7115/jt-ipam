@@ -18,10 +18,12 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import { NIcon } from "naive-ui";
-import { RequestsIcon } from "@/icons";
+import { RequestsIcon, OkIcon, CancelIcon } from "@/icons";
 import {
   listRequests,
   createRequest,
+  approveRequest,
+  rejectRequest,
   type IPRequest,
 } from "@/api/ip_requests";
 import { listSubnets } from "@/api/subnets";
@@ -29,6 +31,8 @@ import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useEntityLinks } from "@/composables/useEntityLinks";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const { t } = useI18n();
 
 const { visibleKeys: rqVis, setVisible: rqSet, reset: rqReset } = useColumnPrefs(
@@ -95,11 +99,55 @@ const allColumns = computed<DataTableColumns<IPRequest>>(() => autoSort([
   { title: t("requests.col_hostname"), key: "hostname", minWidth: 180, ellipsis: { tooltip: true }, render: (r) => r.hostname ?? "—" },
   { title: t("requests.col_purpose"),  key: "purpose", minWidth: 200, ellipsis: { tooltip: true } },
   { title: t("requests.col_created"),  key: "created_at", width: 180 },
+  {
+    title: t("common.actions"), key: "__act", width: 150,
+    render: (r) => r.can_approve
+      ? h(NSpace, { size: 6, wrapItem: false }, () => [
+          h(NButton, { size: "tiny", type: "primary", onClick: (e: Event) => { e.stopPropagation(); void approve(r); } },
+            { icon: () => h(NIcon, null, () => h(OkIcon)), default: () => t("request_detail.approve_btn") }),
+          h(NButton, { size: "tiny", type: "error", ghost: true, onClick: (e: Event) => { e.stopPropagation(); openReject(r); } },
+            { icon: () => h(NIcon, null, () => h(CancelIcon)), default: () => t("request_detail.reject_btn") }),
+        ])
+      : "—",
+  },
 ]));
 
 const columns = computed<DataTableColumns<IPRequest>>(() =>
-  allColumns.value.filter((c: any) => rqVis.value.includes(c.key)),
+  allColumns.value.filter((c: any) => c.key === "__act" || rqVis.value.includes(c.key)),
 );
+
+// ── 核准 / 駁回（審核人專用，可逐列操作）──
+const rejectTarget = ref<IPRequest | null>(null);
+const rejectReason = ref("");
+const showReject = ref(false);
+async function approve(r: IPRequest) {
+  try {
+    await approveRequest(r.id);
+    msg.success(t("request_detail.approved_ok"));
+    await refresh();
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? t("errors.network"));
+  }
+}
+function openReject(r: IPRequest) {
+  rejectTarget.value = r;
+  rejectReason.value = "";
+  showReject.value = true;
+}
+async function doReject() {
+  if (!rejectTarget.value || !rejectReason.value.trim()) {
+    msg.warning(t("request_detail.reject_reason_required"));
+    return;
+  }
+  try {
+    await rejectRequest(rejectTarget.value.id, rejectReason.value.trim());
+    msg.success(t("request_detail.rejected_ok"));
+    showReject.value = false;
+    await refresh();
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? t("errors.network"));
+  }
+}
 
 async function refresh() {
   loading.value = true;
@@ -185,7 +233,6 @@ onMounted(() => {
           :value="filterStatus ?? ''"
           :options="statusOptions"
           :placeholder="t('requests.col_status')"
-          size="small"
           style="width: 140px"
           @update:value="(v: string) => { filterStatus = v || null; refresh(); }"
         />
@@ -202,7 +249,7 @@ onMounted(() => {
       :columns="columns"
       :data="rows"
       :loading="loading"
-      :pagination="{ pageSize: 50 }"
+      :pagination="pg"
       :bordered="false"
       :scroll-x="840"
       :row-props="(row: IPRequest) => ({
@@ -245,6 +292,22 @@ onMounted(() => {
       <n-space>
         <n-button @click="showCreate = false">{{ t("common.cancel") }}</n-button>
         <n-button type="primary" :loading="submitting" @click="submitCreate">{{ t("common.submit") }}</n-button>
+      </n-space>
+    </template>
+  </n-modal>
+
+  <n-modal v-model:show="showReject" preset="dialog"
+           :title="t('request_detail.reject_title')" :show-icon="false" style="width: 480px">
+    <n-form>
+      <n-form-item :label="t('request_detail.reject_reason_label')" required>
+        <n-input v-model:value="rejectReason" type="textarea" :rows="3"
+                 :placeholder="t('request_detail.reject_reason_ph')" />
+      </n-form-item>
+    </n-form>
+    <template #action>
+      <n-space>
+        <n-button @click="showReject = false">{{ t("common.cancel") }}</n-button>
+        <n-button type="error" @click="doReject">{{ t("request_detail.reject_btn") }}</n-button>
       </n-space>
     </template>
   </n-modal>

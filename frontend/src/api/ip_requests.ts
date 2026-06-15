@@ -20,6 +20,31 @@ export interface IPRequest {
   cancelled_at: string | null;
   created_at: string;
   updated_at: string;
+  can_approve?: boolean;   // 此請求對目前使用者是否可核准（後端依審核政策計算）
+}
+
+export interface IPRequestStep {
+  name: string;
+  user_ids: string[];
+  group_ids: string[];
+}
+
+export interface IPRequestPolicy {
+  approver_mode: "admin" | "designated" | "parallel" | "stages";
+  designated_user_ids: string[];
+  designated_group_ids: string[];
+  allow_self_approve: boolean;
+  stages: IPRequestStep[];
+}
+
+export async function getRequestPolicy(): Promise<IPRequestPolicy> {
+  const { data } = await apiClient.get<IPRequestPolicy>("/api/v1/ip-requests/policy/config");
+  return data;
+}
+
+export async function setRequestPolicy(p: IPRequestPolicy): Promise<IPRequestPolicy> {
+  const { data } = await apiClient.put<IPRequestPolicy>("/api/v1/ip-requests/policy/config", p);
+  return data;
 }
 
 export interface IPRequestEvent {
@@ -33,6 +58,11 @@ export interface IPRequestEvent {
 export interface IPRequestDetail {
   request: IPRequest;
   events: IPRequestEvent[];
+  subnet_cidr?: string | null;
+  target_ip?: string | null;       // pending：實際會配發的 IP（申請指定或系統自動）
+  target_auto?: boolean;           // target_ip 是否系統自動挑的
+  allocated_ip?: string | null;    // 已配發的 IP
+  stages?: { index: number; name: string; approved: boolean; is_current: boolean }[];
 }
 
 export async function listRequests(
@@ -66,8 +96,10 @@ export async function createRequest(payload: {
   return data;
 }
 
-export async function approveRequest(id: string): Promise<IPRequest> {
-  const { data } = await apiClient.post<IPRequest>(`/api/v1/ip-requests/${id}/approve`);
+export async function approveRequest(id: string, ip?: string): Promise<IPRequest> {
+  const { data } = await apiClient.post<IPRequest>(
+    `/api/v1/ip-requests/${id}/approve`, ip ? { ip } : {},
+  );
   return data;
 }
 

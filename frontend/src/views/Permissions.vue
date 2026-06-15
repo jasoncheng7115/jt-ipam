@@ -25,6 +25,8 @@ import {
 } from "@/api/permissions";
 import { UsersIcon, DeleteIcon, PlusIcon, AdminIcon } from "@/icons";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -196,7 +198,7 @@ onMounted(async () => {
 
     <n-data-table :columns="userCols" :data="filteredUsers" :loading="loading" :bordered="false"
                   :row-props="(u: User) => ({ style: 'cursor:pointer', onClick: () => openUser(u) })"
-                  :pagination="{ pageSize: 20 }" />
+                  :pagination="pg" />
 
     <n-drawer v-model:show="drawer" :width="480" placement="right">
       <n-drawer-content :title="sel ? (sel.display_name || sel.username) : ''" closable>

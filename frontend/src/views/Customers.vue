@@ -25,6 +25,8 @@ import { fmtDateTime } from "@/utils/datetime";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const { t } = useI18n();
 const router = useRouter();
 
@@ -203,7 +205,7 @@ onMounted(() => { void refresh(); });
     <n-data-table
       :columns="cols" :data="rows" :loading="loading"
       :bordered="false" :scroll-x="1054"
-      :pagination="{ pageSize: 50, showSizePicker: true, pageSizes: [25, 50, 100] }"
+      :pagination="pg"
     >
       <template #empty>
         <n-space justify="center">{{ t("common.no_data") }}</n-space>

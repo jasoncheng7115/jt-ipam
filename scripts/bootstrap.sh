@@ -22,7 +22,14 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 if [[ -d "$DIR/.git" ]]; then
-  echo "[*] $DIR is already a git repo, using existing code (run upgrade to update)."
+  echo "[*] $DIR exists; updating to latest origin/main…"
+  git config --global --add safe.directory "$DIR" 2>/dev/null || true
+  git -C "$DIR" remote set-url origin "$REPO" 2>/dev/null || true
+  if ! git -C "$DIR" pull --ff-only 2>/dev/null; then
+    # diverged / local edits → hard-reset the install dir to the published main
+    git -C "$DIR" fetch origin main && git -C "$DIR" reset --hard origin/main \
+      || echo "[warn] could not update existing repo; proceeding with current code."
+  fi
 else
   echo "[*] git clone $REPO -> $DIR"
   git clone "$REPO" "$DIR"

@@ -18,8 +18,10 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import INET, UUID
@@ -96,4 +98,28 @@ class IPRequestEvent(Base, UUIDPrimaryKeyMixin):
         server_default=func.now(),
         nullable=False,
         index=True,
+    )
+
+
+class IPRequestStageApproval(Base, UUIDPrimaryKeyMixin):
+    """多關卡審核：每個關卡（step_index）被核准時記一筆。
+
+    sequential（stages）模式：依序，step 0,1,2… 全數核准才完成。
+    parallel（會簽）模式：不分先後，所有 step 都被核准才完成。
+    （admin / designated 單關卡模式不用此表，approve 即配發。）
+    """
+
+    __tablename__ = "ip_request_stage_approvals"
+    __table_args__ = (UniqueConstraint("request_id", "step_index", name="uq_ip_req_stage_step"),)
+
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ip_requests.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    approver_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

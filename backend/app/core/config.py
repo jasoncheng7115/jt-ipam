@@ -101,9 +101,19 @@ class Settings(BaseSettings):
     rate_limit_ai: str = "20/minute"   # LLM 推論昂貴，專屬較嚴格限流（防 DoS / 拖垮）
 
     # ── SSRF Allowlist (A10) ──
+    # 預設允許連到 RFC1918 私網：IPAM 的整合對象（OPNsense/LibreNMS/Wazuh/Proxmox/
+    # AdGuard/DNS/Ollama…）本來就在內網，關掉會讓多數部署開箱不能用。loopback /
+    # link-local / cloud-metadata(169.254.169.254) 仍由 safe_http 硬擋、不受此旗標影響。
+    # ⚠️ 取捨：被攻陷的 admin 帳號可藉整合 URL 對內網其他服務發請求（橫向移動面）。
+    # 若部署不需打私網，設 false 並用 outbound_allow_cidrs 白名單各整合目標網段收斂。
     outbound_allow_cidrs: Annotated[list[str], NoDecode, Field(default_factory=list)]
     outbound_allow_hosts: Annotated[list[str], NoDecode, Field(default_factory=list)]
     outbound_allow_private: bool = True
+
+    # ── ARP 紀錄保留 ──
+    # arp_entries 只新增/更新、不會自動回收；定時 sync 會刪掉 last_seen_at 超過此天數的
+    # 舊 ARP（含來源 device 被刪的孤兒 row）。設 0 或負數＝停用清除（永久保留）。
+    arp_retention_days: int = 30
 
     # ── Graylog ──
     graylog_host: str | None = None

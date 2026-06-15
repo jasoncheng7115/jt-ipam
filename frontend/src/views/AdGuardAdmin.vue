@@ -2,11 +2,13 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip,
-  NModal, NForm, NFormItem, NInput, NInputNumber, NSwitch, NCheckbox, NPopconfirm,
+  NModal, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NCheckbox, NPopconfirm,
   useMessage, type DataTableColumns,
 } from "naive-ui";
+import { listSubnets } from "@/api/subnets";
 import {
   listAdGuard, createAdGuard, updateAdGuard, deleteAdGuard,
   testAdGuard, syncAdGuard, type AdGuardInstance,
@@ -46,7 +48,17 @@ const form = ref({
   sync_clients: true, sync_rewrites: true,
   sync_interval_seconds: 300,
   description: "",
+  scope_subnet_ids: [] as string[],
 });
+
+const subnetOptions = ref<{ label: string; value: string }[]>([]);
+async function loadSubnetOptions() {
+  try {
+    const r = await listSubnets({ page: 1, pageSize: 500 });
+    subnetOptions.value = r.items.map((s) => ({
+      label: s.description ? `${s.cidr} — ${s.description}` : s.cidr, value: s.id }));
+  } catch { /* silent */ }
+}
 
 async function refresh() {
   loading.value = true;
@@ -64,6 +76,7 @@ function openCreate() {
     enabled: true, verify_tls: true,
     sync_clients: true, sync_rewrites: true,
     sync_interval_seconds: 300, description: "",
+    scope_subnet_ids: [],
   };
   show.value = true;
 }
@@ -76,6 +89,7 @@ function openEdit(r: AdGuardInstance) {
     sync_clients: r.sync_clients, sync_rewrites: r.sync_rewrites,
     sync_interval_seconds: r.sync_interval_seconds,
     description: r.description ?? "",
+    scope_subnet_ids: r.scope_subnet_ids ?? [],
   };
   show.value = true;
 }
@@ -93,6 +107,7 @@ async function submit() {
         sync_rewrites: form.value.sync_rewrites,
         sync_interval_seconds: form.value.sync_interval_seconds,
         description: form.value.description || undefined,
+        scope_subnet_ids: form.value.scope_subnet_ids,
       };
       if (form.value.api_password) payload.api_password = form.value.api_password;
       await updateAdGuard(editing.value.id, payload);
@@ -108,6 +123,7 @@ async function submit() {
         sync_rewrites: form.value.sync_rewrites,
         sync_interval_seconds: form.value.sync_interval_seconds,
         description: form.value.description || undefined,
+        scope_subnet_ids: form.value.scope_subnet_ids,
       });
     }
     show.value = false;
@@ -185,7 +201,7 @@ const cols = computed<DataTableColumns<AdGuardInstance>>(() =>
   allCols.value.filter((c: any) => agVis.value.includes(c.key)),
 );
 
-onMounted(refresh);
+onMounted(() => { void refresh(); void loadSubnetOptions(); });
 </script>
 
 <template>
@@ -239,6 +255,14 @@ onMounted(refresh);
         <n-form-item :label="t('common.enable')">
           <n-switch v-model:value="form.enabled" />
         </n-form-item>
+        <n-form-item :label="t('adguard_admin.scope_subnets')">
+          <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
+                    multiple filterable clearable :placeholder="t('adguard_admin.scope_all')" />
+          <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
+        </n-form-item>
+        <div style="margin: -8px 0 4px">
+          <span style="font-size: 11px; opacity: .7">{{ t("adguard_admin.scope_hint") }}</span>
+        </div>
         <n-form-item :label="t('common.description')">
           <n-input v-model:value="form.description" type="textarea" :rows="2" />
         </n-form-item>

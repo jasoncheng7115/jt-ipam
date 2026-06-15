@@ -3,6 +3,7 @@ import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { autoSort } from "@/composables/useTableSort";
 import { useI18n } from "vue-i18n";
+import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NInputNumber, NSwitch, NCheckbox, NTabs, NTabPane, NSelect, NPopconfirm, NTag, NAlert,
@@ -23,8 +24,11 @@ import {
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useCustomers } from "@/composables/useCustomers";
+import { listLocations } from "@/api/basic";
 import { useRoute } from "vue-router";
 const { t } = useI18n();
+const { options: customerOptions, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 const route = useRoute();
 // 管理區：OPNsense 連線 + 別名對應；功能/進階區：防火牆規則 + 別名
 const adminMode = computed(() => route.name === "firewall_admin");
@@ -201,24 +205,36 @@ const loading = ref(false);
 
 const showFw = ref(false);
 const editingFw = ref<OPNsenseFirewall | null>(null);
-const newFw = ref({
-  name: "", api_url: "", api_key: "", api_secret: "",
-  verify_tls: true,
-  sync_dhcp: false, sync_arp: false, sync_openvpn: false,
-  sync_rules: false, sync_nat: false, sync_aliases: true,
-  sync_interval_seconds: 300,
-  description: "",
-});
-
-function openFwCreate() {
-  editingFw.value = null;
-  newFw.value = {
+interface IfaceMapRow { iface: string; subnet_id: string | null }
+interface FwForm {
+  name: string; api_url: string; api_key: string; api_secret: string;
+  verify_tls: boolean;
+  sync_dhcp: boolean; sync_arp: boolean; sync_openvpn: boolean;
+  sync_rules: boolean; sync_nat: boolean; sync_aliases: boolean;
+  sync_interval_seconds: number;
+  description: string;
+  scope_location_id: string | null;
+  scope_customer_id: string | null;
+  scope_subnet_ids: string[];
+  iface_map_rows: IfaceMapRow[];
+}
+function blankFwForm(): FwForm {
+  return {
     name: "", api_url: "", api_key: "", api_secret: "", verify_tls: true,
     sync_dhcp: false, sync_arp: false, sync_openvpn: false,
     sync_rules: false, sync_nat: false, sync_aliases: true,
     sync_interval_seconds: 300, description: "",
+    scope_location_id: null, scope_customer_id: null,
+    scope_subnet_ids: [], iface_map_rows: [],
   };
+}
+const newFw = ref<FwForm>(blankFwForm());
+
+function openFwCreate() {
+  editingFw.value = null;
+  newFw.value = blankFwForm();
   showFw.value = true;
+  void loadScopeOpts();
 }
 function openFwEdit(r: OPNsenseFirewall) {
   editingFw.value = r;
@@ -229,8 +245,21 @@ function openFwEdit(r: OPNsenseFirewall) {
     sync_rules: r.sync_rules, sync_nat: r.sync_nat, sync_aliases: (r as any).sync_aliases ?? true,
     sync_interval_seconds: r.sync_interval_seconds ?? 300,
     description: r.description ?? "",
+    scope_location_id: r.scope_location_id ?? null,
+    scope_customer_id: r.scope_customer_id ?? null,
+    scope_subnet_ids: r.scope_subnet_ids ? [...r.scope_subnet_ids] : [],
+    iface_map_rows: r.iface_subnet_map
+      ? Object.entries(r.iface_subnet_map).map(([iface, subnet_id]) => ({ iface, subnet_id }))
+      : [],
   };
   showFw.value = true;
+  void loadScopeOpts();
+}
+function addIfaceRow() {
+  newFw.value.iface_map_rows.push({ iface: "", subnet_id: null });
+}
+function removeIfaceRow(idx: number) {
+  newFw.value.iface_map_rows.splice(idx, 1);
 }
 const showMapCreate = ref(false);
 const newMap = ref({
@@ -246,6 +275,8 @@ const newMap = ref({
 
 import { listSections } from "@/api/sections";
 import { listSubnets } from "@/api/subnets";
+import { useTablePagination } from "@/composables/useTablePagination";
+const pg = useTablePagination();
 const sectionOpts = ref<{ label: string; value: string }[]>([]);
 const subnetOpts = ref<{ label: string; value: string }[]>([]);
 
@@ -256,6 +287,24 @@ async function loadAliasSelectorOpts() {
     subnetOpts.value = subs.items.map((s: any) => ({
       label: `${s.cidr}${s.description ? ' — ' + s.description : ''}`, value: s.id,
     }));
+  } catch {}
+}
+
+// 關聯範圍（NAT 對應）用的選項
+const locationOpts = ref<{ label: string; value: string }[]>([]);
+async function loadScopeOpts() {
+  try {
+    void ensureCustomersLoaded();
+    const tasks: Promise<unknown>[] = [];
+    if (!locationOpts.value.length) {
+      tasks.push(
+        listLocations().then((locs) => {
+          locationOpts.value = locs.items.map((l) => ({ label: l.name, value: l.id }));
+        }),
+      );
+    }
+    if (!subnetOpts.value.length) tasks.push(loadAliasSelectorOpts());
+    await Promise.all(tasks);
   } catch {}
 }
 
@@ -276,6 +325,19 @@ async function refresh() {
   } catch { msg.error(t("errors.network")); }
   finally { loading.value = false; }
 }
+function scopePayload() {
+  const ifaceMap: Record<string, string> = {};
+  for (const row of newFw.value.iface_map_rows) {
+    const k = row.iface.trim();
+    if (k && row.subnet_id) ifaceMap[k] = row.subnet_id;
+  }
+  return {
+    scope_location_id: newFw.value.scope_location_id || null,
+    scope_customer_id: newFw.value.scope_customer_id || null,
+    scope_subnet_ids: newFw.value.scope_subnet_ids.length ? newFw.value.scope_subnet_ids : null,
+    iface_subnet_map: Object.keys(ifaceMap).length ? ifaceMap : null,
+  };
+}
 async function submitFw() {
   try {
     if (editingFw.value) {
@@ -291,6 +353,7 @@ async function submitFw() {
         sync_aliases: newFw.value.sync_aliases,
         sync_interval_seconds: newFw.value.sync_interval_seconds,
         description: newFw.value.description || undefined,
+        ...scopePayload(),
       };
       // 只在使用者輸入新憑證時才送 — backend 要 key+secret 同時送
       if (newFw.value.api_key && newFw.value.api_secret) {
@@ -311,6 +374,7 @@ async function submitFw() {
         sync_aliases: newFw.value.sync_aliases,
         sync_interval_seconds: newFw.value.sync_interval_seconds,
         description: newFw.value.description || undefined,
+        ...scopePayload(),
       } as any);
     }
     showFw.value = false;
@@ -559,7 +623,7 @@ onMounted(() => {
           v-if="rulesFw"
           :columns="ruleCols" :data="rulesView" :loading="rulesLoading"
           :bordered="false" size="small" :scroll-x="910"
-          :pagination="{ pageSize: 100, showSizePicker: true, pageSizes: [50, 100, 200, 500] }"
+          :pagination="pg"
         />
         <n-empty v-else :description="t('firewall_admin.pick_firewall_to_view')" />
       </n-tab-pane>
@@ -595,7 +659,7 @@ onMounted(() => {
           v-if="aliasesFw"
           :columns="aliasCols" :data="aliasesFiltered" :loading="aliasesLoading"
           :bordered="false" size="small" :scroll-x="860"
-          :pagination="{ pageSize: 100, showSizePicker: true, pageSizes: [50, 100, 200, 500] }"
+          :pagination="pg"
         />
         <n-empty v-else :description="t('firewall_admin.pick_firewall_to_view')" />
       </n-tab-pane>
@@ -652,6 +716,43 @@ onMounted(() => {
               {{ t("firewall_admin.sync_sources_hint") }}
             </span>
           </template>
+        </n-form-item>
+        <n-form-item :label="t('firewall.scope_title')" style="margin-top: 14px; border-top: 1px solid var(--n-border-color, rgba(128,128,128,0.18)); padding-top: 16px;">
+          <n-space vertical :size="10" style="width: 100%">
+            <span style="opacity: 0.7; font-size: 12px;">{{ t("firewall.scope_hint") }}</span>
+            <div>
+              <div style="font-size: 12px; opacity: 0.8; margin-bottom: 2px;">{{ t("firewall.scope_location") }}</div>
+              <n-select v-model:value="newFw.scope_location_id" :options="locationOpts"
+                        clearable filterable :placeholder="t('firewall.scope_location')" />
+            </div>
+            <div>
+              <div style="font-size: 12px; opacity: 0.8; margin-bottom: 2px;">{{ t("firewall.scope_customer") }}</div>
+              <n-select v-model:value="newFw.scope_customer_id" :options="customerOptions"
+                        clearable filterable :placeholder="t('firewall.scope_customer')" />
+            </div>
+            <div>
+              <div style="font-size: 12px; opacity: 0.8; margin-bottom: 2px;">{{ t("firewall.scope_subnets") }}</div>
+              <n-select v-model:value="newFw.scope_subnet_ids" :options="subnetOpts"
+                        multiple clearable filterable :placeholder="t('firewall.scope_subnets')" />
+              <ScopeOverlapWarning :scope-empty="!newFw.scope_subnet_ids?.length" />
+            </div>
+            <div>
+              <div style="font-size: 12px; opacity: 0.8; margin-bottom: 2px;">{{ t("firewall.scope_iface_map") }}</div>
+              <n-space v-for="(row, idx) in newFw.iface_map_rows" :key="idx" :size="8" align="center"
+                       style="margin-bottom: 6px;">
+                <n-input v-model:value="row.iface" style="width: 140px;" placeholder="LAN / opt1" />
+                <n-select v-model:value="row.subnet_id" :options="subnetOpts" clearable filterable
+                          style="width: 280px;" :placeholder="t('firewall.scope_subnets')" />
+                <n-button quaternary size="small" @click="removeIfaceRow(idx)">
+                  <template #icon><n-icon><DeleteIcon /></n-icon></template>
+                </n-button>
+              </n-space>
+              <n-button size="small" dashed @click="addIfaceRow">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.add") }}
+              </n-button>
+            </div>
+          </n-space>
         </n-form-item>
         <n-form-item :label="t('common.description')">
           <n-input v-model:value="newFw.description" type="textarea" :rows="2" />

@@ -24,6 +24,11 @@ class OPNsenseFirewallBase(StrictModel):
     sync_nat: bool = False
     sync_aliases: bool = True
     description: Annotated[str | None, Field(max_length=2048)] = None
+    # 關聯範圍（NAT 對應）；留空 = 沿用全域 IP 字串比對
+    scope_location_id: uuid.UUID | None = None
+    scope_customer_id: uuid.UUID | None = None
+    scope_subnet_ids: list[uuid.UUID] | None = None
+    iface_subnet_map: dict[str, uuid.UUID] | None = None
 
 
 class OPNsenseFirewallCreate(OPNsenseFirewallBase):
@@ -46,6 +51,10 @@ class OPNsenseFirewallUpdate(StrictModel):
     sync_nat: bool | None = None
     sync_aliases: bool | None = None
     description: Annotated[str | None, Field(max_length=2048)] = None
+    scope_location_id: uuid.UUID | None = None
+    scope_customer_id: uuid.UUID | None = None
+    scope_subnet_ids: list[uuid.UUID] | None = None
+    iface_subnet_map: dict[str, uuid.UUID] | None = None
 
 
 class OPNsenseFirewallRead(OPNsenseFirewallBase):

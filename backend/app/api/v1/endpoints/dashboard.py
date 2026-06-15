@@ -16,7 +16,7 @@ from __future__ import annotations
 import ipaddress
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -53,6 +53,15 @@ class TopSubnet(StrictModel):
     used_pct: float
 
 
+class SectionBands(StrictModel):
+    """區段內各子網路依使用率分布的計數（滿載 / 偏高 / 中等 / 偏低）。"""
+
+    full: int = 0   # >= 90%
+    high: int = 0   # 75 ~ 90%
+    mid: int = 0    # 50 ~ 75%
+    low: int = 0    # < 50%
+
+
 class SectionHeat(StrictModel):
     section_id: str
     name: str
@@ -60,6 +69,9 @@ class SectionHeat(StrictModel):
     total_hosts: int
     used: int
     used_pct: float
+    # 平均子網路使用率：避免單一大網段（如 /16）把整體拉到趨近 0，較能反映實際熱度
+    avg_subnet_pct: float = 0.0
+    bands: SectionBands = SectionBands()
 
 
 class TypeCount(StrictModel):
@@ -230,19 +242,27 @@ async def overview(
 
     # ── section heat ──
     section_by_id = {s.id: s for s in visible_sections}
-    sect_buckets: dict[str, dict[str, int]] = {}
+    sect_buckets: dict[str, dict[str, Any]] = {}
     for s in visible_subnets:
         sec = sect_buckets.setdefault(
             str(s.section_id),
-            {"subnet_count": 0, "total_hosts": 0, "used": 0},
+            {"subnet_count": 0, "total_hosts": 0, "used": 0,
+             "pct_sum": 0.0, "pct_n": 0, "bands": {"full": 0, "high": 0, "mid": 0, "low": 0}},
         )
         sec["subnet_count"] += 1
         try:
             cap = host_count(ipaddress.ip_network(str(s.cidr), strict=False))
         except ValueError:
             cap = 0
+        u = per_subnet_used.get(str(s.id), 0)
         sec["total_hosts"] += cap
-        sec["used"] += per_subnet_used.get(str(s.id), 0)
+        sec["used"] += u
+        if cap > 0:
+            p = u / cap * 100
+            sec["pct_sum"] += p
+            sec["pct_n"] += 1
+            band = "full" if p >= 90 else "high" if p >= 75 else "mid" if p >= 50 else "low"
+            sec["bands"][band] += 1
 
     section_heat: list[SectionHeat] = []
     for sid, bucket in sect_buckets.items():
@@ -250,6 +270,7 @@ async def overview(
         if sec is None:
             continue
         pct = round(bucket["used"] / bucket["total_hosts"] * 100, 2) if bucket["total_hosts"] else 0.0
+        avg = round(bucket["pct_sum"] / bucket["pct_n"], 2) if bucket["pct_n"] else 0.0
         section_heat.append(SectionHeat(
             section_id=sid,
             name=sec.name,  # type: ignore[attr-defined]
@@ -257,8 +278,11 @@ async def overview(
             total_hosts=bucket["total_hosts"],
             used=bucket["used"],
             used_pct=pct,
+            avg_subnet_pct=avg,
+            bands=SectionBands(**bucket["bands"]),
         ))
-    section_heat.sort(key=lambda x: x.used_pct, reverse=True)
+    # 依平均子網路使用率排序（較能反映「熱」），平手再看絕對已用數
+    section_heat.sort(key=lambda x: (x.avg_subnet_pct, x.used), reverse=True)
 
     # ── audit 24h（稽核屬全域安全記錄，僅管理員可見彙總）──
     cutoff = datetime.now(UTC) - timedelta(hours=24)

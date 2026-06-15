@@ -570,3 +570,94 @@ async def set_audit_forward(
     await session.commit()
     _af_cache.pop(AUDIT_FWD_KEY, None)
     return await get_audit_forward(session)
+
+
+# ─────────────────── 通知發送管道（Email 已實作；其餘開發中）───────────────────
+NOTIFY_CH_KEY = "notification_channels"
+_NOTIFY_AAD = b"notification:smtp_password"
+_ncfg_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+# 規劃支援的管道；available=False 者前端顯示但反灰（開發中）
+NOTIFY_CHANNELS: tuple[tuple[str, bool], ...] = (
+    ("email", True),
+    ("telegram", False),
+    ("slack", False),
+    ("teams", False),
+    ("nextcloud", False),
+    ("zulip", False),
+)
+
+
+def _enc_smtp(pw: str) -> str:
+    ct, nonce = encrypt_secret(pw, aad=_NOTIFY_AAD)
+    return "v1:" + base64.b64encode(nonce).decode() + ":" + base64.b64encode(ct).decode()
+
+
+def _dec_smtp(blob: str) -> str | None:
+    try:
+        _ver, b_nonce, b_ct = blob.split(":", 2)
+        return decrypt_secret(
+            base64.b64decode(b_ct), base64.b64decode(b_nonce), aad=_NOTIFY_AAD
+        ).decode("utf-8")
+    except Exception:
+        return None
+
+
+def _default_notify() -> dict[str, Any]:
+    return {
+        "email_enabled": False,
+        "smtp_host": None, "smtp_port": 587, "smtp_tls": "starttls",  # none/starttls/tls
+        "smtp_username": None, "smtp_password_enc": None, "smtp_from": None,
+    }
+
+
+async def get_notification_channels(session: AsyncSession) -> dict[str, Any]:
+    """回傳通知管道設定（含解密後的 smtp_password；僅後端 send 用，API 層會遮蔽）。"""
+    now = time.monotonic()
+    c = _ncfg_cache.get(NOTIFY_CH_KEY)
+    if c and now - c[0] < _TTL_SEC:
+        return dict(c[1])
+    cfg = _default_notify()
+    row = await session.get(SystemSetting, NOTIFY_CH_KEY)
+    if row and isinstance(row.value, dict):
+        v = row.value
+        for k in ("email_enabled",):
+            if isinstance(v.get(k), bool):
+                cfg[k] = v[k]
+        if isinstance(v.get("smtp_port"), int):
+            cfg["smtp_port"] = v["smtp_port"]
+        if v.get("smtp_tls") in ("none", "starttls", "tls"):
+            cfg["smtp_tls"] = v["smtp_tls"]
+        for k in ("smtp_host", "smtp_username", "smtp_from", "smtp_password_enc"):
+            if isinstance(v.get(k), str) and v[k]:
+                cfg[k] = v[k]
+    cfg["smtp_password"] = _dec_smtp(cfg["smtp_password_enc"]) if cfg.get("smtp_password_enc") else None
+    _ncfg_cache[NOTIFY_CH_KEY] = (now, dict(cfg))
+    return cfg
+
+
+async def set_notification_channels(
+    session: AsyncSession, *, data: dict[str, Any], updated_by_user_id: uuid.UUID,
+) -> dict[str, Any]:
+    from sqlalchemy.orm.attributes import flag_modified
+    row = await session.get(SystemSetting, NOTIFY_CH_KEY)
+    if row is None:
+        row = SystemSetting(key=NOTIFY_CH_KEY, value={}, updated_by=updated_by_user_id)
+        session.add(row)
+    val = dict(row.value or {})
+    for k in ("email_enabled", "smtp_host", "smtp_port", "smtp_tls", "smtp_username", "smtp_from"):
+        if k in data:
+            val[k] = data[k]
+    # 密碼：給了非空字串才更新（空字串/未給 = 保留原本）；明確傳 null/"" 清除
+    if "smtp_password" in data:
+        pw = data["smtp_password"]
+        if pw:
+            val["smtp_password_enc"] = _enc_smtp(str(pw))
+        elif pw == "" or pw is None:
+            val.pop("smtp_password_enc", None)
+    row.value = val
+    row.updated_by = updated_by_user_id
+    flag_modified(row, "value")
+    await session.commit()
+    _ncfg_cache.pop(NOTIFY_CH_KEY, None)
+    return await get_notification_channels(session)
