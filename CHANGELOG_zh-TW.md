@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.175] — 2026-06-15
+
+### 變更
+- **設定檔產生器的服務多選格不再把長標籤折行**——服務多選改用 auto-fill 欄寬（最小 135px），足以容下
+  最長的 profile 名稱（`wazuh-dashboard`）並讓每項標籤維持單行，原本只有那一項被折成兩行的情況解除。
+- 文件：憑證派送說明改為「憑證檔案可以手動上傳或設定 URL／SFTP 來源定期自動同步」。
+
 ## [0.4.174] — 2026-06-15
 
 ### 變更

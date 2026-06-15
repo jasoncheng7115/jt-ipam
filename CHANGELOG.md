@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.175] — 2026-06-15
+
+### Changed
+- **Config-generator service grid no longer wraps long labels** — the service multi-select now uses
+  auto-fill columns wide enough (min 135px) for the longest profile name (`wazuh-dashboard`) and keeps
+  each label on a single line, so only that one option no longer breaks onto two rows.
+- Docs: the certificate-distribution caption now reads "certificate files can be uploaded manually or
+  pulled from a URL / SFTP source on a periodic sync".
+
 ## [0.4.174] — 2026-06-15
 
 ### Changed

@@ -1154,7 +1154,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     <div class="help-note" style="margin:0 0 10px">{{ t("certGen.scope_hint") }}</div>
     <n-form-item :label="t('certGen.services')" :show-feedback="false">
       <n-checkbox-group v-model:value="genProfiles" style="width:100%">
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px 10px">
+        <div class="gen-svc-grid">
           <n-checkbox v-for="p in PROFILE_OPTIONS" :key="p" :value="p" :label="p" />
         </div>
       </n-checkbox-group>
@@ -1265,4 +1265,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 .cert-ver-detail { font-size: 12px; line-height: 1.75; opacity: .9; }
 .cert-ver-detail b { opacity: .55; font-weight: 600; }
 .cert-ver-detail code { font-size: 11px; }
+/* 服務多選格：欄寬足夠容下最長標籤（wazuh-dashboard），每項不換行 */
+.gen-svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px 10px; }
+.gen-svc-grid :deep(.n-checkbox__label) { white-space: nowrap; }
 </style>
