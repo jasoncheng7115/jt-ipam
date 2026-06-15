@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.167] — 2026-06-15
+
+### Fixed
+- The cert-agent install / uninstall one-liners now add `sudo` **only when not already root**
+  (`$([ "$(id -u)" -ne 0 ] && echo sudo)`). On hosts that are already root and have no `sudo` binary
+  (common on Proxmox VE / PBS / PDM and minimal appliances) the previous `| sudo … bash` failed with
+  `sudo: command not found`; it now runs directly as root.
+
 ## [0.4.166] — 2026-06-15
 
 ### Fixed

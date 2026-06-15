@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.167] — 2026-06-15
+
+### 修正
+- 派送代理的安裝／移除一行式指令改成**只有非 root 時才加 `sudo`**(`$([ "$(id -u)" -ne 0 ] && echo sudo)`)。
+  在本來就是 root、且沒有 `sudo` 的主機(Proxmox VE／PBS／PDM 與精簡 appliance 很常見)原本 `| sudo … bash`
+  會出 `sudo: command not found`;現在直接以 root 執行。
+
 ## [0.4.166] — 2026-06-15
 
 ### 修正

@@ -454,10 +454,11 @@ function copy(s: string) { navigator.clipboard?.writeText(s); msg.success(t("com
 const showHelp = ref(false);
 const showConfigHelp = ref(false);
 const serverOrigin = window.location.origin;
+// 用 sudo 只在「非 root」時加上；已是 root（PVE/PBS/PDM 等多半直接 root，且常無 sudo）就不加，避免 sudo: command not found。
 const installerOneLiner = computed(() =>
-  `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | sudo `
+  `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) `
   + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${newKey.value || "<建立代理時的-KEY>"} JT_IPAM_INSECURE=1 bash`);
-const uninstallOneLiner = `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | sudo JT_IPAM_UNINSTALL=1 bash`;
+const uninstallOneLiner = `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) JT_IPAM_UNINSTALL=1 bash`;
 const configExample = `# ── 快速模式（優先）：只設憑證 + 服務 ──
 # 代理會把憑證寫到固定路徑並自動重載，你再把服務設定指過去：
 DEPLOY_1_CERT=wildcard-example-com
