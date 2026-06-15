@@ -68,14 +68,23 @@ command -v curl >/dev/null || pkg_install curl || { echo "curl is required, plea
 
 # ── Download agent ──
 install -d "$DEST" "$CONFDIR"
-CURL_OPTS=(-fsSL); [[ -n "$JT_IPAM_INSECURE" ]] && CURL_OPTS+=(-k)
-curl "${CURL_OPTS[@]}" "${JT_IPAM_URL%/}/api/v1/cert-agents/agent.sh" -o "$AGENT"
+# Always set connect/overall timeouts so a dead IPv6 path or a firewall blackhole
+# (common in LXC / containers) fails fast instead of hanging silently with no output.
+CURL_OPTS=(-fsSL --connect-timeout 10 --max-time 60 --retry 2)
+[[ -n "$JT_IPAM_INSECURE" ]] && CURL_OPTS+=(-k)
+echo "Downloading agent from ${JT_IPAM_URL%/} …"
+if ! curl "${CURL_OPTS[@]}" "${JT_IPAM_URL%/}/api/v1/cert-agents/agent.sh" -o "$AGENT"; then
+    echo "ERROR: could not download the agent from ${JT_IPAM_URL%/} (timeout / unreachable)." >&2
+    echo "  Check this host can reach the server: curl -fsSLk -m 15 ${JT_IPAM_URL%/}/api/v1/cert-agents/agent.sh -o /dev/null" >&2
+    echo "  If it hangs on IPv6, try forcing IPv4 (add -4) or fix the container's IPv6 routing." >&2
+    exit 1
+fi
 chmod 0755 "$AGENT"
 
 # ── Ask the server which certificates this agent is allowed to deploy (best-effort) ──
 # These are the valid values for DEPLOY_<N>_CERT. The example lines use a generic
 # placeholder (example.com); replace it with one of the real names listed here.
-CERTS="$(curl "${CURL_OPTS[@]}" -H "X-Agent-Key: ${JT_IPAM_AGENT_KEY}" \
+CERTS="$(curl "${CURL_OPTS[@]}" --max-time 15 -H "X-Agent-Key: ${JT_IPAM_AGENT_KEY}" \
         "${JT_IPAM_URL%/}/api/v1/cert-agents/check?format=text" 2>/dev/null \
         | awk -F'\t' 'NF>=2{print $1}')"
 EXAMPLE_CERT="example.com"

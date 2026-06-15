@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.172] — 2026-06-15
+
+### Fixed
+- **The cert-agent installer no longer hangs silently** in LXC/containers with a dead IPv6 path or a
+  firewall blackhole. Its curl calls now use `--connect-timeout 10 --max-time 60 --retry 2` (so a stuck
+  IPv6 attempt falls back to IPv4 in ~10s instead of hanging forever), print a "Downloading agent…" line,
+  and emit a clear error with a connectivity-test hint if the download fails.
+
 ## [0.4.171] — 2026-06-15
 
 ### Changed

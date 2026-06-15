@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.172] — 2026-06-15
+
+### 修正
+- **派送代理 installer 在 LXC／容器裡不再無聲卡死**（IPv6 路徑死掉或防火牆黑洞時）。curl 改帶
+  `--connect-timeout 10 --max-time 60 --retry 2`（IPv6 連不上約 10 秒就退回 IPv4，不再永遠卡住），
+  並印出「Downloading agent…」、下載失敗時給清楚錯誤與連線測試提示。
+
 ## [0.4.171] — 2026-06-15
 
 ### 變更
