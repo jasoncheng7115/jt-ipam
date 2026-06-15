@@ -28,7 +28,7 @@
 #   #     pve      /etc/pve/local/pveproxy-ssl.pem + .key (root:www-data 640)  reload: systemctl restart pveproxy
 #   #     pmg      /etc/pmg/pmg-api.pem (root:www-data 640) + pmg-tls.pem (root:root 600)  reload: systemctl restart pmgproxy + pmgdaemon restart
 #   #     pbs      /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload|restart proxmox-backup-proxy
-#   #     pdm      /etc/proxmox-datacenter-manager/proxy.pem + .key (root:www-data 640)  reload: systemctl reload|restart proxmox-datacenter-manager-proxy
+#   #     pdm      /etc/proxmox-datacenter-manager/auth/api.pem + api.key (root:www-data 640)  reload: systemctl restart proxmox-datacenter-api.service
 #   #     wazuh-dashboard  /etc/wazuh-dashboard/certs/dashboard.pem + dashboard-key.pem  reload: systemctl restart wazuh-dashboard
 #   #     zimbra   commercial cert via zmcertmgr deploycrt comm + zmcontrol restart (needs intermediate/root in chain)
 #   #   Then point your service config at the path(s) above.
@@ -38,8 +38,8 @@
 #   #   DEPLOY_1_FULLCHAIN=/etc/nginx/ssl/site.pem  DEPLOY_1_KEY=/etc/nginx/ssl/site.key  DEPLOY_1_RELOAD=systemctl reload nginx
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
-# Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--version]
-AGENT_VERSION=0.4.166
+# Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
+AGENT_VERSION=0.4.169
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -50,8 +50,18 @@ STATE_FILE="$STATE_DIR/state"
 DRY_RUN=0
 FORCE=0
 UPGRADE_ONLY=0
+DEBUG=0
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+dbg() { [ "$DEBUG" = 1 ] && log "[debug] $*"; return 0; }
+# Run a command string (may contain shell operators); show its output only in --debug, else discard.
+run_q() {
+  if [ "$DEBUG" = 1 ]; then log "[debug] \$ $1"; eval "$1"; else eval "$1" >/dev/null 2>&1; fi
+}
+# Run a command (argv form); show its output only in --debug, else discard.
+run_qv() {
+  if [ "$DEBUG" = 1 ]; then log "[debug] \$ $*"; "$@"; else "$@" >/dev/null 2>&1; fi
+}
 
 usage() {
   cat <<EOF
@@ -63,6 +73,8 @@ Options:
   --config PATH   Config file (default: /etc/jt-ipam-cert-agent/config)
   --dry-run       Show what would be written / reloaded; make no changes
   --force         Re-deploy even if the certificate is already up to date
+  --debug         Verbose: print each command and show its full output
+                  (config-test, reload, zmcertmgr, downloads). Default off.
   --upgrade       Update this agent to the server's latest version, then exit
                   (works even if AUTO_UPDATE=false in the config)
   --version       Print the agent version and exit
@@ -80,6 +92,7 @@ while [ $# -gt 0 ]; do
     --config) CONFIG="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
+    --debug) DEBUG=1; shift ;;
     --upgrade) UPGRADE_ONLY=1; shift ;;
     --version) echo "$AGENT_VERSION"; exit 0 ;;
     -h|--help) usage; exit 0 ;;
@@ -140,10 +153,11 @@ combined|/etc/pmg/pmg-tls.pem|600|root:root"
 key|/etc/proxmox-backup/proxy.key|640|root:backup"
       PRELOAD="systemctl reload proxmox-backup-proxy 2>/dev/null || systemctl restart proxmox-backup-proxy" ;;
     pdm)
-      # Proxmox Datacenter Manager (same proxmox-rest-server framework as PBS).
-      PFILES="fullchain|/etc/proxmox-datacenter-manager/proxy.pem|640|root:www-data
-key|/etc/proxmox-datacenter-manager/proxy.key|640|root:www-data"
-      PRELOAD="systemctl reload proxmox-datacenter-manager-proxy 2>/dev/null || systemctl restart proxmox-datacenter-manager-proxy" ;;
+      # Proxmox Datacenter Manager (official: cert+chain -> auth/api.pem, key -> auth/api.key,
+      # root:www-data; the API daemon runs as www-data on :8443). Key must NOT be password-protected.
+      PFILES="fullchain|/etc/proxmox-datacenter-manager/auth/api.pem|640|root:www-data
+key|/etc/proxmox-datacenter-manager/auth/api.key|640|root:www-data"
+      PRELOAD="systemctl restart proxmox-datacenter-api.service" ;;
     wazuh-dashboard)
       # Wazuh dashboard (OpenSearch Dashboards). opensearch_dashboards.yml must point
       # server.ssl.certificate / server.ssl.key at these files (the Wazuh default paths).
@@ -206,6 +220,11 @@ key|$base/$cert.key|600"
 # Download one raw PEM part to a file; return 0 on success
 fetch_part() {
   local cert="$1" part="$2" dest="$3"
+  dbg "fetch $part of '$cert' -> $dest"
+  if [ "$DEBUG" = 1 ]; then
+    "${CURL[@]}" -G --data-urlencode "cert=$cert" --data-urlencode "part=$part" -o "$dest" "$API/bundle/raw"
+    local rc=$?; dbg "fetch $part rc=$rc bytes=$(wc -c <"$dest" 2>/dev/null || echo 0)"; return $rc
+  fi
   "${CURL[@]}" -G --data-urlencode "cert=$cert" --data-urlencode "part=$part" \
     -o "$dest" "$API/bundle/raw" 2>/dev/null
 }
@@ -249,18 +268,18 @@ deploy_zimbra() {  # cert fp not_after
   cp -f "$tmpd/commercial.key" "$zssl/commercial.key"
   chown zimbra:zimbra "$zssl/commercial.key" 2>/dev/null || true
   chmod 600 "$zssl/commercial.key" 2>/dev/null || true
-  if ! "$zmcert" verifycrt comm "$zssl/commercial.key" "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt" >/dev/null 2>&1; then
-    log "[$cert/zimbra] zmcertmgr verifycrt failed (key/cert mismatch, or the chain is missing the intermediate/root CA)"
+  if ! run_qv "$zmcert" verifycrt comm "$zssl/commercial.key" "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt"; then
+    log "[$cert/zimbra] zmcertmgr verifycrt failed (key/cert mismatch, or the chain is missing the intermediate/root CA) — re-run with --debug to see zmcertmgr's message"
     rm -rf "$tmpd"; add_report "$cert" zimbra failed "$fp" "$na" "verifycrt failed"; return 1
   fi
-  if ! "$zmcert" deploycrt comm "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt" >/dev/null 2>&1; then
+  if ! run_qv "$zmcert" deploycrt comm "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt"; then
     log "[$cert/zimbra] zmcertmgr deploycrt failed"
     rm -rf "$tmpd"; add_report "$cert" zimbra failed "$fp" "$na" "deploycrt failed"; return 1
   fi
   rm -rf "$tmpd"
   # zmcontrol restart is heavy but is the documented way to load a new cert; the
   # fingerprint guard means this only runs when the certificate actually changed.
-  if ! su - zimbra -c "zmcontrol restart" >/dev/null 2>&1; then
+  if ! run_q "su - zimbra -c 'zmcontrol restart'"; then
     log "[$cert/zimbra] deployed, but 'zmcontrol restart' failed — restart Zimbra manually to load the new cert"
     add_report "$cert" zimbra ok "$fp" "$na" "deployed (manual restart needed)"; return 0
   fi
@@ -332,6 +351,7 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
     # Write content into place, then set mode/owner best-effort. Proxmox pmxcfs (/etc/pve)
     # forbids chmod/chown ("Operation not permitted") — the content still lands and the
     # filesystem manages the permissions itself, so we don't treat that as a failure.
+    dbg "write $kind -> $path (mode $mode${owner:+ owner $owner})"
     cp -f "$tmpd/f" "$path.jtnew" && mv -f "$path.jtnew" "$path"
     chmod "$mode" "$path" 2>/dev/null \
       || log "[$cert/$profile] note: kept filesystem-managed permissions for $path (chmod not permitted — normal on Proxmox /etc/pve)"
@@ -341,12 +361,12 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
   rm -rf "$tmpd"
 
   # config-test
-  if [ -n "$PTEST" ] && ! eval "$PTEST" >/dev/null 2>&1; then
+  if [ -n "$PTEST" ] && ! run_q "$PTEST"; then
     log "[$cert/$profile] config-test failed -> rollback"; rollback
     add_report "$cert" "$profile" failed "$fp" "$na" "config-test failed"; return 1
   fi
   # reload
-  if [ -n "$PRELOAD" ] && ! eval "$PRELOAD" >/dev/null 2>&1; then
+  if [ -n "$PRELOAD" ] && ! run_q "$PRELOAD"; then
     log "[$cert/$profile] reload failed -> rollback"; rollback
     add_report "$cert" "$profile" failed "$fp" "$na" "reload failed"; return 1
   fi

@@ -148,7 +148,7 @@ ${CERT_HINT}
 #   pve   -> /etc/pve/local/pveproxy-ssl.pem + .key (root:www-data 640)  reload: systemctl restart pveproxy  (no config change; /etc/pve is pmxcfs so perms are fs-managed)
 #   pmg   -> /etc/pmg/pmg-api.pem (root:www-data 640) + /etc/pmg/pmg-tls.pem (root:root 600)  reload: systemctl restart pmgproxy + pmgdaemon restart (no config change)
 #   pbs   -> /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload/restart proxmox-backup-proxy (no config change)
-#   pdm   -> /etc/proxmox-datacenter-manager/proxy.pem + .key (root:www-data 640)  reload: systemctl reload/restart proxmox-datacenter-manager-proxy (no config change)
+#   pdm   -> /etc/proxmox-datacenter-manager/auth/api.pem + api.key (root:www-data 640)  reload: systemctl restart proxmox-datacenter-api.service (no config change; key must not be password-protected)
 #   wazuh-dashboard -> /etc/wazuh-dashboard/certs/dashboard.pem + dashboard-key.pem  reload: systemctl restart wazuh-dashboard (point server.ssl.* in opensearch_dashboards.yml at these)
 #   zimbra-> commercial cert via zmcertmgr deploycrt comm  reload: su - zimbra -c 'zmcontrol restart' (chain must include intermediate/root)
 #

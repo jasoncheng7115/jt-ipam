@@ -16,6 +16,7 @@ import {
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTablePagination } from "@/composables/useTablePagination";
+import { SUDO } from "@/utils/sudo";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import {
   listCertificates, createCertificate, deleteCertificate, uploadVersion, generateSelfSigned,
@@ -81,8 +82,8 @@ const PROFILE_OPTIONS = [
   "postfix", "dovecot", "exim4", "mosquitto", "cockpit", "webmin", "wazuh-dashboard",
   "pve", "pmg", "pbs", "pdm", "zimbra",
 ];
-const dryRunCmd = "sudo bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run";
-const runCmd = "sudo bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config";
+const dryRunCmd = `${SUDO} bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run`;
+const runCmd = `${SUDO} bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config`;
 const showGen = ref(false);
 const genAgentName = ref("");
 const genScopeIds = ref<string[]>([]);
@@ -115,7 +116,7 @@ function profileFiles(profile: string, cert: string): { kind: string; path: stri
     case "pve": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/pve/local/pveproxy-ssl.pem" }, { kind: "key (root:www-data 640)", path: "/etc/pve/local/pveproxy-ssl.key" }];
     case "pmg": return [{ kind: "cert+chain+key (root:www-data 640)", path: "/etc/pmg/pmg-api.pem" }, { kind: "cert+chain+key (root:root 600)", path: "/etc/pmg/pmg-tls.pem" }];
     case "pbs": return [{ kind: "cert+chain (root:backup 640)", path: "/etc/proxmox-backup/proxy.pem" }, { kind: "key (root:backup 640)", path: "/etc/proxmox-backup/proxy.key" }];
-    case "pdm": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/proxy.pem" }, { kind: "key (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/proxy.key" }];
+    case "pdm": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/auth/api.pem" }, { kind: "key (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/auth/api.key" }];
     case "wazuh-dashboard": return [{ kind: "cert+chain (wazuh-dashboard 640)", path: "/etc/wazuh-dashboard/certs/dashboard.pem" }, { kind: "key (wazuh-dashboard 640)", path: "/etc/wazuh-dashboard/certs/dashboard-key.pem" }];
     case "zimbra": return [{ kind: "zmcertmgr deploycrt comm + zmcontrol restart", path: "/opt/zimbra/ssl/zimbra/commercial/commercial.{key,crt}" }];
     default: return [];
@@ -454,13 +455,11 @@ function copy(s: string) { navigator.clipboard?.writeText(s); msg.success(t("com
 const showHelp = ref(false);
 const showConfigHelp = ref(false);
 const serverOrigin = window.location.origin;
-// sudo 只在「非 root」時加上（PVE/PBS/PDM 多半直接 root 且無 sudo）。一定要用 `env` 帶環境變數：
-// 當 $(...) 在 root 時展開成空字串，後面的 VAR=val 會被當成「指令」而非賦值（因 $(...) 才是指令字 word），
-// 用 env 當真正的指令字、把 VAR=val 當其引數，root/非 root 都正確。
+// sudo 只在非 root 時加（見 utils/sudo）；帶環境變數一定要透過 env，否則 root 時 VAR=val 會被當成指令。
 const installerOneLiner = computed(() =>
-  `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) env `
+  `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | ${SUDO} env `
   + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${newKey.value || "<建立代理時的-KEY>"} JT_IPAM_INSECURE=1 bash`);
-const uninstallOneLiner = `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) env JT_IPAM_UNINSTALL=1 bash`;
+const uninstallOneLiner = `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | ${SUDO} env JT_IPAM_UNINSTALL=1 bash`;
 const configExample = `# ── 快速模式（優先）：只設憑證 + 服務 ──
 # 代理會把憑證寫到固定路徑並自動重載，你再把服務設定指過去：
 DEPLOY_1_CERT=wildcard-example-com
@@ -1007,20 +1006,20 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     <div class="help-step">
       <div class="help-step-num">3</div>
       <div class="help-step-body">
-        <div class="help-step-title">{{ t("certHelp.step3") }}</div>
-        <div class="help-note" style="margin-top: 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap">
+        <div class="help-step-title" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
           <span>{{ t("certHelp.step3_gen_a") }}</span>
           <n-tag size="small" :bordered="false" type="primary">
             <template #icon><n-icon :component="ToolsIcon" /></template>{{ t("certGen.title") }}
           </n-tag>
           <span>{{ t("certHelp.step3_gen_b") }}</span>
         </div>
-        <div class="help-note" style="margin-top: 4px">{{ t("certHelp.step3_hint") }}</div>
-        <n-space :size="8" style="margin-top: 8px">
-          <n-button size="small" secondary @click="showHelp = false; showConfigHelp = true">
+        <n-space :size="8" style="margin-top: 10px; margin-bottom: 4px">
+          <n-button size="small" type="primary" secondary @click="showHelp = false; showConfigHelp = true">
             <template #icon><n-icon :component="InfoIcon" /></template>{{ t("certConfigHelp.button") }}
           </n-button>
         </n-space>
+        <div class="help-note" style="margin-top: 6px">{{ t("certHelp.step3") }}</div>
+        <div class="help-note" style="margin-top: 4px">{{ t("certHelp.step3_hint") }}</div>
       </div>
     </div>
 

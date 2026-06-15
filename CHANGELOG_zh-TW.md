@@ -4,6 +4,23 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.169] — 2026-06-15
+
+### 修正
+- **修正 `pdm`(Proxmox Datacenter Manager)profile** 為官方路徑與服務:cert+chain →
+  `/etc/proxmox-datacenter-manager/auth/api.pem`、key → `…/auth/api.key`(root:www-data 640),
+  重載 `systemctl restart proxmox-datacenter-api.service`。(先前的路徑/服務是錯誤推測。)
+- **所有產生的含 sudo 指令都改為會判斷 root。** 抽出共用 `SUDO`(`$([ "$(id -u)" -ne 0 ] && echo sudo)`),
+  套用到:派送代理的 dry-run/正式執行指令與安裝/移除一行式、掃描代理安裝一行式、探測工具 `apt install` 提示。
+  在本來就是 root、且沒有 sudo 的主機上現在可直接執行。
+
+### 新增
+- 派送代理新增 **`--debug`** 旗標(預設關閉):印出每個執行的指令並顯示 config-test／reload／`zmcertmgr`／
+  下載 的完整輸出 — 方便診斷例如 Zimbra `verifycrt` 失敗(常見原因是憑證鏈缺了根 CA)。
+
+### 變更
+- 安裝說明第 3 步改成**先帶到「產生設定檔」工具**(快速路徑),手動編輯設定降為次要說明。
+
 ## [0.4.168] — 2026-06-15
 
 ### 修正

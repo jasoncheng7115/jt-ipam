@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.169] — 2026-06-15
+
+### Fixed
+- **Corrected the `pdm` (Proxmox Datacenter Manager) profile** to the official paths and service:
+  cert+chain → `/etc/proxmox-datacenter-manager/auth/api.pem`, key → `…/auth/api.key` (root:www-data 640),
+  reload `systemctl restart proxmox-datacenter-api.service`. (Previous paths/service were wrong guesses.)
+- **Every generated shell command that used `sudo` is now root-aware.** A shared `SUDO` helper
+  (`$([ "$(id -u)" -ne 0 ] && echo sudo)`) is applied to: the cert-agent dry-run / run commands and the
+  install/uninstall one-liners, the scan-agent install one-liner, and the probe-tool `apt install` hints.
+  On hosts that are already root with no `sudo` binary they now run directly.
+
+### Added
+- The cert agent gains a **`--debug`** flag (default off) that prints each command and shows the full
+  output of config-test / reload / `zmcertmgr` / downloads — useful for diagnosing e.g. a Zimbra
+  `verifycrt` failure (whose root cause is usually a chain missing the root CA).
+
+### Changed
+- Install-help step 3 now leads with the **Generate config** tool (quick path) and demotes manual
+  config editing to a secondary note.
+
 ## [0.4.168] — 2026-06-15
 
 ### Fixed

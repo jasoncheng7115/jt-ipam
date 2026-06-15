@@ -29,6 +29,7 @@ import { listScanAgents } from "@/api/phase3";
 import { listVLANs, listVRFs, listLocations, type VLAN, type VRF } from "@/api/basic";
 import type { Subnet, Section } from "@/types";
 import { EditIcon, PlusIcon, SaveIcon, CancelIcon } from "@/icons";
+import { SUDO } from "@/utils/sudo";
 import { useCustomers } from "@/composables/useCustomers";
 import { useSubnetTree } from "@/composables/useSubnetTree";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
@@ -74,10 +75,10 @@ function probeUnsupported(key: string): boolean {
 }
 // 探測所需的工具 / 安裝指令（與掃描代理頁一致）
 const PROBE_INSTALL: Record<string, string> = {
-  os: "sudo apt install nmap",
-  ports: "sudo apt install nmap",
-  netbios: "sudo apt install samba-common-bin   # 提供 nmblookup",
-  mdns: "sudo apt install avahi-utils   # 提供 avahi-resolve",
+  os: `${SUDO} apt install nmap`,
+  ports: `${SUDO} apt install nmap`,
+  netbios: `${SUDO} apt install samba-common-bin   # 提供 nmblookup`,
+  mdns: `${SUDO} apt install avahi-utils   # 提供 avahi-resolve`,
 };
 function probeInstall(key: string): string {
   return (

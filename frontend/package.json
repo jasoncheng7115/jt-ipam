@@ -1,6 +1,6 @@
 {
   "name": "jt-ipam-frontend",
-  "version": "0.4.168",
+  "version": "0.4.169",
   "description": "jt-ipam — 可自架的整合型 IPAM 系統前端",
   "license": "AGPL-3.0-or-later",
   "private": true,

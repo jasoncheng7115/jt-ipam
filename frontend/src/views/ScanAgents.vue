@@ -20,6 +20,7 @@ import {
 import { listSubnets } from "@/api/subnets";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import { autoSort } from "@/composables/useTableSort";
+import { SUDO } from "@/utils/sudo";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
@@ -64,10 +65,10 @@ function probeAvailable(key: string): boolean {
 }
 // 探測所需的工具 / 安裝指令（代理主機上安裝後，下次回報即解鎖該探測）
 const PROBE_INSTALL: Record<string, string> = {
-  os: "sudo apt install nmap",
-  ports: "sudo apt install nmap",
-  netbios: "sudo apt install samba-common-bin   # 提供 nmblookup",
-  mdns: "sudo apt install avahi-utils   # 提供 avahi-resolve",
+  os: `${SUDO} apt install nmap`,
+  ports: `${SUDO} apt install nmap`,
+  netbios: `${SUDO} apt install samba-common-bin   # 提供 nmblookup`,
+  mdns: `${SUDO} apt install avahi-utils   # 提供 avahi-resolve`,
 };
 function probeInstall(key: string): string {
   return (
@@ -118,7 +119,7 @@ const revealedName = ref("");
 
 const serverOrigin = window.location.origin;
 const installerOneLiner = computed(() =>
-  `curl -fsSLk ${serverOrigin}/api/v1/scan-agents/installer.sh | sudo `
+  `curl -fsSLk ${serverOrigin}/api/v1/scan-agents/installer.sh | ${SUDO} env `
   + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${revealedKey.value || "<KEY>"} JT_IPAM_INSECURE=1 bash`,
 );
 
