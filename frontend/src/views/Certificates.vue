@@ -454,11 +454,13 @@ function copy(s: string) { navigator.clipboard?.writeText(s); msg.success(t("com
 const showHelp = ref(false);
 const showConfigHelp = ref(false);
 const serverOrigin = window.location.origin;
-// 用 sudo 只在「非 root」時加上；已是 root（PVE/PBS/PDM 等多半直接 root，且常無 sudo）就不加，避免 sudo: command not found。
+// sudo 只在「非 root」時加上（PVE/PBS/PDM 多半直接 root 且無 sudo）。一定要用 `env` 帶環境變數：
+// 當 $(...) 在 root 時展開成空字串，後面的 VAR=val 會被當成「指令」而非賦值（因 $(...) 才是指令字 word），
+// 用 env 當真正的指令字、把 VAR=val 當其引數，root/非 root 都正確。
 const installerOneLiner = computed(() =>
-  `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) `
+  `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) env `
   + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${newKey.value || "<建立代理時的-KEY>"} JT_IPAM_INSECURE=1 bash`);
-const uninstallOneLiner = `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) JT_IPAM_UNINSTALL=1 bash`;
+const uninstallOneLiner = `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | $([ "$(id -u)" -ne 0 ] && echo sudo) env JT_IPAM_UNINSTALL=1 bash`;
 const configExample = `# ── 快速模式（優先）：只設憑證 + 服務 ──
 # 代理會把憑證寫到固定路徑並自動重載，你再把服務設定指過去：
 DEPLOY_1_CERT=wildcard-example-com
@@ -994,17 +996,10 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       <div class="help-step-num">2</div>
       <div class="help-step-body">
         <div class="help-step-title">{{ t("certHelp.step2") }}</div>
-        <n-space align="center" :wrap="false" :size="8" style="margin-top: 8px">
-          <code class="help-code">{{ installerOneLiner }}</code>
-          <n-button size="small" secondary @click="copy(installerOneLiner)">
-            <template #icon><n-icon :component="CopyIcon" /></template>{{ t("certHelp.copy") }}
-          </n-button>
-        </n-space>
         <div class="help-subtle" style="margin-top:10px;margin-bottom:5px">{{ t("certHelp.distros_title") }}</div>
         <n-space :size="[6, 6]">
           <n-tag v-for="os in SUPPORTED_OS" :key="os" size="small" type="success" :bordered="false" round>{{ os }}</n-tag>
         </n-space>
-        <div class="help-note" style="margin-top:6px">{{ t("certHelp.distros_note") }}</div>
       </div>
     </div>
 

@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.168] — 2026-06-15
+
+### Fixed
+- **Critical: the conditional-sudo install one-liner from 0.4.167 failed as root.** With `$(…)` expanding
+  to empty, the `VAR=value` env assignments after it were parsed as a command, not an assignment
+  (`JT_IPAM_URL=…: No such file or directory`). Fixed by running through `env`
+  (`… | $([ "$(id -u)" -ne 0 ] && echo sudo) env JT_IPAM_URL=… bash`), which works as both root and non-root.
+- The AI chat header action buttons now align hard-right (they could drift left when the header wrapped).
+
+### Changed
+- The cert-agent **install-help dialog no longer duplicates the full install command** — each agent's
+  dialog already shows its ready-to-paste one-liner (key filled in, sudo auto-detected), so the help now
+  just points there and keeps the supported-OS overview.
+- Relabeled the one-liner from "(root)" to "(auto root / sudo)".
+
 ## [0.4.167] — 2026-06-15
 
 ### Fixed

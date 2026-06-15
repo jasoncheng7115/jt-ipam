@@ -4,6 +4,19 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.168] — 2026-06-15
+
+### 修正
+- **重要:0.4.167 的條件式 sudo 一行式指令在 root 下會壞。** `$(…)` 在 root 展開成空字串時,後面的
+  `VAR=value` 會被當成「指令」而非賦值(`JT_IPAM_URL=…: No such file or directory`)。改用 `env` 當指令字
+  (`… | $([ "$(id -u)" -ne 0 ] && echo sudo) env JT_IPAM_URL=… bash`),root / 非 root 都正確。
+- AI 對話標題列的動作鈕改為確實靠右(標題列換行時原本會偏左)。
+
+### 變更
+- 派送代理的**安裝說明視窗不再重複放完整安裝指令** — 每個代理自己的視窗已顯示帶好 key、自動判斷 sudo 的
+  一行式指令,安裝說明改為指向那裡,只保留支援作業系統一覽。
+- 一行式指令標題由「(root)」改為「(自動判斷 root / sudo)」;「發行版」→「發行版本」。
+
 ## [0.4.167] — 2026-06-15
 
 ### 修正

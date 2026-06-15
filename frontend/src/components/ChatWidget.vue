@@ -509,7 +509,10 @@ async function removeConversation(id: string) {
 /* 標題：字體調小 + 不換行，避免把「本地 Ollama」標籤擠到第二行 */
 /* 標題列與動作區放不下時整列換行（動作區掉到第二列），避免標題/標籤與按鈕重疊 */
 .chat-shell :deep(.n-card-header) { flex-wrap: wrap; row-gap: 6px; column-gap: 8px; }
-.chat-shell :deep(.n-card-header__main) { min-width: 0; }
+.chat-shell :deep(.n-card-header__main) { flex: 1 1 auto; min-width: 0; }
+/* 動作鈕一律靠右：未換行時把標題與動作撐開、換行時動作獨佔第二列也靠右 */
+.chat-shell :deep(.n-card-header__extra) { margin-left: auto; }
+.chat-actions { margin-left: auto; justify-content: flex-end; }
 .chat-title-row { flex-wrap: nowrap; min-width: 0; }
 .chat-title { font-size: 15px; font-weight: 600; white-space: nowrap; }
 .chat-badge { white-space: nowrap; flex: 0 0 auto; }
