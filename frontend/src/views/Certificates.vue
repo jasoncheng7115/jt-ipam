@@ -81,7 +81,7 @@ const SUPPORTED_OS = [
 const PROFILE_OPTIONS = [
   "nginx", "apache", "caddy", "traefik", "lighttpd", "haproxy", "zoraxy", "jetty",
   "postfix", "dovecot", "exim4", "mosquitto", "cockpit", "webmin", "wazuh-dashboard",
-  "pve", "pmg", "pbs", "pdm", "zimbra",
+  "jitsi", "coturn", "pve", "pmg", "pbs", "pdm", "zimbra",
 ];
 const dryRunCmd = `${SUDO} bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run`;
 const runCmd = `${SUDO} bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config`;
@@ -119,6 +119,8 @@ function profileFiles(profile: string, cert: string): { kind: string; path: stri
     case "pbs": return [{ kind: "cert+chain (root:backup 640)", path: "/etc/proxmox-backup/proxy.pem" }, { kind: "key (root:backup 640)", path: "/etc/proxmox-backup/proxy.key" }];
     case "pdm": return [{ kind: "cert+chain (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/auth/api.pem" }, { kind: "key (root:www-data 640)", path: "/etc/proxmox-datacenter-manager/auth/api.key" }];
     case "wazuh-dashboard": return [{ kind: "cert+chain (wazuh-dashboard 640)", path: "/etc/wazuh-dashboard/certs/dashboard.pem" }, { kind: "key (wazuh-dashboard 640)", path: "/etc/wazuh-dashboard/certs/dashboard-key.pem" }];
+    case "jitsi": return [{ kind: "cert+chain (docker restart jitsi web)", path: "/root/.jitsi-meet-cfg/web/keys/cert.crt" }, { kind: "key", path: "/root/.jitsi-meet-cfg/web/keys/cert.key" }];
+    case "coturn": return [{ kind: "cert+chain (root:65534 644)", path: "/etc/coturn/certs/turn.crt" }, { kind: "key (root:65534 640)", path: "/etc/coturn/certs/turn.key" }];
     case "zimbra": return [{ kind: "zmcertmgr deploycrt comm + zmcontrol restart", path: "/opt/zimbra/ssl/zimbra/commercial/commercial.{key,crt}" }];
     default: return [];
   }
@@ -139,7 +141,7 @@ function serviceSnippet(profile: string, cert: string): string {
     case "exim4": return `tls_certificate = ${b}/${cert}.fullchain.pem\ntls_privatekey  = ${b}/${cert}.key`;
     case "mosquitto": return `certfile ${b}/${cert}.crt\nkeyfile  ${b}/${cert}.key\ncafile   ${b}/${cert}.chain.pem`;
     case "wazuh-dashboard": return `# /etc/wazuh-dashboard/opensearch_dashboards.yml\nserver.ssl.certificate: "/etc/wazuh-dashboard/certs/dashboard.pem"\nserver.ssl.key:         "/etc/wazuh-dashboard/certs/dashboard-key.pem"`;
-    default: return "";  // zoraxy/cockpit/webmin/pve/pmg/pbs/pdm/zimbra：固定路徑或由各自 UI 管理，不需手改設定檔
+    default: return "";  // zoraxy/cockpit/webmin/jitsi/coturn/pve/pmg/pbs/pdm/zimbra：固定路徑或由各自 UI / 容器管理，不需手改設定檔
   }
 }
 const genServiceBlocks = computed(() =>

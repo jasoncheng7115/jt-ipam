@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.173] — 2026-06-15
+
+### Added
+- **Auto-fetched certificates (SFTP / URL sources) now auto-complete their chain.** When a sync pulls a
+  new cert that only has leaf+intermediate, jt-ipam builds the full intermediate+root chain before storing
+  (using the fetched files or the server's system trust store, e.g. ISRG Root X1) — so strict services
+  (Zimbra / PDM) keep verifying on every renewal without anyone clicking "Build full chain" again.
+- New distribution profiles **`jitsi`** (docker-jitsi-meet web: `/root/.jitsi-meet-cfg/web/keys/cert.{crt,key}`,
+  restarts the jitsi web container) and **`coturn`** (`/etc/coturn/certs/turn.{crt,key}`, root:65534 so the
+  container user can read the key; restarts the coturn container or native systemd coturn).
+
 ## [0.4.172] — 2026-06-15
 
 ### Fixed

@@ -32,7 +32,12 @@ from app.core.safe_http import (
 from app.core.security import decrypt_secret, encrypt_secret
 from app.models.certificate import Certificate, CertVersion
 from app.models.encrypted_secret import EncryptedSecret
-from app.services.cert_service import CertError, validate_bundle
+from app.services.cert_service import (
+    CertError,
+    _split_pem_certs,
+    analyze_chain,
+    validate_bundle,
+)
 
 
 class FetchError(RuntimeError):
@@ -334,6 +339,15 @@ async def fetch_certificate(session: AsyncSession, cert: Certificate, *,
         cert.last_fetch_error = None
         await session.commit()
         return {"status": "skipped", "fingerprint": info.fingerprint_sha256}
+
+    # Auto-complete the chain before storing: sources (SFTP/URL) usually provide only leaf+intermediate.
+    # If the chain can reach the root (from the fetched files or the server's trust store), build the full
+    # intermediate+root chain now — so strict services (Zimbra/PDM) verify without a manual "build full chain".
+    chain_analysis = analyze_chain(cert_pem, chain_pem)
+    if chain_analysis["can_rebuild"]:
+        leaf = _split_pem_certs(cert_pem)[0]
+        cert_pem = leaf if leaf.endswith("\n") else leaf + "\n"
+        chain_pem = chain_analysis["built_chain_pem"]
 
     try:
         await store_cert_version(session, cert=cert, cert_pem=cert_pem, key_pem=key_pem,

@@ -112,3 +112,48 @@ def test_generate_source_ssh_keypair():
     # 私鑰可被解析，且其公鑰與回傳公鑰一致
     k = asyncssh.import_private_key(priv)
     assert k.export_public_key().decode().split()[1] == pub.split()[1]
+
+
+async def test_fetch_auto_completes_chain_from_system_trust(db_session, monkeypatch):
+    """來源只給葉 + 中繼（缺根）→ 抓取時自動用系統信任庫補根，存進去的 chain 已是完整鏈。"""
+    from app.services.cert_service import _system_trust, analyze_chain
+    from sqlalchemy import select
+
+    trust = _system_trust()
+    root_name = next((n for n in trust if "ISRG Root X1" in n), None) or next(iter(trust))
+    root_subj = trust[root_name].subject
+
+    def mk(cn, issuer_name=None, issuer_key=None, ca=False):
+        k = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subj = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+        iss = subj if issuer_name is None else issuer_name
+        sk = k if issuer_key is None else issuer_key
+        now = datetime.now(UTC)
+        cert = (x509.CertificateBuilder().subject_name(subj).issuer_name(iss)
+                .public_key(k.public_key()).serial_number(x509.random_serial_number())
+                .not_valid_before(now - timedelta(days=1)).not_valid_after(now + timedelta(days=60))
+                .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
+                .sign(sk, hashes.SHA256()))
+        return cert, k, cert.public_bytes(serialization.Encoding.PEM).decode()
+
+    int_c, int_k, int_p = mk("Fetch Test Intermediate", issuer_name=root_subj, ca=True)
+    _leaf_c, leaf_k, leaf_p = mk("fetch-leaf.example.com", issuer_name=int_c.subject, issuer_key=int_k)
+    leaf_key_pem = leaf_k.private_bytes(serialization.Encoding.PEM,
+                                        serialization.PrivateFormat.TraditionalOpenSSL,
+                                        serialization.NoEncryption()).decode()
+
+    old_cert, old_key, _ = _cert()
+    c, _ = await _seed(db_session, old_cert, old_key)
+
+    async def fake(cfg):
+        return leaf_p, leaf_key_pem, int_p  # chain = intermediate only (no root)
+    monkeypatch.setattr(cert_fetch, "_fetch_url", fake)
+    res = await cert_fetch.fetch_certificate(db_session, c)
+    assert res["status"] == "updated"
+
+    v = (await db_session.execute(select(CertVersion).where(
+        CertVersion.certificate_id == c.id, CertVersion.is_current.is_(True)))).scalar_one()
+    a = analyze_chain(v.cert_pem, v.chain_pem)
+    assert a["complete"] is True             # 鏈已到根
+    assert a["used_system_trust"] is False   # 根已寫進存起來的 chain，不再靠系統信任庫
+    assert a["can_rebuild"] is False          # 已完整，沒得再組

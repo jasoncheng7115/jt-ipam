@@ -4,6 +4,16 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.173] — 2026-06-15
+
+### 新增
+- **自動抓取的憑證（SFTP／URL 來源）會自動補完整鏈。** 當同步抓到只含葉+中繼的新憑證時，jt-ipam 會在存檔前
+  自動組好「中繼+根」的完整鏈（用抓來的檔案，或伺服器系統信任庫的公信根如 ISRG Root X1）—— 這樣每次續簽後
+  Zimbra／PDM 等嚴格驗鏈服務都還是驗得過，不用再手動按一次「組合完整鏈」。
+- 新增派送 profile **`jitsi`**（docker-jitsi-meet web：`/root/.jitsi-meet-cfg/web/keys/cert.{crt,key}`，
+  重啟 jitsi web 容器）與 **`coturn`**（`/etc/coturn/certs/turn.{crt,key}`，root:65534 讓容器內使用者可讀 key；
+  重啟 coturn 容器或原生 systemd coturn）。可一台同時派 jitsi + coturn，取代手動 renew 腳本。
+
 ## [0.4.172] — 2026-06-15
 
 ### 修正

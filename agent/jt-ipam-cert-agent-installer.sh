@@ -159,6 +159,8 @@ ${CERT_HINT}
 #   pbs   -> /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload/restart proxmox-backup-proxy (no config change)
 #   pdm   -> /etc/proxmox-datacenter-manager/auth/api.pem + api.key (root:www-data 640)  reload: systemctl restart proxmox-datacenter-api.service (no config change; key must not be password-protected)
 #   wazuh-dashboard -> /etc/wazuh-dashboard/certs/dashboard.pem + dashboard-key.pem  reload: systemctl restart wazuh-dashboard (point server.ssl.* in opensearch_dashboards.yml at these)
+#   jitsi -> /root/.jitsi-meet-cfg/web/keys/cert.crt + cert.key  reload: docker restart <jitsi web container> (docker-jitsi-meet; non-root/custom CONFIG -> manual mode)
+#   coturn-> /etc/coturn/certs/turn.crt + turn.key (root:65534)  reload: docker restart coturn (or systemctl coturn)
 #   zimbra-> commercial cert via zmcertmgr deploycrt comm  reload: su - zimbra -c 'zmcontrol restart' (chain must include intermediate/root)
 #
 # ══════════════════════════════════════════════════════════════════════════════

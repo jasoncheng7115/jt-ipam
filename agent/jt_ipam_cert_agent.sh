@@ -30,6 +30,8 @@
 #   #     pbs      /etc/proxmox-backup/proxy.pem + .key (root:backup 640)  reload: systemctl reload|restart proxmox-backup-proxy
 #   #     pdm      /etc/proxmox-datacenter-manager/auth/api.pem + api.key (root:www-data 640)  reload: systemctl restart proxmox-datacenter-api.service
 #   #     wazuh-dashboard  /etc/wazuh-dashboard/certs/dashboard.pem + dashboard-key.pem  reload: systemctl restart wazuh-dashboard
+#   #     jitsi    docker-jitsi-meet web: /root/.jitsi-meet-cfg/web/keys/cert.crt + cert.key  reload: docker restart <jitsi web container>
+#   #     coturn   /etc/coturn/certs/turn.crt + turn.key (root:65534)  reload: docker restart coturn (or systemctl coturn)
 #   #     zimbra   commercial cert via zmcertmgr deploycrt comm + zmcontrol restart (needs intermediate/root in chain)
 #   #   Then point your service config at the path(s) above.
 #   #
@@ -39,7 +41,7 @@
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
-AGENT_VERSION=0.4.171
+AGENT_VERSION=0.4.173
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -164,6 +166,19 @@ key|/etc/proxmox-datacenter-manager/auth/api.key|640|root:www-data"
       PFILES="fullchain|/etc/wazuh-dashboard/certs/dashboard.pem|640|wazuh-dashboard:wazuh-dashboard
 key|/etc/wazuh-dashboard/certs/dashboard-key.pem|640|wazuh-dashboard:wazuh-dashboard"
       PRELOAD="systemctl restart wazuh-dashboard" ;;
+    jitsi)
+      # docker-jitsi-meet: nginx in the web container terminates TLS. Cert lives in the CONFIG dir
+      # (default ~/.jitsi-meet-cfg -> /root/... when run as root) with fixed names cert.crt/cert.key.
+      # Non-root or custom CONFIG: use MANUAL MODE to override the paths.
+      PFILES="fullchain|/root/.jitsi-meet-cfg/web/keys/cert.crt|644
+key|/root/.jitsi-meet-cfg/web/keys/cert.key|600"
+      PRELOAD='c=$(docker ps -qf name=jitsi-meet-web 2>/dev/null); [ -n "$c" ] && docker restart $c' ;;
+    coturn)
+      # coturn (commonly paired with jitsi). The container user (nobody, gid 65534) must read the key.
+      # Tries the docker container first, then a native systemd coturn.
+      PFILES="fullchain|/etc/coturn/certs/turn.crt|644|root:65534
+key|/etc/coturn/certs/turn.key|640|root:65534"
+      PRELOAD='c=$(docker ps -qf name=coturn 2>/dev/null); if [ -n "$c" ]; then docker restart $c; else systemctl reload coturn 2>/dev/null || systemctl restart coturn; fi' ;;
     postfix)
       PFILES="fullchain|$base/$cert.fullchain.pem|644
 key|$base/$cert.key|600"
