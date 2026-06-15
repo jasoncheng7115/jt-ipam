@@ -11,16 +11,17 @@ import {
 import {
   PlusIcon, RefreshIcon, CopyIcon, LockIcon, InfoIcon, SaveIcon, SearchIcon,
   ImportIcon, TokenIcon, SettingsIcon, SyncIcon, DeleteIcon, TestIcon, EyeIcon, ToolsIcon, CancelIcon, EditIcon,
-  ExportIcon, WarnIcon, UpgradeIcon,
+  ExportIcon, WarnIcon, UpgradeIcon, CheckIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTablePagination } from "@/composables/useTablePagination";
 import { SUDO } from "@/utils/sudo";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 import {
   listCertificates, createCertificate, deleteCertificate, uploadVersion, generateSelfSigned,
-  setCertSource, fetchCertNow, testCertSource, genCertSourceSshKey, listVersions, downloadVersionFile,
+  setCertSource, fetchCertNow, testCertSource, genCertSourceSshKey, listVersions, downloadVersionFile, rebuildChain,
   listCertAgents, createCertAgent, rotateCertAgentKey, deleteCertAgent, getCertAgentKey, updateCertAgent,
   getServerAgentVersion,
   type Certificate, type CertAgent, type CertVersion,
@@ -208,6 +209,15 @@ async function doDownload(v: CertVersion, fmt: string) {
   if (!filesTarget.value) return;
   try { await downloadVersionFile(filesTarget.value.id, v.id, fmt); }
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
+async function doRebuildChain(v: CertVersion) {
+  if (!filesTarget.value) return;
+  try {
+    await rebuildChain(filesTarget.value.id, v.id);
+    msg.success(t("certFiles.rebuild_done"));
+    filesVersions.value = await listVersions(filesTarget.value.id);
+    await loadCerts();
+  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
 // ── 新增憑證 ──
@@ -506,6 +516,21 @@ const certPickerItems = computed(() => [
   { key: "source", label: t("certSource.col_source") },
   { key: "actions", label: t("cols.actions") },
 ]);
+const certExportCols = computed(() => [
+  { key: "name", label: t("cols.name") },
+  { key: "domains", label: t("certs.domains") },
+  { key: "exp_date", label: t("certs.expiry_date") },
+  { key: "days_left", label: t("certs.days_remaining") },
+  { key: "version_count", label: t("certs.versions") },
+  { key: "source", label: t("certSource.col_source") },
+]);
+const certExportRows = computed(() => certsFiltered.value.map((c) => ({
+  name: c.name, domains: (c.domains ?? []).join("、"),
+  exp_date: c.current_not_after ? fmtDateTime(c.current_not_after).slice(0, 10) : "",
+  days_left: c.current_days_remaining != null ? String(c.current_days_remaining) : "",
+  version_count: String(c.version_count),
+  source: c.source_type === "none" ? "" : c.source_type.toUpperCase(),
+})));
 const certColsAll = computed<DataTableColumns<Certificate>>(() => autoSort([
   // name 與 domains 都設 minWidth（彈性）→ 多餘寬度由兩欄平分，避免任一欄獨自撐爆。
   { title: t("cols.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
@@ -564,6 +589,29 @@ const agentPickerItems = computed(() => [
   { key: "reported", label: t("certs.deployed") },
   { key: "actions", label: t("cols.actions") },
 ]);
+// 匯出（純字串欄位）
+const agentExportCols = computed(() => [
+  { key: "name", label: t("cols.name") },
+  { key: "enabled", label: t("cols.enabled") },
+  { key: "scope", label: t("certs.scope") },
+  { key: "agent_version", label: t("cols.version") },
+  { key: "source_ip", label: t("cols.source_ip") },
+  { key: "last_seen_at", label: t("cols.last_report") },
+  { key: "reported", label: t("certs.deployed") },
+]);
+const agentExportRows = computed(() => agentsFiltered.value.map((a) => {
+  const reps = (a.reported ?? []) as any[];
+  const ok = reps.filter((d) => d.status === "ok").length;
+  const scopeNames = certs.value.filter((c) => (a.scope_cert_ids ?? []).map(String).includes(c.id)).map((c) => c.name);
+  return {
+    name: a.name, enabled: a.enabled ? "Y" : "N",
+    scope: scopeNames.join("、"),
+    agent_version: a.agent_version ? `v${a.agent_version}` : "",
+    source_ip: a.last_source_ip ?? "",
+    last_seen_at: a.last_seen_at ? fmtDateTime(a.last_seen_at) : "",
+    reported: `${ok} / ${reps.length}`,
+  };
+}));
 const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
   { title: t("cols.name"), key: "name", minWidth: 120, ellipsis: { tooltip: true } },
   { title: t("cols.enabled"), key: "enabled", width: 70,
@@ -674,6 +722,8 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </n-input>
           </n-space>
           <n-space :size="8">
+            <ExportButton :columns="certExportCols" :rows="certExportRows" filename="certificates"
+                          :title="t('certs.tab_certs')" />
             <ColumnPicker :all="certPickerItems" :visible="certPrefs.visibleKeys.value"
                           @update:visible="certPrefs.setVisible" @reset="certPrefs.reset" />
             <n-button size="small" quaternary @click="loadCerts">
@@ -707,6 +757,8 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </span>
           </n-space>
           <n-space :size="8">
+            <ExportButton :columns="agentExportCols" :rows="agentExportRows" filename="cert-agents"
+                          :title="t('certs.tab_agents')" />
             <ColumnPicker :all="agentPickerItems" :visible="agentPrefs.visibleKeys.value"
                           @update:visible="agentPrefs.setVisible" @reset="agentPrefs.reset" />
             <n-button size="small" quaternary @click="loadAgents">
@@ -743,23 +795,47 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       {{ t("certFiles.intro") }}
     </n-alert>
     <div v-if="!filesVersions.length" class="help-note">{{ t("certFiles.no_version") }}</div>
-    <div v-for="v in filesVersions" :key="v.id"
+    <div v-for="(v, i) in filesVersions" :key="v.id"
          style="border:1px solid var(--n-border-color,#eee);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-      <n-space align="center" justify="space-between" :wrap="false">
-        <div style="min-width:0">
-          <n-space align="center" :size="6" :wrap="false">
-            <n-tag v-if="v.is_current" size="tiny" type="success" :bordered="false">{{ t("certFiles.current") }}</n-tag>
-            <code style="font-size:12px">{{ v.fingerprint_sha256.slice(0, 16) }}…</code>
-            <span style="font-size:12px;opacity:.6">{{ t("certFiles.expires") }} {{ fmtDateTime(v.not_after).slice(0, 10) }}</span>
-          </n-space>
-          <div style="font-size:12px;opacity:.7;margin-top:2px;word-break:break-all">{{ (v.domains ?? []).join("、") }}</div>
-        </div>
-        <n-dropdown trigger="click" :options="dlOptions" @select="(fmt:string) => doDownload(v, fmt)">
-          <n-button size="small" type="primary" secondary>
-            <template #icon><n-icon :component="ExportIcon" /></template>{{ t("certFiles.download") }}
+      <n-space align="center" justify="space-between" :wrap="false" style="margin-bottom:8px">
+        <n-space align="center" :size="6" :wrap="true">
+          <n-tag v-if="v.is_current" size="tiny" type="success" :bordered="false">{{ t("certFiles.current") }}</n-tag>
+          <span style="font-weight:600">{{ t("certFiles.version_n", { n: filesVersions.length - i }) }}</span>
+          <n-tooltip>
+            <template #trigger>
+              <n-tag size="tiny" :bordered="false"
+                     :type="v.chain_complete ? 'success' : (v.chain_can_rebuild ? 'warning' : 'error')">
+                <template #icon><n-icon :component="v.chain_complete ? CheckIcon : WarnIcon" /></template>
+                {{ v.chain_complete ? t("certFiles.chain_ok") : (v.chain_can_rebuild ? t("certFiles.chain_rebuildable") : t("certFiles.chain_no_root")) }}
+              </n-tag>
+            </template>
+            {{ v.chain_complete ? t("certFiles.chain_ok_hint") : (v.chain_can_rebuild ? t("certFiles.chain_rebuildable_hint") : t("certFiles.chain_no_root_hint")) }}
+          </n-tooltip>
+        </n-space>
+        <n-space :size="6" :wrap="false">
+          <n-button v-if="v.chain_can_rebuild" size="small" type="warning" secondary @click="doRebuildChain(v)">
+            <template #icon><n-icon :component="ToolsIcon" /></template>{{ t("certFiles.rebuild_chain") }}
           </n-button>
-        </n-dropdown>
+          <n-dropdown trigger="click" :options="dlOptions" @select="(fmt:string) => doDownload(v, fmt)">
+            <n-button size="small" type="primary" secondary>
+              <template #icon><n-icon :component="ExportIcon" /></template>{{ t("certFiles.download") }}
+            </n-button>
+          </n-dropdown>
+        </n-space>
       </n-space>
+      <div class="cert-ver-detail">
+        <div><b>{{ t("certFiles.domains") }}：</b>{{ (v.domains ?? []).join("、") || "—" }}</div>
+        <div><b>{{ t("certFiles.subject") }}：</b>{{ v.subject || "—" }}</div>
+        <div><b>{{ t("certFiles.issuer") }}：</b>{{ v.issuer || "—" }}</div>
+        <div><b>{{ t("certFiles.serial") }}：</b><code>{{ v.serial || "—" }}</code></div>
+        <div><b>{{ t("certFiles.validity") }}：</b>{{ v.not_before ? fmtDateTime(v.not_before).slice(0, 10) : "—" }} ~ {{ fmtDateTime(v.not_after).slice(0, 10) }}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <b style="flex:0 0 auto">{{ t("certFiles.fingerprint") }}：</b>
+          <code style="word-break:break-all;flex:1">{{ v.fingerprint_sha256 }}</code>
+          <n-button size="tiny" text @click="copy(v.fingerprint_sha256)"><template #icon><n-icon :component="CopyIcon" /></template></n-button>
+        </div>
+        <div><b>{{ t("certFiles.uploaded_at") }}：</b>{{ fmtDateTime(v.created_at) }}</div>
+      </div>
     </div>
   </n-modal>
 
@@ -1184,4 +1260,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 }
 .help-subtle { font-size: 12px; opacity: .7; }
 .help-note { font-size: 12px; opacity: .68; line-height: 1.6; margin-top: 8px; }
+.cert-ver-detail { font-size: 12px; line-height: 1.75; opacity: .9; }
+.cert-ver-detail b { opacity: .55; font-weight: 600; }
+.cert-ver-detail code { font-size: 11px; }
 </style>

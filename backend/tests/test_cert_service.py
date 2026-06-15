@@ -94,3 +94,42 @@ def test_generate_self_signed_defaults_san_to_cn():
     cert_pem, key_pem = generate_self_signed("solo.lan")
     info = validate_bundle(cert_pem, key_pem)
     assert info.domains == ["solo.lan"]
+
+
+def _ca_hierarchy():
+    """root (self-signed CA) -> intermediate -> leaf。回 (leaf_pem, int_pem, root_pem)。"""
+    def mk(cn, issuer_cert=None, issuer_key=None, ca=False):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subj = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+        iss = subj if issuer_cert is None else issuer_cert.subject
+        sk = key if issuer_key is None else issuer_key
+        now = datetime.now(UTC)
+        cert = (x509.CertificateBuilder().subject_name(subj).issuer_name(iss)
+                .public_key(key.public_key()).serial_number(x509.random_serial_number())
+                .not_valid_before(now - timedelta(days=1)).not_valid_after(now + timedelta(days=30))
+                .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
+                .sign(sk, hashes.SHA256()))
+        return cert, key, cert.public_bytes(serialization.Encoding.PEM).decode()
+    root_c, root_k, root_p = mk("Test Root CA", ca=True)
+    int_c, int_k, int_p = mk("Test Intermediate CA", root_c, root_k, ca=True)
+    _leaf_c, _leaf_k, leaf_p = mk("leaf.example.com", int_c, int_k)
+    return leaf_p, int_p, root_p
+
+
+def test_analyze_chain_complete_missing_and_rebuildable():
+    from app.services.cert_service import analyze_chain
+    leaf, inter, root = _ca_hierarchy()
+    # 中繼 + 根都在 chain → 完整、不需組合
+    a = analyze_chain(leaf, inter + root)
+    assert a["complete"] is True
+    assert a["has_root"] is True
+    assert a["can_rebuild"] is False
+    # 只有中繼、缺根 → 不完整
+    b = analyze_chain(leaf, inter)
+    assert b["complete"] is False
+    assert b["has_root"] is False
+    # 根藏在 cert 欄、chain 空 → 可一鍵組合
+    c = analyze_chain(leaf + inter + root, None)
+    assert c["complete"] is True
+    assert c["can_rebuild"] is True
+    assert "BEGIN CERTIFICATE" in c["built_chain_pem"]

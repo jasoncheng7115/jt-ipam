@@ -51,6 +51,7 @@ from app.services.cert_fetch import (
 from app.services.cert_service import (
     CertError,
     CertInfo,
+    analyze_chain,
     export_cert_file,
     generate_self_signed,
     validate_bundle,
@@ -246,7 +247,56 @@ async def list_versions(
         select(CertVersion).where(CertVersion.certificate_id == cert_id)
         .order_by(CertVersion.created_at.desc())
     )).scalars().all()
-    return [CertVersionRead.model_validate(r, from_attributes=True) for r in rows]
+    out: list[CertVersionRead] = []
+    for r in rows:
+        m = CertVersionRead.model_validate(r, from_attributes=True)
+        a = analyze_chain(r.cert_pem, r.chain_pem)
+        m.chain_has_root = a["has_root"]
+        m.chain_complete = a["complete"]
+        m.chain_can_rebuild = a["can_rebuild"]
+        out.append(m)
+    return out
+
+
+@router.post("/{cert_id}/versions/{version_id}/rebuild-chain", response_model=CertVersionRead)
+async def rebuild_chain(
+    cert_id: uuid.UUID,
+    version_id: uuid.UUID,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CertVersionRead:
+    """把可組合的完整鏈（中繼 + 根 CA）組好、就地修正此版本的 chain（給 Zimbra/PDM 等嚴格驗鏈服務）。
+
+    僅當分析判定 can_rebuild（根藏在 cert 欄或順序不對、可從現有憑證組出）才允許；指紋不變。
+    """
+    from app.services.cert_service import _split_pem_certs
+    cert = await session.get(Certificate, cert_id)
+    if cert is None:
+        raise HTTPException(404, detail="Not found")
+    ver = await session.get(CertVersion, version_id)
+    if ver is None or ver.certificate_id != cert_id:
+        raise HTTPException(404, detail="Version not found")
+    a = analyze_chain(ver.cert_pem, ver.chain_pem)
+    if not a["can_rebuild"]:
+        raise HTTPException(409, detail="此版本無法自動組合完整鏈（可用憑證中沒有根 CA，或已是完整鏈）。")
+    leaf_pem = _split_pem_certs(ver.cert_pem)[0]
+    ver.cert_pem = leaf_pem if leaf_pem.endswith("\n") else leaf_pem + "\n"
+    ver.chain_pem = a["built_chain_pem"]
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="certificate", object_id=str(cert.id), action="cert_rebuild_chain",
+        diff={"version": str(ver.id), "fingerprint": ver.fingerprint_sha256, "chain_rebuilt": True},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    await session.refresh(ver)
+    m = CertVersionRead.model_validate(ver, from_attributes=True)
+    na = analyze_chain(ver.cert_pem, ver.chain_pem)
+    m.chain_has_root, m.chain_complete, m.chain_can_rebuild = na["has_root"], na["complete"], na["can_rebuild"]
+    return m
 
 
 @router.get("/{cert_id}/versions/{version_id}/file")

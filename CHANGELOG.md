@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.170] — 2026-06-15
+
+### Fixed
+- **Zimbra deployment ran `zmcertmgr` as root and failed** (`zmcertmgr: ERROR: no longer runs as root!`).
+  It now runs via `su - zimbra` and stages the cert/chain/key in a zimbra-readable dir
+  (`/etc/.../jt-ipam` → `/opt/zimbra/ssl/jt-ipam`), matching Proxmox/Zimbra's documented flow.
+- The cert-status page no longer shows "up to date" for a deployment that actually failed — status now
+  requires both a fingerprint match **and** an `ok` report.
+
+### Added
+- **Certificate chain check + one-click fix.** The Files/info dialog now analyses each version's chain:
+  "Full chain" (reaches the root CA), "Chain fixable" (root present but not in the chain — a **Build full
+  chain** button rebuilds it in place, fingerprint unchanged), or "Missing root CA" (with a hint on how to
+  obtain and re-upload the root). Strict-validating services (Zimbra / PDM) need the full chain.
+- The **Files dialog is now a detailed certificate-info view**: SAN domains, subject, issuer, serial,
+  validity window, full SHA-256 fingerprint (copyable), upload time, plus per-format download.
+- **Export buttons** on the Certificates, Distribution-agents and cert-status pages (the last two were missing).
+- The cert-status page now shows **one row per agent** with its services aggregated (e.g. `pbs, pve`)
+  instead of one row per deployment; the status tooltip lists each cert/service.
+
 ## [0.4.169] — 2026-06-15
 
 ### Fixed

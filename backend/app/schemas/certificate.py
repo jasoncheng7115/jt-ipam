@@ -43,6 +43,10 @@ class CertVersionRead(StrictModel):
     is_current: bool
     uploaded_by: uuid.UUID | None
     created_at: datetime
+    # 憑證鏈分析（Zimbra/PDM 等嚴格驗鏈服務需要完整鏈到根 CA）
+    chain_has_root: bool = False        # 可用憑證中含自簽根
+    chain_complete: bool = False        # 葉能鏈到根（中繼+根都齊）
+    chain_can_rebuild: bool = False     # 可一鍵組合出含根的完整鏈（根藏在 cert 欄或順序不對）
 
 
 class CertificateRead(StrictModel):

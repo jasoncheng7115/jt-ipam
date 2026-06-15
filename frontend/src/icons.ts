@@ -99,6 +99,7 @@ export const SyncIcon = RefreshDouble;
 export const SearchIcon = Search;
 export const CancelIcon = Xmark;
 export const SaveIcon = Check;
+export const CheckIcon = Check;
 export const WarnIcon = WarningTriangle;
 export const UpgradeIcon = ArrowUpCircle;
 export const InfoIcon = InfoCircle;

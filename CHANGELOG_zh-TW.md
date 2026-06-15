@@ -4,6 +4,24 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.170] — 2026-06-15
+
+### 修正
+- **Zimbra 派送以 root 跑 `zmcertmgr` 失敗**（`zmcertmgr: ERROR: no longer runs as root!`）。改成透過
+  `su - zimbra` 執行，並把 cert/chain/key 暫存到 zimbra 可讀的目錄（`/opt/zimbra/ssl/jt-ipam`），
+  比照 Proxmox/Zimbra 官方流程。
+- 憑證派送現況不再對「實際失敗」的部署顯示「最新」— 狀態現在要同時指紋相符**且**回報 ok。
+
+### 新增
+- **憑證鏈檢查 + 一鍵修復。** 憑證資訊／檔案視窗會分析每個版本的鏈：「完整鏈」（已鏈到根 CA）、
+  「可組合完整鏈」（根在但目前鏈沒帶到 → 按**組合完整鏈**就地修正、指紋不變）、或「缺根 CA」
+  （附上如何取得並重新上傳根 CA 的提示）。Zimbra / PDM 等嚴格驗鏈服務需要完整鏈。
+- **檔案視窗改為詳細的憑證資訊頁**：網域（SAN）、主體、簽發者、序號、有效期、完整 SHA-256 指紋
+  （可複製）、上傳時間，加上各格式下載。
+- 憑證、派送代理、憑證派送現況三頁加上**匯出按鈕**（後兩頁原本漏做）。
+- 憑證派送現況改為**一個代理一列**、服務彙整在欄位內（如 `pbs, pve`），不再每個 deployment 各一列；
+  狀態 hover 會列出每個憑證／服務。
+
 ## [0.4.169] — 2026-06-15
 
 ### 修正

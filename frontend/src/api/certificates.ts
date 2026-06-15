@@ -16,6 +16,14 @@ export interface CertVersion {
   is_current: boolean;
   uploaded_by: string | null;
   created_at: string;
+  chain_has_root: boolean;
+  chain_complete: boolean;
+  chain_can_rebuild: boolean;
+}
+
+export async function rebuildChain(certId: string, versionId: string): Promise<CertVersion> {
+  const { data } = await apiClient.post(`/api/v1/certificates/${certId}/versions/${versionId}/rebuild-chain`);
+  return data;
 }
 
 export interface Certificate {

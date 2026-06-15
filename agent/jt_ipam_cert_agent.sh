@@ -39,7 +39,7 @@
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
-AGENT_VERSION=0.4.169
+AGENT_VERSION=0.4.170
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -245,38 +245,44 @@ deploy_zimbra() {  # cert fp not_after
   local cert="$1" fp="$2" na="$3"
   local zmcert=/opt/zimbra/bin/zmcertmgr
   local zssl=/opt/zimbra/ssl/zimbra/commercial
+  # zmcertmgr refuses to run as root → it runs via 'su - zimbra', which cannot read root-owned
+  # /tmp; stage cert/chain/key in a zimbra-readable dir instead.
+  local work=/opt/zimbra/ssl/jt-ipam
   if [ ! -x "$zmcert" ]; then
     log "[$cert/zimbra] $zmcert not found — is this a Zimbra host?"
     add_report "$cert" zimbra failed "$fp" "$na" "zmcertmgr not found"; return 1
   fi
   if [ "$DRY_RUN" = 1 ]; then
-    log "[$cert/zimbra] (dry-run) would deploy the commercial cert via zmcertmgr:"
-    log "    key  -> $zssl/commercial.key (zimbra:zimbra 600)"
-    log "    verify+deploy: $zmcert verifycrt comm <key> <crt> <ca_chain> && $zmcert deploycrt comm <crt> <ca_chain>"
-    log "    restart: su - zimbra -c 'zmcontrol restart'"
+    log "[$cert/zimbra] (dry-run) would deploy the commercial cert via zmcertmgr (run as the zimbra user):"
+    log "    stage cert/chain/key under $work (zimbra:zimbra)"
+    log "    su - zimbra -c '$zmcert verifycrt comm <key> <cert> <chain>'   (chain must contain the intermediate(s) AND the root CA)"
+    log "    cp <key> -> $zssl/commercial.key ; su - zimbra -c '$zmcert deploycrt comm <cert> <chain>' ; su - zimbra -c 'zmcontrol restart'"
     add_report "$cert" zimbra dry-run "$fp" "$na" "planned"; return 0
   fi
-  local tmpd; tmpd="$(mktemp -d)"
-  if ! fetch_part "$cert" cert "$tmpd/commercial.crt" \
-     || ! fetch_part "$cert" chain "$tmpd/commercial_ca.crt" \
-     || ! fetch_part "$cert" key "$tmpd/commercial.key"; then
-    log "[$cert/zimbra] download failed"; rm -rf "$tmpd"
+  mkdir -p "$work"
+  if ! fetch_part "$cert" cert "$work/cert.crt" \
+     || ! fetch_part "$cert" chain "$work/chain.crt" \
+     || ! fetch_part "$cert" key "$work/key.pem"; then
+    log "[$cert/zimbra] download failed"
     add_report "$cert" zimbra failed "$fp" "$na" "download failed"; return 1
   fi
-  # Zimbra wants the private key staged at the commercial path before verify/deploy.
+  chown -R zimbra:zimbra "$work" 2>/dev/null || true
+  chmod 600 "$work/key.pem" 2>/dev/null || true
+  # verifycrt comm <key> <leaf cert> <ca chain> — must run as the zimbra user.
+  if ! run_q "su - zimbra -c '$zmcert verifycrt comm $work/key.pem $work/cert.crt $work/chain.crt'"; then
+    log "[$cert/zimbra] zmcertmgr verifycrt failed — the chain must contain the intermediate(s) AND the root CA, and the key must match (re-run with --debug for zmcertmgr's message)"
+    rm -f "$work/key.pem"; add_report "$cert" zimbra failed "$fp" "$na" "verifycrt failed"; return 1
+  fi
+  # Zimbra expects the private key staged at the commercial path before deploycrt.
   mkdir -p "$zssl"
-  cp -f "$tmpd/commercial.key" "$zssl/commercial.key"
+  cp -f "$work/key.pem" "$zssl/commercial.key"
   chown zimbra:zimbra "$zssl/commercial.key" 2>/dev/null || true
   chmod 600 "$zssl/commercial.key" 2>/dev/null || true
-  if ! run_qv "$zmcert" verifycrt comm "$zssl/commercial.key" "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt"; then
-    log "[$cert/zimbra] zmcertmgr verifycrt failed (key/cert mismatch, or the chain is missing the intermediate/root CA) — re-run with --debug to see zmcertmgr's message"
-    rm -rf "$tmpd"; add_report "$cert" zimbra failed "$fp" "$na" "verifycrt failed"; return 1
-  fi
-  if ! run_qv "$zmcert" deploycrt comm "$tmpd/commercial.crt" "$tmpd/commercial_ca.crt"; then
+  if ! run_q "su - zimbra -c '$zmcert deploycrt comm $work/cert.crt $work/chain.crt'"; then
     log "[$cert/zimbra] zmcertmgr deploycrt failed"
-    rm -rf "$tmpd"; add_report "$cert" zimbra failed "$fp" "$na" "deploycrt failed"; return 1
+    rm -f "$work/key.pem"; add_report "$cert" zimbra failed "$fp" "$na" "deploycrt failed"; return 1
   fi
-  rm -rf "$tmpd"
+  rm -f "$work/key.pem"
   # zmcontrol restart is heavy but is the documented way to load a new cert; the
   # fingerprint guard means this only runs when the certificate actually changed.
   if ! run_q "su - zimbra -c 'zmcontrol restart'"; then
