@@ -26,6 +26,7 @@ import {
   Trash,
   Refresh,
   RefreshDouble,
+  ArrowUpCircle,
   Search,
   Xmark,
   Check,
@@ -99,6 +100,7 @@ export const SearchIcon = Search;
 export const CancelIcon = Xmark;
 export const SaveIcon = Check;
 export const WarnIcon = WarningTriangle;
+export const UpgradeIcon = ArrowUpCircle;
 export const InfoIcon = InfoCircle;
 export const EyeIcon = Eye;
 export const EyeOffIcon = EyeClosed;

@@ -31,7 +31,8 @@
     "drift": "未套用最新",
     "no_report": "尚無回報",
     "expired": "已過期",
-    "days_left": "剩 {n} 天"
+    "days_left": "剩 {n} 天",
+    "filter": "篩選代理 / 憑證 / IP"
   },
   "certSource": {
     "col_source": "來源",
@@ -82,6 +83,7 @@
     "distros_title": "支援的作業系統 / 發行版",
     "distros_note": "自動偵測 apt / dnf / yum / zypper；server 為自簽憑證時保留 JT_IPAM_INSECURE=1。",
     "after_install_gen": "代理裝好之後，回到這個清單按該代理操作欄的「產生設定檔」工具，即可快速產生它的部署設定（要派送哪些憑證、用哪個服務 profile）。",
+    "service_note": "安裝後的服務（systemd）：jt-ipam-cert-agent.timer（排程，預設每日）＋ jt-ipam-cert-agent.service（每次執行）。看完整記錄：journalctl -u jt-ipam-cert-agent.service（追蹤加 -f）。立即手動跑一次：systemctl start jt-ipam-cert-agent.service。",
     "config_label": "設定檔範例（/etc/jt-ipam-cert-agent/config）：",
     "profiles": "內建 profile：nginx / apache(httpd) / haproxy / postfix / dovecot / pve / pmg / pbs / zimbra / generic（generic 需自訂 *_path 與 reload）。",
     "dryrun": "先試跑不動檔：bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run",
@@ -159,6 +161,15 @@
     "upload_version": "上傳新版",
     "self_signed": "產生自簽",
     "self_signed_blocked": "已設來源或已有版本，不可產生自簽（避免覆蓋現有憑證）",
+    "renew": "續簽",
+    "renew_action": "續簽",
+    "renew_done": "已續簽（已產生新版本並設為目前版本）",
+    "renew_hint": "沿用目前的 CN 與 SAN 重新簽發一張新的自簽憑證，並設為目前版本（派送代理下次比對指紋不同就會自動更新各站台）。可調整效期天數。",
+    "filter_name": "篩選名稱 / 網域",
+    "filter_agent": "篩選名稱 / IP",
+    "multi_ip_badge": "多 IP",
+    "multi_ip_hint": "近期有多台主機用同一把 Key 回報（{ips}）。建議一台主機一把 Key，否則來源 IP／版本／回報狀態會互相覆蓋。",
+    "one_key_per_host": "建議一台主機一把 Key。多台主機共用同一把 Key 雖能運作，但管理頁的「來源 IP／版本／回報狀態」只會顯示最後回報的那一台；若偵測到近期有不同 IP 共用同一把 Key，列表會在來源 IP 旁標示警告。",
     "delete_confirm": "刪除此憑證（含所有版本）？",
     "scope": "可取憑證",
     "certs_unit": "張",

@@ -96,3 +96,5 @@ class CertAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     agent_version: Mapped[str | None] = mapped_column(String(32))
     # agent 回報的各部署狀態：list of {cert,profile,fingerprint,not_after,applied_at,status,message,dry_run}
     reported: Mapped[list[Any] | None] = mapped_column(JSONB)
+    # 近期回報來源 IP（list of {ip, at}，去重、上限 10、保留 7 天）；多筆不同 IP＝同把 Key 被多台主機共用
+    recent_sources: Mapped[list[Any] | None] = mapped_column(JSONB)

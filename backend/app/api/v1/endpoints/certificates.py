@@ -6,6 +6,7 @@ agent 拉取協定(check/bundle/report,key 認證)放 cert_agents.py。
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -105,6 +106,16 @@ async def _store_version(
     return v
 
 
+def _common_name_of(subject: str | None) -> str | None:
+    """從 rfc4514 subject（如 `CN=foo.example,O=bar`）取出 CN。"""
+    if not subject:
+        return None
+    m = re.search(r"CN=((?:[^,\\]|\\.)+)", subject)
+    if not m:
+        return None
+    return m.group(1).replace("\\,", ",").replace("\\=", "=").strip()
+
+
 async def _to_read(session: AsyncSession, cert: Certificate) -> CertificateRead:
     cur = (await session.execute(
         select(CertVersion).where(
@@ -120,6 +131,11 @@ async def _to_read(session: AsyncSession, cert: Certificate) -> CertificateRead:
         m.current_fingerprint = cur.fingerprint_sha256
         m.current_not_after = cur.not_after
         m.current_days_remaining = (cur.not_after - datetime.now(UTC)).days
+        # 自簽＝subject==issuer；自簽才提供「續簽」並帶出 CN/SAN 重簽一張
+        m.current_is_self_signed = bool(cur.subject and cur.issuer and cur.subject == cur.issuer)
+        if m.current_is_self_signed:
+            m.current_common_name = _common_name_of(cur.subject)
+            m.current_sans = list(cur.domains or [])
     return m
 
 

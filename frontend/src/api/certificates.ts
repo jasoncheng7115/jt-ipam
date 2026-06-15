@@ -29,6 +29,9 @@ export interface Certificate {
   current_not_after: string | null;
   current_days_remaining: number | null;
   version_count: number;
+  current_is_self_signed: boolean;
+  current_common_name: string | null;
+  current_sans: string[] | null;
   source_type: string;
   source_config: Record<string, unknown> | null;
   fetch_interval_seconds: number;
@@ -52,6 +55,8 @@ export interface CertAgent {
   scope_cert_ids: string[] | null;
   last_seen_at: string | null;
   last_source_ip: string | null;
+  recent_source_ips: string[];
+  multi_source_recent: boolean;
   agent_version: string | null;
   server_agent_version: string | null;
   reported: Array<Record<string, unknown>> | null;
@@ -176,7 +181,11 @@ export interface CertAgentStatus {
   agent: string;
   enabled: boolean;
   last_seen_at: string | null;
+  last_source_ip: string | null;
+  recent_source_ips: string[];
+  multi_source_recent: boolean;
   agent_version: string | null;
+  server_agent_version: string | null;
   deployments: CertStatusDeployment[];
 }
 export async function getCertAgentStatus(): Promise<{ agents: CertAgentStatus[] }> {

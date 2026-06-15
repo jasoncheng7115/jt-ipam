@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.163] — 2026-06-15
+
+### Added
+- **Manual renew for self-signed certificates** — self-signed certs get a **Renew** action that
+  re-issues a new version reusing the current CN/SANs (adjustable validity days), so agents pick it
+  up on the next fingerprint change.
+- **Same-key-on-multiple-hosts detection** — the agent records recent reporting source IPs
+  (migration 0077, `recent_sources`); if a key is used from more than one IP within 7 days the
+  distribution-agent list flags a warning next to the source IP, and the create-agent dialog +
+  install help now recommend **one key per host**.
+- **Agent CLI flags** — `--help` usage, `--upgrade` (self-update to the server's latest agent then
+  exit, even when `AUTO_UPDATE=false`), and `--force` (re-deploy even when already up to date).
+- Name/IP **filter box** on the certificate + distribution-agent tables; the read-only cert-status
+  page (Advanced) gains a column picker, sortable columns, a filter row, and **source-IP + agent-version**
+  columns. Tab headers got icons.
+
+### Changed / Fixed
+- **Agent now reports even when already up to date** — previously a re-keyed agent showed `0/0`
+  because the up-to-date path sent no report; it now reports the current state every run.
+- **Proxmox/Zimbra hardening (cont. from 0.4.162):** carried into this release with the version-column
+  "update available" indicator changed from a text tag to a single icon that no longer wraps.
+
 ## [0.4.162] — 2026-06-15
 
 ### Added — more web-server / service profiles for the distribution agent

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # jt-ipam certificate distribution agent one-shot installer (systemd timer).
 #
-# Supported: Debian 11/12/13, Ubuntu 22.04/24.04/26.04, RHEL/Rocky/AlmaLinux/CentOS, Fedora,
-#            openSUSE/SLES (apt / dnf / yum / zypper auto-detected; all use systemd).
+# Supported: Debian 11/12/13, Ubuntu 22.04/24.04/26.04, RHEL/Rocky/AlmaLinux/CentOS 8/9,
+#            Fedora 38+, openSUSE Leap 15+/SLES 15+ (apt / dnf / yum / zypper auto-detected; all use systemd).
 # The agent itself depends only on curl + coreutils (no Python / jq / YAML).
 # Target-site profiles: nginx / apache(httpd) / caddy / traefik / lighttpd / haproxy /
 #                       zoraxy / jetty / postfix / dovecot / exim4 / mosquitto /

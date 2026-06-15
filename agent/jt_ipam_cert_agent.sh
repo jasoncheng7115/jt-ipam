@@ -37,7 +37,7 @@
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--version]
-AGENT_VERSION=0.4.162
+AGENT_VERSION=0.4.163
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -46,15 +46,42 @@ CONFIG=/etc/jt-ipam-cert-agent/config
 STATE_DIR=/var/lib/jt-ipam-cert-agent
 STATE_FILE="$STATE_DIR/state"
 DRY_RUN=0
+FORCE=0
+UPGRADE_ONLY=0
 
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+
+usage() {
+  cat <<EOF
+jt-ipam certificate distribution agent v$AGENT_VERSION
+
+Usage: jt_ipam_cert_agent.sh [options]
+
+Options:
+  --config PATH   Config file (default: /etc/jt-ipam-cert-agent/config)
+  --dry-run       Show what would be written / reloaded; make no changes
+  --force         Re-deploy even if the certificate is already up to date
+  --upgrade       Update this agent to the server's latest version, then exit
+                  (works even if AUTO_UPDATE=false in the config)
+  --version       Print the agent version and exit
+  -h, --help      Show this help and exit
+
+For each DEPLOY_<N>_* in the config the agent fetches that certificate's
+current version and writes it to the target paths, reloading the service only
+after a successful config-test (auto-rollback on failure).
+Scheduled-run logs: journalctl -u jt-ipam-cert-agent.service
+EOF
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --config) CONFIG="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --force) FORCE=1; shift ;;
+    --upgrade) UPGRADE_ONLY=1; shift ;;
     --version) echo "$AGENT_VERSION"; exit 0 ;;
-    *) echo "unknown arg: $1" >&2; exit 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
@@ -318,9 +345,10 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
 }
 
 # ─────────────────── Self-update ───────────────────
+# self_update <server_sha> [force]  — force=1 ignores AUTO_UPDATE=false (used by --upgrade).
 self_update() {
-  local server_sha="$1"
-  [ "$AUTO_UPDATE" = "false" ] && return 0
+  local server_sha="$1" force="${2:-0}"
+  [ "$force" != 1 ] && [ "$AUTO_UPDATE" = "false" ] && return 0
   [ -z "$server_sha" ] && return 0
   command -v sha256sum >/dev/null 2>&1 || return 0
   local self_sha; self_sha="$(sha256sum "$SELF" | cut -d' ' -f1)"
@@ -345,7 +373,12 @@ if ! "${CURL[@]}" -o "$CHECK" "$API/check?format=text" 2>/dev/null; then
   log "check failed (cannot reach $SERVER)"; rm -f "$CHECK"; exit 1
 fi
 SERVER_SHA="$(awk -F= '/^agent_sha=/{print $2}' "$CHECK")"
-self_update "$SERVER_SHA"
+self_update "$SERVER_SHA" "$UPGRADE_ONLY"   # --upgrade forces even when AUTO_UPDATE=false
+if [ "$UPGRADE_ONLY" = 1 ]; then
+  # If an update was available, self_update already re-exec'd; reaching here means latest.
+  log "[upgrade] agent is already at the latest version (v$AGENT_VERSION)"
+  rm -f "$CHECK"; exit 0
+fi
 
 state_fp() { awk -F'\t' -v c="$1" -v p="$2" '$1==c && $2==p{print $3}' "$STATE_FILE"; }
 set_state() {  # cert profile fp
@@ -379,8 +412,13 @@ while :; do
     log "[$cert/$profile] cert not found on server or not in scope, skipping"
     add_report "$cert" "$profile" skipped "" "" "not in scope / no current version"; continue
   fi
-  if [ "$DRY_RUN" != 1 ] && [ "$(state_fp "$cert" "$profile")" = "$fp" ]; then
-    log "[$cert/$profile] already up to date (${fp:0:12}…), skipping"; continue
+  if [ "$DRY_RUN" != 1 ] && [ "$FORCE" != 1 ] && [ "$(state_fp "$cert" "$profile")" = "$fp" ]; then
+    # Already applied locally — skip the file write/reload, but STILL report the
+    # current state so the server reflects this deployment (e.g. after re-keying an
+    # agent, whose local state matches but the new agent row has never reported).
+    # --force overrides this and re-writes anyway.
+    log "[$cert/$profile] already up to date (${fp:0:12}…), skipping write"
+    add_report "$cert" "$profile" ok "$fp" "$na" "already up to date"; continue
   fi
   if apply_deployment "$cert" "$profile" "$fp" "$na"; then
     [ "$DRY_RUN" != 1 ] && set_state "$cert" "$profile" "$fp"

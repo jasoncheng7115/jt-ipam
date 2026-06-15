@@ -188,6 +188,26 @@ async def test_report_tsv(client, auth_headers):
     assert dep["up_to_date"] is True
 
 
+def test_record_source_ip_dedupes_and_flags_multi():
+    """同一把 Key 多 IP 偵測：去重保留最新、>1 個 IP 即視為多主機共用。"""
+    from app.api.v1.endpoints.cert_agents import _recent_source_ips, _record_source_ip
+
+    class _A:
+        recent_sources = None
+
+    a = _A()
+    _record_source_ip(a, "10.0.0.1")
+    assert _recent_source_ips(a) == ["10.0.0.1"]  # 單 IP → 不算多主機
+    _record_source_ip(a, "10.0.0.2")
+    _record_source_ip(a, "10.0.0.1")  # 重複 → 移到最前、不產生重複
+    ips = _recent_source_ips(a)
+    assert ips[0] == "10.0.0.1"
+    assert set(ips) == {"10.0.0.1", "10.0.0.2"}
+    assert len(ips) == 2  # >1 → multi_source_recent 會是 True
+    _record_source_ip(a, None)  # 空 IP 忽略
+    assert len(_recent_source_ips(a)) == 2
+
+
 async def test_agent_key_reviewable(client, auth_headers):
     """建立後可再次檢視 enroll key（加密保存）；輪替後檢視回新 key；非 admin 不可取。"""
     r = await client.post("/api/v1/cert-agents", headers=auth_headers,

@@ -9,9 +9,9 @@ import {
   NCollapseItem, NSwitch, NDropdown, useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
-  PlusIcon, RefreshIcon, CopyIcon, LockIcon, InfoIcon, SaveIcon,
+  PlusIcon, RefreshIcon, CopyIcon, LockIcon, InfoIcon, SaveIcon, SearchIcon,
   ImportIcon, TokenIcon, SettingsIcon, SyncIcon, DeleteIcon, TestIcon, EyeIcon, ToolsIcon, CancelIcon, EditIcon,
-  ExportIcon,
+  ExportIcon, WarnIcon, UpgradeIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
@@ -30,6 +30,22 @@ const msg = useMessage();
 const certs = ref<Certificate[]>([]);
 const agents = ref<CertAgent[]>([]);
 const loading = ref(false);
+
+// ── 名稱篩選 ──
+const certFilter = ref("");
+const agentFilter = ref("");
+const certsFiltered = computed(() => {
+  const q = certFilter.value.trim().toLowerCase();
+  if (!q) return certs.value;
+  return certs.value.filter((c) =>
+    c.name.toLowerCase().includes(q) || (c.domains ?? []).some((d) => d.toLowerCase().includes(q)));
+});
+const agentsFiltered = computed(() => {
+  const q = agentFilter.value.trim().toLowerCase();
+  if (!q) return agents.value;
+  return agents.value.filter((a) =>
+    a.name.toLowerCase().includes(q) || (a.last_source_ip ?? "").includes(q));
+});
 
 async function loadCerts() {
   loading.value = true;
@@ -51,7 +67,7 @@ onMounted(() => { loadCerts(); loadAgents(); loadServerVersion(); });
 // 安裝說明：支援的 OS / 發行版（醒目標籤呈現）
 const SUPPORTED_OS = [
   "Debian 11 / 12 / 13", "Ubuntu 22.04 / 24.04 / 26.04",
-  "RHEL / Rocky / AlmaLinux / CentOS", "Fedora", "openSUSE / SLES",
+  "RHEL / Rocky / AlmaLinux / CentOS 8 / 9", "Fedora 38+", "openSUSE Leap 15+ / SLES 15+",
 ];
 
 // ── 設定檔產生器 ──
@@ -241,19 +257,31 @@ async function doUpload() {
   finally { upBusy.value = false; }
 }
 
-// ── 產生自簽 ──
+// ── 產生自簽 / 續簽 ──
 const showSelf = ref(false);
+const selfRenew = ref(false);  // true＝續簽（沿用現有 CN/SAN 重簽一張新版本）
 const selfTarget = ref<Certificate | null>(null);
 const selfForm = ref({ common_name: "", sans: [] as string[], days: 365 });
 function openSelf(c: Certificate) {
-  selfTarget.value = c; selfForm.value = { common_name: "", sans: [], days: 365 }; showSelf.value = true;
+  selfTarget.value = c; selfRenew.value = false;
+  selfForm.value = { common_name: "", sans: [], days: 365 }; showSelf.value = true;
+}
+function openRenew(c: Certificate) {
+  selfTarget.value = c; selfRenew.value = true;
+  selfForm.value = {
+    common_name: c.current_common_name ?? "",
+    sans: [...(c.current_sans ?? [])],
+    days: 365,
+  };
+  showSelf.value = true;
 }
 async function doSelf() {
   if (!selfTarget.value || !selfForm.value.common_name.trim()) { msg.warning(t("certs.cn_required")); return; }
   try {
     await generateSelfSigned(selfTarget.value.id, {
       common_name: selfForm.value.common_name.trim(), sans: selfForm.value.sans, days: selfForm.value.days });
-    showSelf.value = false; await loadCerts(); msg.success(t("certs.self_signed_done"));
+    showSelf.value = false; await loadCerts();
+    msg.success(selfRenew.value ? t("certs.renew_done") : t("certs.self_signed_done"));
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
@@ -484,10 +512,12 @@ const certColsAll = computed<DataTableColumns<Certificate>>(() => autoSort([
         ? actBtn(ExportIcon, t("certFiles.title"), () => openFiles(c))
         : actBtn(ExportIcon, t("certFiles.empty"), () => {}, { disabled: true }),
       actBtn(ImportIcon, t("certs.upload_version"), () => openUpload(c)),
-      // 已設來源或已有版本 → 停用「產生自簽」避免覆蓋現有憑證
-      (c.source_type !== "none" || c.version_count > 0)
-        ? actBtn(TokenIcon, t("certs.self_signed_blocked"), () => {}, { disabled: true })
-        : actBtn(TokenIcon, t("certs.self_signed"), () => openSelf(c)),
+      // 已設來源或已有版本 → 停用「產生自簽」避免覆蓋現有憑證；自簽憑證改提供「續簽」
+      c.current_is_self_signed
+        ? actBtn(RefreshIcon, t("certs.renew"), () => openRenew(c), { type: "primary", ghost: true })
+        : (c.source_type !== "none" || c.version_count > 0)
+          ? actBtn(TokenIcon, t("certs.self_signed_blocked"), () => {}, { disabled: true })
+          : actBtn(TokenIcon, t("certs.self_signed"), () => openSelf(c)),
       actBtn(SettingsIcon, t("certSource.source"), () => openSource(c)),
       c.source_type !== "none"
         ? actBtn(SyncIcon, t("certSource.fetch_now"), () => doFetchNow(c), { type: "primary", ghost: true })
@@ -530,25 +560,36 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
         default: () => names.join("、"),
       });
     } },
-  { title: t("cols.version"), key: "agent_version", width: 130,
+  { title: t("cols.version"), key: "agent_version", width: 120,
     render: (a) => {
       if (!a.agent_version) return "—";
       const outdated = !!a.server_agent_version && a.agent_version !== a.server_agent_version;
       const verTag = h(NTag, { size: "small", type: outdated ? "warning" : "success", bordered: false },
         () => `v${a.agent_version}`);
       if (!outdated) return verTag;
-      // 允許「可更新」換行到下一列，不要溢出到右邊欄位
-      return h(NTooltip, null, {
-        trigger: () => h(NSpace, { size: 4, wrapItem: false, align: "center", wrap: true }, () => [
-          verTag,
-          h(NTag, { size: "small", type: "warning", bordered: false }, () => t("scan_agent.outdated")),
-        ]),
-        default: () => t("scan_agent.outdated_hint", { v: a.server_agent_version }),
-      });
+      // 「可更新」改成一個 icon，與版本同列不換行（寬度夠就完整顯示）
+      return h("div", { style: "display:flex;align-items:center;gap:4px;white-space:nowrap" }, [
+        verTag,
+        h(NTooltip, null, {
+          trigger: () => h(NIcon, { component: UpgradeIcon, size: 16,
+            style: "color:var(--warning-color,#f0a020);cursor:help;flex-shrink:0" }),
+          default: () => t("scan_agent.outdated_hint", { v: a.server_agent_version }),
+        }),
+      ]);
     } },
-  { title: t("cols.source_ip"), key: "source_ip", width: 128,
+  { title: t("cols.source_ip"), key: "source_ip", minWidth: 150,
     render: (a) => a.last_source_ip
-      ? h("span", { style: "font-family:monospace" }, a.last_source_ip) : "—" },
+      ? h("div", { style: "display:flex;align-items:center;gap:4px;flex-wrap:wrap" }, [
+          h("span", { style: "font-family:monospace" }, a.last_source_ip),
+          a.multi_source_recent
+            ? h(NTooltip, null, {
+                trigger: () => h(NTag, { size: "tiny", type: "warning", round: true, bordered: false },
+                  { default: () => t("certs.multi_ip_badge"), icon: () => h(NIcon, { component: WarnIcon }) }),
+                default: () => t("certs.multi_ip_hint", { ips: a.recent_source_ips.join("、") }),
+              })
+            : null,
+        ])
+      : "—" },
   { title: t("cols.last_report"), key: "last_seen_at", minWidth: 170,
     sorter: (a, b) => (a.last_seen_at ?? "").localeCompare(b.last_seen_at ?? ""),
     render: (a) => a.last_seen_at ? fmtDateTime(a.last_seen_at) : "—" },
@@ -584,11 +625,18 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 
     <n-tabs type="line" animated>
       <!-- 憑證 -->
-      <n-tab-pane name="certs" :tab="t('certs.tab_certs')">
+      <n-tab-pane name="certs">
+        <template #tab><n-icon :component="LockIcon" style="margin-right:5px" />{{ t('certs.tab_certs') }}</template>
         <n-space justify="space-between" style="margin-bottom: 10px">
-          <n-button type="primary" size="small" @click="showNew = true">
-            <template #icon><n-icon :component="PlusIcon" /></template>{{ t("certs.new") }}
-          </n-button>
+          <n-space :size="8" align="center">
+            <n-button type="primary" size="small" @click="showNew = true">
+              <template #icon><n-icon :component="PlusIcon" /></template>{{ t("certs.new") }}
+            </n-button>
+            <n-input v-model:value="certFilter" size="small" clearable
+                     :placeholder="t('certs.filter_name')" style="width: 220px">
+              <template #prefix><n-icon :component="SearchIcon" /></template>
+            </n-input>
+          </n-space>
           <n-space :size="8">
             <ColumnPicker :all="certPickerItems" :visible="certPrefs.visibleKeys.value"
                           @update:visible="certPrefs.setVisible" @reset="certPrefs.reset" />
@@ -597,12 +645,13 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </n-button>
           </n-space>
         </n-space>
-        <n-data-table :columns="certCols" :data="certs" :loading="loading" size="small"
+        <n-data-table :columns="certCols" :data="certsFiltered" :loading="loading" size="small"
                       :scroll-x="1008" :row-key="(r:Certificate) => r.id" />
       </n-tab-pane>
 
       <!-- 派送代理 -->
-      <n-tab-pane name="agents" :tab="t('certs.tab_agents')">
+      <n-tab-pane name="agents">
+        <template #tab><n-icon :component="ToolsIcon" style="margin-right:5px" />{{ t('certs.tab_agents') }}</template>
         <n-space justify="space-between" style="margin-bottom: 10px">
           <n-space :size="8" align="center">
             <n-button type="primary" size="small" @click="newKey = null; viewMode = false; showNewAgent = true">
@@ -611,6 +660,10 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             <n-button size="small" @click="showHelp = true">
               <template #icon><n-icon :component="InfoIcon" /></template>{{ t("certHelp.button") }}
             </n-button>
+            <n-input v-model:value="agentFilter" size="small" clearable
+                     :placeholder="t('certs.filter_agent')" style="width: 200px">
+              <template #prefix><n-icon :component="SearchIcon" /></template>
+            </n-input>
             <span v-if="serverAgentVersion" style="font-size:12px;opacity:.7">
               {{ t("certs.latest_agent_version") }}：<n-tag size="small" type="info" :bordered="false">v{{ serverAgentVersion }}</n-tag>
             </span>
@@ -623,7 +676,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </n-button>
           </n-space>
         </n-space>
-        <n-data-table :columns="agentCols" :data="agents" size="small" :scroll-x="1041" :row-key="(r:CertAgent) => r.id" />
+        <n-data-table :columns="agentCols" :data="agentsFiltered" size="small" :scroll-x="1041" :row-key="(r:CertAgent) => r.id" />
       </n-tab-pane>
     </n-tabs>
   </n-card>
@@ -712,7 +765,10 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 
   <!-- 產生自簽 -->
   <n-modal v-model:show="showSelf" preset="card"
-           :title="`${t('certs.self_signed')} — ${selfTarget?.name}`" style="max-width: 480px">
+           :title="`${selfRenew ? t('certs.renew') : t('certs.self_signed')} — ${selfTarget?.name}`" style="max-width: 480px">
+    <n-alert v-if="selfRenew" type="info" :bordered="false" :show-icon="false" style="margin-bottom: 12px">
+      {{ t("certs.renew_hint") }}
+    </n-alert>
     <n-form>
       <n-form-item :label="t('certs.common_name')">
         <n-input v-model:value="selfForm.common_name" placeholder="host.lan" />
@@ -725,7 +781,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       </n-form-item>
     </n-form>
     <template #footer>
-      <n-button type="primary" @click="doSelf">{{ t("certs.generate") }}</n-button>
+      <n-button type="primary" @click="doSelf">{{ selfRenew ? t("certs.renew_action") : t("certs.generate") }}</n-button>
     </template>
   </n-modal>
 
@@ -833,7 +889,10 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
         <n-tag v-for="os in SUPPORTED_OS" :key="os" size="small" type="success" :bordered="false" round>{{ os }}</n-tag>
       </n-space>
       <div class="help-note" style="margin-top:6px">{{ t("certHelp.distros_note") }}</div>
-      <n-alert type="info" :bordered="false" :show-icon="true" style="margin-top:12px">
+      <n-alert type="warning" :bordered="false" :show-icon="true" style="margin-top:12px">
+        {{ t("certs.one_key_per_host") }}
+      </n-alert>
+      <n-alert type="info" :bordered="false" :show-icon="true" style="margin-top:10px">
         <template #icon><n-icon :component="ToolsIcon" /></template>
         {{ t("certHelp.after_install_gen") }}
       </n-alert>
@@ -944,6 +1003,12 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     <div class="help-note" style="margin-bottom: 14px">{{ t("certHelp.uninstall_note") }}</div>
 
     <n-space vertical :size="10">
+      <n-alert type="warning" :bordered="true" :show-icon="true" style="font-size: 12px">
+        {{ t("certs.one_key_per_host") }}
+      </n-alert>
+      <n-alert type="default" :bordered="true" :show-icon="false" style="font-size: 12px">
+        {{ t("certHelp.service_note") }}
+      </n-alert>
       <n-alert type="default" :bordered="true" :show-icon="false" style="font-size: 12px">
         {{ t("certHelp.requirements") }}
       </n-alert>

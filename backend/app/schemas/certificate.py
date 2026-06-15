@@ -57,6 +57,10 @@ class CertificateRead(StrictModel):
     current_not_after: datetime | None = None
     current_days_remaining: int | None = None
     version_count: int = 0
+    # 目前版本是否為自簽（subject==issuer）→ 前端據此顯示「續簽」按鈕並帶出 CN/SAN
+    current_is_self_signed: bool = False
+    current_common_name: str | None = None
+    current_sans: list[str] | None = None
     # 自動抓取來源狀態（source_config 不含機敏:URL/host/路徑/帳號;密碼/key 在 encrypted_secret）
     source_type: str = "none"
     source_config: dict[str, Any] | None = None
@@ -100,6 +104,9 @@ class CertAgentRead(StrictModel):
     scope_cert_ids: list[uuid.UUID] | None
     last_seen_at: datetime | None
     last_source_ip: str | None
+    # 近期（7 天）回報過的去重來源 IP；>1 表示同把 Key 被多台主機共用 → 前端警告
+    recent_source_ips: list[str] = Field(default_factory=list)
+    multi_source_recent: bool = False
     agent_version: str | None
     server_agent_version: str | None = None  # server 端 agent.sh 版本；UI 比對標「可更新」
     reported: list[dict[str, Any]] | None

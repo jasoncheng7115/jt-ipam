@@ -109,6 +109,29 @@ async def test_generate_self_signed_version(client, auth_headers):
     lst = await client.get("/api/v1/certificates", headers=auth_headers)
     item = next(c for c in lst.json()["items"] if c["id"] == cid)
     assert item["current_fingerprint"] == body["fingerprint_sha256"]
+    # 自簽偵測 + 帶出 CN/SAN（前端據此提供「續簽」並預填）
+    assert item["current_is_self_signed"] is True
+    assert item["current_common_name"] == "lab.lan"
+    assert set(item["current_sans"]) == {"lab.lan", "x.lan"}
+
+
+async def test_self_signed_renew_creates_new_version(client, auth_headers):
+    """續簽＝沿用 CN/SAN 再呼叫 self-signed，產生第二個版本並成為目前版本。"""
+    cid = await _create_cert(client, auth_headers)
+    r1 = await client.post(f"/api/v1/certificates/{cid}/self-signed", headers=auth_headers,
+                           json={"common_name": "renew.lan", "sans": ["renew.lan"], "days": 30})
+    assert r1.status_code == 201, r1.text
+    fp1 = r1.json()["fingerprint_sha256"]
+    # 續簽：同 CN/SAN、較長效期
+    r2 = await client.post(f"/api/v1/certificates/{cid}/self-signed", headers=auth_headers,
+                           json={"common_name": "renew.lan", "sans": ["renew.lan"], "days": 825})
+    assert r2.status_code == 201, r2.text
+    assert r2.json()["fingerprint_sha256"] != fp1
+    lst = await client.get("/api/v1/certificates", headers=auth_headers)
+    item = next(c for c in lst.json()["items"] if c["id"] == cid)
+    assert item["version_count"] == 2
+    assert item["current_fingerprint"] == r2.json()["fingerprint_sha256"]
+    assert item["current_is_self_signed"] is True
 
 
 async def test_set_source_returns_200(client, auth_headers):

@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -98,10 +98,51 @@ def _new_key() -> str:
     return secrets.token_urlsafe(32)
 
 
+# 近期回報來源 IP 視窗（同把 Key 被多台主機共用時用來警告）。
+_SOURCE_WINDOW = timedelta(days=7)
+_SOURCE_CAP = 10
+
+
+def _record_source_ip(agent: CertAgent, ip: str | None) -> None:
+    """把這次回報的來源 IP 併入 recent_sources（去重保留最新、上限 _SOURCE_CAP、淘汰過期）。"""
+    if not ip:
+        return
+    now = datetime.now(UTC)
+    cutoff = now - _SOURCE_WINDOW
+    out: list[dict[str, str]] = []
+    for e in (agent.recent_sources or []):
+        try:
+            eip = e["ip"]
+            eat = datetime.fromisoformat(e["at"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if eip == ip or eat < cutoff:
+            continue  # 目前這顆 IP 等下重新加在最前面；過期的丟掉
+        out.append({"ip": eip, "at": e["at"]})
+    out.insert(0, {"ip": ip, "at": now.isoformat()})
+    agent.recent_sources = out[:_SOURCE_CAP]
+
+
+def _recent_source_ips(agent: CertAgent) -> list[str]:
+    """視窗內去重的來源 IP（最新在前）。"""
+    cutoff = datetime.now(UTC) - _SOURCE_WINDOW
+    ips: list[str] = []
+    for e in (agent.recent_sources or []):
+        try:
+            if datetime.fromisoformat(e["at"]) >= cutoff and e["ip"] not in ips:
+                ips.append(e["ip"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return ips
+
+
 def _to_read(obj: CertAgent) -> CertAgentRead:
     m = CertAgentRead.model_validate(obj, from_attributes=True)
     m.has_key = bool(obj.enroll_key_hash)
     m.server_agent_version = _server_agent_version()
+    ips = _recent_source_ips(obj)
+    m.recent_source_ips = ips
+    m.multi_source_recent = len(ips) > 1
     return m
 
 
@@ -183,10 +224,13 @@ async def agents_status(
                 "not_after": na.isoformat() if na else None,
                 "days_remaining": (na - now).days if na else None,
             })
+        recent_ips = _recent_source_ips(a)
         out.append({
             "agent": a.name, "enabled": a.enabled,
             "last_seen_at": a.last_seen_at.isoformat() if a.last_seen_at else None,
             "last_source_ip": a.last_source_ip,
+            "recent_source_ips": recent_ips,
+            "multi_source_recent": len(recent_ips) > 1,
             "agent_version": a.agent_version, "server_agent_version": server_ver,
             "deployments": deps,
         })
@@ -344,6 +388,7 @@ async def agent_check(
     agent = await _agent_from_key(session, x_agent_key)
     agent.last_seen_at = datetime.now(UTC)
     agent.last_source_ip = request.client.host if request.client else None
+    _record_source_ip(agent, agent.last_source_ip)
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
     certs = await _current_versions_for_scope(session, agent)
@@ -503,6 +548,7 @@ async def agent_report(
     agent.reported = clean
     agent.last_seen_at = datetime.now(UTC)
     agent.last_source_ip = request.client.host if request.client else None
+    _record_source_ip(agent, agent.last_source_ip)
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
     await session.commit()
