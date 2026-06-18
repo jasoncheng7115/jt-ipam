@@ -120,7 +120,7 @@ onMounted(load);
   background: linear-gradient(135deg, rgba(24,160,88,.14), rgba(20,184,166,.10));
   border-color: rgba(24,160,88,.35);
 }
-.ver-tile--action { grid-column: 1 / -1; }
+/* 「檢查 GitHub 最新版」與「現行版本 / Python」同一排（第三格），不再獨佔整列 */
 .ver-tile__label {
   font-size: 12.5px; opacity: .7; letter-spacing: .3px; margin-bottom: 4px;
 }

@@ -288,6 +288,24 @@ async def _addable_subnets(
     return nets
 
 
+def _pick_subnet_for_ip(nets: list[tuple[Any, Any]], aip: Any) -> Any | None:
+    """從候選子網路挑「唯一且最精確」包含此 IP 的子網路，回 subnet_id。
+
+    避免建錯子網路：
+    - 多層巢狀（如 10.0.0.0/8 與 10.1.1.0/24 都包含）→ 取最長首碼（最精確）那個。
+    - **重疊網段歧義**（多個「相同最長首碼」都包含，如兩個客戶各有 192.168.1.0/24）
+      → 回 None：寧可不建，也不要建到錯的單位。要消除歧義就在該 LibreNMS 實例設
+      scope_subnet_ids，把候選縮到自己的子網路（整合設定頁的 ScopeOverlapWarning 會提醒）。
+    - 沒有任何既有子網路包含 → 回 None（不憑空建子網路）。
+    """
+    containing = [(net, sid) for net, sid in nets if aip in net]
+    if not containing:
+        return None
+    maxlen = max(net.prefixlen for net, _ in containing)
+    best = [sid for net, sid in containing if net.prefixlen == maxlen]
+    return best[0] if len(best) == 1 else None
+
+
 async def sync_devices(
     session: AsyncSession, instance: LibreNMSInstance,
 ) -> tuple[int, int, int]:
@@ -340,10 +358,8 @@ async def sync_devices(
                     aip = ipaddress.ip_address(str(primary_ip).split("/")[0])
                 except ValueError:
                     aip = None
-                sub_id = (
-                    next((sid for net, sid in addable_nets if aip in net), None)
-                    if aip is not None else None
-                )
+                # 唯一最精確的子網路；重疊網段歧義或無容器 → None（不猜、不建錯單位）
+                sub_id = _pick_subnet_for_ip(addable_nets, aip) if aip is not None else None
                 if sub_id is not None:
                     ipa = IPAddress(
                         subnet_id=sub_id, ip=str(primary_ip).split("/")[0],

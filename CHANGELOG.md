@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.200] — 2026-06-18
+
+### Fixed
+- **Version check flagged an older version as newer.** "Check GitHub latest" compared version strings with
+  `!=`, so `0.4.79` looked newer than `0.4.199` (string-wise `'7' > '1'`); and since releases are pushed to
+  main without a release/tag, it fell back to a stale tag. It now reads `version.py` from the **main branch**
+  (reflecting what's actually published) and compares **numerically** (the tags fallback also picks the
+  numerically-highest).
+
+### Changed
+- **Version Info page layout:** "Check GitHub latest" now sits in the third cell of the top row (next to
+  Current version / Python) instead of spanning its own full-width row.
+- **Hardened LibreNMS auto-create subnet selection to avoid wrong placement.** The target subnet is now the
+  *single most-specific* (longest-prefix) match: nested ranges pick the most specific; under **overlapping
+  subnets where two+ share the longest prefix, it skips rather than guessing** (better to not create than
+  create in the wrong unit); no creation if no existing subnet contains the IP. Set the instance's subnet
+  scope to disambiguate.
+
 ## [0.4.199] — 2026-06-18
 
 ### Fixed

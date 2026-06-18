@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+
 from app.models.address import IPAddress
 from app.models.librenms import LibreNMSInstance
 from app.models.section import Section
@@ -77,3 +79,17 @@ async def test_auto_create_skips_ip_outside_any_subnet(db_session, monkeypatch):
     await lib.sync_devices(db_session, inst)
     await db_session.commit()
     assert await _host_count(db_session, "10.99.0.5") == 0
+
+
+def test_pick_subnet_longest_prefix_and_ambiguity():
+    """_pick_subnet_for_ip：巢狀取最精確、重疊歧義不猜、無容器回 None（純函式）。"""
+    from app.services.librenms import _pick_subnet_for_ip
+    n8 = ipaddress.ip_network("10.0.0.0/8")
+    n24 = ipaddress.ip_network("10.1.1.0/24")
+    # 巢狀 → 取最長首碼 /24
+    assert _pick_subnet_for_ip([(n8, "A"), (n24, "B")], ipaddress.ip_address("10.1.1.5")) == "B"
+    # 無任何容器 → None
+    assert _pick_subnet_for_ip([(n8, "A")], ipaddress.ip_address("192.168.1.1")) is None
+    # 重疊網段、相同最長首碼 → 歧義 → None（不建錯單位）
+    dup = ipaddress.ip_network("192.168.1.0/24")
+    assert _pick_subnet_for_ip([(dup, "X"), (dup, "Y")], ipaddress.ip_address("192.168.1.9")) is None

@@ -737,40 +737,75 @@ async def get_version_info() -> dict[str, Any]:
     }
 
 
+def _ver_tuple(v: str | None) -> tuple[int, ...]:
+    """版本字串 → 數字序 tuple（'0.4.199' → (0,4,199)），給「誰比較新」做數值比較。
+    純字串比較會把 '0.4.79' 當成新過 '0.4.199'（'7' > '1'）→ 必須用數字序。"""
+    import re
+    return tuple(int(x) for x in re.findall(r"\d+", v or ""))
+
+
 @router.get("/version/check-latest")
 async def check_latest_version() -> dict[str, Any]:
-    """查 GitHub 最新 release（無 release 則退回 tags），與現行版本比較。"""
+    """查 GitHub 上已發佈的最新版並與現行版本比較。
+
+    發佈方式是 push 到 main 分支（不一定建 release/tag），所以**主要來源直接讀 main 上的
+    version.py**；讀不到才退回 releases→tags。比較一律用「數字序」(_ver_tuple)，避免
+    0.4.79 被誤判為新過 0.4.199。
+    """
+    import re
     from app.version import __version__
 
     headers = {"Accept": "application/vnd.github+json"}
     latest: str | None = None
     error: str | None = None
+
+    # 主要來源：main 分支的 version.py（反映真正已發佈的最新碼）
     try:
         resp = await safe_request(
-            "GET", f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest",
-            timeout=10.0, headers=headers,
+            "GET",
+            f"https://raw.githubusercontent.com/{_GITHUB_REPO}/main/backend/app/version.py",
+            timeout=10.0,
         )
         if resp.status_code == 200:
-            latest = (resp.json().get("tag_name") or "").lstrip("v") or None
-        elif resp.status_code == 404:
-            # 尚無 release → 退回 tags
-            tags_resp = await safe_request(
-                "GET", f"https://api.github.com/repos/{_GITHUB_REPO}/tags",
-                timeout=10.0, headers=headers,
-            )
-            if tags_resp.status_code == 200:
-                tags = tags_resp.json()
-                if isinstance(tags, list) and tags:
-                    latest = (tags[0].get("name") or "").lstrip("v") or None
-        else:
-            error = f"github http {resp.status_code}"
+            m = re.search(r"""__version__\s*=\s*["']([0-9][^"']*)""", resp.text)
+            if m:
+                latest = m.group(1)
     except (UnsafeOutboundURL, httpx.HTTPError) as exc:
         error = f"transport: {exc.__class__.__name__}"
+
+    # 退回：releases/latest →（無 release）tags。GitHub tags 順序非語意序 → 取數字序最大者。
+    if latest is None and error is None:
+        try:
+            resp = await safe_request(
+                "GET", f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest",
+                timeout=10.0, headers=headers,
+            )
+            if resp.status_code == 200:
+                latest = (resp.json().get("tag_name") or "").lstrip("v") or None
+            elif resp.status_code == 404:
+                tags_resp = await safe_request(
+                    "GET", f"https://api.github.com/repos/{_GITHUB_REPO}/tags",
+                    timeout=10.0, headers=headers,
+                )
+                if tags_resp.status_code == 200:
+                    tags = tags_resp.json()
+                    names = [
+                        (t.get("name") or "").lstrip("v")
+                        for t in tags if isinstance(t, dict)
+                    ] if isinstance(tags, list) else []
+                    names = [n for n in names if n]
+                    if names:
+                        latest = max(names, key=_ver_tuple)
+            else:
+                error = f"github http {resp.status_code}"
+        except (UnsafeOutboundURL, httpx.HTTPError) as exc:
+            error = f"transport: {exc.__class__.__name__}"
 
     return {
         "current": __version__,
         "latest": latest,
-        "update_available": bool(latest and latest != __version__),
+        # 只有「數字序確實比現行新」才算有更新（修 0.4.79>0.4.199 的字串比較 bug）
+        "update_available": bool(latest and _ver_tuple(latest) > _ver_tuple(__version__)),
         "release_url": f"https://github.com/{_GITHUB_REPO}/releases",
         "error": error,
     }
