@@ -1,4 +1,40 @@
 import { apiClient } from "@/api/client";
+import type { IPAddress } from "@/types";
+
+// 連線管理頁：列出所有已啟用 SSH 且目前使用者可連線的 IP
+export async function listSshTargets(): Promise<IPAddress[]> {
+  const { data } = await apiClient.get<IPAddress[]>("/api/v1/addresses/ssh/targets");
+  return data;
+}
+
+// ── by-user 已存帳密（憑證只回遮罩，永不含明文）──
+export interface SshCredential {
+  id: string;
+  label: string;
+  username: string;
+  auth_type: "password" | "key";
+  target_ip_id: string | null;
+  has_password: boolean;
+  has_private_key: boolean;
+  last_used_at: string | null;
+  created_at: string;
+}
+export async function listSshCredentials(targetIpId?: string): Promise<SshCredential[]> {
+  const { data } = await apiClient.get<SshCredential[]>("/api/v1/ssh-credentials", {
+    params: targetIpId ? { target_ip_id: targetIpId } : {},
+  });
+  return data;
+}
+export async function createSshCredential(p: {
+  label: string; username: string; auth_type: "password" | "key";
+  target_ip_id?: string | null; password?: string; private_key?: string; passphrase?: string;
+}): Promise<SshCredential> {
+  const { data } = await apiClient.post<SshCredential>("/api/v1/ssh-credentials", p);
+  return data;
+}
+export async function deleteSshCredential(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/ssh-credentials/${id}`);
+}
 
 export interface SshTicket {
   ticket: string;

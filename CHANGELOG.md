@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.4.210] — 2026-06-21
+
+### Added
+- **"Remember" SSH credentials (per-user, individually owned).** Each user can store their own
+  password / private key and reuse it next time without retyping:
+  - Backend `ssh_credentials` (migration 0082): password / private key / passphrase are each
+    **envelope-encrypted** (per-field random DEK wrapped by the master KEK = ENCRYPTION_KEY, AAD bound to
+    owner+field); plaintext never hits the DB, logs, or the frontend.
+  - `GET/POST/DELETE /api/v1/ssh-credentials`: owner-only, masked reads (never plaintext).
+  - Connecting now uses a **reference (credential_id)**: the frontend sends only the id; the backend
+    decrypts in-memory at connect time and discards it. `can_use_ssh(target)` is still enforced; scope
+    supports both target-bound and personal-default (any IP the user may reach).
+  - Audit logs the `credential_id` (never plaintext) and flows to the existing SIEM forwarder; disabling a
+    user makes their credentials unusable immediately.
+  - Connect form gains a "Saved credential" dropdown (pick to connect) and a "Remember" toggle.
+
+### Out of scope (roadmap)
+- PTY session recording, MFA re-auth for sensitive targets, external Vault/KMS-backed KEK, SSH CA short-lived certs.
+
+## [0.4.209] — 2026-06-21
+
+### Added
+- **Advanced → Connections page**: a table of all SSH-enabled targets you're allowed to connect to (backend `GET /addresses/ssh/targets`, same deny-by-default filtering as `can_use_ssh`), with sort / live filter / column picker / export, and per-row "SSH" (new tab) or dropdown "open in new window".
+
+### Changed
+- The IP detail "SSH" button now **opens a new tab** (main click) and **a new window** (dropdown); the in-page embedded terminal was removed.
+- SSH connect form reordered: auth method first, password directly under username.
+- Connection status is now a colored-dot pill badge (connected pulses green); disconnect / reconnect / open-in-new-window all have icons.
+
+### Fixed
+- After enabling "SSH management" and saving, the SSH button required a refresh to appear — the PATCH `/addresses/{id}` response didn't compute `ssh_available`; now it does (matching GET).
+
 ## [0.4.208] — 2026-06-21
 
 ### Added

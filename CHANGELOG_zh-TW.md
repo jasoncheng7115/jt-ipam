@@ -4,6 +4,35 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.4.210] — 2026-06-21
+
+### 新增
+- **SSH 連線帳密「記住」功能（by-user 個別保管）。** 每位使用者可儲存自己的密碼／私鑰，
+  下次直接選用，不必重打：
+  - 後端 `ssh_credentials`（migration 0082）：密碼／私鑰／passphrase 各自**信封加密**
+    （per-field 隨機 DEK，DEK 由主 KEK（ENCRYPTION_KEY）包覆，AAD 綁 owner+欄位）；明文絕不落 DB／log／回前端。
+  - `GET/POST/DELETE /api/v1/ssh-credentials`：一律 owner-only、僅回遮罩（不含明文）。
+  - 連線改以 **reference（credential_id）**：前端只送 id，後端在連線當下記憶體解密、用完即丟；
+    仍須通過 `can_use_ssh(target)` 授權，scope 支援「綁定目標」與「個人預設（任一可連 IP）」。
+  - 稽核：連線記錄 `credential_id`（永不記明文），接現有 SIEM 轉送；停用使用者即無法使用其帳密。
+  - 前端連線表單加「已存帳密」下拉（選用即連）＋「記住此帳密」開關。
+
+### 範圍外（roadmap）
+- PTY session 錄製、敏感目標 MFA 二次驗證、外部 Vault/KMS 收 KEK、SSH CA 短效憑證。
+
+## [0.4.209] — 2026-06-21
+
+### 新增
+- **進階 → 連線管理頁**：表格列出所有已啟用 SSH 且本人可連線的目標（後端 `GET /addresses/ssh/targets`，與 `can_use_ssh` 同樣 deny-by-default 過濾），支援排序 / 即時篩選 / 選欄位 / 匯出，每列可「SSH 連線」（新分頁）或下拉「另開視窗」。
+
+### 變更
+- IP 詳情頁的「SSH 連線」改為**點主鍵開新分頁**、**下拉開新視窗**（移除頁內嵌入式終端機）。
+- SSH 連線表單欄位順序調整：認證方式移到最上、密碼緊接帳號下方。
+- 連線狀態改成有色圓點藥丸徽章（已連線綠色脈動）、中斷 / 重新連線 / 另開視窗都加上圖示。
+
+### 修正
+- 啟用「SSH 連線管理」存檔後，SSH 按鈕需重新整理才出現 —— PATCH `/addresses/{id}` 回應未計算 `ssh_available`，已比照 GET 補上。
+
 ## [0.4.208] — 2026-06-21
 
 ### 新增

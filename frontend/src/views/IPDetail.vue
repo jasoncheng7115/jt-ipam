@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { NCard, NDescriptions, NDescriptionsItem, NSpin, NSpace, NTag, NButton, NIcon, useMessage } from "naive-ui";
+import { NCard, NDescriptions, NDescriptionsItem, NSpin, NSpace, NTag, useMessage } from "naive-ui";
 import { getAddress } from "@/api/addresses";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
-import SshTerminal from "@/components/SshTerminal.vue";
-import { TerminalIcon, CancelIcon } from "@/icons";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import type { IPAddress } from "@/types";
 
@@ -18,19 +16,18 @@ const { catalog } = useScanProbes();
 
 const addr = ref<IPAddress | null>(null);
 const loading = ref(false);
-const showSsh = ref(false);
-const sshCardRef = ref<any>(null);
 
-async function openSsh() {
-  showSsh.value = true;
-  // 終端機面板在長頁面底部，開啟後捲動到可視範圍，否則看起來像「沒反應」
-  await nextTick();
-  sshCardRef.value?.$el?.scrollIntoView({ behavior: "smooth", block: "start" });
+function sshHref(): string {
+  return router.resolve({ name: "ssh-console", params: { id: addr.value!.id } }).href;
+}
+// 主按鈕 → 新分頁；下拉 → 新視窗（彈出）
+function openSsh() {
+  if (!addr.value) return;
+  window.open(sshHref(), "_blank");
 }
 function openSshPopout() {
   if (!addr.value) return;
-  const href = router.resolve({ name: "ssh-console", params: { id: addr.value.id } }).href;
-  window.open(href, `ssh-${addr.value.id}`, "width=960,height=640,noopener");
+  window.open(sshHref(), `ssh-${addr.value.id}`, "width=960,height=640");
 }
 
 // 把探測 key 轉成顯示 label（比不到目錄就直接顯示 key）
@@ -46,15 +43,11 @@ const showScanSection = computed(() => {
 
 async function load(id: string) {
   loading.value = true;
-  showSsh.value = false;
   try { addr.value = await getAddress(id); }
   catch { msg.error(t("errors.network")); addr.value = null; }
   finally { loading.value = false; }
 }
-function onSaved(a: IPAddress) {
-  addr.value = a;
-  if (!a.ssh_available) showSsh.value = false;  // 取消啟用/失去權限 → 收掉終端機
-}
+function onSaved(a: IPAddress) { addr.value = a; }
 function onDeleted() { router.push({ name: "addresses" }); }
 function back() {
   if (window.history.length > 1) router.back();
@@ -79,22 +72,6 @@ watch(() => route.params.id, (id) => { if (id) load(String(id)); });
         @ssh-open="openSsh"
         @ssh-popout="openSshPopout"
       />
-
-      <!-- 嵌入式 SSH 終端機 -->
-      <n-card v-if="addr && addr.ssh_available && showSsh" ref="sshCardRef" size="small" :bordered="true">
-        <template #header>
-          <n-space align="center" :size="6">
-            <n-icon><TerminalIcon /></n-icon>
-            <span>{{ t("ssh.terminal_title") }}</span>
-          </n-space>
-        </template>
-        <template #header-extra>
-          <n-button size="tiny" quaternary @click="showSsh = false">
-            <template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("ssh.close_panel") }}
-          </n-button>
-        </template>
-        <SshTerminal :key="addr.id" :address-id="addr.id" :ip="addr.ip" />
-      </n-card>
 
       <!-- 掃描項目（唯讀，由探測結果推導）；OS 已併入上方主要欄位表 -->
       <n-card v-if="addr && showScanSection" size="small" :bordered="true">

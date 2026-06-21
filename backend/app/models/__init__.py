@@ -56,6 +56,7 @@ from app.models.physical import (
 )
 from app.models.scan_agent import ScanAgent
 from app.models.section import Section
+from app.models.ssh_credential import SSHCredential
 from app.models.subnet import Subnet
 from app.models.system_setting import SystemSetting
 from app.models.user import APIToken, Group, User, UserGroupMember, UserPreference
@@ -126,6 +127,7 @@ __all__ = [
     "ProxmoxInstance",
     "Rack",
     "ScanAgent",
+    "SSHCredential",
     "Section",
     "Subnet",
     "Tenant",
