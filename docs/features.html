@@ -115,6 +115,7 @@
       <li><span class="leaf"><span class="zh">DHCP 範圍標示、重疊網段偵測</span><span class="en">DHCP-range marking, overlap detection</span></span></li>
       <li><span class="leaf"><span class="zh">失聯 IP 篩選與批次回收、子網路歸檔（連帶隱藏 IP）</span><span class="en">Stale-IP filter &amp; bulk reclaim, subnet archive (hides its IPs)</span></span></li>
       <li><span class="leaf"><span class="zh">IP 異動記錄、主機名稱與作業系統多源優先序（掃描代理 / LibreNMS / Wazuh）</span><span class="en">IP change log, multi-source hostname &amp; OS precedence (scan agent / LibreNMS / Wazuh)</span></span></li>
+      <li><span class="leaf"><span class="zh">IP 申請審核流程（可設多關卡會簽 / 依序關卡，站內 + Email 通知）</span><span class="en">IP request approval workflow (multi-stage / parallel sign-off, in-app + email notifications)</span></span></li>
       <li><span class="leaf"><span class="zh">VLAN / VLAN Domain、VRF</span><span class="en">VLAN / VLAN Domain, VRF</span></span></li>
       <li><span class="leaf"><span class="zh">CSV 匯入；匯出 CSV / Markdown / PDF / Excel / ODS、欄位選擇</span><span class="en">CSV import; export CSV / Markdown / PDF / Excel / ODS, column picker</span></span></li>
     </ul>
@@ -136,7 +137,7 @@
     <ul class="branch">
       <li><span class="leaf"><span class="zh">DNS、AdGuard、LibreNMS、Wazuh</span><span class="en">DNS, AdGuard, LibreNMS, Wazuh</span></span></li>
       <li><span class="leaf"><span class="zh">OPNsense：防火牆規則 / 別名 / NAT、DHCP / ARP / OpenVPN</span><span class="en">OPNsense: firewall rules / aliases / NAT, DHCP / ARP / OpenVPN</span></span></li>
-      <li><span class="leaf"><span class="zh">Graylog：記錄補主機名稱（Lookup Table）、稽核事件轉送（syslog/CEF/GELF）</span><span class="en">Graylog: log enrichment, audit forwarding (syslog/CEF/GELF)</span></span></li>
+      <li><span class="leaf"><span class="zh">Graylog：DSV 查詢表（IP→主機名稱、防火牆規則→別名、別名→成員、Proxmox VM）、記錄補主機名稱（Lookup Table）、稽核事件轉送（syslog/CEF/GELF）</span><span class="en">Graylog: DSV lookup tables (IP→hostname, firewall rule→alias, alias→members, Proxmox VM), log enrichment (Lookup Table), audit forwarding (syslog/CEF/GELF)</span></span></li>
       <li><span class="leaf"><span class="zh">phpIPAM 遷移（SSH tunnel 匯入）</span><span class="en">phpIPAM migration (import over SSH tunnel)</span></span></li>
     </ul>
 
@@ -146,6 +147,14 @@
       <li><span class="leaf"><span class="zh">網路工具：CIDR 計算/切割/聚合、遮罩、EUI-64、MAC 格式、DNS 解析、郵件 DNS、GeoIP</span><span class="en">Net tools: CIDR calc/split/aggregate, netmask, EUI-64, MAC format, DNS lookup, mail DNS, GeoIP</span></span></li>
       <li><span class="leaf"><span class="zh">站對站 VPN（WireGuard 公鑰配對 / IPsec 端點比對）</span><span class="en">Site-to-site VPN (WireGuard key pairing / IPsec match)</span></span></li>
       <li><span class="leaf"><span class="zh">OUI 廠商查詢（每月更新）</span><span class="en">OUI vendor lookup (monthly refresh)</span></span></li>
+    </ul>
+
+    <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span class="zh">瀏覽器連線管理</span><span class="en">In-browser remote console</span></div>
+    <ul class="branch">
+      <li><span class="leaf"><span class="zh">直接從 IP / 裝置開 SSH 終端機與 RDP、VNC 桌面（RDP / VNC 為 Beta），全程在瀏覽器內、免裝用戶端</span><span class="en">Open an SSH terminal plus RDP &amp; VNC desktops (RDP / VNC Beta) straight from an IP / device — all in-browser, no client to install</span></span></li>
+      <li><span class="leaf"><span class="zh">連線帳密預設不儲存（僅連線當下傳送）；也可選擇存進個人加密金庫（by-user、AES-GCM 加密，私鑰 / 密碼逐欄加密）</span><span class="en">Credentials are not stored by default (sent only at connect time); optionally save to a per-user encrypted vault (by-user, AES-GCM, per-field encryption)</span></span></li>
+      <li><span class="leaf"><span class="zh">逐物件權限控管誰能連、單次 ticket→WebSocket 連線、每次開閉皆稽核；目標主機鎖死防 SSRF</span><span class="en">Per-object permissions on who may connect, single-use ticket→WebSocket sessions, every open/close audited; target host locked to prevent SSRF</span></span></li>
+      <li><span class="leaf"><span class="zh">RDP / VNC 可送特殊組合鍵（Ctrl + Alt + Del、F1～F12、⊞ Win / ⌘…）、自動縮放符合視窗、以目前視窗大小重連取得原生畫面</span><span class="en">RDP / VNC can send special key combos (Ctrl + Alt + Del, F1–F12, ⊞ Win / ⌘…), auto-fit to window, and reconnect at the current window size for a native picture</span></span></li>
     </ul>
 
     <div class="grp"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg><span class="zh">AI 助理</span><span class="en">AI assistant</span></div>
