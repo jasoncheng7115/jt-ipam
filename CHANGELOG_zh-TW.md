@@ -4,6 +4,15 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.5] — 2026-06-26
+
+### 新增
+- **掃描代理：新增「相依套件」欄。** 代理會回報它的探測工具盤點；欄位顯示裝好幾個（例如 `4/7`），點下去
+  開詳情：每個工具裝了沒、版本多少、用於哪些探測（nmap → OS/連接埠、nmblookup → NetBIOS、avahi-resolve
+  → mDNS…）、缺的附上安裝指令。可一眼看出「查不到機器名稱」是因為缺 `nmblookup`。代理自我更新到 v1.5.0
+  才會回報（migration 0086）。
+
+
 ## [0.5.4] — 2026-06-24
 
 ### 修正

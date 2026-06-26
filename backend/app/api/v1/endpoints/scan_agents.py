@@ -85,6 +85,8 @@ class ScanAgentRead(StrictModel):
     enabled_probes: list[str] = Field(default_factory=lambda: ["icmp"])
     probe_intervals: dict[str, int] | None = None
     available_probes: list[str] | None = None
+    # 相依工具盤點：[{name, installed, version, probes, package}]（哪些裝了/版本/缺）
+    tools: list[dict[str, Any]] | None = None
     subnet_count: int = 0
     last_seen_at: Any
     last_error: str | None
@@ -105,10 +107,51 @@ def _new_key() -> str:
     return secrets.token_urlsafe(32)
 
 
+# 相依工具的顯示對照表（probes＝啟用哪些探測、package＝apt 套件名）。agent 只回報 installed/version。
+_DEP_TOOL_META: dict[str, tuple[list[str], str]] = {
+    "python3": ([], "python3"),
+    "ping": (["icmp"], "iputils-ping"),
+    "ip": (["arp"], "iproute2"),
+    "nmap": (["os", "ports"], "nmap"),
+    "nmblookup": (["netbios"], "samba-common-bin"),
+    "nbtscan": (["netbios"], "nbtscan"),
+    "avahi-resolve": (["mdns"], "avahi-utils"),
+}
+
+
+def _parse_tools_header(raw: str) -> list[dict[str, Any]]:
+    """X-Agent-Tools: `name|installed(1/0)|version` 以分號相接 → [{name, installed, version}]。"""
+    out: list[dict[str, Any]] = []
+    for part in raw.split(";"):
+        seg = part.split("|")
+        name = seg[0].strip()[:40] if seg else ""
+        if not name:
+            continue
+        installed = len(seg) > 1 and seg[1].strip() == "1"
+        version = seg[2].strip()[:32] if len(seg) > 2 and seg[2].strip() else None
+        out.append({"name": name, "installed": installed, "version": version})
+        if len(out) >= 50:
+            break
+    return out
+
+
+def _merge_tool_meta(tools: list | None) -> list[dict[str, Any]] | None:
+    if not tools:
+        return None
+    out: list[dict[str, Any]] = []
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        probes, pkg = _DEP_TOOL_META.get(t.get("name"), ([], t.get("name")))
+        out.append({**t, "probes": probes, "package": pkg})
+    return out
+
+
 def _to_read(obj: ScanAgent) -> ScanAgentRead:
     m = ScanAgentRead.model_validate(obj)
     m.has_key = bool(obj.enroll_key_hash)
     m.server_agent_version = _server_agent_version()
+    m.tools = _merge_tool_meta(obj.tools)
     return m
 
 
@@ -397,6 +440,7 @@ async def agent_poll(
     x_agent_key: Annotated[str | None, Header()] = None,
     x_agent_version: Annotated[str | None, Header()] = None,
     x_agent_probes: Annotated[str | None, Header()] = None,
+    x_agent_tools: Annotated[str | None, Header()] = None,
 ) -> AgentPollOut:
     """Agent 主動拉取「要掃哪些網段、各網段跑哪些探測、各探測間隔、逐 IP 略過」。"""
     agent = await _agent_from_key(session, x_agent_key)
@@ -412,6 +456,9 @@ async def agent_poll(
         agent.available_probes = scan_probes.normalize_probes(
             [p.strip() for p in x_agent_probes.split(",") if p.strip()]
         )
+    # 相依工具盤點（裝了哪些 / 版本）→ 掃描代理頁「相依套件 N/M」
+    if x_agent_tools is not None:
+        agent.tools = _parse_tools_header(x_agent_tools)
 
     cap = set(agent.enabled_probes or ["icmp"])   # 代理能力天花板
     rows = (await session.execute(

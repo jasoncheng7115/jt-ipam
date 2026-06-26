@@ -42,7 +42,7 @@ import sys
 import time
 import urllib.request
 
-AGENT_VERSION = "1.4.0"
+AGENT_VERSION = "1.5.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INTERVAL = int(os.environ.get("JT_IPAM_INTERVAL", "300"))
@@ -101,6 +101,40 @@ def _capabilities() -> list[str]:
     # 去重並維持 ALL_PROBES 順序
     seen = set(caps)
     return [p for p in ALL_PROBES if p in seen]
+
+
+# 探測相依的外部工具（name, version-args）。server 端另有 probes/package 對照表（顯示用）。
+_DEP_TOOLS = (
+    ("python3", ["--version"]),
+    ("ping", ["-V"]),
+    ("ip", ["-V"]),
+    ("nmap", ["--version"]),
+    ("nmblookup", ["-V"]),
+    ("nbtscan", []),         # 無可靠的版本旗標
+    ("avahi-resolve", []),   # 無可靠的版本旗標
+)
+
+
+def _tool_version(path: str, args: list) -> str:
+    if not args:
+        return ""
+    try:
+        r = subprocess.run([path, *args], capture_output=True, text=True, timeout=4)
+        txt = (r.stdout or "") + (r.stderr or "")
+        m = re.search(r"(\d+\.\d+(?:\.\d+)?)", txt)
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
+def _tools_header() -> str:
+    """相依工具盤點 → 緊湊字串 `name|installed(1/0)|version` 以分號相接（送 X-Agent-Tools）。"""
+    parts = []
+    for name, vargs in _DEP_TOOLS:
+        path = shutil.which(name)
+        ver = _tool_version(path, vargs) if path else ""
+        parts.append(f"{name}|{1 if path else 0}|{ver}")
+    return ";".join(parts)
 
 
 def _req(method: str, path: str, body: dict | None = None,
@@ -343,7 +377,8 @@ def _due(subnet_id, probe: str, intervals: dict, fast: int, now: float) -> bool:
 def scan_once() -> None:
     caps = _capabilities()
     poll = _req("GET", "/api/v1/scan-agents/poll",
-                extra_headers={"X-Agent-Probes": ",".join(caps)})
+                extra_headers={"X-Agent-Probes": ",".join(caps),
+                               "X-Agent-Tools": _tools_header()})
     _maybe_self_update(poll.get("agent_sha"))
     subnets = poll.get("subnets") or []
     fast = int(poll.get("interval_seconds") or INTERVAL)

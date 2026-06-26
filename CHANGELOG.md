@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.5] — 2026-06-26
+
+### Added
+- **Scan agents: a "Dependencies" column.** Each agent now reports its probe-tool inventory; the column
+  shows how many are installed (e.g. `4/7`) and clicking opens a detail dialog listing every tool — whether
+  it is installed and at which version, which probes it enables (nmap → OS/ports, nmblookup → NetBIOS,
+  avahi-resolve → mDNS …), and the install command for the missing ones. Helps diagnose "no machine name"
+  (NetBIOS needs `nmblookup`) at a glance. Agent self-updates to v1.5.0 to report this (migration 0086).
+
+
 ## [0.5.4] — 2026-06-24
 
 ### Fixed

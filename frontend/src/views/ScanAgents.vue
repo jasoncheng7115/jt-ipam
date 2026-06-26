@@ -39,6 +39,7 @@ const saPicker = [
   { key: "agent_version", label: t("cols.version") },
   { key: "source_ip", label: t("cols.source_ip") },
   { key: "subnet_count", label: t("cols.subnet") },
+  { key: "tools", label: t("scan_agent.deps") },
   { key: "last_seen_at", label: t("cols.last_report") },
   { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
@@ -254,6 +255,20 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
     title: t("scanAgentHelp.col_subnets"), key: "subnet_count", width: 64,
     render: (r) => r.subnet_count ?? 0,
   },
+  {
+    title: t("scan_agent.deps"), key: "tools", width: 96,
+    render: (r) => {
+      const ts = r.tools ?? [];
+      if (!ts.length) return h("span", { style: "opacity:.5" }, "—");
+      const ok = ts.filter((x) => x.installed).length;
+      const all = ts.length;
+      return h(NTag, {
+        size: "small", round: true, style: "cursor:pointer",
+        type: ok >= all ? "success" : "warning",
+        onClick: () => openTools(r),
+      }, () => `${ok}/${all}`);
+    },
+  },
   { title: t("scanAgentHelp.col_last_seen"), key: "last_seen_at", width: 168,
     render: (r) => h("span", { style: "white-space:nowrap" }, fmtDateTime(r.last_seen_at)) },
   { title: t("scanAgentHelp.col_last_error"), key: "last_error", minWidth: 150, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
@@ -276,6 +291,11 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
 const cols = computed<DataTableColumns<ScanAgent>>(() =>
   allCols.value.filter((c: any) => saVis.value.includes(c.key)),
 );
+
+// 相依套件詳情
+const toolsShow = ref(false);
+const toolsRow = ref<ScanAgent | null>(null);
+function openTools(r: ScanAgent) { toolsRow.value = r; toolsShow.value = true; }
 
 onMounted(() => { void refresh(); });
 </script>
@@ -307,6 +327,39 @@ onMounted(() => { void refresh(); });
       <ExportButton :columns="cols" :rows="rows" filename="scan-agents" :title="t('nav.scan_agents')" />
     </n-space>
     <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1080" :pagination="pg" />
+
+    <!-- 相依套件詳情 -->
+    <n-modal v-model:show="toolsShow" preset="card" :title="t('scan_agent.deps_title')" style="width: 600px">
+      <p class="hint" style="margin-top:0">{{ t("scan_agent.deps_hint") }}</p>
+      <table class="dep-tbl">
+        <thead>
+          <tr>
+            <th>{{ t("scan_agent.dep_tool") }}</th>
+            <th>{{ t("common.status") }}</th>
+            <th>{{ t("scanAgentHelp.col_version") }}</th>
+            <th>{{ t("scan_agent.dep_probes") }}</th>
+            <th>{{ t("scan_agent.dep_install") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="tdep in (toolsRow?.tools ?? [])" :key="tdep.name">
+            <td><code>{{ tdep.name }}</code></td>
+            <td>
+              <n-tag size="tiny" :bordered="false" :type="tdep.installed ? 'success' : 'error'">
+                {{ tdep.installed ? t("scan_agent.dep_installed") : t("scan_agent.dep_missing") }}
+              </n-tag>
+            </td>
+            <td>{{ tdep.version || "—" }}</td>
+            <td>{{ tdep.probes.length ? tdep.probes.join(", ") : "—" }}</td>
+            <td>
+              <code v-if="!tdep.installed && tdep.package">{{ SUDO }} apt install {{ tdep.package }}</code>
+              <span v-else style="opacity:.4">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">{{ t("scan_agent.deps_note") }}</p>
+    </n-modal>
 
     <!-- 建立 / 編輯 -->
     <n-modal v-model:show="show" preset="card" style="width: 460px">
@@ -525,4 +578,9 @@ onMounted(() => { void refresh(); });
   white-space: pre-wrap;
   word-break: break-all;
 }
+.dep-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dep-tbl th, .dep-tbl td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--n-border-color, rgba(128,128,128,.18)); }
+.dep-tbl th { font-weight: 600; opacity: .7; font-size: 12px; }
+.dep-tbl code { font-size: 12px; background: rgba(128,128,128,.1); border-radius: 4px; padding: 1px 5px; }
+.hint { font-size: 12px; opacity: .65; line-height: 1.5; margin: 8px 0; }
 </style>

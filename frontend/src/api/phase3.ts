@@ -43,6 +43,13 @@ export async function deleteCustomField(id: string): Promise<void> {
 
 // ─────────────────── Scan Agents ───────────────────
 
+export interface ScanAgentTool {
+  name: string;
+  installed: boolean;
+  version: string | null;
+  probes: string[];
+  package: string | null;
+}
 export interface ScanAgent {
   id: string;
   name: string;
@@ -56,6 +63,7 @@ export interface ScanAgent {
   enabled_probes: string[];
   probe_intervals: Record<string, number> | null;
   available_probes: string[] | null;
+  tools: ScanAgentTool[] | null;
   subnet_count: number;
   last_seen_at: string | null;
   last_error: string | null;
