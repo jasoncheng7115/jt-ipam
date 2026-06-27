@@ -94,7 +94,7 @@ High-frequency history of every IP change (created/deleted/hostname_changed/mac_
 phpIPAM's signature NAT, extended to mirror OPNsense port-forward rules.
 - `type` (`one_to_one`/`many_to_one`/`port_forward`), `src_ip_id`/`dst_ip_id` (FK ip_addresses), `src_port`/`dst_port` (+ `_to` for ranges), `protocol`, `src_interface`, `device_id`.
 - OPNsense parity: `disabled`, `no_rdr`, `ip_version`, `src_not`/`dst_not`, `log`, `category`, `nat_reflection`, `pool_options`, `filter_rule`, and alias references (`src_alias`/`dst_alias`/`src_port_alias`/`dst_port_alias`/`redirect_alias`).
-- Sync provenance: `source_origin` (`manual` / `phpipam` / `opnsense:<fw_uuid>`) + `external_id` (unique together = upsert key).
+- Sync provenance: `source_origin` (`manual` / `phpipam` / `opnsense:<fw_uuid>` / `pfsense:<fw_uuid>`) + `external_id` (unique together = upsert key).
 
 ### 2.8 `ip_requests` / `ip_request_events`
 IP request workflow with a clear state machine (`pending → approved → fulfilled` / `rejected` / `cancelled`). `ip_request_events` is the timeline (one row per state change). Approval allocates an IP atomically (`allocated_ip_id`).
@@ -181,6 +181,14 @@ Each integration has an **instance** table (connection metadata; API keys/passwo
 - **DHCPPoolRange**: DHCP pool ranges synced from the firewall (Kea/ISC) — `subnet_cidr`, `start_ip`/`end_ip`; IPs falling in a range are flagged DHCP.
 
 > **Graylog DSV** (token-protected lookup endpoints under `/api/v1/lookup/...`): a global IP→hostname/FQDN table, per-firewall `rid → alias` and `alias → members` tables (gated by `expose_dsv`), and per-cluster Proxmox `vmid → VM name`. Consumed by Graylog's "DSV File from HTTP" data adapter (key column 0, value column 1).
+
+### 6.3b pfSense firewall — `pfsense.py` (its own settings page, not shared with OPNsense)
+
+Talks to pfSense via the third-party **pfSense-pkg-RESTAPI** (pfrest.org; base `/api/v2`, `X-API-Key`).
+
+- **PfSenseFirewall**: encrypted `api_key`, `verify_tls`, sync toggles (`sync_dhcp`/`sync_arp`/`sync_aliases`/`sync_rules`), `expose_dsv`, and the compact `rules` (jsonb) cache. Scoped by `scope_subnet_ids`.
+- **PfSenseSyncedAlias**: aliases pulled back for read-only viewing (`members`, `alias_type`); also feeds the alias→members Graylog DSV.
+- pfSense NAT port-forwards are synced into the same `nat_translations` table with `source_origin = pfsense:<fw_uuid>`, so they list alongside OPNsense NAT (filterable by source).
 
 ### 6.4 Proxmox virtualization — `virt.py`
 - **ProxmoxInstance**: PVE API connection (`api_url` + `extra_api_urls` for node failover, `auth_username`/`auth_token_id`, secret via `encrypted_secrets`, `verify_tls`).

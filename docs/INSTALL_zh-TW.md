@@ -274,6 +274,16 @@ backend 容器啟動時會**自動**跑資料庫遷移（entrypoint 執行 `alem
 2. jt-ipam → 防火牆 → 新增 → 填 `https://opnsense:443`、key、secret
 3. 加 alias mapping（selector JSON 例：`{"type":"section","section_id":"<uuid>"}`）
 
+### pfSense 防火牆
+
+pfSense 無內建 REST API，需安裝第三方 **pfSense-pkg-RESTAPI** 套件（pfrest.org）：
+
+1. pfSense → System → Package Manager → 安裝 **pfSense-pkg-RESTAPI**
+2. System → REST API → Settings → 把 **API Key** 加進認證方式（auth methods；預設只有 BasicAuth）
+3. System → REST API → Keys → 建立一把 key
+4. jt-ipam → 整合 pfSense → 新增 → 填 `https://pfsense`、API key；憑證自簽請關閉 Verify TLS
+5. 同步 DHCP / ARP / 別名 / 規則 / NAT（base path `/api/v2`、`X-API-Key` 認證）。pfSense 有獨立設定頁（不與 OPNsense 共用）
+
 ### Wazuh
 
 1. Wazuh manager → API user（預設 `wazuh-wui` 或自建）

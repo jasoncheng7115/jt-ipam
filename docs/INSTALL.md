@@ -287,6 +287,16 @@ Once added, `jt-ipam-sync.timer` syncs them automatically every 5 minutes by def
 2. jt-ipam → Firewall → Add → fill in `https://opnsense:443`, key, secret
 3. Add alias mappings (selector JSON example: `{"type":"section","section_id":"<uuid>"}`)
 
+### pfSense firewall
+
+pfSense has no built-in REST API, so install the third-party **pfSense-pkg-RESTAPI** package (pfrest.org):
+
+1. pfSense → System → Package Manager → install **pfSense-pkg-RESTAPI**
+2. System → REST API → Settings → add **API Key** to the auth methods (the default is BasicAuth only)
+3. System → REST API → Keys → create a key
+4. jt-ipam → Integrate pfSense → Add → fill in `https://pfsense`, the API key; turn off Verify TLS for a self-signed cert
+5. Syncs DHCP / ARP / aliases / rules / NAT (base path `/api/v2`, `X-API-Key` auth). pfSense has its own settings page (not shared with OPNsense)
+
 ### Wazuh
 
 1. Wazuh manager → API user (default `wazuh-wui` or your own)

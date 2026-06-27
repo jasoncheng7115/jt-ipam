@@ -94,7 +94,7 @@ erDiagram
 phpIPAM 的招牌 NAT，擴充對齊 OPNsense port-forward 規則。
 - `type`（`one_to_one`/`many_to_one`/`port_forward`）、`src_ip_id`/`dst_ip_id`（外鍵 ip_addresses）、`src_port`/`dst_port`（加 `_to` 表埠範圍）、`protocol`、`src_interface`、`device_id`。
 - OPNsense 對齊：`disabled`、`no_rdr`、`ip_version`、`src_not`/`dst_not`、`log`、`category`、`nat_reflection`、`pool_options`、`filter_rule`，以及 alias 參考（`src_alias`/`dst_alias`/`src_port_alias`/`dst_port_alias`/`redirect_alias`）。
-- 來源追蹤：`source_origin`（`manual` / `phpipam` / `opnsense:<fw_uuid>`）+ `external_id`（兩者合起來唯一 = upsert 鍵）。
+- 來源追蹤：`source_origin`（`manual` / `phpipam` / `opnsense:<fw_uuid>` / `pfsense:<fw_uuid>`）+ `external_id`（兩者合起來唯一 = upsert 鍵）。
 
 ### 2.8 `ip_requests` / `ip_request_events`
 IP 申請工作流，狀態機清楚（`pending → approved → fulfilled` / `rejected` / `cancelled`）。`ip_request_events` 是 timeline（每次狀態變化一筆）。核准時原子配發一個 IP（`allocated_ip_id`）。
@@ -181,6 +181,14 @@ NetBox 風但精簡（一張多型 termination 表，不拆多表）。
 - **DHCPPoolRange**：從防火牆（Kea/ISC）同步回的 DHCP 發放範圍 — `subnet_cidr`、`start_ip`/`end_ip`；落在範圍內的 IP 標示為 DHCP。
 
 > **Graylog DSV**（token 保護的 `/api/v1/lookup/...` 端點）：全域 IP→hostname/FQDN、每台防火牆的 `rid → alias` 與 `alias → members`（受 `expose_dsv` 控制）、每個 PVE 叢集的 `vmid → VM 名稱`；供 Graylog「DSV File from HTTP」配接器抓取（key 欄=0、value 欄=1）。
+
+### 6.3b pfSense 防火牆 — `pfsense.py`（獨立設定頁，不與 OPNsense 共用）
+
+透過第三方 **pfSense-pkg-RESTAPI**（pfrest.org；base `/api/v2`、`X-API-Key`）與 pfSense 溝通。
+
+- **PfSenseFirewall**：加密 `api_key`、`verify_tls`、同步開關（`sync_dhcp`/`sync_arp`/`sync_aliases`/`sync_rules`）、`expose_dsv`，以及精簡的 `rules`（jsonb）快取。以 `scope_subnet_ids` 限定範圍。
+- **PfSenseSyncedAlias**：抓回的別名（`members`、`alias_type`）供唯讀檢視；也餵 alias→members 的 Graylog DSV。
+- pfSense 的 NAT port-forward 會同步進同一張 `nat_translations` 表、`source_origin = pfsense:<fw_uuid>`，與 OPNsense NAT 並列（可依來源篩選）。
 
 ### 6.4 Proxmox 虛擬化 — `virt.py`
 - **ProxmoxInstance**：PVE API 連線（`api_url` + `extra_api_urls` 供節點換手、`auth_username`/`auth_token_id`、secret 走 `encrypted_secrets`、`verify_tls`）。
