@@ -4,6 +4,30 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.16] — 2026-06-27
+
+### 變更
+- **pfSense 介面對齊 OPNsense 各頁。**「pfSense 防火牆」管理表格現在有欄位選擇 + 匯出與合適的預設欄位（操作欄在窄
+  寬度下不再被切掉）；新增／編輯視窗間距修正（同步開關 / 提供 DSV 改成表單列分組）；頁面標題改為
+  **「pfSense 防火牆」**（原「整合 pfSense」）。
+- 進階的「防火牆規則 / 別名」（OPNsense）改名為 **「防火牆 (OPN)」**。
+
+### 新增
+- **進階 →「防火牆 (pf)」** —— 唯讀的 pfSense 規則與別名檢視（實例選擇 + 頁籤 + 快速篩選 + 欄位選擇 + 匯出），
+  比照 OPNsense 的「防火牆 (OPN)」頁。
+- `pfsense` 已納入**主機名稱／ARP 來源順序**，預設排在 `opnsense` 之下。
+
+
+## [0.5.15] — 2026-06-27
+
+### 安全／文件
+- **把安全標頭列為部署的必要設定，並在 install／upgrade 輸出中明確提示。** 當你用自己的邊緣反向代理／負載平衡器
+  擋在 jt-ipam 前面（Mode C），**那台代理必須自己設安全標頭**——它們不會自動跨多一跳存活，否則對外網站就會完全沒有
+  CSP／HSTS。外部代理 snippet（`jt-ipam-external-proxy-snippet.conf`）現在也會 `proxy_hide_header` 上游的安全標頭
+  （去重，比照 v0.5.14 的內部 snippet）；INSTALL（中／英）、README（中／英）、首頁都把這列為**必要**並附上「從對外
+  網址驗證」步驟；`jt-ipam.sh install`／`upgrade` 也會印出必要標頭提示。
+
+
 ## [0.5.14] — 2026-06-27
 
 ### 安全

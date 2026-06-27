@@ -1,4 +1,4 @@
-# jt-ipam v0.5.14
+# jt-ipam v0.5.16
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -168,6 +168,14 @@ sudo cp deploy/nginx/jt-ipam-external-proxy.conf         /etc/nginx/sites-availa
 sudo cp deploy/nginx/jt-ipam-external-proxy-snippet.conf /etc/nginx/snippets/jt-ipam-proxy.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+> ⚠️ **Required — security headers at the public edge.** The proxy that **terminates TLS for users** must
+> emit the security headers (HSTS, CSP `frame-src 'self'`, X-Frame-Options, nosniff, Referrer-Policy,
+> Permissions-Policy, COOP, CORP) and `server_tokens off`. They do **not** survive an extra proxy hop, so if
+> your edge box is a *different* machine than the one above, **set the headers on that edge box too**
+> (the bundled templates already do; replicate them on a non-nginx LB). Verify through the real public URL:
+> `curl -skI https://your-domain/ | grep -iE 'strict-transport|content-security|x-frame|cross-origin|^server'`
+> — each header should appear **exactly once**, `Server: nginx` (no version).
 
 An external proxy does **not** break OIDC / M365 (Entra ID) login, but three things must be right or you'll be redirected to `ipam.example.com` or stuck on the login page:
 1. Set `APP_PUBLIC_URL` / `API_PUBLIC_URL` / `CORS_ORIGINS` in `/etc/jt-ipam/backend.env` to your public domain (not the default `ipam.example.com`), then `systemctl restart jt-ipam-backend`.

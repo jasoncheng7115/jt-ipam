@@ -17,11 +17,27 @@ import {
   getPfSenseRules, getPfSenseNat, type PfSense, type PfRule,
 } from "@/api/pfsense";
 import { autoSort } from "@/composables/useTableSort";
+import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
 
 const { t } = useI18n();
 const msg = useMessage();
 const rows = ref<PfSense[]>([]);
 const loading = ref(false);
+
+// 表格欄位偏好（比照 OPNsense）：預設只顯示會撐爆的那幾欄以外的核心欄，其餘可在「欄位」勾選
+const PF_ALL = ["name", "api_url", "enabled", "syncs", "alias_count", "rule_count",
+  "last_sync_at", "last_error", "actions"];
+const PF_DEFAULT = ["name", "api_url", "enabled", "syncs", "last_sync_at", "actions"];
+const pfPrefs = useColumnPrefs("pfsense_fws", PF_ALL, PF_DEFAULT);
+const pfPicker = [
+  { key: "name", label: t("common.name") }, { key: "api_url", label: "API URL" },
+  { key: "enabled", label: t("cols.enabled") }, { key: "syncs", label: t("pfsense_admin.syncs") },
+  { key: "alias_count", label: t("pfsense_admin.aliases") }, { key: "rule_count", label: t("pfsense_admin.rules") },
+  { key: "last_sync_at", label: t("cols.last_sync") }, { key: "last_error", label: t("cols.last_error") },
+  { key: "actions", label: t("common.actions") },
+];
 
 const show = ref(false);
 const editing = ref<PfSense | null>(null);
@@ -157,7 +173,7 @@ const ruleCols: DataTableColumns<PfRule> = [
   { title: t("common.description"), key: "descr", minWidth: 140, ellipsis: { tooltip: true }, render: (r) => r.descr || "—" },
   { title: "tracker", key: "tracker", width: 110, render: (r) => r.tracker ?? "—" },
 ];
-const cols = computed<DataTableColumns<PfSense>>(() => autoSort([
+const allCols = computed<DataTableColumns<PfSense>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 150, ellipsis: { tooltip: true } },
   { title: "API URL", key: "api_url", minWidth: 190, ellipsis: { tooltip: true } },
   {
@@ -174,7 +190,7 @@ const cols = computed<DataTableColumns<PfSense>>(() => autoSort([
   },
   { title: t("cols.last_error"), key: "last_error", minWidth: 150, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
   {
-    title: t("common.actions"), key: "actions", className: "col-actions", width: 210,
+    title: t("common.actions"), key: "actions", className: "col-actions", width: 168,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       iconAction(EyeIcon, t("pfsense_admin.view_rules_nat"), () => openViewer(r)),
       iconAction(TestIcon, t("common.test"), () => test(r)),
@@ -186,6 +202,8 @@ const cols = computed<DataTableColumns<PfSense>>(() => autoSort([
     ]),
   },
 ]));
+const cols = computed<DataTableColumns<PfSense>>(() =>
+  allCols.value.filter((c: any) => pfPrefs.visibleKeys.value.includes(c.key)));
 
 onMounted(() => { void refresh(); void loadSubnetOptions(); });
 </script>
@@ -212,8 +230,11 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <template #icon><n-icon><PlusIcon /></n-icon></template>
         {{ t("pfsense_admin.create") }}
       </n-button>
+      <ColumnPicker :all="pfPicker" :visible="pfPrefs.visibleKeys.value"
+                    @update:visible="pfPrefs.setVisible" @reset="pfPrefs.reset" />
+      <ExportButton :columns="cols" :rows="rows" filename="pfsense" :title="t('pfsense_admin.title')" />
     </n-space>
-    <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" :scroll-x="1010" />
+    <n-data-table :columns="cols" :data="rows" :loading="loading" :bordered="false" :scroll-x="980" />
 
     <n-modal v-model:show="show" preset="card"
              :title="editing ? t('common.edit') : t('pfsense_admin.create')" style="width: 480px">
@@ -230,15 +251,19 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <n-form-item :label="t('pfsense_admin.sync_interval')">
           <n-input-number v-model:value="form.sync_interval_seconds" :min="60" :step="60" style="width: 160px" />
         </n-form-item>
-        <n-space :size="20" style="margin-bottom: 4px">
-          <span><n-switch v-model:value="form.sync_dhcp" size="small" /> DHCP</span>
-          <span><n-switch v-model:value="form.sync_arp" size="small" /> ARP</span>
-          <span><n-switch v-model:value="form.sync_aliases" size="small" /> {{ t("pfsense_admin.alias") }}</span>
-          <span><n-switch v-model:value="form.sync_rules" size="small" /> {{ t("pfsense_admin.rules") }}</span>
-        </n-space>
+        <n-form-item :label="t('pfsense_admin.syncs')">
+          <n-space :size="20" align="center">
+            <span><n-switch v-model:value="form.sync_dhcp" size="small" /> DHCP</span>
+            <span><n-switch v-model:value="form.sync_arp" size="small" /> ARP</span>
+            <span><n-switch v-model:value="form.sync_aliases" size="small" /> {{ t("pfsense_admin.alias") }}</span>
+            <span><n-switch v-model:value="form.sync_rules" size="small" /> {{ t("pfsense_admin.rules") }}</span>
+          </n-space>
+        </n-form-item>
         <n-form-item :label="t('pfsense_admin.expose_dsv')">
-          <n-switch v-model:value="form.expose_dsv" />
-          <span style="font-size:11px;opacity:.65;margin-left:10px">{{ t("pfsense_admin.expose_dsv_hint") }}</span>
+          <div style="width:100%">
+            <n-switch v-model:value="form.expose_dsv" />
+            <div style="font-size:11px;opacity:.65;margin-top:4px">{{ t("pfsense_admin.expose_dsv_hint") }}</div>
+          </div>
         </n-form-item>
         <n-form-item :label="t('pfsense_admin.scope_subnets')">
           <div style="width: 100%">

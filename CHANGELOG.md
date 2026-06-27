@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.16] — 2026-06-27
+
+### Changed
+- **pfSense UI aligned with the OPNsense pages.** The "pfSense firewall" admin table now has a column picker
+  + export and a fitting default column set (the actions column is no longer cut off on narrow widths); the
+  add/edit dialog spacing is fixed (sync toggles / Expose-DSV grouped into form rows); and the page title is
+  now **"pfSense firewall"** (was "Integrate pfSense").
+- The Advanced → "Firewall rules / aliases" entry (OPNsense) was renamed to **"Firewall (OPN)"**.
+
+### Added
+- **Advanced → "Firewall (pf)"** — a read-only pfSense rules & aliases viewer (instance selector + tabs +
+  quick filter + column picker + export), mirroring the OPNsense "Firewall (OPN)" page.
+- `pfsense` is registered in the **hostname/ARP source precedence**, defaulting just below `opnsense`.
+
+
+## [0.5.15] — 2026-06-27
+
+### Security / Docs
+- **The security headers are now documented as a required deployment setting and surfaced in install/upgrade
+  output.** When jt-ipam is fronted by your *own* edge reverse proxy / load balancer (Mode C), that proxy
+  **must** set the security headers itself — they don't survive an extra proxy hop, so otherwise the public
+  site ships with no CSP/HSTS. The external-proxy snippet (`jt-ipam-external-proxy-snippet.conf`) now also
+  `proxy_hide_header`s the upstream's security headers (dedup, matching the internal snippet in v0.5.14);
+  INSTALL (EN/zh), README (EN/zh) and the landing page now call this out as **required** with a
+  verify-through-the-public-URL step; and `jt-ipam.sh install`/`upgrade` print a required-headers notice.
+
+
 ## [0.5.14] — 2026-06-27
 
 ### Security

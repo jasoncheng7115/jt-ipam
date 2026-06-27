@@ -246,7 +246,7 @@
     "dns": "整合 DNS",
     "adguard": "整合 AdGuard",
     "librenms": "整合 LibreNMS",
-    "firewall": "防火牆規則 / 別名",
+    "firewall": "防火牆 (OPN)",
     "wazuh": "整合 Wazuh",
     "plugins": "Plugin",
     "settings": "系統設定",
@@ -279,7 +279,8 @@
     "system_admin": "系統管理員",
     "system_logs": "系統記錄",
     "graylog_dsv": "整合 Graylog",
-    "pfsense": "整合 pfSense"
+    "pfsense": "整合 pfSense",
+    "pfsense_fw": "防火牆 (pf)"
   },
   "topbar": {
     "search": "搜尋…",
@@ -2433,7 +2434,7 @@
     "empty": "（無記錄）"
   },
   "pfsense_admin": {
-    "title": "整合 pfSense",
+    "title": "pfSense 防火牆",
     "create": "新增 pfSense",
     "alias": "別名",
     "aliases": "別名數",
@@ -2457,5 +2458,9 @@
     "r_port": "埠",
     "nat_pf": "Port forward",
     "nat_out": "Outbound"
+  },
+  "pfsense_view": {
+    "hint": "pfSense 防火牆規則與別名（唯讀；需在「pfSense 防火牆」設定頁開啟規則／別名同步並執行）。",
+    "pick_fw": "選擇 pfSense"
   }
 }

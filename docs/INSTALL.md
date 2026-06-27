@@ -182,15 +182,28 @@ app server is never exposed directly:
   hidden — no version or framework fingerprint.
 - Backend listens on `127.0.0.1` only; nginx is the sole public listener.
 
-> Do **not** expose uvicorn directly to the internet. `--tls-mode self-signed`/`direct` is for internal/dev,
-> or when a separate external proxy already provides these protections. If you front jt-ipam with your own
-> proxy (Mode C), replicate the same baseline — see `deploy/nginx/jt-ipam-external-proxy.conf`.
+> Do **not** expose uvicorn directly to the internet. `--tls-mode self-signed`/`direct` is for internal/dev.
 
-Verify the baseline after install:
+> ### ⚠️ Required when you put your OWN reverse proxy in front (Mode C)
+> The security headers above are applied by whatever nginx **terminates TLS at the public edge**. If you front
+> jt-ipam with a separate reverse proxy (e.g. a company edge nginx / load balancer), **that proxy MUST set the
+> security headers itself** — they will NOT automatically survive an extra hop, so the public site would ship
+> with *no* CSP / HSTS / Permissions-Policy. This is a **required** part of the deployment, not optional.
+>
+> Install the bundled hardened external-proxy config on that edge box —
+> [`deploy/nginx/jt-ipam-external-proxy.conf`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/nginx/jt-ipam-external-proxy.conf)
+> + [`jt-ipam-external-proxy-snippet.conf`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/nginx/jt-ipam-external-proxy-snippet.conf)
+> (sets HSTS preload, the tightened CSP, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy,
+> COOP + CORP, `server_tokens off`, and `proxy_hide_header`s the upstream copies so each header appears once).
+
+**Verify the headers are present *through the public URL the users actually hit*** (i.e. through your edge
+proxy, not just the local box):
 
 ```bash
 curl -skI https://ipam.example.com/ \
   | grep -iE 'strict-transport|content-security|x-frame|x-content|referrer|permissions|cross-origin|^server'
+# Must show: HSTS, Content-Security-Policy (frame-src 'self'), X-Frame-Options, X-Content-Type-Options,
+# Referrer-Policy, Permissions-Policy, COOP, CORP — each exactly ONCE, and Server: nginx (no version).
 ```
 
 ### 2.8 Optional: Docker Compose (NOT the preferred mode)

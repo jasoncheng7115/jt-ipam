@@ -228,6 +228,28 @@ USAGE
 # =============================================================================
 # cmd_install — fresh install (original scripts/install-debian.sh logic, preserved verbatim)
 # =============================================================================
+# OWASP A05 — security headers are a required part of the deployment. The bundled nginx config
+# applies them; but if the operator fronts this box with their own edge proxy, that proxy must
+# set them too (they don't survive an extra hop). Print a clear, required notice.
+security_headers_notice() {
+    local mode="${1:-nginx}" fqdn="${2:-your-fqdn}"
+    echo
+    echo "  === SECURITY HEADERS (required) ============================="
+    if [[ "$mode" == "nginx" ]]; then
+        echo "   This install's nginx applies HSTS / CSP (frame-src 'self') / X-Frame-Options /"
+        echo "   nosniff / Referrer-Policy / Permissions-Policy / COOP / CORP and hides the banner."
+    fi
+    echo "   ⚠  If you put your OWN reverse proxy / load balancer in FRONT of this box, that edge"
+    echo "      proxy MUST set the same security headers — they do NOT survive an extra hop, or the"
+    echo "      public site ships with no CSP/HSTS. Apply on that edge box:"
+    echo "        deploy/nginx/jt-ipam-external-proxy.conf  (+ jt-ipam-external-proxy-snippet.conf)"
+    echo "   Verify through the PUBLIC url users actually hit:"
+    echo "     curl -skI https://${fqdn}/ | grep -iE 'strict-transport|content-security|x-frame|cross-origin|^server'"
+    echo "     (each header exactly once; Server: nginx, no version)"
+    echo "  ============================================================"
+    echo
+}
+
 cmd_install() {
     # -- default parameters --
     local TLS_MODE="nginx"
@@ -689,6 +711,7 @@ EOF
             ;;
     esac
     log "Review /etc/jt-ipam/backend.env (especially APP_PUBLIC_URL / CORS_ORIGINS)"
+    security_headers_notice "$TLS_MODE" "$PUBLIC_FQDN"
 
     # -- first-admin credentials --
     if [[ -n "$INITIAL_ADMIN_PW" ]]; then
@@ -803,6 +826,8 @@ cmd_upgrade() {
     trap - ERR
     log "Upgrade complete: ${OLD_VER} (${OLD_REV}) -> ${NEW_VER} (${NEW_REV})  alembic $(alembic_head)"
     log "Frontend rebuilt (nginx serves dist directly, no restart needed)."
+    security_headers_notice "$(grep -oP 'BACKEND_TLS_MODE=\K\S+' "$ENV_FILE" 2>/dev/null || echo nginx)" \
+        "$(grep -oP 'APP_PUBLIC_URL=https?://\K[^/]+' "$ENV_FILE" 2>/dev/null || echo your-fqdn)"
 }
 
 # =============================================================================

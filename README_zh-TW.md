@@ -1,4 +1,4 @@
-# jt-ipam v0.5.14
+# jt-ipam v0.5.16
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -168,6 +168,13 @@ sudo cp deploy/nginx/jt-ipam-external-proxy.conf         /etc/nginx/sites-availa
 sudo cp deploy/nginx/jt-ipam-external-proxy-snippet.conf /etc/nginx/snippets/jt-ipam-proxy.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+> ⚠️ **必要——公開邊緣的安全標頭。** 真正**為使用者終結 TLS 的那台代理**必須送出安全標頭（HSTS、CSP `frame-src 'self'`、
+> X-Frame-Options、nosniff、Referrer-Policy、Permissions-Policy、COOP、CORP）與 `server_tokens off`。這些標頭**不會**
+> 自動跨多一跳存活，所以如果你的邊緣機是上面這台以外的**另一台**，**那台邊緣機也要設**（內建範本已含；非 nginx 的 LB
+> 請照樣複製一份）。請從真正的對外網址驗證：
+> `curl -skI https://你的網域/ | grep -iE 'strict-transport|content-security|x-frame|cross-origin|^server'`
+> ——每個標頭應**剛好出現一次**、`Server: nginx`（無版本）。
 
 外部代理本身**不會**影響 OIDC / M365(Entra ID) 登入，但有三個一定要對，否則登入會被導到 `ipam.example.com` 或卡在登入頁：
 

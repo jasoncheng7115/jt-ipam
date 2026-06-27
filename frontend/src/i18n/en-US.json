@@ -246,7 +246,7 @@
     "dns": "DNS Servers",
     "adguard": "AdGuard",
     "librenms": "LibreNMS",
-    "firewall": "Firewall rules / aliases",
+    "firewall": "Firewall (OPN)",
     "wazuh": "Wazuh",
     "plugins": "Plugins",
     "settings": "Settings",
@@ -279,7 +279,8 @@
     "system_admin": "System administrator",
     "system_logs": "System logs",
     "graylog_dsv": "Graylog integration",
-    "pfsense": "pfSense"
+    "pfsense": "pfSense",
+    "pfsense_fw": "Firewall (pf)"
   },
   "topbar": {
     "search": "Search…",
@@ -2435,7 +2436,7 @@
     "empty": "(no logs)"
   },
   "pfsense_admin": {
-    "title": "pfSense",
+    "title": "pfSense firewall",
     "create": "Add pfSense",
     "alias": "Aliases",
     "aliases": "Aliases",
@@ -2459,5 +2460,9 @@
     "r_port": "Port",
     "nat_pf": "Port forward",
     "nat_out": "Outbound"
+  },
+  "pfsense_view": {
+    "hint": "pfSense firewall rules & aliases (read-only; enable rules/alias sync on the pfSense settings page and run it).",
+    "pick_fw": "Select pfSense"
   }
 }

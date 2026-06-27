@@ -178,15 +178,26 @@ openssl s_client -connect ipam.example.com:443 -servername ipam.example.com </de
 - **不洩漏版本指紋**：`server_tokens off`，並隱藏上游（uvicorn）的 `Server`／`X-Powered-By` 標頭。
 - 後端只監聽 `127.0.0.1`，nginx 是唯一對外監聽者。
 
-> **請勿**把 uvicorn 直接對外。`--tls-mode self-signed`／`direct` 適用於內部／開發，或已有另一層外部代理
-> 提供上述防護時。若你用自己的代理擋在前面（Mode C），務必複製同一套基線——見
-> `deploy/nginx/jt-ipam-external-proxy.conf`。
+> **請勿**把 uvicorn 直接對外。`--tls-mode self-signed`／`direct` 只適用於內部／開發。
 
-安裝後可驗證基線：
+> ### ⚠️ 自己在前面再擋一層反向代理時（Mode C）＝必要設定
+> 上述安全標頭是由「**在公開邊緣終結 TLS 的那台 nginx**」送出的。如果你用另一台反向代理（例如公司邊緣 nginx／
+> 負載平衡器）擋在 jt-ipam 前面，**那台代理必須自己也設這些安全標頭**——它們不會自動跨多一跳存活，否則對外網站就會
+> **完全沒有** CSP／HSTS／Permissions-Policy。這是部署的**必要**步驟，不是選用。
+>
+> 把內建的硬化外部代理設定套到那台邊緣機：
+> [`deploy/nginx/jt-ipam-external-proxy.conf`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/nginx/jt-ipam-external-proxy.conf)
+> ＋ [`jt-ipam-external-proxy-snippet.conf`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/nginx/jt-ipam-external-proxy-snippet.conf)
+> （含 HSTS preload、收緊的 CSP、X-Frame-Options DENY、nosniff、Referrer-Policy、Permissions-Policy、COOP＋CORP、
+> `server_tokens off`，並用 `proxy_hide_header` 擋掉上游重複的標頭，讓每個標頭只出現一次）。
+
+**請從「使用者實際連的對外網址」驗證**（也就是要穿過你的邊緣代理，而不只是本機）：
 
 ```bash
 curl -skI https://ipam.example.com/ \
   | grep -iE 'strict-transport|content-security|x-frame|x-content|referrer|permissions|cross-origin|^server'
+# 應看到：HSTS、Content-Security-Policy（frame-src 'self'）、X-Frame-Options、X-Content-Type-Options、
+# Referrer-Policy、Permissions-Policy、COOP、CORP——每個各一份，且 Server: nginx（無版本）。
 ```
 
 ### 2.8 選用：Docker Compose（非本專案優先使用模式）
