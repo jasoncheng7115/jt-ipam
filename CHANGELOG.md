@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.17] — 2026-06-27
+
+### Changed
+- **More pfSense/OPNsense parity.** The "pfSense firewall" admin page no longer has a view-rules button —
+  rule/alias viewing lives in **Advanced → Firewall (pfSense)** (read-only), matching OPNsense. Menu entries
+  renamed: **Firewall (OPN) → Firewall (OPNsense)**, **Firewall (pf) → Firewall (pfSense)**, with the in-page
+  titles made consistent; the pfSense rules tab is now labelled **"Firewall rules"**.
+- The NAT-rules **Source** filter now offers **pfSense**, and pfSense NAT port-forwards are synced into the NAT
+  table (`source_origin = pfsense:<id>`) so they list alongside OPNsense NAT.
+
+### Fixed
+- Column-picker labels now re-translate immediately on a live language switch (no page refresh needed) on the
+  pfSense pages and the NAT source filter — they were frozen at the language active when the page first loaded.
+
+
 ## [0.5.16] — 2026-06-27
 
 ### Changed

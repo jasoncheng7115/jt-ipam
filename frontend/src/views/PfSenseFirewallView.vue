@@ -31,19 +31,19 @@ const { query: aliasQ, filtered: aliasesFiltered } = useTableQuickFilter(aliases
 const rPrefs = useColumnPrefs("pfsense_view_rules",
   ["disabled", "type", "interface", "protocol", "source", "destination", "destination_port", "descr", "tracker"],
   ["disabled", "type", "interface", "protocol", "source", "destination", "destination_port", "descr"]);
-const rPicker = [
+const rPicker = computed(() => [
   { key: "disabled", label: t("cols.enabled") }, { key: "type", label: t("pfsense_admin.r_action") },
   { key: "interface", label: t("pfsense_admin.r_iface") }, { key: "protocol", label: t("pfsense_admin.r_proto") },
   { key: "source", label: t("pfsense_admin.r_source") }, { key: "destination", label: t("pfsense_admin.r_dest") },
   { key: "destination_port", label: t("pfsense_admin.r_port") }, { key: "descr", label: t("common.description") },
   { key: "tracker", label: "tracker" },
-];
+]);
 const aPrefs = useColumnPrefs("pfsense_view_aliases",
   ["name", "type", "members", "descr"], ["name", "type", "members", "descr"]);
-const aPicker = [
+const aPicker = computed(() => [
   { key: "name", label: t("common.name") }, { key: "type", label: t("pfsense_admin.r_action") },
   { key: "members", label: t("firewall_admin.content") }, { key: "descr", label: t("common.description") },
-];
+]);
 
 async function loadInstances() {
   insts.value = (await listPfSense(50, 0)).items;
@@ -109,7 +109,7 @@ onMounted(async () => { await loadInstances(); await loadData(); });
     </n-space>
 
     <n-tabs v-model:value="tab" type="line">
-      <n-tab-pane name="rules" :tab="`${t('pfsense_admin.rules')} (${rules.length})`">
+      <n-tab-pane name="rules" :tab="`${t('firewall_admin.rules')} (${rules.length})`">
         <n-space align="center" style="margin-bottom: 8px">
           <n-input v-model:value="ruleQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
           <ColumnPicker :all="rPicker" :visible="rPrefs.visibleKeys.value"

@@ -246,7 +246,7 @@
     "dns": "DNS Servers",
     "adguard": "AdGuard",
     "librenms": "LibreNMS",
-    "firewall": "Firewall (OPN)",
+    "firewall": "Firewall (OPNsense)",
     "wazuh": "Wazuh",
     "plugins": "Plugins",
     "settings": "Settings",
@@ -280,7 +280,7 @@
     "system_logs": "System logs",
     "graylog_dsv": "Graylog integration",
     "pfsense": "pfSense",
-    "pfsense_fw": "Firewall (pf)"
+    "pfsense_fw": "Firewall (pfSense)"
   },
   "topbar": {
     "search": "Search…",
@@ -1501,7 +1501,7 @@
     "aliases_hint": "Alias definitions pulled from OPNsense (read-only); refreshed when you sync the firewall.",
     "members": "Members",
     "content": "Content",
-    "func_title": "Firewall rules / aliases",
+    "func_title": "Firewall (OPNsense)",
     "sync_aliases_label": "Aliases",
     "expose_dsv_label": "Expose firewall DSV (alias lookup for Graylog)",
     "sync_dhcp_label": "DHCP leases",

@@ -40,6 +40,13 @@ def _parse_origin(
             return "opnsense", None, "OPNsense (unknown)"
         name = fw_names.get(fw_id) or "unknown"
         return "opnsense", fw_id, f"OPNsense: {name}"
+    if origin.startswith("pfsense:"):
+        try:
+            fw_id = uuid.UUID(origin.split(":", 1)[1])
+        except ValueError:
+            return "pfsense", None, "pfSense (unknown)"
+        name = fw_names.get(fw_id) or "unknown"
+        return "pfsense", fw_id, f"pfSense: {name}"
     return origin, None, origin
 
 
@@ -68,8 +75,8 @@ async def list_nat(
         ipc = _or_ip(NATTranslation.src_ip_id == ip_id, NATTranslation.dst_ip_id == ip_id)
         stmt = stmt.where(ipc)
         cstmt = cstmt.where(ipc)
-    # 來源可複選：phpipam / manual / opnsense（OR）
-    kinds = {k for k in (source_kind or []) if k in ("phpipam", "manual", "opnsense")}
+    # 來源可複選：phpipam / manual / opnsense / pfsense（OR）
+    kinds = {k for k in (source_kind or []) if k in ("phpipam", "manual", "opnsense", "pfsense")}
     if kinds:
         from sqlalchemy import or_
         conds = []
@@ -82,6 +89,11 @@ async def list_nat(
                 conds.append(NATTranslation.source_origin == f"opnsense:{source_firewall_id}")
             else:
                 conds.append(NATTranslation.source_origin.like("opnsense:%"))
+        if "pfsense" in kinds:
+            if source_firewall_id is not None and kinds == {"pfsense"}:
+                conds.append(NATTranslation.source_origin == f"pfsense:{source_firewall_id}")
+            else:
+                conds.append(NATTranslation.source_origin.like("pfsense:%"))
         clause = or_(*conds)
         stmt = stmt.where(clause)
         cstmt = cstmt.where(clause)
@@ -91,6 +103,9 @@ async def list_nat(
 
     fw_rows = (await session.execute(select(OPNsenseFirewall.id, OPNsenseFirewall.name))).all()
     fw_names = {r[0]: r[1] for r in fw_rows}
+    from app.models.pfsense import PfSenseFirewall
+    pf_rows = (await session.execute(select(PfSenseFirewall.id, PfSenseFirewall.name))).all()
+    fw_names.update({r[0]: r[1] for r in pf_rows})
 
     items: list[NATRead] = []
     for r in rows:

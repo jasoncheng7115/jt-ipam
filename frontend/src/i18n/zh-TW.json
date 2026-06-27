@@ -246,7 +246,7 @@
     "dns": "整合 DNS",
     "adguard": "整合 AdGuard",
     "librenms": "整合 LibreNMS",
-    "firewall": "防火牆 (OPN)",
+    "firewall": "防火牆 (OPNsense)",
     "wazuh": "整合 Wazuh",
     "plugins": "Plugin",
     "settings": "系統設定",
@@ -280,7 +280,7 @@
     "system_logs": "系統記錄",
     "graylog_dsv": "整合 Graylog",
     "pfsense": "整合 pfSense",
-    "pfsense_fw": "防火牆 (pf)"
+    "pfsense_fw": "防火牆 (pfSense)"
   },
   "topbar": {
     "search": "搜尋…",
@@ -1499,7 +1499,7 @@
     "aliases_hint": "從 OPNsense 同步回來的別名定義（唯讀）；按防火牆的「立即同步」會一併更新。",
     "members": "成員數",
     "content": "內容",
-    "func_title": "防火牆規則 / 別名",
+    "func_title": "防火牆 (OPNsense)",
     "sync_aliases_label": "別名 (Aliases)",
     "expose_dsv_label": "提供防火牆 DSV（給 Graylog 查 alias）",
     "sync_dhcp_label": "DHCP 租約 (DHCP leases)",

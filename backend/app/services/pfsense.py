@@ -241,6 +241,48 @@ async def fetch_nat(fw: PfSenseFirewall) -> dict[str, list]:
     }
 
 
+def _to_port(v: object) -> int | None:
+    if v in (None, ""):
+        return None
+    try:
+        return int(str(v).split("-")[0].split(":")[-1].strip())
+    except (ValueError, TypeError):
+        return None
+
+
+async def sync_nat(session: AsyncSession, fw: PfSenseFirewall) -> int:
+    """同步 pfSense NAT port forward → nat_translations（source_origin=pfsense:<id>）。
+
+    與 OPNsense 並列出現在「NAT 規則」頁，可用「來源＝pfSense」篩選。delete+reinsert 該防火牆範圍，
+    不動其他來源。欄位防禦式解析（pfSense-pkg-RESTAPI 各版本欄名略有差異）。
+    """
+    from sqlalchemy import delete as _delete
+
+    from app.models.nat import NATTranslation
+    origin = f"pfsense:{fw.id}"
+    await session.execute(_delete(NATTranslation).where(NATTranslation.source_origin == origin))
+    rows = await _api_get(fw, EP_NAT_PF)
+    if not isinstance(rows, list):
+        return 0
+    n = 0
+    for d in rows:
+        if not isinstance(d, dict):
+            continue
+        session.add(NATTranslation(
+            name=str(_first(d, "descr", "name") or "port forward")[:200],
+            type="port_forward",
+            protocol=str(d.get("protocol") or "any")[:8],
+            src_interface=(str(d.get("interface"))[:64] if d.get("interface") else None),
+            dst_port=_to_port(_first(d, "local_port", "destination_port", "dst_port")),
+            src_port=_to_port(_first(d, "source_port", "src_port")),
+            description=_first(d, "descr", "description"),
+            source_origin=origin,
+            disabled=bool(d.get("disabled")),
+        ))
+        n += 1
+    return n
+
+
 async def sync_instance(session: AsyncSession, fw: PfSenseFirewall) -> dict[str, int]:
     """跑此實例所有啟用的同步；設定 last_sync_at / last_error。"""
     counts: dict[str, int] = {}
@@ -252,6 +294,7 @@ async def sync_instance(session: AsyncSession, fw: PfSenseFirewall) -> dict[str,
         counts["aliases"] = await sync_aliases(session, fw)
     if fw.sync_rules:
         counts["rules"] = await sync_rules(session, fw)
+        counts["nat"] = await sync_nat(session, fw)
     fw.last_sync_at = datetime.now(UTC)
     fw.last_error = None
     return counts

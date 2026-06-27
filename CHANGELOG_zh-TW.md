@@ -4,6 +4,20 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.17] — 2026-06-27
+
+### 變更
+- **pfSense／OPNsense 一致性再加強。**「pfSense 防火牆」管理頁移除「檢視規則」按鈕——規則／別名檢視改在
+  **進階 → 防火牆 (pfSense)**（唯讀），與 OPNsense 一致。選單更名：**防火牆 (OPN) → 防火牆 (OPNsense)**、
+  **防火牆 (pf) → 防火牆 (pfSense)**，內頁標題同步一致；pfSense 規則頁籤改為**「防火牆規則」**。
+- NAT 規則的**來源**篩選新增 **pfSense**，並把 pfSense NAT port forward 同步進 NAT 表
+  （`source_origin = pfsense:<id>`），與 OPNsense NAT 並列顯示。
+
+### 修正
+- 欄位選擇選單的標籤現在會在**即時切換語言（免重整）**時立即重新翻譯——pfSense 各頁與 NAT 來源篩選原本會卡在
+  進入頁面當下的語言。
+
+
 ## [0.5.16] — 2026-06-27
 
 ### 變更

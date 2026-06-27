@@ -5,16 +5,16 @@ import { useI18n } from "vue-i18n";
 import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
-  NInput, NInputNumber, NSwitch, NSelect, NTag, NPopconfirm, NAlert, NTooltip, NSpin,
+  NInput, NInputNumber, NSwitch, NSelect, NTag, NPopconfirm, NAlert, NTooltip,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { listSubnets } from "@/api/subnets";
 import {
-  FirewallIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, EyeIcon,
+  FirewallIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon,
 } from "@/icons";
 import {
   listPfSense, createPfSense, updatePfSense, deletePfSense, testPfSense, syncPfSense,
-  getPfSenseRules, getPfSenseNat, type PfSense, type PfRule,
+  type PfSense,
 } from "@/api/pfsense";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
@@ -31,13 +31,14 @@ const PF_ALL = ["name", "api_url", "enabled", "syncs", "alias_count", "rule_coun
   "last_sync_at", "last_error", "actions"];
 const PF_DEFAULT = ["name", "api_url", "enabled", "syncs", "last_sync_at", "actions"];
 const pfPrefs = useColumnPrefs("pfsense_fws", PF_ALL, PF_DEFAULT);
-const pfPicker = [
+// computed 讓欄位選單標籤在切換語言（不重整）時即時重新翻譯
+const pfPicker = computed(() => [
   { key: "name", label: t("common.name") }, { key: "api_url", label: "API URL" },
   { key: "enabled", label: t("cols.enabled") }, { key: "syncs", label: t("pfsense_admin.syncs") },
   { key: "alias_count", label: t("pfsense_admin.aliases") }, { key: "rule_count", label: t("pfsense_admin.rules") },
   { key: "last_sync_at", label: t("cols.last_sync") }, { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("common.actions") },
-];
+]);
 
 const show = ref(false);
 const editing = ref<PfSense | null>(null);
@@ -145,34 +146,6 @@ function syncSummary(r: PfSense): string {
   return on.length ? on.join(" · ") : "—";
 }
 
-// 規則 / NAT 檢視
-const viewerShow = ref(false);
-const viewerTitle = ref("");
-const viewerRules = ref<PfRule[]>([]);
-const viewerNat = ref<{ port_forwards: any[]; outbound: any[] }>({ port_forwards: [], outbound: [] });
-const viewerLoading = ref(false);
-async function openViewer(r: PfSense) {
-  viewerTitle.value = r.name;
-  viewerShow.value = true;
-  viewerLoading.value = true;
-  viewerRules.value = []; viewerNat.value = { port_forwards: [], outbound: [] };
-  try {
-    const [ru, na] = await Promise.all([getPfSenseRules(r.id), getPfSenseNat(r.id)]);
-    viewerRules.value = ru.items; viewerNat.value = na;
-  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
-  finally { viewerLoading.value = false; }
-}
-const ruleCols: DataTableColumns<PfRule> = [
-  { title: t("pfsense_admin.r_action"), key: "type", width: 80,
-    render: (r) => h(NTag, { size: "small", type: r.type === "pass" ? "success" : r.type === "block" || r.type === "reject" ? "error" : "default" }, () => r.type ?? "—") },
-  { title: t("pfsense_admin.r_iface"), key: "interface", width: 100 },
-  { title: t("pfsense_admin.r_proto"), key: "protocol", width: 90, render: (r) => r.protocol ?? "any" },
-  { title: t("pfsense_admin.r_source"), key: "source", width: 130, ellipsis: { tooltip: true }, render: (r) => String(r.source ?? "any") },
-  { title: t("pfsense_admin.r_dest"), key: "destination", width: 130, ellipsis: { tooltip: true }, render: (r) => String(r.destination ?? "any") },
-  { title: t("pfsense_admin.r_port"), key: "destination_port", width: 80, render: (r) => r.destination_port ?? "*" },
-  { title: t("common.description"), key: "descr", minWidth: 140, ellipsis: { tooltip: true }, render: (r) => r.descr || "—" },
-  { title: "tracker", key: "tracker", width: 110, render: (r) => r.tracker ?? "—" },
-];
 const allCols = computed<DataTableColumns<PfSense>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 150, ellipsis: { tooltip: true } },
   { title: "API URL", key: "api_url", minWidth: 190, ellipsis: { tooltip: true } },
@@ -192,7 +165,6 @@ const allCols = computed<DataTableColumns<PfSense>>(() => autoSort([
   {
     title: t("common.actions"), key: "actions", className: "col-actions", width: 168,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
-      iconAction(EyeIcon, t("pfsense_admin.view_rules_nat"), () => openViewer(r)),
       iconAction(TestIcon, t("common.test"), () => test(r)),
       iconAction(SyncIcon, t("common.pull"), () => sync(r), "primary"),
       iconAction(EditIcon, t("common.edit"), () => openEdit(r)),
@@ -281,25 +253,5 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>
-
-    <!-- 規則 / NAT 檢視 -->
-    <n-modal v-model:show="viewerShow" preset="card"
-             :title="`${t('pfsense_admin.view_rules_nat')} — ${viewerTitle}`" style="width: 900px; max-width: 95vw">
-      <n-spin :show="viewerLoading">
-        <div style="font-weight:600;margin:0 0 6px">{{ t("pfsense_admin.rules") }} ({{ viewerRules.length }})</div>
-        <p v-if="!viewerRules.length" class="pf-empty">{{ t("pfsense_admin.rules_empty") }}</p>
-        <n-data-table v-else :columns="ruleCols" :data="viewerRules" :bordered="false" size="small"
-                      :scroll-x="850" :max-height="320" />
-        <div style="font-weight:600;margin:16px 0 6px">NAT</div>
-        <p class="pf-empty">
-          {{ t("pfsense_admin.nat_pf") }}: {{ viewerNat.port_forwards.length }} ·
-          {{ t("pfsense_admin.nat_out") }}: {{ viewerNat.outbound.length }}
-        </p>
-      </n-spin>
-    </n-modal>
   </n-card>
 </template>
-
-<style scoped>
-.pf-empty { font-size: 13px; opacity: .6; margin: 4px 0; }
-</style>
