@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.39] — 2026-06-29
+
+### 修正
+- **OPNsense 防火牆欄位選擇不再列出不存在的欄位。** 原本選單會列出 狀態／DHCP／ARP／OpenVPN／Rules／NAT，但表格
+  根本沒有這些欄位（全勾選卻永遠不出現）。選單現在與實際欄位一致：名稱、API URL、TLS、最後同步、最後錯誤、操作。
+
+
 ## [0.5.38] — 2026-06-29
 
 ### 變更

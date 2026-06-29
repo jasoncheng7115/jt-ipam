@@ -34,14 +34,13 @@ const route = useRoute();
 const adminMode = computed(() => route.name === "firewall_admin");
 
 const fwPrefs = useColumnPrefs("opnsense_fws",
-  ["name", "api_url", "enabled", "verify_tls", "sync_dhcp", "sync_arp", "sync_openvpn", "sync_rules", "sync_nat", "last_sync_at", "actions"],
-  ["name", "api_url", "enabled", "verify_tls", "sync_dhcp", "sync_arp", "sync_openvpn", "sync_rules", "sync_nat", "last_sync_at", "actions"]);
+  ["name", "api_url", "verify_tls", "last_sync_at", "last_error", "actions"],
+  ["name", "api_url", "verify_tls", "last_sync_at", "actions"]);
 const fwPicker = computed(() => [
   { key: "name", label: t("cols.name") }, { key: "api_url", label: "API URL" },
-  { key: "enabled", label: t("cols.status") }, { key: "verify_tls", label: "Verify TLS" },
-  { key: "sync_dhcp", label: "DHCP" }, { key: "sync_arp", label: "ARP" },
-  { key: "sync_openvpn", label: "OpenVPN" }, { key: "sync_rules", label: "Rules" },
-  { key: "sync_nat", label: "NAT" }, { key: "last_sync_at", label: t("cols.last_sync") },
+  { key: "verify_tls", label: "TLS" },
+  { key: "last_sync_at", label: t("cols.last_sync") },
+  { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
 ]);
 const mapPrefs = useColumnPrefs("opnsense_maps",

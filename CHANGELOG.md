@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.39] — 2026-06-29
+
+### Fixed
+- **OPNsense firewall column picker no longer lists phantom columns.** It used to offer 狀態/DHCP/ARP/OpenVPN/
+  Rules/NAT entries that the table doesn't actually render (all shown checked but never appearing). The picker
+  now matches the real columns: name, API URL, TLS, last sync, last error, actions.
+
+
 ## [0.5.38] — 2026-06-29
 
 ### Changed
