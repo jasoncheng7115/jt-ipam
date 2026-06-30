@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.63] — 2026-07-01
+
+### Fixed
+- **Connections page 500** — `list_connection_targets` had a leftover 4-tuple unpack after BMC added a 5th
+  element; the page errored with no rows. Fixed.
+- BMC console: added the connect button to the IP detail page (it was only on the Connections page).
+
+### Changed
+- Terminology: dropped "帶外" (not Taiwan usage) from the BMC console UI; comments use OOB.
+
+
 ## [0.5.62] — 2026-07-01
 
 ### Changed

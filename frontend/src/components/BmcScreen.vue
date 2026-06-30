@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * BMC 帶外主控台（IPMI SOL）— 瀏覽器內序列主控台。
+ * BMC OOB主控台（IPMI SOL）— 瀏覽器內序列主控台。
  * 與後端 `/addresses/{id}/bmc/ws` 連線：先送 JSON config，之後資料雙向走 binary（鍵盤 ↔ SOL）。
  * 非破壞：只有鍵盤 + 文字畫面，無滑鼠/電源。Beta。
  */

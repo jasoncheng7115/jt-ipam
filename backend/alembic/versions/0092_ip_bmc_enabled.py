@@ -4,7 +4,7 @@ Revision ID: 0092_ip_bmc_enabled
 Revises: 0091_librenms_auto_add
 Create Date: 2026-07-01
 
-帶外 BMC 主控台（IPMI 2.0 SOL，鍵盤 + 文字畫面；非破壞、不含滑鼠/電源）。針對「BMC 管理 IP」開關。
+OOB BMC 主控台（IPMI 2.0 SOL，鍵盤 + 文字畫面；非破壞、不含滑鼠/電源）。針對「BMC 管理 IP」開關。
 連線帳密走既有憑證金庫（protocol='bmc'）；權限沿用 can_ssh + 物件層級授權（與 SSH 同等級）。
 """
 

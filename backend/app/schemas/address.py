@@ -123,7 +123,7 @@ class IPAddressUpdate(StrictModel):
     vnc_enabled: bool | None = None
     # PVE 主控台（noVNC/xterm）連線管理開關（沿用 IP 編輯權限；僅對應到 PVE VM/CT 的 IP 有意義）
     novnc_enabled: bool | None = None
-    # BMC 帶外主控台（IPMI SOL）開關
+    # BMC OOB主控台（IPMI SOL）開關
     bmc_enabled: bool | None = None
     # 手動標記此 IP 是 DHCP 伺服器（清單視覺化用）
     is_dhcp_server: bool | None = None
@@ -174,7 +174,7 @@ class IPAddressRead(IPAddressBase):
     novnc_enabled: bool = False
     novnc_available: bool = False
     pve: PveConsoleTarget | None = None
-    # BMC 帶外主控台（IPMI SOL）：是否已啟用 + 目前使用者是否可用
+    # BMC OOB主控台（IPMI SOL）：是否已啟用 + 目前使用者是否可用
     bmc_enabled: bool = False
     bmc_available: bool = False
     # 後端從 oui_vendors 表 lookup 帶上來；前端不用自己查

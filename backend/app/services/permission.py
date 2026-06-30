@@ -225,7 +225,7 @@ async def can_use_vnc(session: AsyncSession, *, user: User, ip: Any) -> bool:
 
 
 async def can_use_bmc(session: AsyncSession, *, user: User, ip: Any) -> bool:
-    """是否可對此 IP 開 BMC 帶外主控台（IPMI SOL；deny-by-default）。
+    """是否可對此 IP 開 BMC OOB主控台（IPMI SOL；deny-by-default）。
 
     與 can_use_ssh 相同授權模型（同等級），唯一差別是檢查 bmc_enabled。
     """

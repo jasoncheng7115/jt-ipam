@@ -4,6 +4,16 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.63] — 2026-07-01
+
+### 修正
+- **連線管理頁 500** —— BMC 讓 `list_connection_targets` 的 tuple 變 5 元素，但有一處仍以 4 元素解包，整頁報錯、0 筆。已修。
+- BMC 主控台：IP 詳細資料頁補上連線按鈕（先前只有連線管理頁有）。
+
+### 變更
+- 用詞：BMC 主控台 UI 拿掉「帶外」（非台灣用語）；註解用 OOB。
+
+
 ## [0.5.62] — 2026-07-01
 
 ### 變更
@@ -13,7 +23,7 @@
 ## [0.5.61] — 2026-07-01
 
 ### 新增
-- **BMC 帶外主控台（Beta）** —— 瀏覽器內 IPMI **SOL** 主控台（鍵盤 + 文字畫面），針對 BMC 管理 IP，併入「連線管理」
+- **BMC OOB主控台（Beta）** —— 瀏覽器內 IPMI **SOL** 主控台（鍵盤 + 文字畫面），針對 BMC 管理 IP，併入「連線管理」
   與 IP 編輯（per-IP 開關）。走標準、跨廠的傳輸（`ipmitool` SOL over RMCP+），**cipher 自動回退（17→3）**、連線
   自我檢查（SOL 是否啟用 / 權限）、單一 session 處理、憑證金庫（`protocol=bmc`）、**權限與 SSH 同等級**、開/關
   皆稽核。非破壞：只有鍵盤 + 畫面 —— 無滑鼠、無電源/感測/開機控制。Migration 0092（`bmc_enabled`）。安裝/升級

@@ -1,4 +1,4 @@
-"""BMC 帶外主控台（IPMI SOL）：ticket 換發 + WebSocket↔SOL 橋接（xterm.js 前端）。
+"""BMC OOB主控台（IPMI SOL）：ticket 換發 + WebSocket↔SOL 橋接（xterm.js 前端）。
 
 比照 SSH 連線管理：
 - A01：ticket 與 WS 兩處都重查 can_use_bmc（deny-by-default）。

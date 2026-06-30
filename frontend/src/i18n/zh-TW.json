@@ -2533,12 +2533,12 @@
     "pw_change_failed": "變更密碼失敗"
   },
   "bmc": {
-    "enable_label": "啟用 BMC 帶外主控台",
+    "enable_label": "啟用 BMC 主控台",
     "enable_hint": "對此 BMC 管理 IP 開啟 IPMI SOL 主控台（鍵盤 + 文字畫面，非破壞、不含滑鼠/電源）。權限同 SSH。",
     "connect": "連線",
-    "connect_title": "BMC 帶外主控台（IPMI SOL）",
+    "connect_title": "BMC 主控台（IPMI SOL）",
     "connect_failed": "連線失敗",
-    "hint": "帶外連線（免 agent、主機死當也能用）。輸入 BMC 帳密；cipher 預設自動（先試 17，退而 3）。",
+    "hint": "不經主機作業系統的獨立連線（免 agent、主機死當也能用）。輸入 BMC 帳密；cipher 預設自動（先試 17，退而 3）。",
     "saved_cred": "已存帳密",
     "saved_cred_ph": "選擇已存帳密，或在下方臨時輸入",
     "username": "帳號",

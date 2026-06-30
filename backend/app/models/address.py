@@ -102,7 +102,7 @@ class IPAddress(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     novnc_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false")
     )
-    # BMC 帶外主控台（IPMI SOL：鍵盤 + 文字畫面）；針對 BMC 管理 IP
+    # BMC OOB主控台（IPMI SOL：鍵盤 + 文字畫面）；針對 BMC 管理 IP
     bmc_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false")
     )

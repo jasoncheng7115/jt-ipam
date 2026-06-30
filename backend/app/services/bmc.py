@@ -1,4 +1,4 @@
-"""BMC 帶外主控台（IPMI 2.0 SOL）服務 — 跨廠、耐韌體改版的地基。
+"""BMC OOB主控台（IPMI 2.0 SOL）服務 — 跨廠、耐韌體改版的地基。
 
 設計（見規格）：
 - 鍵盤 + 文字畫面走 IPMI SOL（RMCP+, UDP 623），用 ipmitool 子行程承載；vendor-agnostic。

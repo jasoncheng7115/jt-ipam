@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 另開視窗的全頁 BMC 帶外主控台（IPMI SOL）。 */
+/** 另開視窗的全頁 BMC OOB主控台（IPMI SOL）。 */
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";

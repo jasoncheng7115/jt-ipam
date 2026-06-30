@@ -156,7 +156,7 @@ async def list_connection_targets(
             continue
         kept.append((ip, bool(ip.ssh_enabled), bool(ip.rdp_enabled), bool(ip.vnc_enabled), bool(ip.bmc_enabled)))
 
-    dev_ids = {ip.device_id for ip, _, _, _ in kept if ip.device_id}
+    dev_ids = {ip.device_id for ip, *_ in kept if ip.device_id}
     dev_names: dict[uuid.UUID, str] = {}
     if dev_ids:
         drows = (await session.execute(
