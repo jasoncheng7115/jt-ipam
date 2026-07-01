@@ -199,18 +199,20 @@ export const CopyIcon = Copy;
 export const TerminalIcon = Terminal;
 // 螢幕外框 + 字母圖示：RDP=R / VNC=V，靠字母直接區分（比找近似 glyph 更直觀）。
 function screenLetterIcon(letter: string) {
+  // 細監視器外框 + 佔滿螢幕的大粗字母，讓 R/V/N 在小按鈕上也一眼可辨
   return () => h("svg", {
     xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24",
     width: "1em", height: "1em", fill: "none",
   }, [
-    h("rect", { x: 2.5, y: 4, width: 19, height: 13, rx: 2,
-      stroke: "currentColor", "stroke-width": 1.7 }),
-    h("path", { d: "M12 17v3.4", stroke: "currentColor", "stroke-width": 1.7 }),
-    h("path", { d: "M8.5 20.5h7", stroke: "currentColor", "stroke-width": 1.7,
+    h("rect", { x: 1.75, y: 3, width: 20.5, height: 15, rx: 2.4,
+      stroke: "currentColor", "stroke-width": 1.4 }),
+    h("path", { d: "M12 18v2.6", stroke: "currentColor", "stroke-width": 1.5 }),
+    h("path", { d: "M8 20.6h8", stroke: "currentColor", "stroke-width": 1.5,
       "stroke-linecap": "round" }),
     h("text", {
-      x: 12, y: 13.9, "text-anchor": "middle", "font-size": 10, "font-weight": 700,
-      fill: "currentColor", "font-family": "system-ui, -apple-system, sans-serif",
+      x: 12, y: 15.1, "text-anchor": "middle", "font-size": 13.5, "font-weight": 800,
+      fill: "currentColor", stroke: "currentColor", "stroke-width": 0.3,
+      "font-family": "system-ui, -apple-system, sans-serif",
     }, letter),
   ]);
 }

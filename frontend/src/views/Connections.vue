@@ -174,8 +174,9 @@ const allColumns = computed<DataTableColumns<IPAddress>>(() => {
                 ic ? { icon: () => h(NIcon, null, () => h(icon)) }
                    : { icon: () => h(NIcon, null, () => h(icon)), default: () => label }),
               h(NDropdown, { trigger: "click", options: menu, onSelect: onMenu },
-                () => h(NButton, { type: btnType, size: "small", style: "padding:0 2px;border-left:1px solid rgba(255,255,255,.45)" },
-                  { icon: () => h(NIcon, null, () => h(ChevronDownIcon)) })),
+                () => h(NButton, { type: btnType, size: "small",
+                  style: "width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.45)" },
+                  { icon: () => h(NIcon, { size: 13 }, () => h(ChevronDownIcon)) })),
             ]),
             default: () => title,
           });

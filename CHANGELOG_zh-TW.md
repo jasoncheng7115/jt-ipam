@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.69] — 2026-07-01
+
+### 變更
+- **連線按鈕 —— RDP/VNC/noVNC 圖示更好辨識** —— 三者原本共用「螢幕 + 10px 小字母」很難分辨；字母改為大（13.5px）且粗、佔滿螢幕，R / V / N 一眼可辨。分割按鈕的下拉箭頭收窄（連線清單頁 + IP 詳情頁）。
+
+
 ## [0.5.68] — 2026-07-01
 
 ### 新增

@@ -603,8 +603,8 @@ async function remove() {
                       <span v-if="!consoleCompact">{{ t("ssh.connect") }}</span>
                     </n-button>
                     <n-dropdown trigger="click" :options="sshMenuOptions" @select="onSshMenu">
-                      <n-button type="info" size="small" style="padding:0 3px;border-left:1px solid rgba(255,255,255,.4)">
-                        <template #icon><n-icon><ChevronDownIcon /></n-icon></template>
+                      <n-button type="info" size="small" style="width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.4)">
+                        <template #icon><n-icon :size="13"><ChevronDownIcon /></n-icon></template>
                       </n-button>
                     </n-dropdown>
                   </n-button-group>
@@ -622,8 +622,8 @@ async function remove() {
                       <span v-if="!consoleCompact">{{ t("rdp.connect") }}</span>
                     </n-button>
                     <n-dropdown trigger="click" :options="rdpMenuOptions" @select="onRdpMenu">
-                      <n-button type="info" size="small" style="padding:0 3px;border-left:1px solid rgba(255,255,255,.4)">
-                        <template #icon><n-icon><ChevronDownIcon /></n-icon></template>
+                      <n-button type="info" size="small" style="width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.4)">
+                        <template #icon><n-icon :size="13"><ChevronDownIcon /></n-icon></template>
                       </n-button>
                     </n-dropdown>
                   </n-button-group>
@@ -642,8 +642,8 @@ async function remove() {
                       <span v-if="!consoleCompact">{{ t("vnc.connect") }}</span>
                     </n-button>
                     <n-dropdown trigger="click" :options="vncMenuOptions" @select="onVncMenu">
-                      <n-button type="info" size="small" style="padding:0 3px;border-left:1px solid rgba(255,255,255,.4)">
-                        <template #icon><n-icon><ChevronDownIcon /></n-icon></template>
+                      <n-button type="info" size="small" style="width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.4)">
+                        <template #icon><n-icon :size="13"><ChevronDownIcon /></n-icon></template>
                       </n-button>
                     </n-dropdown>
                   </n-button-group>
@@ -664,8 +664,8 @@ async function remove() {
                       <span v-if="!consoleCompact">{{ props.address?.pve?.kind === 'ct' ? 'xterm' : 'noVNC' }}</span>
                     </n-button>
                     <n-dropdown trigger="click" :options="novncMenuOptions" @select="onNovncMenu">
-                      <n-button type="warning" size="small" style="padding:0 3px;border-left:1px solid rgba(255,255,255,.4)">
-                        <template #icon><n-icon><ChevronDownIcon /></n-icon></template>
+                      <n-button type="warning" size="small" style="width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.4)">
+                        <template #icon><n-icon :size="13"><ChevronDownIcon /></n-icon></template>
                       </n-button>
                     </n-dropdown>
                   </n-button-group>
@@ -684,8 +684,8 @@ async function remove() {
                       <span v-if="!consoleCompact">BMC</span>
                     </n-button>
                     <n-dropdown trigger="click" :options="bmcMenuOptions" @select="onBmcMenu">
-                      <n-button type="warning" size="small" style="padding:0 3px;border-left:1px solid rgba(255,255,255,.4)">
-                        <template #icon><n-icon><ChevronDownIcon /></n-icon></template>
+                      <n-button type="warning" size="small" style="width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.4)">
+                        <template #icon><n-icon :size="13"><ChevronDownIcon /></n-icon></template>
                       </n-button>
                     </n-dropdown>
                   </n-button-group>

@@ -3,4 +3,4 @@
 發版時請與 frontend/package.json 的 version 一起更新。
 """
 
-__version__ = "0.5.68"
+__version__ = "0.5.69"

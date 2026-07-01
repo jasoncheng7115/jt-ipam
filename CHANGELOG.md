@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.69] — 2026-07-01
+
+### Changed
+- **Connection buttons — clearer RDP/VNC/noVNC icons** — the three shared a monitor glyph with a tiny 10px letter that was hard to tell apart; the letter is now large (13.5px) and bold, filling the screen, so R / V / N read at a glance. The split-button dropdown chevron is narrower (Connections list + IP detail).
+
+
 ## [0.5.68] — 2026-07-01
 
 ### Added
