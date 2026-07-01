@@ -29,6 +29,7 @@ import {
   ArrowUpCircle,
   Search,
   Xmark,
+  LinkSlash,
   Check,
   WarningTriangle,
   InfoCircle,
@@ -104,6 +105,7 @@ export const RefreshIcon = Refresh;
 export const SyncIcon = RefreshDouble;
 export const SearchIcon = Search;
 export const CancelIcon = Xmark;
+export const DisconnectedIcon = LinkSlash;   // 主控台斷線覆蓋層
 export const SaveIcon = Check;
 export const CheckIcon = Check;
 export const WarnIcon = WarningTriangle;

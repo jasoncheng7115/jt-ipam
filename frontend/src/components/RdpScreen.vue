@@ -16,6 +16,7 @@ import {
 } from "@/api/rdp";
 import { buildSendKeysMenu, makeSendCombo } from "@/composables/useSendKeys";
 import { DisplayIcon, CancelIcon, RefreshIcon, DeleteIcon, ChevronDownIcon, ExpandIcon, KeyIcon, PasteIcon } from "@/icons";
+import ConsoleDisconnectedOverlay from "@/components/ConsoleDisconnectedOverlay.vue";
 
 const props = withDefaults(defineProps<{
   addressId: string;
@@ -434,6 +435,7 @@ onBeforeUnmount(teardown);
                 @wheel.prevent="onWheel" @contextmenu.prevent
                 @keydown="onKey($event, true)" @keyup="onKey($event, false)" />
       </div>
+      <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
     </div>
   </div>
 </template>
@@ -444,7 +446,7 @@ onBeforeUnmount(teardown);
 .rdp-wrap.rdp-center { justify-content: center; align-items: center; }
 .rdp-wrap.rdp-center .rdp-form { width: 560px; max-width: 92vw; }
 .rdp-form { max-width: 560px; }
-.rdp-screen-area { display: flex; flex-direction: column; }
+.rdp-screen-area { display: flex; flex-direction: column; position: relative; }
 .rdp-screen-area.rdp-full { flex: 1; min-height: 0; }
 .rdp-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .rdp-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

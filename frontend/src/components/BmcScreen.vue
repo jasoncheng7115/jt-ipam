@@ -16,6 +16,7 @@ import "@xterm/xterm/css/xterm.css";
 import { requestBmcTicket, buildBmcWsUrl, listBmcCredentials, createBmcCredential } from "@/api/bmc";
 import type { SshCredential } from "@/api/ssh";
 import { TerminalIcon, CancelIcon, RefreshIcon, InfoIcon, FitIcon } from "@/icons";
+import ConsoleDisconnectedOverlay from "@/components/ConsoleDisconnectedOverlay.vue";
 
 const props = withDefaults(defineProps<{
   addressId: string; ip: string; hostname?: string | null; deviceName?: string | null; fullHeight?: boolean;
@@ -230,6 +231,7 @@ onBeforeUnmount(() => { window.removeEventListener("resize", onWinResize); teard
         </n-button>
       </n-alert>
       <div ref="termEl" class="bmc-term" :class="{ 'bmc-full': fullHeight, 'term-dim': phase === 'closed' }" />
+      <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
     </div>
 
     <!-- 設定教學：讓 SOL 顯示主機畫面（序列主控台設定） -->
@@ -313,7 +315,7 @@ proxmox-boot-tool refresh</pre>
 .bmc-wrap.bmc-center { justify-content: center; align-items: center; }
 .bmc-wrap.bmc-center .bmc-form { width: 560px; max-width: 92vw; }
 .bmc-form { max-width: 560px; }
-.bmc-term-area { display: flex; flex-direction: column; }
+.bmc-term-area { display: flex; flex-direction: column; position: relative; }
 .bmc-term-area.bmc-full { flex: 1; min-height: 0; }
 .bmc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .bmc-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

@@ -369,7 +369,10 @@
     "confirm": "Confirm",
     "select": "Select",
     "download": "Download",
-    "please_enter": "Please enter"
+    "please_enter": "Please enter",
+    "disconnected": "Disconnected",
+    "disconnected_err": "Connection error",
+    "disconnected_hint": "Click Reconnect (top right) to retry"
   },
   "scan_agent": {
     "outdated": "update available",
