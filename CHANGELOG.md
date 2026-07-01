@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.77] — 2026-07-01
+
+### Added
+- **Notification channels: Telegram, Slack, Microsoft Teams, Nextcloud Talk, Zulip** — all implemented (previously grayed “coming soon”). Each has a config form (encrypted tokens/webhooks) + a Test button on the notification-settings page; enabled channels receive every alert the matrix fires (IP requests, anomalies, certificate expiry/drift/deploy, stale-IP reminders) alongside Email/in-app. Admin-configured outbound (same trust model as SMTP).
+
+
 ## [0.5.76] — 2026-07-01
 
 ### Changed

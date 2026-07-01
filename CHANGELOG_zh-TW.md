@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.77] — 2026-07-01
+
+### 新增
+- **通知管道：Telegram、Slack、Microsoft Teams、Nextcloud Talk、Zulip** —— 全部實作完成（原本反灰「開發中」）。每個管道在通知設定頁都有設定表單（Token／Webhook 加密保存）+ 測試按鈕；啟用後會與 Email／站內一起收到矩陣觸發的所有告警（IP 申請、異常、憑證到期／飄移／派送、失聯 IP 提醒）。屬管理者設定的對外連線（信任模型同 SMTP）。
+
+
 ## [0.5.76] — 2026-07-01
 
 ### 變更

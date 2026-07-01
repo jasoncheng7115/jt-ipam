@@ -1047,7 +1047,28 @@ class NotificationChannelsOut(StrictModel):
     smtp_username: str | None = None
     smtp_from: str | None = None
     smtp_password_set: bool = False      # 是否已存密碼（不回傳明文）
-    # 規劃中的管道：available=False 前端反灰顯示「開發中」
+    # Telegram
+    telegram_enabled: bool = False
+    telegram_chat_id: str | None = None
+    telegram_token_set: bool = False
+    # Slack（Incoming Webhook URL）
+    slack_enabled: bool = False
+    slack_webhook_set: bool = False
+    # Microsoft Teams（Incoming Webhook URL）
+    teams_enabled: bool = False
+    teams_webhook_set: bool = False
+    # Nextcloud Talk（bot：對話 token + 密鑰）
+    nextcloud_enabled: bool = False
+    nextcloud_url: str | None = None
+    nextcloud_token: str | None = None
+    nextcloud_secret_set: bool = False
+    # Zulip（bot email + API key → 串流/主題）
+    zulip_enabled: bool = False
+    zulip_site: str | None = None
+    zulip_bot_email: str | None = None
+    zulip_stream: str | None = None
+    zulip_topic: str | None = None
+    zulip_api_key_set: bool = False
     channels: list[dict[str, Any]] = []
 
 
@@ -1059,6 +1080,28 @@ class NotificationChannelsIn(StrictModel):
     smtp_username: str | None = None
     smtp_from: str | None = None
     smtp_password: str | None = None     # 給非空才更新；"" 清除；不給保留
+    # Telegram
+    telegram_enabled: bool | None = None
+    telegram_chat_id: str | None = None
+    telegram_token: str | None = None
+    # Slack
+    slack_enabled: bool | None = None
+    slack_webhook: str | None = None
+    # Teams
+    teams_enabled: bool | None = None
+    teams_webhook: str | None = None
+    # Nextcloud Talk
+    nextcloud_enabled: bool | None = None
+    nextcloud_url: str | None = None
+    nextcloud_token: str | None = None
+    nextcloud_secret: str | None = None
+    # Zulip
+    zulip_enabled: bool | None = None
+    zulip_site: str | None = None
+    zulip_bot_email: str | None = None
+    zulip_stream: str | None = None
+    zulip_topic: str | None = None
+    zulip_api_key: str | None = None
 
 
 class TestEmailIn(StrictModel):
@@ -1075,6 +1118,23 @@ def _channels_payload(cfg: dict[str, Any]) -> NotificationChannelsOut:
         smtp_username=cfg.get("smtp_username"),
         smtp_from=cfg.get("smtp_from"),
         smtp_password_set=bool(cfg.get("smtp_password_enc")),
+        telegram_enabled=bool(cfg.get("telegram_enabled")),
+        telegram_chat_id=cfg.get("telegram_chat_id"),
+        telegram_token_set=bool(cfg.get("telegram_token_enc")),
+        slack_enabled=bool(cfg.get("slack_enabled")),
+        slack_webhook_set=bool(cfg.get("slack_webhook_enc")),
+        teams_enabled=bool(cfg.get("teams_enabled")),
+        teams_webhook_set=bool(cfg.get("teams_webhook_enc")),
+        nextcloud_enabled=bool(cfg.get("nextcloud_enabled")),
+        nextcloud_url=cfg.get("nextcloud_url"),
+        nextcloud_token=cfg.get("nextcloud_token"),
+        nextcloud_secret_set=bool(cfg.get("nextcloud_secret_enc")),
+        zulip_enabled=bool(cfg.get("zulip_enabled")),
+        zulip_site=cfg.get("zulip_site"),
+        zulip_bot_email=cfg.get("zulip_bot_email"),
+        zulip_stream=cfg.get("zulip_stream"),
+        zulip_topic=cfg.get("zulip_topic"),
+        zulip_api_key_set=bool(cfg.get("zulip_api_key_enc")),
         channels=[{"key": k, "available": avail} for k, avail in NOTIFY_CHANNELS],
     )
 
@@ -1173,4 +1233,33 @@ async def test_notification_email(
         raise HTTPException(400, detail="missing_smtp_host") from None
     except EmailSendError as exc:
         raise HTTPException(502, detail=f"SMTP send failed: {exc}") from exc
+    return {"ok": True}
+
+
+class TestChannelIn(StrictModel):
+    channel: str
+
+
+@router.post("/notification-channels/test-channel")
+async def test_notification_channel(
+    payload: TestChannelIn,
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """用目前『已儲存』的設定，對指定 webhook 型管道送一則測試通知。"""
+    from fastapi import HTTPException
+
+    from app.services.notify_channels import WEBHOOK_CHANNELS, send_one
+    from app.services.system_config import get_notification_channels
+    if payload.channel not in WEBHOOK_CHANNELS:
+        raise HTTPException(400, detail="unknown channel")
+    cfg = await get_notification_channels(session)
+    try:
+        await send_one(
+            cfg, payload.channel,
+            "jt-ipam 測試通知 / test notification",
+            "這是一則來自 jt-ipam 的測試通知；若你收到，代表此管道設定正確。",
+        )
+    except Exception as exc:  # noqa: BLE001 — 回報可讀錯誤給前端
+        raise HTTPException(502, detail=f"send failed: {str(exc)[:300]}") from exc
     return {"ok": True}

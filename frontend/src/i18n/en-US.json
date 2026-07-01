@@ -2384,7 +2384,23 @@
       "cert_deployed": "Agent deployed a new certificate",
       "cert_drift": "Certificate drift (an agent is not up to date)",
       "anomaly_detected": "Anomaly detection found new issues"
-    }
+    },
+    "enable": "Enable",
+    "secret_keep": "(set — leave blank to keep)",
+    "tg_hint": "Create a bot via @BotFather for the token; add the bot to a group/channel, then get the Chat ID via @userinfobot or getUpdates.",
+    "slack_hint": "Create one under Slack App → Incoming Webhooks and paste the channel's Webhook URL.",
+    "teams_hint": "Create an Incoming Webhook (connector / Workflows) on the channel and paste the URL.",
+    "nc_hint": "On Nextcloud, install a Talk bot (occ talk:bot:install) for the secret, add it to a conversation, then get the conversation token.",
+    "nc_url": "Nextcloud URL",
+    "nc_token": "Conversation token",
+    "nc_secret": "Bot secret",
+    "nc_secret_ph": "secret from talk:bot:install",
+    "zulip_hint": "Create a bot for its email and API key; messages go to the given stream / topic.",
+    "zulip_site": "Zulip URL",
+    "zulip_bot_email": "Bot email",
+    "zulip_key_ph": "the bot's API key",
+    "zulip_stream": "Stream",
+    "zulip_topic": "Topic"
   },
   "system_settings": {
     "title": "System Settings (global)",

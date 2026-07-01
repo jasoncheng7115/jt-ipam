@@ -125,6 +125,8 @@ async def notify_admins_event(
             sent += 1
     if ch.get("email"):
         await email_users(session, [a.email for a in admins], f"[jt-ipam] {title}", body or title)
+    from app.services.notify_channels import broadcast_channels
+    await broadcast_channels(session, subject=title, text=body)
     return sent
 
 
