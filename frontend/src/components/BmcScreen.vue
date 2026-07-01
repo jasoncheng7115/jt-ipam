@@ -230,8 +230,10 @@ onBeforeUnmount(() => { window.removeEventListener("resize", onWinResize); teard
           {{ t("bmc.guide_open") }}
         </n-button>
       </n-alert>
-      <div ref="termEl" class="bmc-term" :class="{ 'bmc-full': fullHeight, 'term-dim': phase === 'closed' }" />
-      <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
+      <div class="bmc-disp" :class="{ 'bmc-full': fullHeight }">
+        <div ref="termEl" class="bmc-term" :class="{ 'bmc-full': fullHeight, 'term-dim': phase === 'closed' }" />
+        <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
+      </div>
     </div>
 
     <!-- 設定教學：讓 SOL 顯示主機畫面（序列主控台設定） -->
@@ -315,7 +317,9 @@ proxmox-boot-tool refresh</pre>
 .bmc-wrap.bmc-center { justify-content: center; align-items: center; }
 .bmc-wrap.bmc-center .bmc-form { width: 560px; max-width: 92vw; }
 .bmc-form { max-width: 560px; }
-.bmc-term-area { display: flex; flex-direction: column; position: relative; }
+.bmc-term-area { display: flex; flex-direction: column; }
+.bmc-disp { position: relative; }
+.bmc-disp.bmc-full { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .bmc-term-area.bmc-full { flex: 1; min-height: 0; }
 .bmc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .bmc-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;
@@ -339,8 +343,8 @@ proxmox-boot-tool refresh</pre>
 .conn-proto { font-weight: 700; font-size: 11px; letter-spacing: .4px; line-height: 1; padding: 2px 7px; border-radius: 999px; }
 .conn-proto--bmc { color: #d99812; background: rgba(217,152,18,.16); }
 .term-dim { filter: grayscale(1) brightness(.45); pointer-events: none; transition: filter .25s; }
-/* 空白提示列收緊：行距、上下內距不要那麼高 */
-.bmc-blank :deep(.n-alert-body) { padding: 7px 12px; }
+/* 空白提示列收緊：只收上下內距與行距，左右維持預設（保留 icon 的左側空間，勿蓋住文字） */
+.bmc-blank :deep(.n-alert-body) { padding-top: 8px; padding-bottom: 8px; }
 .bmc-blank :deep(.n-alert-body__content) { line-height: 1.5; font-size: 13px; }
 /* 設定教學彈窗 */
 .bmc-guide-intro { margin: 0 0 16px; color: #555; }

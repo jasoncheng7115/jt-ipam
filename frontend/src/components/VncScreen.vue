@@ -363,6 +363,7 @@ onBeforeUnmount(teardown);
       <n-alert v-if="phase === 'error'" type="error" :show-icon="true" style="margin:8px 0">
         {{ errorMsg }}
       </n-alert>
+      <div class="vnc-disp" :class="{ 'vnc-full': fullHeight }">
       <div ref="canvasBoxEl" class="vnc-canvas-box"
            :class="{ 'vnc-full': fullHeight, 'vnc-fit': scaleMode === 'fit', 'vnc-native': scaleMode !== 'fit', 'term-dim': phase === 'closed' }">
         <canvas ref="canvasEl" class="vnc-canvas" tabindex="0"
@@ -371,6 +372,7 @@ onBeforeUnmount(teardown);
                 @keydown="onKey($event, true)" @keyup="onKey($event, false)" />
       </div>
       <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
+      </div>
     </div>
   </div>
 </template>
@@ -381,7 +383,9 @@ onBeforeUnmount(teardown);
 .vnc-wrap.vnc-center { justify-content: center; align-items: center; }
 .vnc-wrap.vnc-center .vnc-form { width: 520px; max-width: 92vw; }
 .vnc-form { max-width: 520px; }
-.vnc-screen-area { display: flex; flex-direction: column; position: relative; }
+.vnc-screen-area { display: flex; flex-direction: column; }
+.vnc-disp { position: relative; }
+.vnc-disp.vnc-full { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .vnc-screen-area.vnc-full { flex: 1; min-height: 0; }
 .vnc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .vnc-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

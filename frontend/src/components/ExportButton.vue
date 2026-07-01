@@ -70,7 +70,7 @@ async function onSelect(key: ExportFormat) {
 
 <template>
   <n-dropdown trigger="click" :options="options" :disabled="loading" @select="onSelect">
-    <n-button :size="size" quaternary :loading="loading">
+    <n-button :size="size" :loading="loading">
       <template #icon><n-icon><ExportIcon /></n-icon></template>
       {{ t("export.label") }}
     </n-button>

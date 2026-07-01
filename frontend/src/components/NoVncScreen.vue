@@ -342,9 +342,11 @@ async function removeCred() {
           </n-button>
         </n-space>
       </div>
-      <div ref="screenBox" class="vnc-canvas-box"
-           :class="{ 'vnc-full': fullHeight, 'vnc-native': scaleMode === 'native', 'vnc-term': !isVm, 'term-dim': phase === 'closed' }"></div>
-      <ConsoleDisconnectedOverlay :show="phase === 'closed'" />
+      <div class="novnc-disp" :class="{ 'vnc-full': fullHeight }">
+        <div ref="screenBox" class="vnc-canvas-box"
+             :class="{ 'vnc-full': fullHeight, 'vnc-native': scaleMode === 'native', 'vnc-term': !isVm, 'term-dim': phase === 'closed' }"></div>
+        <ConsoleDisconnectedOverlay :show="phase === 'closed'" />
+      </div>
     </div>
   </div>
 </template>
@@ -357,7 +359,9 @@ async function removeCred() {
 .vnc-form { max-width: 520px; }
 .vnc-saved-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .vnc-saved-label { font-size: 12px; opacity: .75; white-space: nowrap; }
-.vnc-screen-area { display: flex; flex-direction: column; position: relative; }
+.vnc-screen-area { display: flex; flex-direction: column; }
+.novnc-disp { position: relative; }
+.novnc-disp.vnc-full { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .vnc-screen-area.vnc-full { flex: 1; min-height: 0; }
 .vnc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .vnc-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

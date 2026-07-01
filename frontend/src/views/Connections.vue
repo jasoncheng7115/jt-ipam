@@ -18,7 +18,7 @@ import { useCustomers } from "@/composables/useCustomers";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import LiveStatusDot from "@/components/LiveStatusDot.vue";
-import OsIcon from "@/components/OsIcon.vue";
+import OsCell from "@/components/OsCell.vue";
 import { renderIcon } from "@/icons";
 import type { IPAddress } from "@/types";
 
@@ -156,10 +156,8 @@ const allColumns = computed<DataTableColumns<IPAddress>>(() => {
       render: (r) => labelFor(r.customer_id) || "—" },
     { title: t("connections.col_device"), key: "device", sorter: "default",
       render: (r) => (r.device_id ? links.device(r.device_id, r.device_name) : "—") },
-    { title: t("connections.col_os"), key: "os", sorter: "default", minWidth: 150,
-      render: (r) => h("span",
-        { style: "display:inline-flex;align-items:center;gap:5px;white-space:nowrap" },
-        [h(OsIcon, { family: r.os_family }), r.os_guess || "—"]) },
+    { title: t("connections.col_os"), key: "os", sorter: "default", minWidth: 190,
+      render: (r) => h(OsCell, { family: r.os_family, guess: r.os_guess, source: r.os_source }) },
     {
       title: t("connections.col_actions"), key: "actions", width: cz ? 190 : 300,
       render: (r) => {

@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.75] — 2026-07-01
+
+### Changed
+- **Connections list OS column matches the IP detail page** — shared `OsCell`: OS icon + localized family name + （source） annotation, with the raw detected string on hover; the OS shown is the source-precedence-resolved value (same as IP detail), not just the raw scanner guess.
+
+
+## [0.5.74] — 2026-07-01
+
+### Changed
+- **Disconnected overlay now covers only the display area** — it no longer dims the toolbar, so the Reconnect button stays fully visible and clickable.
+- **Export button now has a border** — matched the neighbouring Columns / Refresh buttons (was borderless `quaternary`); applies to every table page via the shared `ExportButton`.
+
+
+## [0.5.73] — 2026-07-01
+
+### Fixed
+- **BMC blank-screen hint text no longer hides behind the info icon** — the previous row-tightening also shrank the alert's left padding (which reserves space for the icon); now only the vertical padding is reduced.
+
+
 ## [0.5.72] — 2026-07-01
 
 ### Changed
