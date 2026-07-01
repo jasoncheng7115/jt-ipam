@@ -2382,7 +2382,23 @@
       "cert_deployed": "代理成功更換新憑證",
       "cert_drift": "憑證飄移（某代理未套到最新版）",
       "anomaly_detected": "異常偵測有新發現"
-    }
+    },
+    "enable": "啟用",
+    "secret_keep": "（已設定，留空＝不變更）",
+    "tg_hint": "用 @BotFather 建立 bot 取得 Token；把 bot 加進群組／頻道後，Chat ID 可用 @userinfobot 或 getUpdates 取得。",
+    "slack_hint": "在 Slack App →「Incoming Webhooks」建立，貼上該頻道的 Webhook URL。",
+    "teams_hint": "在頻道 → 連接器／Workflows 建立「Incoming Webhook」，貼上產生的網址。",
+    "nc_hint": "在 Nextcloud 用 talk bot（occ talk:bot:install）取得密鑰，並把 bot 加進對話後取得對話 Token。",
+    "nc_url": "Nextcloud 網址",
+    "nc_token": "對話 Token",
+    "nc_secret": "Bot 密鑰",
+    "nc_secret_ph": "talk:bot:install 產生的密鑰",
+    "zulip_hint": "建立 bot 取得 Email 與 API key；訊息會發到指定的串流／主題。",
+    "zulip_site": "Zulip 網址",
+    "zulip_bot_email": "Bot Email",
+    "zulip_key_ph": "bot 的 API key",
+    "zulip_stream": "串流 (Stream)",
+    "zulip_topic": "主題 (Topic)"
   },
   "system_settings": {
     "title": "系統設定（全域）",

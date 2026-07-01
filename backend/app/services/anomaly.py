@@ -245,6 +245,8 @@ async def run_detection(
                 if ch.get("email"):
                     await email_users(session, [a.email for a in admins],
                                       f"[jt-ipam] {title}", "詳見「異常偵測」頁面。")
+                from app.services.notify_channels import broadcast_channels
+                await broadcast_channels(session, subject=title, text="詳見「異常偵測」頁面。")
         await deliver_event(session, event="anomaly.detected", payload=report.to_dict())
 
     await session.commit()

@@ -959,6 +959,8 @@ async def notify_stale(
             body_key="notif.ghost_reminder_body",
             params=_gp,
         )
+    from app.services.notify_channels import broadcast_channels
+    await broadcast_channels(session, subject=title, text=body)
     await session.commit()
     return {"notified_admins": len(admins), "ip_count": n}
 

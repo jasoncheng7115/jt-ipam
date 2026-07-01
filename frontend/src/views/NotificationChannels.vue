@@ -7,7 +7,7 @@ import {
 } from "naive-ui";
 import { SettingsIcon, SaveIcon } from "@/icons";
 import {
-  getNotificationChannels, setNotificationChannels, sendTestEmail,
+  getNotificationChannels, setNotificationChannels, sendTestEmail, sendTestChannel,
   getNotificationMatrix, setNotificationMatrix,
   type NotificationChannels, type NotifyMatrix,
 } from "@/api/notify_channels";
@@ -21,6 +21,13 @@ const testing = ref(false);
 const cfg = ref<NotificationChannels | null>(null);
 const pw = ref("");          // 留空＝不變更
 const testTo = ref("");
+// 各管道密鑰輸入（留空＝不變更）
+const tgToken = ref("");
+const slackHook = ref("");
+const teamsHook = ref("");
+const ncSecret = ref("");
+const zulipKey = ref("");
+const testingCh = ref("");   // 正在測試的管道 key
 
 const tlsOptions = [
   { label: "STARTTLS", value: "starttls" },
@@ -55,10 +62,27 @@ async function save() {
       smtp_tls: c.smtp_tls,
       smtp_username: c.smtp_username,
       smtp_from: c.smtp_from,
+      telegram_enabled: c.telegram_enabled,
+      telegram_chat_id: c.telegram_chat_id,
+      slack_enabled: c.slack_enabled,
+      teams_enabled: c.teams_enabled,
+      nextcloud_enabled: c.nextcloud_enabled,
+      nextcloud_url: c.nextcloud_url,
+      nextcloud_token: c.nextcloud_token,
+      zulip_enabled: c.zulip_enabled,
+      zulip_site: c.zulip_site,
+      zulip_bot_email: c.zulip_bot_email,
+      zulip_stream: c.zulip_stream,
+      zulip_topic: c.zulip_topic,
     };
     if (pw.value) patch.smtp_password = pw.value;
+    if (tgToken.value) patch.telegram_token = tgToken.value;
+    if (slackHook.value) patch.slack_webhook = slackHook.value;
+    if (teamsHook.value) patch.teams_webhook = teamsHook.value;
+    if (ncSecret.value) patch.nextcloud_secret = ncSecret.value;
+    if (zulipKey.value) patch.zulip_api_key = zulipKey.value;
     cfg.value = await setNotificationChannels(patch);
-    pw.value = "";
+    pw.value = tgToken.value = slackHook.value = teamsHook.value = ncSecret.value = zulipKey.value = "";
     msg.success(t("common.saved"));
   } catch (e: any) {
     msg.error(e?.response?.data?.detail ?? t("errors.network"));
@@ -85,6 +109,21 @@ async function test() {
     }
   } finally {
     testing.value = false;
+  }
+}
+
+async function testChannel(ch: string) {
+  if (!cfg.value) return;
+  testingCh.value = ch;
+  try {
+    // 測試用「已儲存」設定；先存再測，避免剛輸入未儲存的密鑰測不到
+    await save();
+    await sendTestChannel(ch);
+    msg.success(t("notify_ch.test_sent"));
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? t("errors.network"));
+  } finally {
+    testingCh.value = "";
   }
 }
 
@@ -218,16 +257,127 @@ onMounted(() => { void load(); void loadMatrix(); });
       </n-space>
     </n-card>
 
-    <!-- 其他管道（開發中，反灰）-->
-    <n-card :title="t('notify_ch.other_title')">
-      <n-grid :cols="3" :x-gap="12" :y-gap="12" responsive="screen">
-        <n-grid-item v-for="ch in otherChannels" :key="ch.key">
-          <div class="ch-card">
-            <div class="ch-name">{{ channelLabel(ch.key) }}</div>
-            <n-tag size="small" :bordered="false">{{ t("notify_ch.coming_soon") }}</n-tag>
-          </div>
-        </n-grid-item>
-      </n-grid>
+    <!-- Telegram -->
+    <n-card v-if="cfg" title="Telegram">
+      <n-space vertical :size="12" style="max-width: 640px">
+        <n-form-item :label="t('notify_ch.enable')" label-placement="left">
+          <n-switch v-model:value="cfg.telegram_enabled" />
+        </n-form-item>
+        <n-alert type="info" :show-icon="false" :bordered="false" size="small">{{ t("notify_ch.tg_hint") }}</n-alert>
+        <n-form-item label="Bot Token" label-placement="top">
+          <n-input v-model:value="tgToken" type="password" show-password-on="click"
+                   :placeholder="cfg.telegram_token_set ? t('notify_ch.secret_keep') : '123456:ABC-DEF...'" />
+        </n-form-item>
+        <n-form-item label="Chat ID" label-placement="top">
+          <n-input v-model:value="cfg.telegram_chat_id" placeholder="-1001234567890 / @channel" />
+        </n-form-item>
+        <n-space align="center">
+          <n-button type="success" :loading="saving" @click="save">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
+          </n-button>
+          <n-button :loading="testingCh === 'telegram'" @click="testChannel('telegram')">{{ t("notify_ch.test_send") }}</n-button>
+        </n-space>
+      </n-space>
+    </n-card>
+
+    <!-- Slack -->
+    <n-card v-if="cfg" title="Slack">
+      <n-space vertical :size="12" style="max-width: 640px">
+        <n-form-item :label="t('notify_ch.enable')" label-placement="left">
+          <n-switch v-model:value="cfg.slack_enabled" />
+        </n-form-item>
+        <n-alert type="info" :show-icon="false" :bordered="false" size="small">{{ t("notify_ch.slack_hint") }}</n-alert>
+        <n-form-item label="Incoming Webhook URL" label-placement="top">
+          <n-input v-model:value="slackHook" type="password" show-password-on="click"
+                   :placeholder="cfg.slack_webhook_set ? t('notify_ch.secret_keep') : 'https://hooks.slack.com/services/...'" />
+        </n-form-item>
+        <n-space align="center">
+          <n-button type="success" :loading="saving" @click="save">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
+          </n-button>
+          <n-button :loading="testingCh === 'slack'" @click="testChannel('slack')">{{ t("notify_ch.test_send") }}</n-button>
+        </n-space>
+      </n-space>
+    </n-card>
+
+    <!-- Microsoft Teams -->
+    <n-card v-if="cfg" title="Microsoft Teams">
+      <n-space vertical :size="12" style="max-width: 640px">
+        <n-form-item :label="t('notify_ch.enable')" label-placement="left">
+          <n-switch v-model:value="cfg.teams_enabled" />
+        </n-form-item>
+        <n-alert type="info" :show-icon="false" :bordered="false" size="small">{{ t("notify_ch.teams_hint") }}</n-alert>
+        <n-form-item label="Incoming Webhook / Workflow URL" label-placement="top">
+          <n-input v-model:value="teamsHook" type="password" show-password-on="click"
+                   :placeholder="cfg.teams_webhook_set ? t('notify_ch.secret_keep') : 'https://...webhook.office.com/...'" />
+        </n-form-item>
+        <n-space align="center">
+          <n-button type="success" :loading="saving" @click="save">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
+          </n-button>
+          <n-button :loading="testingCh === 'teams'" @click="testChannel('teams')">{{ t("notify_ch.test_send") }}</n-button>
+        </n-space>
+      </n-space>
+    </n-card>
+
+    <!-- Nextcloud Talk -->
+    <n-card v-if="cfg" title="Nextcloud Talk">
+      <n-space vertical :size="12" style="max-width: 640px">
+        <n-form-item :label="t('notify_ch.enable')" label-placement="left">
+          <n-switch v-model:value="cfg.nextcloud_enabled" />
+        </n-form-item>
+        <n-alert type="info" :show-icon="false" :bordered="false" size="small">{{ t("notify_ch.nc_hint") }}</n-alert>
+        <n-form-item :label="t('notify_ch.nc_url')" label-placement="top">
+          <n-input v-model:value="cfg.nextcloud_url" placeholder="https://cloud.example.com" />
+        </n-form-item>
+        <n-form-item :label="t('notify_ch.nc_token')" label-placement="top">
+          <n-input v-model:value="cfg.nextcloud_token" placeholder="conversation token" />
+        </n-form-item>
+        <n-form-item :label="t('notify_ch.nc_secret')" label-placement="top">
+          <n-input v-model:value="ncSecret" type="password" show-password-on="click"
+                   :placeholder="cfg.nextcloud_secret_set ? t('notify_ch.secret_keep') : t('notify_ch.nc_secret_ph')" />
+        </n-form-item>
+        <n-space align="center">
+          <n-button type="success" :loading="saving" @click="save">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
+          </n-button>
+          <n-button :loading="testingCh === 'nextcloud'" @click="testChannel('nextcloud')">{{ t("notify_ch.test_send") }}</n-button>
+        </n-space>
+      </n-space>
+    </n-card>
+
+    <!-- Zulip -->
+    <n-card v-if="cfg" title="Zulip">
+      <n-space vertical :size="12" style="max-width: 640px">
+        <n-form-item :label="t('notify_ch.enable')" label-placement="left">
+          <n-switch v-model:value="cfg.zulip_enabled" />
+        </n-form-item>
+        <n-alert type="info" :show-icon="false" :bordered="false" size="small">{{ t("notify_ch.zulip_hint") }}</n-alert>
+        <n-form-item :label="t('notify_ch.zulip_site')" label-placement="top">
+          <n-input v-model:value="cfg.zulip_site" placeholder="https://your.zulipchat.com" />
+        </n-form-item>
+        <n-form-item :label="t('notify_ch.zulip_bot_email')" label-placement="top">
+          <n-input v-model:value="cfg.zulip_bot_email" placeholder="bot@your.zulipchat.com" />
+        </n-form-item>
+        <n-form-item label="API Key" label-placement="top">
+          <n-input v-model:value="zulipKey" type="password" show-password-on="click"
+                   :placeholder="cfg.zulip_api_key_set ? t('notify_ch.secret_keep') : t('notify_ch.zulip_key_ph')" />
+        </n-form-item>
+        <n-space :size="14">
+          <n-form-item :label="t('notify_ch.zulip_stream')" label-placement="top">
+            <n-input v-model:value="cfg.zulip_stream" placeholder="alerts" style="width: 200px" />
+          </n-form-item>
+          <n-form-item :label="t('notify_ch.zulip_topic')" label-placement="top">
+            <n-input v-model:value="cfg.zulip_topic" placeholder="jt-ipam" style="width: 200px" />
+          </n-form-item>
+        </n-space>
+        <n-space align="center">
+          <n-button type="success" :loading="saving" @click="save">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}
+          </n-button>
+          <n-button :loading="testingCh === 'zulip'" @click="testChannel('zulip')">{{ t("notify_ch.test_send") }}</n-button>
+        </n-space>
+      </n-space>
     </n-card>
   </n-space>
 </template>

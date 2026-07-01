@@ -86,6 +86,8 @@ async def check_cert_alerts(
                 )
         if exp_ch.get("email"):
             await email_users(session, admin_emails, f"[jt-ipam] {title}", body)
+        from app.services.notify_channels import broadcast_channels
+        await broadcast_channels(session, subject=title, text=body)
         expiry += 1
 
     drift = 0
@@ -117,6 +119,8 @@ async def check_cert_alerts(
                     )
             if drift_ch.get("email"):
                 await email_users(session, admin_emails, f"[jt-ipam] {dtitle}", dbody)
+            from app.services.notify_channels import broadcast_channels
+            await broadcast_channels(session, subject=dtitle, text=dbody)
             drift += 1
 
     return {"expiry": expiry, "drift": drift}
