@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.72] — 2026-07-01
+
+### 變更
+- **掃描代理 —— OS 偵測大幅更準（agent 1.7.0）** —— OS 探測加上 `nmap -sV`（服務/banner 偵測）+ `smb-os-discovery`，改由 **banner** 推導 OS（SSH `OpenSSH … Debian/Ubuntu`、`Service Info: OS:`、SMB），不再輕信純 TCP/IP 堆疊指紋（對裝置/BMC 常自信地誤判）。`-O` 積極猜測降為最後手段，且當結果是裝置型號（NAS/router/OpenWrt…）而非通用 OS 時直接捨棄 —— 寧顯示未知也不給錯型號。實測：Proxmox Datacenter Manager `HP P2000 NAS`→`Debian`、Windows `XP SP3`→`Windows`、BMC `OpenWrt Kamikaze`→未知。
+
+
 ## [0.5.71] — 2026-07-01
 
 ### 新增

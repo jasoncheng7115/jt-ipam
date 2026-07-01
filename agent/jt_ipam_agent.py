@@ -42,7 +42,7 @@ import sys
 import time
 import urllib.request
 
-AGENT_VERSION = "1.6.0"
+AGENT_VERSION = "1.7.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INTERVAL = int(os.environ.get("JT_IPAM_INTERVAL", "300"))
@@ -307,6 +307,45 @@ def _arp_table() -> dict[str, str]:
     return out
 
 
+# OS 推導：積極猜測（-O --osscan-guess）對裝置/BMC 常自信地誤判（HP NAS、OpenWrt…），
+# 故只接受「通用 OS」猜測、排除裝置型號；有 banner/服務資訊時一律優先採信。
+_OS_DEVICEY = re.compile(
+    r"NAS|printer|\bWAP\b|router|webcam|camera|storage|switch|VoIP|media device|"
+    r"game console|specialized|OpenWrt|P2000|firewall|access point|broadband|"
+    r"bridge|load balancer|embedded", re.I)
+_OS_OSY = re.compile(r"Linux|Windows|BSD|macOS|Mac OS|Solaris|Unix|Android|VMware|ESXi", re.I)
+
+
+def _derive_os(text: str):
+    """從 nmap -sV / smb-os-discovery / -O 輸出推出最可靠的 OS 字串。
+
+    優先序（可靠 → 猜測）：SMB 探得的 Windows 版本 > SSH banner 發行版 > 綜合 Service Info OS
+    > -O 精確匹配 > -O 系列 > 積極猜測（僅限通用 OS、排除裝置型號）。
+    banner/服務資訊比 TCP/IP 堆疊指紋準得多，故一律優先；純猜測若是裝置型號寧回 None（顯示未知）。
+    """
+    m = re.search(r"smb-os-discovery:.*?\n\|\s*OS:\s*([^\n(]+)", text, re.S)
+    if m:
+        return m.group(1).strip()[:200]
+    m = re.search(r"\d+/tcp\s+open\s+ssh\s+OpenSSH\s+\S+\s+(Debian|Ubuntu|Raspbian|FreeBSD)\b", text, re.I)
+    if m:
+        return m.group(1)
+    m = re.search(r"Service Info:.*?\bOSs?:\s*([^;\n]+)", text)
+    if m:
+        return m.group(1).strip()[:200]
+    m = re.search(r"OS details:\s*(.+)", text)
+    if m:
+        return m.group(1).strip()[:200]
+    m = re.search(r"Running:\s*(.+)", text)
+    if m:
+        return m.group(1).strip()[:200]
+    g = re.search(r"(?:Aggressive )?OS guesses:\s*(.+)", text)
+    if g:
+        top = g.group(1).split(",")[0].strip()[:200]
+        if _OS_OSY.search(top) and not _OS_DEVICEY.search(top):
+            return top
+    return None
+
+
 def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
     """os / ports 重量探測：有 nmap 才跑，回 {os_guess?, open_ports?}。
 
@@ -315,20 +354,19 @@ def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
     result: dict = {}
     if not shutil.which("nmap"):
         return result
-    args = ["nmap", "-Pn", "-T4", "--host-timeout", "30s"]
+    args = ["nmap", "-Pn", "-T4", "--host-timeout", "70s" if want_os else "30s"]
     if want_ports:
         args += ["--top-ports", "100"]
     else:
         args += ["-p", ",".join(str(p) for p in TCP_PROBE_PORTS)]
     if want_os:
-        # --osscan-guess: when nmap has no exact fingerprint match it still prints an
-        # "Aggressive OS guesses: <os> (NN%)" line (parsed below), so common hosts that
-        # otherwise yield "No exact OS matches" still get a best-guess OS (with a confidence %).
-        args += ["-O", "--osscan-guess"]
+        # -sV（服務/banner 偵測）+ smb-os-discovery 遠比純 TCP/IP 堆疊指紋（-O）可靠：
+        # 裝置/BMC 用 -O 常被自信地誤判。_derive_os 綜合這些訊號、優先採信 banner。
+        args += ["-sV", "-O", "--osscan-guess", "--script", "smb-os-discovery"]
     args.append(ip)
     try:
         r = subprocess.run(
-            args, capture_output=True, text=True, timeout=60,
+            args, capture_output=True, text=True, timeout=90 if want_os else 60,
         )
         text = r.stdout or ""
         if want_ports:
@@ -340,20 +378,9 @@ def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
             if ports:
                 result["open_ports"] = ports
         if want_os:
-            # exact match first (no %); otherwise fall back to the best aggressive guess.
-            m = re.search(r"OS details:\s*(.+)", text)
-            if m:
-                result["os_guess"] = m.group(1).strip()[:200]
-            else:
-                m = re.search(r"Running:\s*(.+)", text)
-                if m:
-                    result["os_guess"] = m.group(1).strip()[:200]
-                else:
-                    g = re.search(r"(?:Aggressive )?OS guesses:\s*(.+)", text)
-                    if g:
-                        # keep only the top (highest-confidence) guess, e.g. "Linux 5.0 - 5.4 (93%)",
-                        # so the OS column stays concise; the (NN%) marks it as a guess.
-                        result["os_guess"] = g.group(1).split(",")[0].strip()[:200]
+            og = _derive_os(text)
+            if og:
+                result["os_guess"] = og
     except Exception:
         return {}
     return result
