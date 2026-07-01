@@ -17,13 +17,13 @@ const { visibleKeys: plVis, setVisible: plSet, reset: plReset } = useColumnPrefs
   ["name", "version", "description", "error", "error_msg"],
   ["name", "version", "description", "error", "error_msg"],
 );
-const plPicker = [
+const plPicker = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "version", label: t("cols.version") },
   { key: "description", label: t("cols.description") },
   { key: "error", label: t("cols.status") },
   { key: "error_msg", label: t("cols.error_message") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<PluginInfo[]>([]);

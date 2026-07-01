@@ -4,7 +4,7 @@
 
 > 後端：SQLAlchemy 2.0（async）+ PostgreSQL 16 + Alembic，使用原生 `inet` / `cidr` / `macaddr` / `citext` / `jsonb` 型別。主鍵一律用 UUID（少數高頻 / 鏈式 log 表用 `bigint`）。
 >
-> 本文件追蹤**目前**的模型，依 `backend/app/models/` 下的 ORM 整理。Migration 在 `backend/alembic/versions/`（最新約 0070）。以「實體＋重要關聯/外鍵」的角度描述，不逐一列出所有欄位。
+> 本文件追蹤**目前**的模型，依 `backend/app/models/` 下的 ORM 整理。Migration 在 `backend/alembic/versions/`（最新約 0080）。以「實體＋重要關聯/外鍵」的角度描述，不逐一列出所有欄位。
 
 ---
 
@@ -81,8 +81,8 @@ erDiagram
 - **探測 / 掃描**：`exclude_from_ping`；`excluded_probes`（`text[]`）— 此 IP 略過的探測項目（icmp 與 `exclude_from_ping` 雙向同步）；`probe_last_run`（jsonb，`{probe: 時間}`，供「下次到期」顯示）。
 - **OS 偵測**：`os_guess`（原始字串）、`os_family`（正規化家族 key，給前端配 icon；見 `core/os_fingerprint.py`）。
 - **hostname 優先序**：`hostname_source_pin` — 把有效 hostname 固定以某來源為準（NULL = 跟全域優先序）。各來源的原始 hostname 存在 `ip_hostname_observations`。
-- **多源活躍度**：`discovery_source`（`manual`/`scanner`/`librenms`/`dns`/`proxmox`/`opnsense`）、`last_seen_scanner`、`last_seen_librenms`、`last_seen_dns`、`effective_status`。
-- `ptr_ignore`、`custom_fields`（jsonb）。
+- **多源活躍度**：`discovery_source`（`manual`/`scanner`/`librenms`/`dns`/`proxmox`/`opnsense`/`phpipam`）、`last_seen_scanner`、`last_seen_librenms`、`last_seen_dns`、`effective_status`（小寫，如 `online`/`online (scanner)`/`online (librenms)`/`offline`）。
+- `in_dhcp_lease`（由防火牆的 DHCP 租約自動標記）、`ptr_ignore`、`custom_fields`（jsonb）。
 
 ### 2.5 `ip_hostname_observations`
 每個 `(ip, source)` 一筆，存該來源回報的 hostname。`IPAddress.hostname` 是依全域優先序加上單一 IP pin 從這些觀測值解析而來（解析邏輯在 `services/hostname.py`）。來源：manual / scanner / librenms / dns / proxmox / opnsense / wazuh / adguard。
@@ -94,7 +94,7 @@ erDiagram
 phpIPAM 的招牌 NAT，擴充對齊 OPNsense port-forward 規則。
 - `type`（`one_to_one`/`many_to_one`/`port_forward`）、`src_ip_id`/`dst_ip_id`（外鍵 ip_addresses）、`src_port`/`dst_port`（加 `_to` 表埠範圍）、`protocol`、`src_interface`、`device_id`。
 - OPNsense 對齊：`disabled`、`no_rdr`、`ip_version`、`src_not`/`dst_not`、`log`、`category`、`nat_reflection`、`pool_options`、`filter_rule`，以及 alias 參考（`src_alias`/`dst_alias`/`src_port_alias`/`dst_port_alias`/`redirect_alias`）。
-- 來源追蹤：`source_origin`（`manual` / `phpipam` / `opnsense:<fw_uuid>`）+ `external_id`（兩者合起來唯一 = upsert 鍵）。
+- 來源追蹤：`source_origin`（`manual` / `phpipam` / `opnsense:<fw_uuid>` / `pfsense:<fw_uuid>`）+ `external_id`（兩者合起來唯一 = upsert 鍵）。
 
 ### 2.8 `ip_requests` / `ip_request_events`
 IP 申請工作流，狀態機清楚（`pending → approved → fulfilled` / `rejected` / `cancelled`）。`ip_request_events` 是 timeline（每次狀態變化一筆）。核准時原子配發一個 IP（`allocated_ip_id`）。
@@ -163,7 +163,7 @@ NetBox 風但精簡（一張多型 termination 表，不拆多表）。
 每個整合都有一張 **instance** 表（連線 metadata；API key/密碼以 AES-GCM 加密，多以雙欄 `*_enc` / `*_nonce` 或透過 `encrypted_secrets` 儲存），加上若干 **synced** 表（pull-only 快取）。
 
 ### 6.1 LibreNMS — `librenms.py`
-- **LibreNMSInstance**：`api_url`、加密 token、各項開關（`sync_devices`/`sync_arp`/`sync_fdb`/`sync_vlans`/`use_for_status`/`auto_add_devices`）、`scope_subnet_ids`（jsonb — 限定 IP 解析範圍，化解重疊網段）、間隔＋last_sync/error。
+- **LibreNMSInstance**：`api_url`、加密 token、各項開關（`sync_devices`/`sync_arp`/`sync_fdb`/`sync_vlans`/`use_for_status`/`auto_add_devices`/`auto_create_ips`）、`scope_subnet_ids`（jsonb — 限定 IP 解析範圍，化解重疊網段）、間隔＋last_sync/error。`auto_create_ips`（預設開啟）會在受監控裝置的主 IP 落在「既有且符合 scope」的子網路時，自動建立一筆 `ip_addresses`。
 - **LibreNMSDevice**：拉回的裝置（`legacy_device_id` = LibreNMS id）、`hostname`/`sysname`/`primary_ip`/`hardware`/`os`/`status`、`jt_ipam_device_id` 連結。
 - **ARPEntry**：來自 `/resources/ip/arp/` 的 IP↔MAC，含 `interface`/`vrf`，用來補 IP 的 MAC。
 - **FDBEntry**：來自 `/devices/{id}/fdb` 的 MAC 位置（`port_name`、`vlan_id_num`），用來推導交換器埠。
@@ -173,11 +173,22 @@ NetBox 風但精簡（一張多型 termination 表，不拆多表）。
 - **WazuhAgent**：每次 sync 的代理（`agent_id`、`ip`、`status`、OS/版本、`group`、keep-alive），透過 `jt_ipam_address_id` 對應到 IP，加上漏洞摘要計數（`cve_critical_count`/`cve_high_count`/`cve_summary_at`）。
 
 ### 6.3 OPNsense 防火牆 — `firewall.py`、`firewall_rule.py`、`nat.py`、`dhcp.py`
-- **OPNsenseFirewall**：加密 `api_key` + `api_secret`、`verify_tls`、同步開關（`sync_dhcp`/`sync_arp`/`sync_openvpn`/`sync_rules`/`sync_nat`/`sync_aliases`）。
+- **OPNsenseFirewall**：加密 `api_key` + `api_secret`、`verify_tls`、同步開關（`sync_dhcp`/`sync_arp`/`sync_openvpn`/`sync_rules`/`sync_nat`/`sync_aliases`），以及 `expose_dsv`（opt-in：把該防火牆的 規則 label→alias 與 alias→members 對外提供成 Graylog DSV）。
 - **OPNsenseAliasMapping**：jt-ipam 範圍 → OPNsense alias 的推送規則；`selector`（jsonb：section/subnet/tag/custom_field）、`direction`（push/pull/both）、上次同步狀態。
-- **OPNsenseSyncedAlias**：從 OPNsense 拉回的 alias（唯讀檢視用，`content`、`member_count`）。
+- **OPNsenseSyncedAlias**：從 OPNsense 拉回的 alias（唯讀檢視用，`content`、`member_count`）；也是 alias→members DSV 的來源。
+- **OPNsenseRuleLabel**：從 `pf_statistics` 解析，把 filterlog 的 `rid`（pf 規則 label）對應到規則引用的 alias：`label`/`action`/`interface`/`alias_names` jsonb，給規則→alias 的 Graylog DSV 用。
 - **OPNsenseRule**：拉回的防火牆規則唯讀快取（`legacy_uuid`、action/interface/direction/protocol、src/dst net & port、`raw` jsonb）。
 - **DHCPPoolRange**：從防火牆（Kea/ISC）同步回的 DHCP 發放範圍 — `subnet_cidr`、`start_ip`/`end_ip`；落在範圍內的 IP 標示為 DHCP。
+
+> **Graylog DSV**（token 保護的 `/api/v1/lookup/...` 端點）：全域 IP→hostname/FQDN、每台防火牆的 `rid → alias` 與 `alias → members`（受 `expose_dsv` 控制）、每個 PVE 叢集的 `vmid → VM 名稱`；供 Graylog「DSV File from HTTP」配接器抓取（key 欄=0、value 欄=1）。
+
+### 6.3b pfSense 防火牆 — `pfsense.py`（獨立設定頁，不與 OPNsense 共用）
+
+透過第三方 **pfSense-pkg-RESTAPI**（pfrest.org；base `/api/v2`、`X-API-Key`）與 pfSense 溝通。
+
+- **PfSenseFirewall**：加密 `api_key`、`verify_tls`、同步開關（`sync_dhcp`/`sync_arp`/`sync_aliases`/`sync_rules`）、`expose_dsv`，以及精簡的 `rules`（jsonb）快取。以 `scope_subnet_ids` 限定範圍。
+- **PfSenseSyncedAlias**：抓回的別名（`members`、`alias_type`）供唯讀檢視；也餵 alias→members 的 Graylog DSV。
+- pfSense 的 NAT port-forward 會同步進同一張 `nat_translations` 表、`source_origin = pfsense:<fw_uuid>`，與 OPNsense NAT 並列（可依來源篩選）。
 
 ### 6.4 Proxmox 虛擬化 — `virt.py`
 - **ProxmoxInstance**：PVE API 連線（`api_url` + `extra_api_urls` 供節點換手、`auth_username`/`auth_token_id`、secret 走 `encrypted_secrets`、`verify_tls`）。
@@ -245,6 +256,11 @@ admin key/value 設定（`key` PK、`value` jsonb、`updated_by`），覆寫 env
 ### 8.10 `background_tasks`
 長時間作業的統一記錄（`librenms.sync` / `opnsense.sync` / `dns.sync` / `phpipam.migration` / `scanner.run` …）：`kind`、`status`（pending/running/succeeded/failed/cancelled）、`target_*`、`progress`（0–100）、`summary`（jsonb）、時間戳。於 `/api/v1/tasks` 呈現。
 
+### 8.11 憑證集中保管與派送 — `certificate.py`
+- **Certificate**：受管理的憑證（`name`、`domains`/SAN、`source_type`（`none`/`url`/`sftp`）+ `source_config` jsonb 供定期自動抓取、`fetch_interval_seconds`、`last_fetch_at`/`last_fetch_error`）。
+- **CertVersion**：每個上傳 / 抓取的版本 — `fingerprint_sha256`、`subject`/`issuer`/`serial`、`not_before`/`not_after`、`cert_pem`/`chain_pem`、AES-GCM 加密的私鑰（`key_enc`/`key_nonce`）、`is_current`。缺中繼 / 根憑證時可用系統信任庫補齊。
+- **CertAgent**：每台主機的派送代理 — `enroll_key_hash`、`scope_cert_ids`（jsonb，預設關閉）、`device_id`（連到某 jt-ipam 裝置；名稱＋來源 IP 在 UI 變可點）、`last_source_ip` / `recent_sources`（同把 Key 多主機偵測）、`agent_version`、`reported`（jsonb 部署狀態）。純 bash 代理以 `X-Agent-Key` 拉憑證，派送到 nginx / apache / haproxy / Proxmox VE·PMG·PBS / Zimbra / … 並做 設定測試 → 失敗還原 → reload。私鑰僅在 scope 內經 TLS 釋出給代理，且逐次稽核；到期 / 飄移會發出告警。
+
 ---
 
 ## 九、命名與索引慣例
@@ -262,4 +278,4 @@ admin key/value 設定（`key` PK、`value` jsonb、`updated_by`），覆寫 env
 
 - Alembic auto-generate 一律人工 review，不直接套用。
 - Migration 實質 forward-only；保留 `downgrade()` 給開發環境。
-- prod 前先在 staging / 乾淨容器跑過。目前 head 約在 `0070`。
+- prod 前先在 staging / 乾淨容器跑過。目前 head 約在 `0080`。

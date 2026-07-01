@@ -97,11 +97,12 @@ const options = computed<any[]>(() => {
   for (const x of hits.value) {
     (groups[x.type] ??= []).push(x);
   }
-  const order = ["section", "subnet", "vlan", "ip_address", "device", "vpn", "customer", "rack", "location", "nat", "dns_record", "firewall", "ip_request"];
+  const order = ["section", "subnet", "vlan", "vm", "ip_address", "device", "vpn", "customer", "rack", "location", "nat", "dns_record", "firewall", "ip_request"];
   const labelMap: Record<string, string> = {
     section: tr("global_search.t_section"),
     subnet: tr("global_search.t_subnet"),
     vlan: "VLAN",
+    vm: tr("nav.virtualization"),
     ip_address: tr("global_search.t_ip"),
     device: tr("global_search.t_device"),
     vpn: "VPN",
@@ -149,7 +150,8 @@ function navigateTo(value: string) {
       router.push({ name: "section-detail", params: { id } });
       break;
     case "ip_address":
-      // 直接進 IP 獨立詳情頁
+    case "vm":
+      // VM/CT 搜尋結果導到其主 IP 詳情頁（可開 PVE 主控台）
       router.push({ name: "address-detail", params: { id } });
       break;
     case "device":
@@ -202,8 +204,14 @@ function onEnter() {
 function detectedTagType(d: string): "info" | "success" | "warning" | "default" {
   if (d === "cidr" || d === "ip") return "success";
   if (d === "mac") return "info";
-  if (d === "vlan_number") return "warning";
+  if (d === "vlan_number" || d === "number") return "warning";
   return "default";
+}
+function detectedLabel(d: string): string {
+  return ({
+    cidr: "CIDR", ip: "IP", mac: "MAC",
+    number: "VLAN / VMID", vlan_number: "VLAN",
+  } as Record<string, string>)[d] || d;
 }
 </script>
 
@@ -230,7 +238,7 @@ function detectedTagType(d: string): "info" | "success" | "warning" | "default" 
       :type="detectedTagType(detected)"
       style="margin-left: 4px"
     >
-      {{ detected }}
+      {{ detectedLabel(detected) }}
     </n-tag>
   </n-space>
 </template>

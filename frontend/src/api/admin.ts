@@ -68,6 +68,7 @@ export interface User {
   auth_provider: string;
   is_active: boolean;
   is_admin: boolean;
+  can_ssh: boolean;
   last_login_at: string | null;
   last_login_ip: string | null;
   failed_login_count: number;
@@ -82,6 +83,7 @@ export interface UserCreate {
   display_name?: string;
   password: string;
   is_admin?: boolean;
+  can_ssh?: boolean;
 }
 
 export interface UserUpdate {
@@ -89,6 +91,7 @@ export interface UserUpdate {
   display_name?: string;
   is_active?: boolean;
   is_admin?: boolean;
+  can_ssh?: boolean;
   password?: string;
   unlock?: boolean;
 }

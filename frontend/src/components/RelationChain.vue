@@ -41,11 +41,11 @@ watch(() => props.nodes, () => { segEls.length = 0; void nextTick(recompute); },
 
 const ICONS: Record<string, any> = {
   section: SectionsIcon, subnet: SubnetsIcon, ip: AddressesIcon, vm: VirtualizationIcon,
-  device: DevicesIcon, rack: RacksIcon, location: LocationsIcon,
+  vmnode: DevicesIcon, device: DevicesIcon, rack: RacksIcon, location: LocationsIcon,
 };
 const TYPE_LABEL = computed<Record<string, string>>(() => ({
   section: t("nav.sections"), subnet: t("nav.subnets"), ip: t("nav.addresses"),
-  vm: t("relations.vm"),
+  vm: t("relations.vm"), vmnode: t("relations.pve_node"),
   device: t("nav.devices"), rack: t("nav.racks"), location: t("nav.locations"),
 }));
 
@@ -55,6 +55,8 @@ function go(n: RelationNode) {
     case "section":  router.push({ name: "section-detail", params: { id: n.id } }); break;
     case "subnet":   router.push({ name: "subnet-detail", params: { id: n.id } }); break;
     case "vm":       router.push({ name: "virt" }); break;
+    // PVE 節點：對得到實體裝置（id 為 UUID）就跳裝置詳情；無實體裝置（id 以 pve: 開頭）則不動作
+    case "vmnode":   if (!n.id.startsWith("pve:")) router.push({ name: "device-detail", params: { id: n.id } }); break;
     case "device":   router.push({ name: "device-detail", params: { id: n.id } }); break;
     case "ip":       router.push({ name: "addresses", query: { q: n.label } }); break;
     case "rack":     router.push({ name: "racks" }); break;

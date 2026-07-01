@@ -32,7 +32,7 @@ _RESP = {
 
 
 def _patch(monkeypatch, resp=_RESP):
-    async def _fake(_session, _instance, path, *, base_url=None):
+    async def _fake(_session, _instance, path, *, base_url=None, timeout=None):
         return resp.get(path, {"data": []})
     monkeypatch.setattr(px, "_api_get", _fake)
 

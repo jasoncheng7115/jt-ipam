@@ -26,7 +26,7 @@ const { visibleKeys: agVis, setVisible: agSet, reset: agReset } = useColumnPrefs
   ["name", "api_url", "enabled", "sync_flags", "last_sync_at", "last_error", "actions"],
   ["name", "api_url", "enabled", "sync_flags", "last_sync_at", "last_error", "actions"],
 );
-const agPicker = [
+const agPicker = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "api_url", label: "API URL" },
   { key: "enabled", label: t("cols.status") },
@@ -34,7 +34,7 @@ const agPicker = [
   { key: "last_sync_at", label: t("cols.last_sync") },
   { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<AdGuardInstance[]>([]);
@@ -256,9 +256,11 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
           <n-switch v-model:value="form.enabled" />
         </n-form-item>
         <n-form-item :label="t('adguard_admin.scope_subnets')">
-          <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
-                    multiple filterable clearable :placeholder="t('adguard_admin.scope_all')" />
-          <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
+          <div style="width: 100%">
+            <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
+                      multiple filterable clearable :placeholder="t('adguard_admin.scope_all')" />
+            <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
+          </div>
         </n-form-item>
         <div style="margin: -8px 0 4px">
           <span style="font-size: 11px; opacity: .7">{{ t("adguard_admin.scope_hint") }}</span>

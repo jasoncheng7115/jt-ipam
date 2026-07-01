@@ -13,7 +13,12 @@ from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.rate_limit import limit_per_ip
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    TokenResponse,
+)
 from app.schemas.totp import ConfirmRequest, EnrollResponse, VerifyRequest
 from app.schemas.user import UserMe
 from app.services import ldap_auth
@@ -36,8 +41,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def list_realms(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
-    """登入頁可選的領域（本機一律有；LDAP/AD 啟用時才列出）。"""
-    from app.services.system_config import get_ldap_config
+    """登入頁可選的領域（本機一律有；LDAP/AD 啟用時才列出）+ 已啟用的 SSO 供應商。
+
+    `sso.oidc` / `sso.saml` 讓登入頁只在該供應商真的設定好時才顯示對應 SSO 按鈕，
+    避免使用者點了未啟用的按鈕跳出 `{"detail":"... is disabled"}` 的原始錯誤。
+    """
+    from app.services.system_config import (
+        get_ldap_config,
+        get_oidc_config,
+        get_saml_config,
+    )
     realms: list[dict[str, str]] = [{"value": "local", "label": "本機"}]
     try:
         cfg = await get_ldap_config(session)
@@ -45,7 +58,17 @@ async def list_realms(
             realms.append({"value": "ldap", "label": "LDAP / AD"})
     except Exception:
         pass
-    return {"realms": realms}
+
+    sso = {"oidc": False, "saml": False}
+    try:
+        sso["oidc"] = bool((await get_oidc_config(session)).enabled)
+    except Exception:
+        pass
+    try:
+        sso["saml"] = bool((await get_saml_config(session)).enabled)
+    except Exception:
+        pass
+    return {"realms": realms, "sso": sso}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -259,6 +282,16 @@ async def me(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserMe:
     out = UserMe.model_validate(user)
+    # RDP 是否可用（後端是否裝了 aardwolf 選用相依）
+    from app.api.v1.endpoints.rdp_console import RDP_AVAILABLE
+    from app.api.v1.endpoints.vnc_console import VNC_AVAILABLE
+    out.rdp_supported = RDP_AVAILABLE
+    out.vnc_supported = VNC_AVAILABLE
+    from app.services.bmc import bmc_available
+    out.bmc_supported = bmc_available()
+    # 全域 LLM/AI 是否啟用 → 前端據此決定要不要顯示 AI 對話小工具（未設定就別讓人輸入/送出）
+    from app.services.system_config import get_llm_config
+    out.ai_enabled = (await get_llm_config(session)).enabled
     # has_visibility：任一類型有可見範圍即 True（零權限→False）
     # has_global_read：管理員或任一類型有「萬用」授權（visible_ids 回 None）→ True
     if user.is_admin:
@@ -299,3 +332,37 @@ async def ldap_test(
         raise HTTPException(503, detail=str(exc)) from exc
     except ldap_auth.LDAPAuthError as exc:
         raise HTTPException(502, detail=f"LDAP error: {exc}") from exc
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    payload: ChangePasswordRequest,
+    user: CurrentUser,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """本機帳號自助變更密碼：需驗證目前密碼；外部認證帳號不適用。"""
+    from app.core.security import hash_password, verify_password
+
+    # 僅本機帳號（password_hash 存在且 auth_provider=local）可在此改密碼
+    if user.auth_provider != "local" or not user.password_hash:
+        raise HTTPException(status_code=400, detail="external_auth")
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="current_password_incorrect")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="same_password")
+
+    user.password_hash = hash_password(payload.new_password)
+    from app.core.audit import append_audit
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="user",
+        object_id=str(user.id),
+        action="password_changed",
+        diff=None,
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()

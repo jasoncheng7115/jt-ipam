@@ -224,6 +224,11 @@ key|$base/$cert.key|600"
       PRELOAD="systemctl reload jetty 2>/dev/null || systemctl restart jetty" ;;
     zimbra)
       PSPECIAL="zimbra" ;;
+    files)
+      # Files-only: write the cert files to the standard path, no config test,
+      # no reload/restart of any service (the operator handles reloading themselves).
+      PFILES="fullchain|$base/$cert.fullchain.pem|644
+key|$base/$cert.key|640" ;;
     generic)
       : ;;  # overridden entirely via config
     *)

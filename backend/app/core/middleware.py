@@ -22,12 +22,11 @@ _CSP: Final[str] = (
     "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
     # 世界地圖（Locations 多點 Leaflet）需要載入 OSM 圖磚（<img>）
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org; "
+    "img-src 'self' data: blob:; "
     "font-src 'self' data:; "
     "connect-src 'self'; "
-    # 地圖預覽（Location 經緯度）需要內嵌 OSM / Google Maps 的 iframe；
-    # frame-src 只放行這幾個地圖網域，其餘維持 default-src 'self'。
-    "frame-src 'self' https://www.openstreetmap.org https://www.google.com https://maps.google.com; "
+    # 不再內嵌第三方地圖 iframe（v0.5.8 改成新分頁開啟）→ frame-src 收成 'self'
+    "frame-src 'self'; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
     "form-action 'self';"
@@ -50,6 +49,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+        # 地圖改用內建世界輪廓、不再嵌外部圖磚 → 全站零跨來源子資源，可用最強的 require-corp。
+        response.headers.setdefault("Cross-Origin-Embedder-Policy", "require-corp")
         # HSTS 只在 HTTPS / production 加（避免本機 dev 卡住）
         if settings.is_production:
             response.headers.setdefault(

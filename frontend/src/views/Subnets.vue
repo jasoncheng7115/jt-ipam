@@ -47,7 +47,7 @@ const router = useRouter();
 const route = useRoute();
 const links = useEntityLinks(router);
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const msg = useMessage();
 // 從某單位的「子網路數」點過來時，只顯示該單位的子網路（可清除）
 const customerFilter = ref<string | null>(null);
@@ -100,7 +100,7 @@ const allColumns: DataTableColumns<Subnet> = [
   {
     // CIDR 放在最前（selection 之後）→ n-data-table 的展開箭頭會落在此欄，與階層縮排一致，
     // 不會出現在「釘選」欄
-    title: () => t("subnets.cidr"), key: "cidr", minWidth: 180, ellipsis: { tooltip: true },
+    title: () => t("subnets.cidr"), key: "cidr", minWidth: 200, ellipsis: { tooltip: true },
     render: (r) => links.subnet(r.id, r.cidr),
     sorter: (a, b) => cidrSortNum(a.cidr) - cidrSortNum(b.cidr) || a.cidr.localeCompare(b.cidr),
   },
@@ -389,7 +389,7 @@ onMounted(() => {
       @update:checked-row-keys="(keys: DataTableRowKey[]) => checkedKeys = keys"
       :pagination="pg"
       :bordered="false"
-      :scroll-x="986"
+      :scroll-x="1340"
       :row-props="(row: Subnet) => ({
         style: 'cursor: pointer',
         onClick: (e: MouseEvent) => {

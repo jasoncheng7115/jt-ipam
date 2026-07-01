@@ -3,7 +3,7 @@ import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
-  NInput, NDynamicTags, NPopconfirm, NTag, NAlert, NCode, NTooltip,
+  NInput, NCheckbox, NCheckboxGroup, NPopconfirm, NTag, NAlert, NCode, NTooltip,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import {
@@ -22,7 +22,7 @@ const { visibleKeys: wbVis, setVisible: wbSet, reset: wbReset } = useColumnPrefs
   ["name", "target_url", "events", "enabled", "failure_count", "last_error", "actions"],
   ["name", "target_url", "events", "enabled", "failure_count", "last_error", "actions"],
 );
-const wbPicker = [
+const wbPicker = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "target_url", label: "Target URL" },
   { key: "events", label: t("cols.event") },
@@ -30,7 +30,7 @@ const wbPicker = [
   { key: "failure_count", label: t("cols.failed_login") },
   { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<Webhook[]>([]);
@@ -39,6 +39,19 @@ const show = ref(false);
 const form = ref<{ name: string; target_url: string; events: string[] }>({
   name: "", target_url: "", events: ["*"],
 });
+
+// 後端實際會發送的事件（app/services/notification.deliver_event 比對；"*" = 全部）。
+// 新增事件種類時這裡與 i18n 一起補。
+const EVENT_CATALOG = [
+  { value: "*", descKey: "webhooks.ev_all" },
+  { value: "subnet.created", descKey: "webhooks.ev_subnet_created" },
+  { value: "ip_request.created", descKey: "webhooks.ev_ipreq_created" },
+  { value: "ip_request.fulfilled", descKey: "webhooks.ev_ipreq_fulfilled" },
+  { value: "ip_request.rejected", descKey: "webhooks.ev_ipreq_rejected" },
+  { value: "anomaly.detected", descKey: "webhooks.ev_anomaly" },
+];
+const eventOptions = computed(() =>
+  EVENT_CATALOG.map((e) => ({ value: e.value, desc: t(e.descKey) })));
 const showSecret = ref(false);
 const newSecret = ref("");
 
@@ -143,8 +156,16 @@ onMounted(() => { void refresh(); });
           <n-input v-model:value="form.target_url" placeholder="https://hook.example.com/path" />
         </n-form-item>
         <n-form-item :label="t('webhooks.events_label')">
-          <n-dynamic-tags v-model:value="form.events"
-                          :input-props="{ placeholder: 'ip.create / subnet.update / *' }" />
+          <n-checkbox-group v-model:value="form.events" style="width:100%">
+            <n-space vertical size="small" style="width:100%">
+              <div v-for="e in eventOptions" :key="e.value" class="ev-row">
+                <n-checkbox :value="e.value">
+                  <code class="ev-name">{{ e.value }}</code>
+                </n-checkbox>
+                <div class="ev-desc">{{ e.desc }}</div>
+              </div>
+            </n-space>
+          </n-checkbox-group>
           <template #feedback>{{ t("webhooks.events_hint") }}</template>
         </n-form-item>
       </n-form>
@@ -181,3 +202,9 @@ onMounted(() => { void refresh(); });
     </n-modal>
   </n-card>
 </template>
+
+<style scoped>
+.ev-row { line-height: 1.4; }
+.ev-name { font-size: 12px; }
+.ev-desc { font-size: 12px; opacity: .6; margin-left: 24px; margin-top: 1px; }
+</style>

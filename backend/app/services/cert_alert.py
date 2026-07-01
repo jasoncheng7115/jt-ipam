@@ -42,6 +42,13 @@ async def check_cert_alerts(
     if not admins:
         return {"expiry": 0, "drift": 0}
 
+    from app.services.notification import email_users
+    from app.services.system_config import get_notification_matrix
+    matrix = await get_notification_matrix(session)
+    exp_ch = matrix.get("cert.expiring", {"in_app": True, "email": False})
+    drift_ch = matrix.get("cert.drift", {"in_app": True, "email": False})
+    admin_emails = [a.email for a in admins]
+
     now = datetime.now(UTC)
     since = now - timedelta(hours=dedup_hours)
     rows = (await session.execute(
@@ -58,18 +65,23 @@ async def check_cert_alerts(
         days = (ver.not_after - now).days
         if days > expiry_days:
             continue
+        if not (exp_ch.get("in_app") or exp_ch.get("email")):
+            continue
         if await _recently_notified(session, cert.id, since):
             continue
         expired = ver.not_after <= now
         title = f"憑證已過期:{cert.name}" if expired else f"憑證即將到期:{cert.name}"
         body = (f"{cert.name} 於 {ver.not_after.date()} "
                 f"{'已過期' if expired else f'到期(剩 {days} 天)'};請上傳新版並讓代理派送。")
-        for a in admins:
-            await push_notification(
-                session, user_id=a.id, title=title, body=body,
-                severity="error" if expired else "warning",
-                link="/certificates", object_type="certificate", object_id=cert.id,
-            )
+        if exp_ch.get("in_app"):
+            for a in admins:
+                await push_notification(
+                    session, user_id=a.id, title=title, body=body,
+                    severity="error" if expired else "warning",
+                    link="/certificates", object_type="certificate", object_id=cert.id,
+                )
+        if exp_ch.get("email"):
+            await email_users(session, admin_emails, f"[jt-ipam] {title}", body)
         expiry += 1
 
     drift = 0
@@ -83,17 +95,22 @@ async def check_cert_alerts(
             cid = name_id.get(cname)
             if not (want and fp and cid) or fp == want:
                 continue
+            if not (drift_ch.get("in_app") or drift_ch.get("email")):
+                continue
             if await _recently_notified(session, cid, since):
                 continue
-            for a in admins:
-                await push_notification(
-                    session, user_id=a.id,
-                    title=f"憑證飄移:{agent.name} 未套用最新版",
-                    body=(f"代理「{agent.name}」上的「{cname}」指紋為 {str(fp)[:12]}…,"
-                          f"並非目前版本 {want[:12]}…;該站台可能沒換成功,請查代理紀錄。"),
-                    severity="warning", link="/certificates",
-                    object_type="certificate", object_id=cid,
-                )
+            dtitle = f"憑證飄移:{agent.name} 未套用最新版"
+            dbody = (f"代理「{agent.name}」上的「{cname}」指紋為 {str(fp)[:12]}…,"
+                     f"並非目前版本 {want[:12]}…;該站台可能沒換成功,請查代理紀錄。")
+            if drift_ch.get("in_app"):
+                for a in admins:
+                    await push_notification(
+                        session, user_id=a.id, title=dtitle, body=dbody,
+                        severity="warning", link="/certificates",
+                        object_type="certificate", object_id=cid,
+                    )
+            if drift_ch.get("email"):
+                await email_users(session, admin_emails, f"[jt-ipam] {dtitle}", dbody)
             drift += 1
 
     return {"expiry": expiry, "drift": drift}

@@ -14,9 +14,11 @@ import {
   type IPChangeLog,
 } from "@/api/ip_history";
 import { fmtDateTime } from "@/utils/datetime";
+import { useChangeLogDim } from "@/composables/useChangeLogDim";
 import ExportButton from "@/components/ExportButton.vue";
 
 const { t } = useI18n();
+const { isOld: isOldLog } = useChangeLogDim();
 
 const rows = ref<IPChangeLog[]>([]);
 const total = ref(0);
@@ -138,9 +140,11 @@ const columns = computed<DataTableColumns<IPChangeLog>>(() => [
       :bordered="false"
       size="small"
       :scroll-x="1000"
+      :row-class-name="(r:any) => isOldLog(r.created_at) ? 'log-dim' : ''"
     />
 
-    <div style="display: flex; justify-content: flex-end; margin-top: 12px">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px">
+      <span style="font-size: 13px; opacity: 0.7">{{ t("common.total_rows", { n: total }) }}</span>
       <n-pagination
         v-model:page="page"
         v-model:page-size="pageSize"
@@ -151,3 +155,8 @@ const columns = computed<DataTableColumns<IPChangeLog>>(() => [
     </div>
   </n-card>
 </template>
+
+<style scoped>
+/* 異動記錄超過 N 天（系統設定）的列以淡色顯示 */
+:deep(tr.log-dim td) { opacity: .45; }
+</style>

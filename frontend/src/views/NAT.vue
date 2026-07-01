@@ -111,11 +111,12 @@ const firewalls = ref<OPNsenseFirewall[]>([]);
 const sourceKindFilter = ref<string[]>([]);
 const sourceFwFilter = ref<string | null>(null);
 
-const sourceKindOpts = [
+const sourceKindOpts = computed(() => [
   { label: "OPNsense", value: "opnsense" },
+  { label: "pfSense",  value: "pfsense" },
   { label: "phpIPAM",  value: "phpipam" },
   { label: t("cols.manual"),     value: "manual" },
-];
+]);
 const firewallOpts = computed(() =>
   firewalls.value.map((f) => ({ label: f.name, value: f.id })),
 );
@@ -179,7 +180,6 @@ function ipDetailCard(ipId: string) {
 function ipLinkCell(ipId: string | null) {
   if (!ipId) return "—";
   const label = addrOpts.value.find((o) => o.value === ipId)?.label ?? ipId.slice(0, 8) + "…";
-  const ipText = label.split(" — ")[0];
   const link = h("a", {
     href: "#",
     style: "color: var(--primary-color, #18a058); text-decoration: none;",
@@ -365,6 +365,7 @@ const allCols = computed<DataTableColumns<NAT>>(() => autoSort([
     render: (r) => {
       if (!r.source_label) return "—";
       const type = r.source_kind === "opnsense" ? "info"
+                 : r.source_kind === "pfsense"  ? "success"
                  : r.source_kind === "phpipam"  ? "warning"
                  : "default";
       return h(NTag, { size: "small", type, bordered: false }, () => r.source_label);

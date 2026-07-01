@@ -1,7 +1,7 @@
 import { apiClient } from "@/api/client";
 
 export interface RelationNode {
-  type: "section" | "subnet" | "ip" | "vm" | "device" | "rack" | "location";
+  type: "section" | "subnet" | "ip" | "vm" | "vmnode" | "device" | "rack" | "location";
   id: string;
   label: string;
   sub?: string | null;

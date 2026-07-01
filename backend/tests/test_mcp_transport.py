@@ -59,7 +59,8 @@ async def test_http_get_405_and_unauth_post():
         g = await c.get("/")
         assert g.status_code == 405 and "POST" in g.headers.get("allow", "")
         p = await c.post("/", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
-        assert p.status_code == 401   # 沒帶 token
+        # 外部 MCP 預設關閉 → 403（在檢查 token 之前就擋下；打開後沒帶 token 才是 401）
+        assert p.status_code == 403
         d = await c.delete("/")
         assert d.status_code == 204
 

@@ -4,7 +4,7 @@
 
 > Backend: SQLAlchemy 2.0 (async) + PostgreSQL 16 + Alembic, using native `inet` / `cidr` / `macaddr` / `citext` / `jsonb` types. UUID primary keys throughout (except a few high-volume / chained log tables that use `bigint`).
 >
-> This document tracks the **current** model. It is generated from the ORM under `backend/app/models/`. Migrations live in `backend/alembic/versions/` (latest ~0070). The model is described entity-by-entity with the relationships/foreign keys that matter; not every column is listed.
+> This document tracks the **current** model. It is generated from the ORM under `backend/app/models/`. Migrations live in `backend/alembic/versions/` (latest ~0080). The model is described entity-by-entity with the relationships/foreign keys that matter; not every column is listed.
 
 ---
 
@@ -81,8 +81,8 @@ Top-level grouping. Self-referential `parent_id` (SET NULL) for nesting; `strict
 - **Probe / scan**: `exclude_from_ping`; `excluded_probes` (`text[]`) — per-IP set of probes to skip (icmp stays in sync with `exclude_from_ping`); `probe_last_run` (jsonb, `{probe: timestamp}` for "next due" display).
 - **OS fingerprint**: `os_guess` (raw string), `os_family` (normalized key for icon mapping; see `core/os_fingerprint.py`).
 - **Hostname precedence**: `hostname_source_pin` — pin the effective hostname to one source (NULL = follow the global precedence order). The per-source raw hostnames live in `ip_hostname_observations`.
-- **Multi-source liveness**: `discovery_source` (`manual`/`scanner`/`librenms`/`dns`/`proxmox`/`opnsense`), `last_seen_scanner`, `last_seen_librenms`, `last_seen_dns`, `effective_status`.
-- `ptr_ignore`, `custom_fields` (jsonb).
+- **Multi-source liveness**: `discovery_source` (`manual`/`scanner`/`librenms`/`dns`/`proxmox`/`opnsense`/`phpipam`), `last_seen_scanner`, `last_seen_librenms`, `last_seen_dns`, `effective_status` (lowercase, e.g. `online`/`online (scanner)`/`online (librenms)`/`offline`).
+- `in_dhcp_lease` (auto-flagged from the firewall's DHCP leases), `ptr_ignore`, `custom_fields` (jsonb).
 
 ### 2.5 `ip_hostname_observations`
 One row per `(ip, source)` storing the hostname that source reported. `IPAddress.hostname` is the value resolved from these by the global precedence order plus the per-IP pin (resolution in `services/hostname.py`). Sources: manual / scanner / librenms / dns / proxmox / opnsense / wazuh / adguard.
@@ -94,7 +94,7 @@ High-frequency history of every IP change (created/deleted/hostname_changed/mac_
 phpIPAM's signature NAT, extended to mirror OPNsense port-forward rules.
 - `type` (`one_to_one`/`many_to_one`/`port_forward`), `src_ip_id`/`dst_ip_id` (FK ip_addresses), `src_port`/`dst_port` (+ `_to` for ranges), `protocol`, `src_interface`, `device_id`.
 - OPNsense parity: `disabled`, `no_rdr`, `ip_version`, `src_not`/`dst_not`, `log`, `category`, `nat_reflection`, `pool_options`, `filter_rule`, and alias references (`src_alias`/`dst_alias`/`src_port_alias`/`dst_port_alias`/`redirect_alias`).
-- Sync provenance: `source_origin` (`manual` / `phpipam` / `opnsense:<fw_uuid>`) + `external_id` (unique together = upsert key).
+- Sync provenance: `source_origin` (`manual` / `phpipam` / `opnsense:<fw_uuid>` / `pfsense:<fw_uuid>`) + `external_id` (unique together = upsert key).
 
 ### 2.8 `ip_requests` / `ip_request_events`
 IP request workflow with a clear state machine (`pending → approved → fulfilled` / `rejected` / `cancelled`). `ip_request_events` is the timeline (one row per state change). Approval allocates an IP atomically (`allocated_ip_id`).
@@ -163,7 +163,7 @@ These are global infra (no per-object authorization); UI exposure is gated by `r
 Each integration has an **instance** table (connection metadata; API keys/passwords are AES-GCM encrypted, generally in dual `*_enc` / `*_nonce` columns or via `encrypted_secrets`) plus **synced** tables (pull-only caches).
 
 ### 6.1 LibreNMS — `librenms.py`
-- **LibreNMSInstance**: `api_url`, encrypted token, per-feature toggles (`sync_devices`/`sync_arp`/`sync_fdb`/`sync_vlans`/`use_for_status`/`auto_add_devices`), `scope_subnet_ids` (jsonb — restrict IP resolution to specific subnets, to disambiguate overlapping segments), interval + last_sync/error.
+- **LibreNMSInstance**: `api_url`, encrypted token, per-feature toggles (`sync_devices`/`sync_arp`/`sync_fdb`/`sync_vlans`/`use_for_status`/`auto_add_devices`/`auto_create_ips`), `scope_subnet_ids` (jsonb — restrict IP resolution to specific subnets, to disambiguate overlapping segments), interval + last_sync/error. `auto_create_ips` (default on) creates an `ip_addresses` row for a monitored device's primary IP when it falls inside an existing, in-scope subnet.
 - **LibreNMSDevice**: pulled device (`legacy_device_id` = LibreNMS id), `hostname`/`sysname`/`primary_ip`/`hardware`/`os`/`status`, `jt_ipam_device_id` link.
 - **ARPEntry**: IP↔MAC from `/resources/ip/arp/`, with `interface`/`vrf`, used to backfill IP MACs.
 - **FDBEntry**: MAC location from `/devices/{id}/fdb` (`port_name`, `vlan_id_num`), used to derive switch port.
@@ -173,11 +173,22 @@ Each integration has an **instance** table (connection metadata; API keys/passwo
 - **WazuhAgent**: per-sync agent (`agent_id`, `ip`, `status`, OS/version, `group`, keep-alive), linked to an IP via `jt_ipam_address_id`, plus vulnerability summary counts (`cve_critical_count`/`cve_high_count`/`cve_summary_at`).
 
 ### 6.3 OPNsense firewall — `firewall.py`, `firewall_rule.py`, `nat.py`, `dhcp.py`
-- **OPNsenseFirewall**: encrypted `api_key` + `api_secret`, `verify_tls`, sync toggles (`sync_dhcp`/`sync_arp`/`sync_openvpn`/`sync_rules`/`sync_nat`/`sync_aliases`).
+- **OPNsenseFirewall**: encrypted `api_key` + `api_secret`, `verify_tls`, sync toggles (`sync_dhcp`/`sync_arp`/`sync_openvpn`/`sync_rules`/`sync_nat`/`sync_aliases`), and `expose_dsv` (opt-in: expose this firewall's rule-label→alias and alias→members lookups as Graylog DSV).
 - **OPNsenseAliasMapping**: jt-ipam scope → OPNsense alias push rule; `selector` (jsonb: section/subnet/tag/custom_field), `direction` (push/pull/both), last sync state.
-- **OPNsenseSyncedAlias**: aliases pulled back from OPNsense for read-only viewing (`content`, `member_count`).
+- **OPNsenseSyncedAlias**: aliases pulled back from OPNsense for read-only viewing (`content`, `member_count`); also the source for the alias→members Graylog DSV.
+- **OPNsenseRuleLabel**: parsed from `pf_statistics` — maps a filterlog `rid` (pf rule label) to the alias(es) the rule references (`label`, `action`, `interface`, `alias_names` jsonb). Feeds the rule→alias Graylog DSV so log events can be enriched by `rid`.
 - **OPNsenseRule**: firewall rules pulled as a read-only cache (`legacy_uuid`, action/interface/direction/protocol, src/dst net & port, `raw` jsonb).
 - **DHCPPoolRange**: DHCP pool ranges synced from the firewall (Kea/ISC) — `subnet_cidr`, `start_ip`/`end_ip`; IPs falling in a range are flagged DHCP.
+
+> **Graylog DSV** (token-protected lookup endpoints under `/api/v1/lookup/...`): a global IP→hostname/FQDN table, per-firewall `rid → alias` and `alias → members` tables (gated by `expose_dsv`), and per-cluster Proxmox `vmid → VM name`. Consumed by Graylog's "DSV File from HTTP" data adapter (key column 0, value column 1).
+
+### 6.3b pfSense firewall — `pfsense.py` (its own settings page, not shared with OPNsense)
+
+Talks to pfSense via the third-party **pfSense-pkg-RESTAPI** (pfrest.org; base `/api/v2`, `X-API-Key`).
+
+- **PfSenseFirewall**: encrypted `api_key`, `verify_tls`, sync toggles (`sync_dhcp`/`sync_arp`/`sync_aliases`/`sync_rules`), `expose_dsv`, and the compact `rules` (jsonb) cache. Scoped by `scope_subnet_ids`.
+- **PfSenseSyncedAlias**: aliases pulled back for read-only viewing (`members`, `alias_type`); also feeds the alias→members Graylog DSV.
+- pfSense NAT port-forwards are synced into the same `nat_translations` table with `source_origin = pfsense:<fw_uuid>`, so they list alongside OPNsense NAT (filterable by source).
 
 ### 6.4 Proxmox virtualization — `virt.py`
 - **ProxmoxInstance**: PVE API connection (`api_url` + `extra_api_urls` for node failover, `auth_username`/`auth_token_id`, secret via `encrypted_secrets`, `verify_tls`).
@@ -245,6 +256,11 @@ Admin key/value store (`key` PK, `value` jsonb, `updated_by`) overriding env. Ho
 ### 8.10 `background_tasks`
 Unified record for long-running jobs (`librenms.sync` / `opnsense.sync` / `dns.sync` / `phpipam.migration` / `scanner.run` …): `kind`, `status` (pending/running/succeeded/failed/cancelled), `target_*`, `progress` (0–100), `summary` (jsonb), timestamps. Surfaced at `/api/v1/tasks`.
 
+### 8.11 Certificate storage & distribution — `certificate.py`
+- **Certificate**: a managed certificate (`name`, `domains`/SAN, `source_type` (`none`/`url`/`sftp`) + `source_config` jsonb for periodic auto-fetch, `fetch_interval_seconds`, `last_fetch_at`/`last_fetch_error`).
+- **CertVersion**: each uploaded/fetched version — `fingerprint_sha256`, `subject`/`issuer`/`serial`, `not_before`/`not_after`, `cert_pem`/`chain_pem`, AES-GCM-encrypted private key (`key_enc`/`key_nonce`), `is_current`. Missing intermediate/root certs can be completed from the system trust store.
+- **CertAgent**: a per-host distribution agent — `enroll_key_hash`, `scope_cert_ids` (jsonb, deny-by-default), `device_id` (link to a jt-ipam device; name + source IP become clickable in the UI), `last_source_ip` / `recent_sources` (same-key-multi-host detection), `agent_version`, `reported` (jsonb deployment state). The pure-bash agent pulls certs over an `X-Agent-Key` and deploys them to nginx / apache / haproxy / Proxmox VE·PMG·PBS / Zimbra / … with config-test → rollback-on-failure → reload. Private keys are released only to a scoped agent over TLS, each access audited; expiry / drift raises alerts.
+
 ---
 
 ## 9. Naming & indexing conventions
@@ -262,4 +278,4 @@ Unified record for long-running jobs (`librenms.sync` / `opnsense.sync` / `dns.s
 
 - Alembic auto-generate is always reviewed manually; never applied blindly.
 - Migrations are effectively forward-only; a `downgrade()` is kept for dev.
-- Run on a staging/clean container before prod. The current head is around `0070`.
+- Run on a staging/clean container before prod. The current head is around `0080`.

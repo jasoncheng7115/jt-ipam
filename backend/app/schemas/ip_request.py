@@ -42,6 +42,7 @@ class IPRequestRead(StrictModel):
     requester_user_id: uuid.UUID
     approver_user_id: uuid.UUID | None
     subnet_id: uuid.UUID
+    subnet_cidr: str | None = None   # 端點填入（清單顯示 CIDR 而非 UUID）；不在 ORM
     requested_ip: str | None
     hostname: str | None
     description: str | None

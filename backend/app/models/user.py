@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -47,6 +48,11 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 獨立的「連線管理權限」：除 admin / 對該 IP 有寫入權者外，另可單獨授予此能力，
+    # 讓使用者對其可檢視且已啟用 SSH 的 IP 開終端機。
+    can_ssh: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false")
+    )
 
     # MFA — secret 存密文（A02）
     totp_secret_enc: Mapped[bytes | None] = mapped_column(LargeBinary)

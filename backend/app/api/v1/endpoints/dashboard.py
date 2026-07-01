@@ -191,9 +191,14 @@ async def overview(
         ).all()
         for st, cnt in status_rows:
             cnt = int(cnt or 0)
-            if st in ("online", "Online (scanner)", "Online (via LibreNMS)", "Online (LibreNMS only)"):
+            # effective_status 實際寫入值是小寫且帶來源後綴：
+            # "online" / "online (scanner)" / "online (librenms)"。一律用
+            # startswith("online") 判定（比照 librenms.recompute_effective_status），
+            # 不要硬列固定字串，否則 scanner/librenms 證據的上線會被誤歸「未知」。
+            s_norm = (st or "").strip().lower()
+            if s_norm.startswith("online"):
                 status_counts.online += cnt
-            elif st == "offline":
+            elif s_norm == "offline":
                 status_counts.offline += cnt
             else:
                 status_counts.unknown += cnt

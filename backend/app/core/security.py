@@ -102,6 +102,36 @@ def decrypt_secret(ciphertext: bytes, nonce: bytes, *, aad: bytes | None = None)
 
 
 # =============================================================================
+# Envelope encryption（信封加密）— 給「by-user 個別保管的長期憑證」用。
+#   每筆密文一把隨機 Data Encryption Key（DEK，AES-256-GCM），DEK 再用主
+#   Master Key（KEK = ENCRYPTION_KEY）包覆後一起存。KEK 輪替時只需重新包覆 DEK。
+#   KEK 不落 DB（在 /etc/jt-ipam/backend.env，0600）；DB 脫庫只拿到密文＋被包覆的 DEK。
+#   aad 應綁定上下文（owner_user_id + 欄位），避免密文跨列/跨人搬遷。
+# =============================================================================
+def envelope_encrypt(plaintext: str, *, aad: bytes) -> dict[str, str]:
+    dek = AESGCM.generate_key(bit_length=256)
+    nonce = secrets.token_bytes(12)
+    ct = AESGCM(dek).encrypt(nonce, plaintext.encode("utf-8"), aad)
+    dek_ct, dek_nonce = encrypt_secret(dek, aad=aad)   # KEK 包覆 DEK
+    return {
+        "ct": base64.b64encode(ct).decode("ascii"),
+        "n": base64.b64encode(nonce).decode("ascii"),
+        "dek": base64.b64encode(dek_ct).decode("ascii"),
+        "dn": base64.b64encode(dek_nonce).decode("ascii"),
+    }
+
+
+def envelope_decrypt(env: dict[str, str], *, aad: bytes) -> str:
+    dek = decrypt_secret(
+        base64.b64decode(env["dek"]), base64.b64decode(env["dn"]), aad=aad
+    )
+    pt = AESGCM(dek).decrypt(
+        base64.b64decode(env["n"]), base64.b64decode(env["ct"]), aad
+    )
+    return pt.decode("utf-8")
+
+
+# =============================================================================
 # API Token hashing (A07)
 # =============================================================================
 # Token 格式：jt_<env>_<32 bytes random base64url>

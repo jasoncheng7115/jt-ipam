@@ -91,6 +91,8 @@ class CertAgentCreate(StrictModel):
     enabled: bool = True
     # 此 agent 可取的 certificate id 清單(deny-by-default;空＝不可取)
     scope_cert_ids: list[uuid.UUID] = Field(default_factory=list)
+    # 對應的 jt-ipam 裝置（讓代理名稱可點去裝置詳情）；空＝未對應
+    device_id: uuid.UUID | None = None
 
 
 class CertAgentUpdate(StrictModel):
@@ -98,6 +100,7 @@ class CertAgentUpdate(StrictModel):
     description: Annotated[str | None, Field(max_length=1024)] = None
     enabled: bool | None = None
     scope_cert_ids: list[uuid.UUID] | None = None
+    device_id: uuid.UUID | None = None
 
 
 class CertAgentRead(StrictModel):
@@ -106,6 +109,10 @@ class CertAgentRead(StrictModel):
     description: str | None
     enabled: bool
     scope_cert_ids: list[uuid.UUID] | None
+    # 對應裝置（device_id）＋其名稱（顯示）；last_source_ip 解析到的 IPAddress.id（IP 欄可點）
+    device_id: uuid.UUID | None = None
+    device_name: str | None = None
+    source_ip_id: uuid.UUID | None = None
     last_seen_at: datetime | None
     last_source_ip: str | None
     # 近期（7 天）回報過的去重來源 IP；>1 表示同把 Key 被多台主機共用 → 前端警告

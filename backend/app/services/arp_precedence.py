@@ -16,9 +16,9 @@ from app.models.address import IPAddress
 from app.models.system_setting import SystemSetting
 
 ARP_KEY = "arp_precedence"
-ARP_SOURCES = ("manual", "scanner", "opnsense", "librenms", "adguard", "proxmox")
+ARP_SOURCES = ("manual", "scanner", "opnsense", "pfsense", "librenms", "adguard", "proxmox")
 # 預設：手動最優先，其次主動掃描、防火牆 ARP、LibreNMS、AdGuard、Proxmox
-DEFAULT_ARP_ORDER: list[str] = ["manual", "scanner", "opnsense", "librenms", "adguard", "proxmox"]
+DEFAULT_ARP_ORDER: list[str] = ["manual", "scanner", "opnsense", "pfsense", "librenms", "adguard", "proxmox"]
 _TTL = 60.0
 _cache: dict[str, tuple[float, list[str], list[str]]] = {}
 

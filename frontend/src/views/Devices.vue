@@ -191,17 +191,37 @@ function onRackChange() { uPickerDiagram.value = null; }
 const showUPicker = ref(false);
 const uPickerDiagram = ref<RackDiagram | null>(null);
 const uPickerLoading = ref(false);
-// U 編號 -> 佔用它的裝置名稱（顯示哪些 U 已被占用）
-const uOccupied = computed<Record<number, string>>(() => {
-  const m: Record<number, string> = {};
+// 每個 U 的左/右半占用（full 裝置占兩半）。半 U 裝置只占一半，另一半仍可放。
+const uHalf = computed<Record<number, { left: string | null; right: string | null }>>(() => {
+  const m: Record<number, { left: string | null; right: string | null }> = {};
   for (const d of uPickerDiagram.value?.devices ?? []) {
+    if (editing.value && d.device_id === editing.value.id) continue;  // 編輯中的自己不算占用
+    const side = d.rack_side ?? "full";
     for (let u = d.u_position; u < d.u_position + d.u_size; u++) {
-      if (editing.value && d.device_id === editing.value.id) continue;  // 編輯中的自己不算占用
-      m[u] = d.name;
+      const cell = (m[u] ??= { left: null, right: null });
+      if (side === "left") cell.left = d.name;
+      else if (side === "right") cell.right = d.name;
+      else { cell.left = d.name; cell.right = d.name; }
     }
   }
   return m;
 });
+// 此 U 對「目前要放的占寬」是否可選（需要的半邊要空）
+function uPickable(u: number): boolean {
+  const cell = uHalf.value[u];
+  if (!cell) return true;
+  const side = form.value.rack_side;
+  if (side === "left") return !cell.left;
+  if (side === "right") return !cell.right;
+  return !cell.left && !cell.right;
+}
+// 此 U 的占用顯示文字（半 U 分左右顯示）
+function uCellText(u: number): string {
+  const cell = uHalf.value[u];
+  if (!cell || (!cell.left && !cell.right)) return t("devices.u_free");
+  if (cell.left && cell.left === cell.right) return cell.left;            // full
+  return `L：${cell.left || t("devices.u_free")}　R：${cell.right || t("devices.u_free")}`;
+}
 const uRows = computed(() => {
   const n = uPickerDiagram.value?.u_height ?? 0;
   return Array.from({ length: n }, (_, i) => n - i);   // 由上而下 = 大U在上
@@ -522,6 +542,8 @@ onMounted(async () => {
             <n-input-number v-model:value="form.u_size" :min="1" :max="99" clearable
                             :disabled="!form.rack_id" style="width: 100%" />
           </n-form-item>
+        </div>
+        <div class="dev-row">
           <n-form-item :label="t('devices.rack_face')">
             <n-select v-model:value="form.rack_face" :options="rackFaceOpts" clearable
                       :disabled="!form.rack_id" :placeholder="t('devices.rack_face_front')"
@@ -560,10 +582,10 @@ onMounted(async () => {
         <p style="font-size:12px; opacity:.65; margin:0 0 8px">{{ t("devices.pick_u_hint") }}</p>
         <div class="upick-rack">
           <div v-for="u in uRows" :key="u" class="upick-row"
-               :class="{ occupied: uOccupied[u], cur: form.u_position === u }"
-               @click="!uOccupied[u] && pickU(u)">
+               :class="{ occupied: !uPickable(u), cur: form.u_position === u }"
+               @click="uPickable(u) && pickU(u)">
             <span class="upick-u">{{ u }}</span>
-            <span class="upick-body">{{ uOccupied[u] || t("devices.u_free") }}</span>
+            <span class="upick-body">{{ uCellText(u) }}</span>
           </div>
         </div>
       </n-spin>

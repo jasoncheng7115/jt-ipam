@@ -93,7 +93,9 @@ class VirtualMachine(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("cluster_id", "name", name="vm_cluster_name_uq"),
+        # Proxmox 同一叢集內 VM 名稱可重複（不同 VMID）→ 唯一鍵用 (cluster, vmid) 而非 (cluster, name)。
+        # issue #8：名稱相同但 VMID 不同的 VM 原本會撞 vm_cluster_name_uq 而無法匯入。
+        UniqueConstraint("cluster_id", "legacy_vmid", name="vm_cluster_vmid_uq"),
         CheckConstraint(
             "status IN ('running','stopped','paused','migrating','unknown')",
             name="ck_virtual_machines_status_valid",

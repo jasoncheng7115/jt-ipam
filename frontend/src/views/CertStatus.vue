@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { useEntityLinks } from "@/composables/useEntityLinks";
 import {
   NCard, NDataTable, NSpace, NButton, NIcon, NTag, NInput, NTooltip,
   useMessage, type DataTableColumns,
@@ -16,6 +18,8 @@ import { getCertAgentStatus, type CertStatusDeployment } from "@/api/certificate
 
 const { t } = useI18n();
 const msg = useMessage();
+const router = useRouter();
+const links = useEntityLinks(router);
 const loading = ref(false);
 const filter = ref("");
 const pg = useTablePagination();
@@ -23,6 +27,9 @@ const pg = useTablePagination();
 // 一個代理一列；它部署的多個憑證 / 服務彙整在欄位內（不再每個 deployment 各一列）。
 interface Row {
   agent: string;
+  device_id: string | null;
+  device_name: string | null;
+  source_ip_id: string | null;
   last_seen_at: string | null;
   last_source_ip: string | null;
   recent_source_ips: string[];
@@ -59,7 +66,8 @@ async function load() {
         }
       }
       return {
-        agent: a.agent, last_seen_at: a.last_seen_at, last_source_ip: a.last_source_ip,
+        agent: a.agent, device_id: a.device_id, device_name: a.device_name, source_ip_id: a.source_ip_id,
+        last_seen_at: a.last_seen_at, last_source_ip: a.last_source_ip,
         recent_source_ips: a.recent_source_ips ?? [], multi_source_recent: a.multi_source_recent ?? false,
         agent_version: a.agent_version, server_agent_version: a.server_agent_version,
         certs, profiles, status, not_after, not_before, days_remaining: days,
@@ -119,11 +127,20 @@ const pickerItems = computed(() => [
 ]);
 
 const colsAll = computed<DataTableColumns<Row>>(() => autoSort([
-  { title: t("certStatus.col_agent"), key: "agent", minWidth: 130 },
+  { title: t("certStatus.col_agent"), key: "agent", minWidth: 130,
+    // 有對應裝置→代理名稱可點去裝置詳情
+    render: (r) => r.device_id
+      ? h(NTooltip, null, {
+          trigger: () => links.device(r.device_id, r.agent),
+          default: () => t("certs.go_device", { name: r.device_name ?? r.agent }),
+        })
+      : r.agent },
   { title: t("cols.source_ip"), key: "source_ip", minWidth: 150,
     render: (r) => r.last_source_ip
       ? h("div", { style: "display:flex;align-items:center;gap:4px;flex-wrap:wrap" }, [
-          h("span", { style: "font-family:monospace" }, r.last_source_ip),
+          r.source_ip_id
+            ? h("span", { style: "font-family:monospace" }, [links.ipById(r.source_ip_id, r.last_source_ip)])
+            : h("span", { style: "font-family:monospace" }, r.last_source_ip),
           r.multi_source_recent
             ? h(NTooltip, null, {
                 trigger: () => h(NTag, { size: "tiny", type: "warning", round: true, bordered: false },

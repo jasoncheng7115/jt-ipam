@@ -40,6 +40,7 @@ class UserRead(StrictModel):
     auth_provider: str
     is_active: bool
     is_admin: bool
+    can_ssh: bool = False
     last_login_at: datetime | None
     last_login_ip: str | None
     failed_login_count: int
@@ -62,6 +63,7 @@ class UserCreate(StrictModel):
     display_name: str | None = None
     password: str
     is_admin: bool = False
+    can_ssh: bool = False
 
 
 class UserUpdate(StrictModel):
@@ -70,6 +72,7 @@ class UserUpdate(StrictModel):
     display_name: str | None = None
     is_active: bool | None = None
     is_admin: bool | None = None
+    can_ssh: bool | None = None
     password: str | None = None
     unlock: bool = False    # 設 true → locked_until=None, failed_login_count=0
 
@@ -137,6 +140,7 @@ async def create_user(
         auth_provider="local",
         is_active=True,
         is_admin=payload.is_admin,
+        can_ssh=payload.can_ssh,
     )
     session.add(user)
     try:

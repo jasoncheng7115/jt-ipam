@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 20
 
+    # ── RDP 連線管理（選用）──
+    # 同時在線 RDP session 上限；每條皆在本行程做 bitmap 解碼+PNG 編碼（Python 單核/GIL），
+    # 過多會互相拖慢，故設上限。0 = 不限。
+    rdp_max_sessions: int = 5
+
     # ── Redis ──
     redis_host: str = "redis"
     redis_port: int = 6379
@@ -195,7 +200,7 @@ class Settings(BaseSettings):
     ollama_enabled: bool = False
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_embedding_model: str = "qwen3-embedding:8b"
-    ollama_chat_model: str = "gpt-oss:120b"
+    ollama_chat_model: str = "gemma4:26b"
     ollama_timeout: float = 90.0  # 大型模型 + 工具結果上下文時 30s 太短會 ReadTimeout
     embedding_dim: int = 768
 

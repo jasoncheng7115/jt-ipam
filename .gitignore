@@ -98,3 +98,7 @@ TODO.local.md
 
 # 原始擷圖(含瀏覽器網址列等)只留本機；公開版用 docs/shots/
 images/
+
+# Docker Compose deploy: generated TLS certs
+deploy/docker/certs/
+zap-reports/

@@ -77,8 +77,9 @@ def _detect_query_kind(q: str) -> str:
         pass
     if _MAC_RE.match(q) or _MAC_FRAGMENT_RE.match(q):
         return "mac"
-    if q.isdigit() and 1 <= int(q) <= 4094:
-        return "vlan_number"
+    if q.isdigit() and int(q) >= 1:
+        # 純數字可能是 VLAN 編號（1–4094）或 Proxmox VMID（任意正整數）→ 兩者都查
+        return "number"
     return "free"
 
 
@@ -210,6 +211,41 @@ async def _search_vlan_number(
         )
         for r in rows
     ]
+
+
+async def _search_vmid(
+    session: AsyncSession, *, user: User, vmid: int, limit: int
+) -> list[SearchHit]:
+    """以 Proxmox VMID 找 VM/CT，回傳其主 IP（導到 IP 詳情，可開 PVE 主控台）。"""
+    from app.models.address import IPAddress
+    from app.models.virt import VirtualMachine
+    rows = list((await session.execute(
+        select(VirtualMachine).where(VirtualMachine.legacy_vmid == vmid).limit(limit)
+    )).scalars().all())
+    if not rows:
+        return []
+    ip_ids = [vm.primary_ip_id for vm in rows if vm.primary_ip_id]
+    if not ip_ids:
+        return []
+    ips = {ip.id: ip for ip in (await session.execute(
+        select(IPAddress).where(IPAddress.id.in_(ip_ids))
+    )).scalars().all()}
+    visible = set(await filter_visible(
+        session, user=user, object_type="subnet",
+        object_ids=[ip.subnet_id for ip in ips.values()], required="read",
+    ))
+    hits: list[SearchHit] = []
+    for vm in rows:
+        ip = ips.get(vm.primary_ip_id) if vm.primary_ip_id else None
+        if ip is None or ip.subnet_id not in visible:
+            continue
+        kindlabel = "CT" if vm.kind == "ct" else "VM"
+        # type=vm → 前端歸「虛擬化」群組、以 VM 名稱為主標（點擊導到該 IP 詳情，可開主控台）
+        hits.append(SearchHit(
+            type="vm", id=str(ip.id), label=vm.name,
+            sublabel=f"{kindlabel} · VMID {vmid} · {ip.ip}", score=0.99,
+        ))
+    return hits
 
 
 async def _search_text_trgm(
@@ -610,9 +646,11 @@ async def search(
                 ))
     elif kind == "mac":
         hits.extend(await _search_mac(session, user=user, mac=q, limit=limit_per_type))
-    elif kind == "vlan_number":
-        hits.extend(await _search_vlan_number(session, _user=user, number=int(q),
-                                              limit=limit_per_type))
+    elif kind == "number":
+        n = int(q)
+        if 1 <= n <= 4094:
+            hits.extend(await _search_vlan_number(session, _user=user, number=n, limit=limit_per_type))
+        hits.extend(await _search_vmid(session, user=user, vmid=n, limit=limit_per_type))
 
     # 一律補上 trigram 模糊搜尋（讓使用者打 IP 也能撞到 hostname 等）
     hits.extend(await _search_text_trgm(session, user=user, q=q, limit=limit_per_type))

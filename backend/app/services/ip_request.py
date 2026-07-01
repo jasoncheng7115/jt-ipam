@@ -62,17 +62,27 @@ async def _notify_requester(
     severity: str,
     title: str,
     body: str | None = None,
+    event: str = "ip_request.approved",
 ) -> None:
-    await push_notification(
-        session,
-        user_id=request.requester_user_id,
-        severity=severity,
-        title=title,
-        body=body,
-        link=f"/requests/{request.id}",
-        object_type="ip_request",
-        object_id=request.id,
-    )
+    from app.services.system_config import get_notification_matrix
+    ch = (await get_notification_matrix(session)).get(event, {"in_app": True, "email": True})
+    if ch.get("in_app"):
+        await push_notification(
+            session,
+            user_id=request.requester_user_id,
+            severity=severity,
+            title=title,
+            body=body,
+            link=f"/requests/{request.id}",
+            object_type="ip_request",
+            object_id=request.id,
+        )
+    if ch.get("email"):
+        from app.models.user import User as _U
+        from app.services.notification import email_users
+        u = await session.get(_U, request.requester_user_id)
+        if u and u.email:
+            await email_users(session, [u.email], f"[jt-ipam] {title}", body or title)
 
 
 async def _deliver_to_approvers(
@@ -81,7 +91,6 @@ async def _deliver_to_approvers(
 ) -> None:
     """把一則通知送給一組審核人：站內鈴鐺 + （若 Email 管道啟用）寄信。Best-effort。"""
     import logging
-
     from html import escape as _esc
 
     from app.core.config import get_settings
@@ -91,14 +100,22 @@ async def _deliver_to_approvers(
     log = logging.getLogger("ip_request")
     if not approvers:
         return
+    from app.services.system_config import get_notification_matrix
+    mx = (await get_notification_matrix(session)).get(
+        "ip_request.created", {"in_app": True, "email": True})
+    if not (mx.get("in_app") or mx.get("email")):
+        return
     link = f"/requests/{request.id}"  # 站內鈴鐺用相對路徑（前端 router 解析）
     # Email 用絕對網址：未登入點了會先被導去登入頁，登入成功再回到此審核頁（router next 機制）
     abs_link = str(get_settings().app_public_url).rstrip("/") + link
-    for u in approvers:
-        await push_notification(
-            session, user_id=u.id, severity="info", title=title, body=body,
-            link=link, object_type="ip_request", object_id=request.id,
-        )
+    if mx.get("in_app"):
+        for u in approvers:
+            await push_notification(
+                session, user_id=u.id, severity="info", title=title, body=body,
+                link=link, object_type="ip_request", object_id=request.id,
+            )
+    if not mx.get("email"):
+        return
     try:
         ch = await get_notification_channels(session)
     except Exception:
@@ -129,7 +146,7 @@ async def _deliver_to_approvers(
                 ch, to=u.email, subject=f"[jt-ipam] {title}：{subnet.cidr}",
                 body_text=text, body_html=body_html,
             )
-        except (EmailNotConfigured, Exception) as exc:  # noqa: BLE001 — best-effort
+        except (EmailNotConfigured, Exception) as exc:
             log.warning("approver email to %s failed: %s", u.email, exc)
 
 
@@ -268,6 +285,17 @@ async def approve_request(
     except (IPAlreadyExists, IPNotInSubnet, SubnetFull) as exc:
         raise IPRequestError(f"Allocation failed: {exc}") from exc
 
+    # 把申請填的資料寫進配發的 IP：
+    #  - 主機名稱走 manual 觀測（最高優先序），否則 create_ip 直接設的欄位會被下次同步 recompute 蓋掉
+    #  - 用途（IPAddress 無對應欄）寫進備註，保留申請脈絡
+    if request.hostname and request.hostname.strip():
+        from app.services.hostname import apply_observation
+        await apply_observation(
+            session, ip=ip_obj, source="manual", hostname=request.hostname.strip(),
+        )
+    if request.purpose and request.purpose.strip():
+        ip_obj.note = f"用途：{request.purpose.strip()}"
+
     now = datetime.now(UTC)
     request.status = "fulfilled"
     request.approver_user_id = approver.id
@@ -296,8 +324,9 @@ async def approve_request(
         session,
         request=request,
         severity="success",
-        title="IP request approved",
-        body=f"Allocated {str(ip_obj.ip).split('/')[0]} for {request.hostname or '(no hostname)'}",
+        title="IP 申請已核准",
+        body=f"已配發 {str(ip_obj.ip).split('/')[0]} 給 {request.hostname or '（無主機名稱）'}",
+        event="ip_request.approved",
     )
     return request
 
@@ -387,8 +416,9 @@ async def reject_request(
         session,
         request=request,
         severity="warning",
-        title="IP request rejected",
+        title="IP 申請已拒絕",
         body=reason,
+        event="ip_request.rejected",
     )
     return request
 

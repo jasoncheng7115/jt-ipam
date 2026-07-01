@@ -16,6 +16,8 @@ export interface UserMe {
   has_visibility?: boolean;
   has_global_read?: boolean;
   can_edit?: boolean;
+  ai_enabled?: boolean;
+  can_ssh?: boolean;
   last_login_at: string | null;
   created_at: string;
 }
@@ -103,11 +105,26 @@ export interface IPAddress {
   switch_port_confident: boolean | null;
   discovery_source: string;
   in_dhcp_lease?: boolean;
+  is_dhcp_server?: boolean;     // 手動標記為 DHCP 伺服器
+  dhcp_server_auto?: boolean;   // 自動：對應到已整合防火牆 IP
+  is_gateway?: boolean;         // 所屬子網路閘道
+  in_dhcp_range?: boolean;      // 落在 DHCP pool 範圍內
   last_seen_scanner: string | null;
   last_seen_librenms: string | null;
   last_seen_dns: string | null;
   effective_status: string | null;
   subnet_scan_enabled: boolean | null;
+  ssh_enabled?: boolean;
+  ssh_available?: boolean;
+  rdp_enabled?: boolean;
+  rdp_available?: boolean;
+  vnc_enabled?: boolean;
+  vnc_available?: boolean;
+  novnc_enabled?: boolean;
+  novnc_available?: boolean;
+  bmc_enabled?: boolean;
+  bmc_available?: boolean;
+  pve?: { kind: "vm" | "ct"; node: string; vmid: number; cluster: string | null } | null;
   mac_vendor: string | null;
   device_name: string | null;
   created_at: string;

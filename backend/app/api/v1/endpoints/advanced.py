@@ -76,6 +76,26 @@ async def _patch_resource(
     return obj
 
 
+async def _delete_resource(
+    session: AsyncSession,
+    *,
+    model: type,
+    obj_id: uuid.UUID,
+    object_type: str,
+    user: CurrentUser,
+    request: Request,
+) -> None:
+    """進階資源通用 DELETE：找不到回 404、寫稽核、commit。"""
+    obj = await session.get(model, obj_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    label = getattr(obj, "name", None) or getattr(obj, "ssid", None) or str(obj.id)
+    await _audit(session, user=user, request=request, object_type=object_type,
+                 object_id=str(obj.id), action="delete", diff={"name": label})
+    await session.delete(obj)
+    await session.commit()
+
+
 async def _audit(
     session: AsyncSession,
     *,
@@ -649,6 +669,70 @@ async def list_contact_groups(
     )
 
 
+class ContactGroupWrite(StrictModel):
+    name: Annotated[str, Field(min_length=1, max_length=128)]
+    description: Annotated[str | None, Field(max_length=1024)] = None
+    parent_id: uuid.UUID | None = None
+
+
+@router.post("/contact-groups", response_model=ContactGroupRead, status_code=201,
+             dependencies=[Depends(require_admin)])
+async def create_contact_group(
+    payload: ContactGroupWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContactGroupRead:
+    obj = ContactGroup(**payload.model_dump())
+    session.add(obj)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Conflict") from exc
+    await _audit(session, user=user, request=request, object_type="contact_group",
+                 object_id=str(obj.id), action="create",
+                 diff=payload.model_dump(mode="json"))
+    await session.commit()
+    await session.refresh(obj)
+    return ContactGroupRead.model_validate(obj)
+
+
+@router.patch("/contact-groups/{g_id}", response_model=ContactGroupRead,
+              dependencies=[Depends(require_admin)])
+async def update_contact_group(
+    g_id: uuid.UUID, payload: ContactGroupWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContactGroupRead:
+    obj = await session.get(ContactGroup, g_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, detail="Conflict") from exc
+    await _audit(session, user=user, request=request, object_type="contact_group",
+                 object_id=str(obj.id), action="update",
+                 diff=payload.model_dump(mode="json", exclude_unset=True))
+    await session.commit()
+    await session.refresh(obj)
+    return ContactGroupRead.model_validate(obj)
+
+
+@router.delete("/contact-groups/{g_id}", status_code=204,
+               dependencies=[Depends(require_admin)])
+async def delete_contact_group(
+    g_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    obj = await session.get(ContactGroup, g_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    await _audit(session, user=user, request=request, object_type="contact_group",
+                 object_id=str(obj.id), action="delete", diff={"name": obj.name})
+    await session.delete(obj)
+    await session.commit()
+
+
 @router.get("/providers", response_model=Paginated[ProviderRead])
 async def list_providers(
     _user: CurrentUser,
@@ -942,3 +1026,40 @@ async def update_wlink(
     obj = await _patch_resource(session, model=WirelessLink, obj_id=l_id,
                                 payload=payload, object_type="wireless_link", user=user, request=request)
     return WirelessLinkRead.model_validate(obj)
+
+
+# 補上原本缺的 DELETE（前端「進階」各資源都有刪除鈕，缺端點會回 405 Method Not Allowed）
+@router.delete("/providers/{p_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_provider(
+    p_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    await _delete_resource(session, model=Provider, obj_id=p_id,
+                           object_type="provider", user=user, request=request)
+
+
+@router.delete("/circuits/{c_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_circuit(
+    c_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    await _delete_resource(session, model=Circuit, obj_id=c_id,
+                           object_type="circuit", user=user, request=request)
+
+
+@router.delete("/wireless/ssids/{s_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_ssid(
+    s_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    await _delete_resource(session, model=WirelessSSID, obj_id=s_id,
+                           object_type="wireless_ssid", user=user, request=request)
+
+
+@router.delete("/wireless/links/{l_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_wlink(
+    l_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    await _delete_resource(session, model=WirelessLink, obj_id=l_id,
+                           object_type="wireless_link", user=user, request=request)

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { useEntityLinks } from "@/composables/useEntityLinks";
+import { listDevices } from "@/api/basic";
 import {
   NCard, NTabs, NTabPane, NDataTable, NSpace, NButton, NIcon, NTag, NModal, NForm,
   NFormItem, NInput, NInputNumber, NDynamicTags, NSelect, NPopconfirm, NAlert,
@@ -29,10 +32,22 @@ import {
 
 const { t } = useI18n();
 const msg = useMessage();
+const router = useRouter();
+const links = useEntityLinks(router);
 
 const certs = ref<Certificate[]>([]);
 const agents = ref<CertAgent[]>([]);
 const loading = ref(false);
+
+// 對應裝置下拉（編輯代理用）
+const deviceOptions = ref<{ label: string; value: string }[]>([]);
+async function loadDeviceOptions() {
+  try {
+    const r = await listDevices({ page: 1, pageSize: 500 });
+    deviceOptions.value = r.items.map((d) => ({
+      label: d.ip ? `${d.name}（${d.ip}）` : d.name, value: d.id }));
+  } catch { /* silent */ }
+}
 
 // ── 篩選 ──
 const certFilter = ref("");
@@ -69,7 +84,7 @@ async function loadServerVersion() {
   try { serverAgentVersion.value = (await getServerAgentVersion()).version; }
   catch { /* 非致命 */ }
 }
-onMounted(() => { loadCerts(); loadAgents(); loadServerVersion(); });
+onMounted(() => { loadCerts(); loadAgents(); loadServerVersion(); loadDeviceOptions(); });
 
 // 安裝說明：支援的 OS / 發行版（醒目標籤呈現）
 const SUPPORTED_OS = [
@@ -81,7 +96,8 @@ const SUPPORTED_OS = [
 const PROFILE_OPTIONS = [
   "nginx", "apache", "caddy", "traefik", "lighttpd", "haproxy", "zoraxy", "jetty",
   "postfix", "dovecot", "exim4", "mosquitto", "cockpit", "webmin", "wazuh-dashboard",
-  "jitsi", "coturn", "pve", "pmg", "pbs", "pdm", "zimbra",
+  "pve", "pmg", "pbs", "pdm", "zimbra",
+  "files",
 ];
 const dryRunCmd = `${SUDO} bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config --dry-run`;
 const runCmd = `${SUDO} bash /usr/local/lib/jt-ipam-cert-agent/jt_ipam_cert_agent.sh --config /etc/jt-ipam-cert-agent/config`;
@@ -122,6 +138,7 @@ function profileFiles(profile: string, cert: string): { kind: string; path: stri
     case "jitsi": return [{ kind: "cert+chain (docker restart jitsi web)", path: "/root/.jitsi-meet-cfg/web/keys/cert.crt" }, { kind: "key", path: "/root/.jitsi-meet-cfg/web/keys/cert.key" }];
     case "coturn": return [{ kind: "cert+chain (root:65534 644)", path: "/etc/coturn/certs/turn.crt" }, { kind: "key (root:65534 640)", path: "/etc/coturn/certs/turn.key" }];
     case "zimbra": return [{ kind: "zmcertmgr deploycrt comm + zmcontrol restart", path: "/opt/zimbra/ssl/zimbra/commercial/commercial.{key,crt}" }];
+    case "files": return [{ kind: "cert+chain（僅換檔，不 reload）", path: `${b}/${cert}.fullchain.pem` }, { kind: "key（僅換檔，不 reload）", path: `${b}/${cert}.key` }];
     default: return [];
   }
 }
@@ -443,11 +460,13 @@ async function toggleAgent(a: CertAgent) {
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 const showEditAgent = ref(false);
-const editForm = ref({ id: "", name: "", description: "", scope_cert_ids: [] as string[], enabled: true });
+const editForm = ref({ id: "", name: "", description: "", scope_cert_ids: [] as string[], enabled: true,
+  device_id: null as string | null });
 function editAgent(a: CertAgent) {
   editForm.value = {
     id: a.id, name: a.name, description: a.description ?? "",
     scope_cert_ids: (a.scope_cert_ids ?? []).map(String), enabled: a.enabled,
+    device_id: a.device_id,
   };
   showEditAgent.value = true;
 }
@@ -457,6 +476,7 @@ async function saveEditAgent() {
     await updateCertAgent(editForm.value.id, {
       name: editForm.value.name.trim(), description: editForm.value.description || null,
       scope_cert_ids: editForm.value.scope_cert_ids, enabled: editForm.value.enabled,
+      device_id: editForm.value.device_id,
     });
     showEditAgent.value = false; await loadAgents(); msg.success(t("common.saved"));
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
@@ -615,7 +635,14 @@ const agentExportRows = computed(() => agentsFiltered.value.map((a) => {
   };
 }));
 const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
-  { title: t("cols.name"), key: "name", minWidth: 120, ellipsis: { tooltip: true } },
+  { title: t("cols.name"), key: "name", minWidth: 120, ellipsis: { tooltip: true },
+    // 有對應裝置時，名稱可點去裝置詳情；未對應則純文字
+    render: (a) => a.device_id
+      ? h(NTooltip, null, {
+          trigger: () => links.device(a.device_id, a.name),
+          default: () => t("certs.go_device", { name: a.device_name ?? a.name }),
+        })
+      : a.name },
   { title: t("cols.enabled"), key: "enabled", width: 70,
     sorter: (a, b) => Number(a.enabled) - Number(b.enabled),
     render: (a) => h(NSwitch, { value: a.enabled, size: "small", onUpdateValue: () => toggleAgent(a) }) },
@@ -651,7 +678,10 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
   { title: t("cols.source_ip"), key: "source_ip", minWidth: 150,
     render: (a) => a.last_source_ip
       ? h("div", { style: "display:flex;align-items:center;gap:4px;flex-wrap:wrap" }, [
-          h("span", { style: "font-family:monospace" }, a.last_source_ip),
+          // 來源 IP 若對到 IPAM 的 IPAddress → 可點進該位址詳情；否則純文字
+          a.source_ip_id
+            ? h("span", { style: "font-family:monospace" }, [links.ipById(a.source_ip_id, a.last_source_ip)])
+            : h("span", { style: "font-family:monospace" }, a.last_source_ip),
           a.multi_source_recent
             ? h(NTooltip, null, {
                 trigger: () => h(NTag, { size: "tiny", type: "warning", round: true, bordered: false },
@@ -825,19 +855,25 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
           </n-dropdown>
         </n-space>
       </n-space>
-      <div class="cert-ver-detail">
-        <div><b>{{ t("certFiles.domains") }}：</b>{{ (v.domains ?? []).join("、") || "—" }}</div>
-        <div><b>{{ t("certFiles.subject") }}：</b>{{ v.subject || "—" }}</div>
-        <div><b>{{ t("certFiles.issuer") }}：</b>{{ v.issuer || "—" }}</div>
-        <div><b>{{ t("certFiles.serial") }}：</b><code>{{ v.serial || "—" }}</code></div>
-        <div><b>{{ t("certFiles.validity") }}：</b>{{ v.not_before ? fmtDateTime(v.not_before).slice(0, 10) : "—" }} ~ {{ fmtDateTime(v.not_after).slice(0, 10) }}</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <b style="flex:0 0 auto">{{ t("certFiles.fingerprint") }}：</b>
-          <code style="word-break:break-all;flex:1">{{ v.fingerprint_sha256 }}</code>
+      <dl class="cert-ver-detail">
+        <dt>{{ t("certFiles.domains") }}</dt>
+        <dd>{{ (v.domains ?? []).join("、") || "—" }}</dd>
+        <dt>{{ t("certFiles.subject") }}</dt>
+        <dd>{{ v.subject || "—" }}</dd>
+        <dt>{{ t("certFiles.issuer") }}</dt>
+        <dd>{{ v.issuer || "—" }}</dd>
+        <dt>{{ t("certFiles.serial") }}</dt>
+        <dd><code>{{ v.serial || "—" }}</code></dd>
+        <dt>{{ t("certFiles.validity") }}</dt>
+        <dd>{{ v.not_before ? fmtDateTime(v.not_before).slice(0, 10) : "—" }} ～ {{ fmtDateTime(v.not_after).slice(0, 10) }}</dd>
+        <dt>{{ t("certFiles.fingerprint") }}</dt>
+        <dd class="fp">
+          <code>{{ v.fingerprint_sha256 }}</code>
           <n-button size="tiny" text @click="copy(v.fingerprint_sha256)"><template #icon><n-icon :component="CopyIcon" /></template></n-button>
-        </div>
-        <div><b>{{ t("certFiles.uploaded_at") }}：</b>{{ fmtDateTime(v.created_at) }}</div>
-      </div>
+        </dd>
+        <dt>{{ t("certFiles.uploaded_at") }}</dt>
+        <dd>{{ fmtDateTime(v.created_at) }}</dd>
+      </dl>
     </div>
   </n-modal>
 
@@ -1042,6 +1078,13 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
         <n-select v-model:value="editForm.scope_cert_ids" multiple filterable :options="editCertOptions"
                   :placeholder="t('certs.scope_hint')" />
       </n-form-item>
+      <n-form-item :label="t('certs.device')">
+        <div style="width:100%">
+          <n-select v-model:value="editForm.device_id" filterable clearable :options="deviceOptions"
+                    :placeholder="t('certs.device_hint')" />
+          <div style="margin-top:4px;font-size:12px;color:#94a3b8;line-height:1.5">{{ t("certs.device_help") }}</div>
+        </div>
+      </n-form-item>
       <n-form-item :label="t('cols.enabled')">
         <n-switch v-model:value="editForm.enabled" />
       </n-form-item>
@@ -1154,8 +1197,9 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     <div class="help-note" style="margin:0 0 10px">{{ t("certGen.scope_hint") }}</div>
     <n-form-item :label="t('certGen.services')" :show-feedback="false">
       <n-checkbox-group v-model:value="genProfiles" style="width:100%">
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px 10px">
-          <n-checkbox v-for="p in PROFILE_OPTIONS" :key="p" :value="p" :label="p" />
+        <div class="gen-svc-grid">
+          <n-checkbox v-for="p in PROFILE_OPTIONS" :key="p" :value="p"
+                      :label="p === 'files' ? t('certGen.files_only') : p" />
         </div>
       </n-checkbox-group>
     </n-form-item>
@@ -1262,7 +1306,14 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 }
 .help-subtle { font-size: 12px; opacity: .7; }
 .help-note { font-size: 12px; opacity: .68; line-height: 1.6; margin-top: 8px; }
-.cert-ver-detail { font-size: 12px; line-height: 1.75; opacity: .9; }
-.cert-ver-detail b { opacity: .55; font-weight: 600; }
-.cert-ver-detail code { font-size: 11px; }
+/* 憑證版本詳細資訊：兩欄對齊（標籤欄 + 值欄），值整齊靠左對齊 */
+.cert-ver-detail { display: grid; grid-template-columns: max-content 1fr; column-gap: 16px; row-gap: 7px; margin: 0; font-size: 12px; align-items: baseline; }
+.cert-ver-detail dt { opacity: .5; font-weight: 600; white-space: nowrap; }
+.cert-ver-detail dd { margin: 0; opacity: .92; word-break: break-word; }
+.cert-ver-detail code { font-size: 11px; font-family: var(--n-font-family-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace); }
+.cert-ver-detail dd.fp { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cert-ver-detail dd.fp code { word-break: break-all; flex: 1; }
+/* 服務多選格：欄寬足夠容下最長標籤（wazuh-dashboard），每項不換行 */
+.gen-svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px 10px; }
+.gen-svc-grid :deep(.n-checkbox__label) { white-space: nowrap; }
 </style>

@@ -135,6 +135,9 @@ export interface LLMConfig {
   embedding_model: string;
   chat_model: string;
   timeout: number;
+  num_ctx?: number | null;
+  mcp_external_enabled: boolean;
+  mcp_api_key_set: boolean;
 }
 
 export interface LLMConfigPatch {
@@ -143,6 +146,8 @@ export interface LLMConfigPatch {
   embedding_model?: string;
   chat_model?: string;
   timeout?: number;
+  num_ctx?: number | null;
+  mcp_external_enabled?: boolean;
 }
 
 export async function getLLMConfig(): Promise<LLMConfig> {
@@ -153,6 +158,17 @@ export async function getLLMConfig(): Promise<LLMConfig> {
 export async function patchLLMConfig(payload: LLMConfigPatch): Promise<LLMConfig> {
   const { data } = await apiClient.patch<LLMConfig>("/api/v1/system/llm", payload);
   return data;
+}
+
+// 對外 MCP 金鑰（唯讀）：檢視目前明文 / 重新產生
+export async function revealMcpKey(): Promise<string | null> {
+  const { data } = await apiClient.get<{ api_key: string | null }>("/api/v1/system/llm/mcp-key");
+  return data.api_key;
+}
+
+export async function rotateMcpKey(): Promise<string> {
+  const { data } = await apiClient.post<{ api_key: string }>("/api/v1/system/llm/mcp-key/rotate");
+  return data.api_key;
 }
 
 export interface OllamaModel {
@@ -174,6 +190,14 @@ export interface VersionInfo {
   current: string;
   python: string;
   packages: Record<string, string | null>;
+  frontend?: Record<string, string | null>;
+  host?: {
+    os: string | null;
+    kernel: string | null;
+    nginx: string | null;
+    node: string | null;
+    postgres: string | null;
+  };
 }
 
 export interface LatestVersion {
@@ -191,5 +215,27 @@ export async function getVersionInfo(): Promise<VersionInfo> {
 
 export async function checkLatestVersion(): Promise<LatestVersion> {
   const { data } = await apiClient.get<LatestVersion>("/api/v1/system/version/check-latest");
+  return data;
+}
+
+// 連線管理資安設定（目前：RDP 控制端貼上文字到被控端）
+export interface ConsoleSecurity { rdp_clipboard_paste: boolean }
+export async function getConsoleSecurity(): Promise<ConsoleSecurity> {
+  const { data } = await apiClient.get<ConsoleSecurity>("/api/v1/system/console-security");
+  return data;
+}
+export async function setConsoleSecurity(p: ConsoleSecurity): Promise<ConsoleSecurity> {
+  const { data } = await apiClient.put<ConsoleSecurity>("/api/v1/system/console-security", p);
+  return data;
+}
+
+// 介面顯示設定（系統層；目前：異動記錄淡化天數）
+export interface UiDisplay { change_log_dim_days: number }
+export async function getUiDisplay(): Promise<UiDisplay> {
+  const { data } = await apiClient.get<UiDisplay>("/api/v1/system/ui-display");
+  return data;
+}
+export async function setUiDisplay(p: UiDisplay): Promise<UiDisplay> {
+  const { data } = await apiClient.put<UiDisplay>("/api/v1/system/ui-display", p);
   return data;
 }

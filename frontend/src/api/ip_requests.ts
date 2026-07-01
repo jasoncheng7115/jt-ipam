@@ -7,6 +7,7 @@ export interface IPRequest {
   requester_user_id: string;
   approver_user_id: string | null;
   subnet_id: string;
+  subnet_cidr?: string | null;
   requested_ip: string | null;
   hostname: string | null;
   description: string | null;

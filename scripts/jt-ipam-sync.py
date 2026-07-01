@@ -35,11 +35,13 @@ async def _run() -> int:
     from app.models.dns import DNSServer
     from app.models.firewall import OPNsenseFirewall
     from app.models.librenms import LibreNMSInstance
+    from app.models.pfsense import PfSenseFirewall
     from app.models.virt import ProxmoxInstance
     from app.models.wazuh import WazuhInstance
     from app.services import adguard as adguard_svc
     from app.services import librenms as librenms_svc
     from app.services import opnsense_firewall as fw_svc
+    from app.services import pfsense as pfsense_svc
     from app.services import proxmox as proxmox_svc
     from app.services import wazuh as wazuh_svc
     from app.services.dns.factory import get_adapter as _dns_adapter  # noqa: F401
@@ -71,6 +73,28 @@ async def _run() -> int:
                 fw.last_error = str(exc)
                 await session.commit()
                 log.error("opnsense %s sync failed: %s", name, exc)
+                failed += 1
+
+        # ── pfSense ──
+        pfws = (
+            await session.execute(
+                select(PfSenseFirewall).where(PfSenseFirewall.enabled.is_(True))
+            )
+        ).scalars().all()
+        for fw in pfws:
+            interval = timedelta(seconds=fw.sync_interval_seconds)
+            if fw.last_sync_at and fw.last_sync_at + interval > now:
+                continue
+            name = fw.name
+            try:
+                counts = await pfsense_svc.sync_instance(session, fw)
+                await session.commit()
+                log.info("pfsense %s: %s", name, counts)
+            except Exception as exc:  # noqa: BLE001
+                await session.rollback()
+                fw.last_error = str(exc)
+                await session.commit()
+                log.error("pfsense %s sync failed: %s", name, exc)
                 failed += 1
 
         # ── Wazuh ──

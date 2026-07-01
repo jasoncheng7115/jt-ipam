@@ -485,8 +485,12 @@ async function removeConversation(id: string) {
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   z-index: 9000;
+  /* 平常半透明、不搶視覺；移過去才變實心 */
+  opacity: 0.45;
+  transition: opacity .15s ease, transform .15s ease;
 }
 .chat-fab:hover {
+  opacity: 1;
   transform: scale(1.05);
 }
 .chat-shell {

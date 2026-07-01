@@ -54,6 +54,10 @@ class OPNsenseFirewall(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     sync_nat: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sync_aliases: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False)
+    # 開啟後：每輪同步另抓 pf_statistics 規則 label，並對外提供 Graylog DSV
+    # （規則 label→alias、alias→成員 兩支查表，token 沿用 graylog_dsv）
+    expose_dsv: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False)
 
     description: Mapped[str | None] = mapped_column(Text)
 
@@ -140,4 +144,31 @@ class OPNsenseSyncedAlias(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("firewall_id", "name", name="opnsense_synced_alias_unique"),
+    )
+
+
+class OPNsenseRuleLabel(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """從 OPNsense pf_statistics 解析出的「規則 label → 引用的 alias」對照。
+
+    filterlog 每筆封包帶穩定的 `rid`（=pf 規則 label，使用者規則為 UUID、外掛/自動
+    規則為 md5）。把 label→alias 名做成 Graylog DSV，log 就能由 rid 反查出是哪個
+    alias / 規則命中。資料來源：/api/diagnostics/firewall/pf_statistics/rules。
+    """
+
+    __tablename__ = "opnsense_rule_labels"
+
+    firewall_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("opnsense_firewalls.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    label: Mapped[str] = mapped_column(String(64), nullable=False)   # rid（uuid/md5）
+    action: Mapped[str | None] = mapped_column(String(8))            # pass / block
+    interface: Mapped[str | None] = mapped_column(String(64))
+    alias_names: Mapped[list[str] | None] = mapped_column(JSONB)     # 引用的 alias 名
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("firewall_id", "label", name="opnsense_rule_label_unique"),
     )

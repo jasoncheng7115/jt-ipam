@@ -13,7 +13,9 @@ import { AdminIcon, SaveIcon, RefreshIcon } from "@/icons";
 import { getLdap, putLdap, testLdap, testLdapAuth, type LdapConfig,
   getAuditForward, putAuditForward, testAuditForward, type AuditForward,
   getOidcConfig, putOidcConfig, testOidc, type OidcConfig,
-  getSamlConfig, putSamlConfig, testSaml, type SamlConfig } from "@/api/system";
+  getSamlConfig, putSamlConfig, testSaml, type SamlConfig,
+  getConsoleSecurity, setConsoleSecurity,
+  getUiDisplay, setUiDisplay } from "@/api/system";
 import { listGroups } from "@/api/admin";
 import { fmtDateTime, fmtRelative } from "@/utils/datetime";
 import {
@@ -27,12 +29,30 @@ const { t } = useI18n();
 const msg = useMessage();
 
 // 地圖供應商
-const mapProvider = ref<"osm" | "google">("osm");
-const mapProviderOpts = [
+// 連線管理資安：RDP 控制端貼上文字到被控端（預設關閉）
+const rdpClipPaste = ref(false);
+async function changeRdpClipPaste(v: boolean) {
+  rdpClipPaste.value = v;
+  try { await setConsoleSecurity({ rdp_clipboard_paste: v }); msg.success(t("common.ok")); }
+  catch { rdpClipPaste.value = !v; msg.error(t("errors.network")); }
+}
+
+// 異動記錄淡化天數（超過 N 天的項目以淡色顯示；0 = 不淡化）
+const changeLogDimDays = ref(30);
+async function changeDimDays(v: number | null) {
+  const days = Math.max(0, Math.min(3650, Math.round(v ?? 0)));
+  changeLogDimDays.value = days;
+  try { await setUiDisplay({ change_log_dim_days: days }); msg.success(t("common.ok")); }
+  catch { msg.error(t("errors.network")); }
+}
+
+const mapProvider = ref<"builtin" | "osm" | "google">("builtin");
+const mapProviderOpts = computed(() => [
+  { label: t("settings.system.map_builtin"), value: "builtin" },
   { label: "OpenStreetMap", value: "osm" },
   { label: "Google Maps", value: "google" },
-];
-async function changeMapProvider(p: "osm" | "google") {
+]);
+async function changeMapProvider(p: "builtin" | "osm" | "google") {
   mapProvider.value = p;
   try { await setMapProvider(p); msg.success(t("common.ok")); } catch { msg.error(t("errors.network")); }
 }
@@ -266,6 +286,8 @@ async function doTestAf() {
 }
 
 onMounted(() => {
+  getUiDisplay().then((d) => { changeLogDimDays.value = d.change_log_dim_days; }).catch(() => {});
+  getConsoleSecurity().then((c) => { rdpClipPaste.value = c.rdp_clipboard_paste; }).catch(() => {});
   getMapProvider().then((p) => { mapProvider.value = p; }).catch(() => {});
   getRackNameAlign().then((a) => { rackAlign.value = a; }).catch(() => {});
   getOnlineGrace().then((m) => { grace.value = m; }).catch(() => {});
@@ -287,6 +309,18 @@ onMounted(() => {
       </n-space>
     </template>
     <div class="ss-wrap">
+      <!-- 資安：連線管理 -->
+      <section class="ss-group">
+        <h3 class="ss-h">{{ t("system_settings.grp_security") }}</h3>
+        <div class="ss-grid">
+          <div class="fld">
+            <label>{{ t("settings.system.rdp_clip_paste") }}</label>
+            <n-switch :value="rdpClipPaste" @update:value="changeRdpClipPaste" />
+            <div class="hint">{{ t("settings.system.rdp_clip_paste_hint") }}</div>
+          </div>
+        </div>
+      </section>
+
       <!-- 顯示與地圖 -->
       <section class="ss-group">
         <h3 class="ss-h">{{ t("system_settings.grp_display") }}</h3>
@@ -300,6 +334,12 @@ onMounted(() => {
             <label>{{ t("settings.system.rack_name_align") }}</label>
             <n-select :value="rackAlign" :options="rackAlignOpts" @update:value="changeRackAlign" />
             <div class="hint">{{ t("settings.system.rack_name_align_hint") }}</div>
+          </div>
+          <div class="fld">
+            <label>{{ t("settings.system.change_log_dim_days") }}</label>
+            <n-input-number :value="changeLogDimDays" :min="0" :max="3650" :step="1"
+                            @update:value="changeDimDays" style="width: 160px" />
+            <div class="hint">{{ t("settings.system.change_log_dim_days_hint") }}</div>
           </div>
         </div>
       </section>

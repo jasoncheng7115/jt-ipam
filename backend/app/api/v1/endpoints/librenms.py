@@ -38,6 +38,7 @@ class LibreNMSInstanceCreate(StrictModel):
     sync_vlans: bool = True
     use_for_status: bool = True
     auto_add_devices: bool = False
+    auto_create_ips: bool = True
     sync_interval_seconds: Annotated[int, Field(ge=60, le=86400)] = 300
     scope_subnet_ids: list[str] | None = None
 
@@ -52,6 +53,7 @@ class LibreNMSInstanceUpdate(StrictModel):
     sync_vlans: bool | None = None
     use_for_status: bool | None = None
     auto_add_devices: bool | None = None
+    auto_create_ips: bool | None = None
     sync_interval_seconds: Annotated[int | None, Field(ge=60, le=86400)] = None
     scope_subnet_ids: list[str] | None = None
 
@@ -67,6 +69,7 @@ class LibreNMSInstanceRead(StrictModel):
     sync_vlans: bool
     use_for_status: bool
     auto_add_devices: bool
+    auto_create_ips: bool
     sync_interval_seconds: int
     scope_subnet_ids: list[str] | None = None
     last_sync_at: Any
@@ -166,6 +169,7 @@ async def create_instance(
         scope_subnet_ids=payload.scope_subnet_ids,
         use_for_status=payload.use_for_status,
         auto_add_devices=payload.auto_add_devices,
+        auto_create_ips=payload.auto_create_ips,
         sync_interval_seconds=payload.sync_interval_seconds,
     )
     session.add(obj)
@@ -211,8 +215,8 @@ async def update_instance(
     if payload.api_url is not None:
         obj.api_url = str(payload.api_url).rstrip("/")
     for field_name in ("enabled", "sync_devices", "sync_arp", "sync_fdb", "sync_vlans",
-                       "use_for_status", "auto_add_devices", "sync_interval_seconds",
-                       "scope_subnet_ids"):
+                       "use_for_status", "auto_add_devices", "auto_create_ips",
+                       "sync_interval_seconds", "scope_subnet_ids"):
         v = getattr(payload, field_name)
         if v is not None:
             setattr(obj, field_name, v)

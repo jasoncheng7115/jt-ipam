@@ -38,20 +38,21 @@ function goPerms(r: User) { router.push({ name: "permissions", query: { ptype: "
 
 const { visibleKeys: usrVis, setVisible: usrSet, reset: usrReset } = useColumnPrefs(
   "users",
-  ["username", "email", "display_name", "auth_provider", "is_active", "is_admin", "last_login_at", "locked_until", "actions"],
-  ["username", "email", "display_name", "auth_provider", "is_active", "is_admin", "last_login_at", "locked_until", "actions"],
+  ["username", "email", "display_name", "auth_provider", "is_active", "is_admin", "can_ssh", "last_login_at", "locked_until", "actions"],
+  ["username", "email", "display_name", "auth_provider", "is_active", "is_admin", "can_ssh", "last_login_at", "locked_until", "actions"],
 );
-const usrPicker = [
+const usrPicker = computed(() => [
   { key: "username", label: t("cols.username") },
   { key: "email", label: "Email" },
   { key: "display_name", label: t("cols.display_name") },
   { key: "auth_provider", label: t("cols.auth_method") },
   { key: "is_active", label: t("cols.enabled") },
   { key: "is_admin", label: t("cols.admin") },
+  { key: "can_ssh", label: t("users.can_ssh") },
   { key: "last_login_at", label: t("cols.last_login") },
   { key: "locked_until", label: t("cols.locked_until") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 
@@ -65,7 +66,7 @@ const offset = ref(0);
 
 const showCreate = ref(false);
 const newUser = ref<UserCreate>({
-  username: "", email: "", display_name: "", password: "", is_admin: false,
+  username: "", email: "", display_name: "", password: "", is_admin: false, can_ssh: false,
 });
 const newUserPasswordConfirm = ref("");
 
@@ -157,7 +158,7 @@ async function submitCreate() {
     msg.success(t("common.ok"));
     showCreate.value = false;
     newUser.value = {
-      username: "", email: "", display_name: "", password: "", is_admin: false,
+      username: "", email: "", display_name: "", password: "", is_admin: false, can_ssh: false,
     };
     newUserPasswordConfirm.value = "";
     await refresh();
@@ -206,6 +207,10 @@ async function toggleAdmin(u: User) {
   try { await updateUser(u.id, { is_admin: !u.is_admin }); await refresh(); }
   catch { msg.error(t("errors.server")); }
 }
+async function toggleSsh(u: User) {
+  try { await updateUser(u.id, { can_ssh: !u.can_ssh }); await refresh(); }
+  catch { msg.error(t("errors.server")); }
+}
 async function unlock(u: User) {
   try { await updateUser(u.id, { unlock: true }); msg.success(t("common.ok")); await refresh(); }
   catch { msg.error(t("errors.server")); }
@@ -248,6 +253,14 @@ const allColumns = computed<DataTableColumns<User>>(() => autoSort([
     }),
   },
   {
+    title: t("users.can_ssh"), key: "can_ssh", width: 110,
+    render: (r) => h(NSwitch, {
+      value: r.can_ssh,
+      "onUpdate:value": () => toggleSsh(r),
+      size: "small",
+    }),
+  },
+  {
     title: t("users.last_login"), key: "last_login_at", width: 158,
     render: (r) => fmtDateTime(r.last_login_at),
   },
@@ -259,7 +272,7 @@ const allColumns = computed<DataTableColumns<User>>(() => autoSort([
       : "—",
   },
   {
-    title: t("common.actions"), key: "actions", className: "col-actions", width: 150,
+    title: t("common.actions"), key: "actions", className: "col-actions", width: 150, fixed: "right",
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       iconAction(EditIcon, t("common.edit"), () => openEdit(r)),
       iconAction(AdminIcon, t("users.assign_perms"), () => goPerms(r)),
@@ -315,6 +328,7 @@ onMounted(() => { void refresh(); });
         page: Math.floor(offset / limit) + 1,
         pageSize: limit,
         itemCount: total,
+        prefix: ({ itemCount }) => t('common.total_rows', { n: itemCount ?? 0 }),
         onUpdatePage: (p) => { offset = (p - 1) * limit; void refresh(); },
       }"
       remote :bordered="false" :scroll-x="1084"
@@ -362,6 +376,12 @@ onMounted(() => { void refresh(); });
         </n-form-item>
         <n-form-item :label="t('users.is_admin')">
           <n-switch v-model:value="newUser.is_admin" />
+        </n-form-item>
+        <n-form-item :label="t('users.can_ssh')">
+          <n-space vertical :size="2" style="width:100%">
+            <n-switch v-model:value="newUser.can_ssh" />
+            <span style="font-size:11px;opacity:.7">{{ t("users.can_ssh_hint") }}</span>
+          </n-space>
         </n-form-item>
       </n-form>
       <n-space justify="end">

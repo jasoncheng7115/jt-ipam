@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     api_tokens,
     audit,
     auth,
+    bmc_console,
     cert_agents,
     certificates,
     custom_fields,
@@ -29,15 +30,20 @@ from app.api.v1.endpoints import (
     migration,
     nat,
     notifications,
+    novnc_console,
     oui,
+    pfsense,
     physical,
     plugins,
     preferences,
     rack_diagram,
+    rdp_console,
     scan,
     scan_agents,
     search,
     sections,
+    ssh_console,
+    ssh_credentials,
     sso,
     subnets,
     system_logs,
@@ -46,6 +52,7 @@ from app.api.v1.endpoints import (
     users,
     virt,
     vlans,
+    vnc_console,
     vrfs,
     wazuh,
 )
@@ -75,6 +82,12 @@ api_v1_router.include_router(sections.router)
 api_v1_router.include_router(subnets.router)
 api_v1_router.include_router(system_logs.router)
 api_v1_router.include_router(addresses.router)
+api_v1_router.include_router(ssh_console.router)
+api_v1_router.include_router(ssh_credentials.router)
+api_v1_router.include_router(rdp_console.router)
+api_v1_router.include_router(vnc_console.router)
+api_v1_router.include_router(novnc_console.router)
+api_v1_router.include_router(bmc_console.router)
 api_v1_router.include_router(vlans.router)
 api_v1_router.include_router(vrfs.router)
 api_v1_router.include_router(devices.router)
@@ -105,6 +118,7 @@ api_v1_router.include_router(physical.router)
 api_v1_router.include_router(topology.router)
 api_v1_router.include_router(plugins.router)
 api_v1_router.include_router(firewall.router)
+api_v1_router.include_router(pfsense.router)
 api_v1_router.include_router(wazuh.router)
 api_v1_router.include_router(audit.router)
 api_v1_router.include_router(users.router)

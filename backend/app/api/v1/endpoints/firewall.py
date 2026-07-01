@@ -73,6 +73,7 @@ async def create_firewall(
         sync_rules=payload.sync_rules,
         sync_nat=payload.sync_nat,
         sync_aliases=payload.sync_aliases,
+        expose_dsv=payload.expose_dsv,
         description=payload.description,
         scope_location_id=payload.scope_location_id,
         scope_customer_id=payload.scope_customer_id,

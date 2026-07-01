@@ -1,12 +1,12 @@
 # jt-ipam
 
-可自架、以整合為核心的 IPAM（整合 DNS / LibreNMS / OPNsense / AdGuard / Wazuh / Proxmox / Ollama LLM；提供 phpIPAM 相容 API 與遷移路徑，但**並非以 phpIPAM 為核心、也非建構於 phpIPAM 之上**）。**已公開發布於 github.com/jasoncheng7115/jt-ipam（Apache-2.0）。**
+可自架、以整合為核心的 IPAM（整合 DNS / LibreNMS / OPNsense / pfSense / AdGuard / Wazuh / Proxmox / Ollama LLM；提供 phpIPAM 相容 API 與遷移路徑，但**並非以 phpIPAM 為核心、也非建構於 phpIPAM 之上**）。**已公開發布於 github.com/jasoncheng7115/jt-ipam（Apache-2.0）。**
 
 ## 部署環境
 
 - **Prod**: `192.168.1.144` (ipam2 LXC)。所有改檔/重啟都 `ssh root@192.168.1.144`；prod 用 rsync 部署（見下方部署流程），**不是 git pull**
 - 本機（log4 / 132）`/opt/jt-ipam` 是 dev；本機改檔不影響線上，要 rsync 過去才生效。**注意本機同時裝了 Docker**（FORWARD policy DROP，會擋 LXD 容器對外）
-- 不用 Docker 部署。靠 systemd + apt（適合虛擬機 / 容器）
+- 主力部署不用 Docker，靠 systemd + apt（適合虛擬機 / 容器）。**另有可選的 docker-compose 次要路徑在 `deploy/docker/`**（v0.4.204 加：postgres(pgvector)/redis/backend/sync/web，`gen-env.sh` 產密鑰、`update.sh`=git pull+rebuild+up，backend entrypoint 自動跑 alembic upgrade head）
 - 強制 HTTPS（`BACKEND_TLS_MODE=nginx` 反代 / `direct` uvicorn 自簽 / `self-signed` uvicorn 自動產自簽）
 - **對外安裝/升級走統一腳本 `scripts/jt-ipam.sh`**（`install` / `upgrade` / `uninstall`）；`scripts/install-debian.sh` 是相容 shim 轉呼叫它。一行式 bootstrap：`curl -fsSL .../scripts/bootstrap.sh | sudo bash`（自動 clone 到 /opt/jt-ipam 再跑 install）。`upgrade` 內含 git pull→備份→pip→alembic→build→restart；`uninstall` 永不刪原始碼（`--purge` 才連 DB/設定一起刪）
 
@@ -15,7 +15,7 @@
 - **Backend**: FastAPI + SQLAlchemy 2.0 async + asyncpg + PostgreSQL 16 + Alembic + Pydantic v2
 - **Frontend**: Vue 3 + TypeScript + Vite + Naive UI + Pinia + vue-i18n
 - **Auth**: argon2id + TOTP + JWT（access 15 min / refresh 14 天）
-- **LLM**: Ollama（本地），預設 chat=gpt-oss / embedding=qwen3-embedding；走 `/api/v1/system/llm` 全域設定
+- **LLM**: Ollama（本地），預設 chat=gemma4:26b / embedding=qwen3-embedding；走 `/api/v1/system/llm` 全域設定
 - **OWASP Top 10:2025 是硬性需求** — 每個模組與 PR 都要過逐項自我檢核
 
 ## 權限模型（RBAC）— 硬性需求，新功能/異動一律遵守
@@ -46,11 +46,11 @@ backend/app/
 ├── core/               # db / audit / config / safe_http / encrypted_secret
 ├── models/             # SQLAlchemy 2.0 ORM
 ├── schemas/            # Pydantic v2（StrictModel extra=forbid）
-├── services/           # ai / anomaly / oui / opnsense_firewall / phpipam_migration / topology / search / librenms / ssh_tunnel / saml / system_config
+├── services/           # ai / anomaly / oui / opnsense_firewall / pfsense / phpipam_migration / topology / search / librenms / ssh_tunnel / saml / system_config
 ├── mcp/                # MCP server + tools（LLM 用；stdio + Streamable HTTP）
 └── plugins/            # 外掛系統
 
-alembic/versions/       # 0001 ~ 0073 migrations（0066 device_power_ports / 0070 scan agent force_scan / 0071 OPNsense 防火牆關聯範圍 / 0072 整合限定子網路範圍 wazuh/proxmox/adguard/dns / 0073 ip_request_stage_approvals 逐關卡審核）
+alembic/versions/       # 0001 ~ 0088 migrations（0066 device_power_ports / 0070 scan agent force_scan / 0071 OPNsense 防火牆關聯範圍 / 0072 整合限定子網路範圍 wazuh/proxmox/adguard/dns / 0073 ip_request_stage_approvals 逐關卡審核 / 0074 ip_addresses.in_dhcp_lease / 0075 憑證派送 certificates+cert_versions+cert_agents / 0076 憑證自動抓取來源 / 0077 cert_agents.recent_sources / 0079 librenms auto_create_ips / 0080 cert_agents.device_id / 0086 scan_agent_tools / 0087 pfsense_firewalls+pfsense_synced_aliases / 0088 pfsense rules JSONB+expose_dsv）
 ```
 
 ```
@@ -72,12 +72,14 @@ frontend/src/
 - **Device** (裝置)、**Rack** (機櫃，支援半 U / 正背面 rack_face)、**Location** (地點＝機房)
 - **Customer** (客戶 / 管理單位)，掛 sections/subnets/devices/IPs
 - **OPNsenseFirewall** + alias mappings + rules + NAT
+- **PfSenseFirewall** + PfSenseSyncedAlias（0087/0088）— 獨立設定頁（不與 OPNsense 共用），走第三方 **pfSense-pkg-RESTAPI（pfrest.org）**：base `/api/v2`、`X-API-Key` 認證（**pfSense 端要在 System→REST API→Settings 把 KeyAuth 加進 auth methods**，預設只有 BasicAuth）、回應外層 `{code,status,data}`。`services/pfsense.py` 同步 DHCP/ARP/別名/規則（精簡存 `fw.rules` JSONB）/NAT（port_forward→`nat_translations`，`source_origin=pfsense:<id>`，欄名已對照實機：interface/protocol/source/source_port/destination/destination_port/target/local_port/disabled/descr）。`expose_dsv` 開可對外 token DSV（tracker→rule、alias→members）。前端：管理頁 `PfSenseAdmin.vue`（整合 pfSense，標題「pfSense 防火牆」）+ 進階唯讀 `PfSenseFirewallView.vue`（防火牆 (pfSense)，規則/別名檢視）。**主機名稱來源 `pfsense` 排在 opnsense 之下**
 - **OUIVendor** — IEEE MAC 廠商 lookup（Wireshark manuf 每月排程更新）
 - **DevicePort / Cable** — 裝置間佈線與 Cable Trace（多跳穿透，bridge→NIC→外部裝置）
 - **DevicePowerPort → PowerOutlet** — NetBox 風電源埠↔插座建模（migration 0066）
 - **進階資源**（advanced.py，全域基礎設施）：VLAN / VRF / ASN / Tenant / Provider / Circuit（含頻寬）/ Contact / SSID — 皆可 CRUD 編輯
 - **SSO**：`OidcConfig` / `SamlConfig`（env 預設 + DB override，AES-GCM 加密 secret）；另有 LDAP 管理頁
 - **ScanAgent**（掃描代理）— 外部 agent（`agent/jt_ipam_agent.py`）以 key 認證，POST `/scan-agents/report` 回報存活 IP。三層探測模型：agent `available_probes`（由 agent `shutil.which` 自報）∩ subnet `scan_method` − 每 IP `excluded_probes`。探測目錄 `core/scan_probes.py`：icmp/arp/rdns/netbios/mdns/os（不開放需憑證或連接埠掃描類）。代理回報存活即時更新 `effective_status=online (scanner)`
+- **Certificate / CertVersion / CertAgent**（憑證集中保管與派送，migration 0075~0077）— 商業／自簽憑證集中保管（私鑰 AES-GCM 加密、`service/cert_service.py` 驗鏈+`analyze_chain` 缺中繼/根用系統信任庫補齊+多格式轉檔 PEM/DER/PKCS#12）；可設 URL/SFTP 來源（`service/cert_fetch.py`）定期自動抓取，抓進來自動補完整鏈。外部 agent **`agent/jt_ipam_cert_agent.sh`（純 bash，只相依 curl，非 .py）**以 X-Agent-Key 認證，`/cert-agents/check|bundle/raw` 拉憑證、依 `profile_spec`（PFILES `kind|path|mode|owner`、PTEST、PRELOAD、PSPECIAL）寫各服務（nginx/apache/caddy/traefik/haproxy/postfix/dovecot/pve/pmg/pbs/pdm/zimbra…，jitsi/coturn 已暫時隱藏）、設定測試→失敗還原→reload→TSV 回報。到期/飄移告警 `cert_alert.check_cert_alerts` 接 `jt-ipam-sync` 每輪。前端 `Certificates.vue`（憑證/派送代理/設定檔產生器）+ 唯讀 `CertStatus.vue`
 
 ## 部署流程
 
@@ -105,13 +107,14 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
 
 - `phpipam.migration` — phpIPAM SSH tunnel 匯入（含 sections/subnets/IPs/devices/customers/nat）
 - `opnsense.sync` — DHCP（Kea / ISC fallback）/ ARP / OpenVPN / filter rules / NAT rules
+- `pfsense.sync`（`services/pfsense.py` `sync_instance`）— DHCP / ARP / 別名 / 規則 / NAT；同 `jt-ipam-sync.timer` 每輪跑（已併入，見下）
 - `librenms.sync` / `wazuh.sync` / `adguard.sync` — pull-only
 - 整合（LibreNMS / Wazuh / Proxmox / AdGuard / DNS）皆有 `scope_subnet_ids`（JSONB，留空＝全域）：sync 時只在這些子網路內比對 IP，避免重疊網段把別人 hostname/OS 誤掛。OPNsense 另有 location/customer/subnets/iface 關聯範圍（0071）
 
 ## systemd services / timers
 
 - `jt-ipam-backend.service` — uvicorn 主服務
-- `jt-ipam-sync.timer` — 每 ~5 分鐘跑 `scripts/jt-ipam-sync.py`，對所有 enabled 且超過各自 `sync_interval_seconds` 的 OPNsense / Wazuh / LibreNMS / AdGuard / Proxmox 實例做 pull（**不是** background_tasks，直接寫表）。某 instance sync 失敗會先 `session.rollback()` 再把 `last_error` 寫回 DB（不 rollback 會二次爆、連鎖中斷整輪）。每輪另跑一次 `librenms.prune_stale_arp()`：刪 `arp_entries` 中 `last_seen_at` 超過 `arp_retention_days`（config 預設 30，0 停用）的舊/孤兒 row（ARP 只新增不回收，否則無限累積）
+- `jt-ipam-sync.timer` — 每 ~5 分鐘跑 `scripts/jt-ipam-sync.py`，對所有 enabled 且超過各自 `sync_interval_seconds` 的 OPNsense / pfSense / Wazuh / LibreNMS / AdGuard / Proxmox 實例做 pull（**不是** background_tasks，直接寫表）。某 instance sync 失敗會先 `session.rollback()` 再把 `last_error` 寫回 DB（不 rollback 會二次爆、連鎖中斷整輪）。每輪另跑一次 `librenms.prune_stale_arp()`：刪 `arp_entries` 中 `last_seen_at` 超過 `arp_retention_days`（config 預設 30，0 停用）的舊/孤兒 row（ARP 只新增不回收，否則無限累積）
 - `jt-ipam-oui-refresh.timer` — 每月 1 號 03:30 + 15min jitter，跑 `/opt/jt-ipam/scripts/oui_refresh.py`
 - `jt-ipam-backup.timer`（每日）/ `jt-ipam-geoip-refresh.timer`（每日）
 
@@ -131,7 +134,7 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
 
 ## 用詞慣例（繁中）
 
-- 「裝置」not 「設備」、「上線」not 「在線」、「對應」not 「映射」、「作業」not 「任務」、「子網路」not 「子網」、「失聯 IP」not 「鬼 IP」、「掃描代理」not 「掃描器」、「首碼」not 「前綴」（prefix；prefix length → 首碼長度）、「外掛」not 「插件」（plugin）、「還原」not 「回滾」（rollback）、「單次」not 「一次性」（one-time）、「不中斷換檔／不中斷寫入」not 「原子覆蓋／原子寫入」（atomic write）
+- 「裝置」not 「設備」、「上線」not 「在線」、「對應」not 「映射」、「作業」not 「任務」、「子網路」not 「子網」、「失聯 IP」not 「鬼 IP」、「掃描代理」not 「掃描器」、「首碼」not 「前綴」（prefix；prefix length → 首碼長度）、「外掛」not 「插件」（plugin）、「還原」not 「回滾」（rollback）、「單次」not 「一次性」（one-time）、「不中斷換檔／不中斷寫入」not 「原子覆蓋／原子寫入」（atomic write）、「選用」not 「可選」（optional；「可以選擇」這種動詞用法仍可用「可選擇」）
 - **中文標點一律全形**：，。、；：「」（）？！ — 不要用半形 `,.:;()?!`。但夾在文案裡的「指令／路徑／程式碼／英數識別字」維持半形（如 `--dry-run`、`/etc/...`、`apt/dnf`）。
 
 ## 主要 frontend composables
@@ -158,18 +161,19 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
 - DNS：`/api/v1/dns/servers` `/dns/records`（filter server_id/rtype/q/ip/missing_ip，回 server_name+matched_ip_id）`/dns/records/type-counts`（型別筆數）`/dns/zones` `/dns/consistency`
 - 通知：`/api/v1/notifications`（鈴鐺）；通知發送設定 `/system/notification-channels`（admin，Email/SMTP；其餘通訊軟體反灰）+ `/system/notification-channels/test-email`
 - `/api/v1/firewalls/opnsense` + alias mappings + rules
+- `/api/v1/pfsense`（admin CRUD + key rotate + `/test` + `/sync` + `/{id}/rules` + `/{id}/aliases` + `/{id}/nat`）；NAT 規則頁來源篩選含 `pfsense`（pfSense port_forward 同步進 `nat_translations`）
 - 進階資源：`/api/v1/vlans` `/vrfs` `/asns` `/tenants` `/providers` `/circuits` `/contacts` `/ssids`（皆含 PATCH 編輯）
 - 佈線/電力：`/api/v1/cables` `/device-ports` `/cable-trace` `/power-*`
 - SSO 設定：`/api/v1/sso/oidc` `/sso/saml`（admin DB 設定）
 - 掃描代理：`/api/v1/scan-agents`（CRUD + key rotate）`/scan-agents/report`（agent push）`/scan-agents/agent.py` `/scan-agents/installer.sh`（下載）
-- 憑證派送：`/api/v1/certificates`（admin CRUD + `POST /{id}/versions` 上傳 crt/key/chain 驗證+加密私鑰 + `POST /{id}/self-signed` 產自簽[CN/SAN/天數]）`/cert-agents`（admin CRUD+key rotate）+ agent 協定 `GET /cert-agents/check|bundle`、`POST /report`（X-Agent-Key）+ `agent.py`/`installer.sh`。私鑰 AES-GCM 加密、僅 agent 經 scope+TLS 取得且逐次稽核。到期/飄移告警在 `jt-ipam-sync` 每輪跑 `cert_alert.check_cert_alerts`（去重不洗版）
+- 憑證派送：`/api/v1/certificates`（admin CRUD + `POST /{id}/versions` 上傳或貼上 crt/key/chain 驗證+加密私鑰 + `POST /{id}/self-signed` 產自簽[CN/SAN/天數] + `POST /{id}/versions/{vid}/rebuild-chain` 系統信任庫補根 + `…/file?fmt=` 多格式下載 + `PUT /{id}/source`+`POST /{id}/fetch-now` URL/SFTP 自動抓取，刪除被代理選用的憑證回 409）`/cert-agents`（admin CRUD+key rotate+`GET /{id}/key` 再檢視）+ agent 協定 `GET /cert-agents/check`（`?format=text`）`/bundle/raw?part=cert|key|chain|fullchain|combined|pkcs12`、`POST /report`（X-Agent-Key，TSV）+ `agent.py`=**`agent/jt_ipam_cert_agent.sh`（純 bash）**/`jt-ipam-cert-agent-installer.sh`；唯讀現況 `GET /cert-agents/status`（require_global_read）。私鑰 AES-GCM 加密、僅 agent 經 scope+TLS 取得且逐次稽核。到期/飄移告警在 `jt-ipam-sync` 每輪跑 `cert_alert.check_cert_alerts`（去重不洗版）
 - 版本：`dist/version.json`（前端自動偵測新版提示重載）
 
 ## 安裝 / 帳號 CLI
 
 - 全新安裝（`jt-ipam.sh install`）會自動建 `admin` + 隨機密碼，結束時印出一次（並存 `/etc/jt-ipam/.admin-initial-password`，root 0600）
 - 重置 / 建管理員：`python -m app.cli.bootstrap create-admin --username admin --email a@b --password-stdin [--force-update]`（密碼 ≥12 字；不加 `--force-update` 是新建，既有 admin 會報錯）
-- 掃描代理 installer（`agent/jt-ipam-agent-installer.sh`）會一併裝 `nmap` / `samba-common-bin`(nmblookup) / `avahi-utils`(avahi-resolve) 解鎖 os/netbios/mdns 探測（`JT_IPAM_SKIP_PROBE_TOOLS=1` 可略過）
+- 掃描代理 installer（`agent/jt-ipam-agent-installer.sh`）：先裝 base tools `curl git sudo`（curl 用來下載 agent），再裝探測工具 `nmap`(os) / `samba-common-bin`(nmblookup→netbios) / **`avahi-utils`(mdns)**。**v0.5.52 起 mdns 改為預設安裝**（avahi-utils 相依 `avahi-daemon`，常駐、監聽 UDP 5353、對外廣播 mDNS）；`JT_IPAM_NO_MDNS=1` 可不裝 mdns、`JT_IPAM_SKIP_PROBE_TOOLS=1` 略過所有探測工具（base tools 仍裝）。**主伺服器安裝/升級不碰這些**
 
 ## 升版規矩
 
@@ -178,9 +182,15 @@ ssh root@192.168.1.144 'cd /opt/jt-ipam/frontend && npm run build'
 - 每次升版實際過一次安裝（全新）+ 升級（舊版升）流程，已整合成單一 `scripts/jt-ipam.sh`（install/upgrade/uninstall）。**安裝/代理層每次發版必驗**（TEST_CHECKLIST 5b）：(A) 安裝產 admin 預設密碼 + 重置 CLI、(B) 代理探測工具安裝 + 不可勾探測的「安裝說明」UI。
 - commit/push 訊息**一律英文**；程式註解 / UI 文案仍繁中。**但 `scripts/` 與 `agent/` 的 *.sh（在客戶終端機執行的腳本）一律純英文**（註解、終端輸出、設定檔範本都不夾中文）。
 
-## 狀態（截至 2026-06-12，v0.4.132）
+## 狀態（截至 2026-06-15，v0.4.175）
 
-已公開發布於 GitHub（Apache-2.0，程式碼最新 v0.4.132），**v0.4.132（客戶回報 + issue #4）**：修一類 asyncpg INET/CIDR 回物件非 str 的 500 — CSV 實際匯入 `str(subnet.cidr)`、IP 申請列表 `IPRequestRead.requested_ip` 加 `field_validator(mode="before")`、掃描代理帶 hostname 對新 IP 500 改 `session.add(ipa)` 後 `flush()`（autoflush=False + server_default UUID）、APITokenRead/VMInterfaceRead/ARP/FDB 同類補轉型。詳見已知地雷 #10。前版 v0.4.131：install/upgrade SOP 已在乾淨 Ubuntu 22.04 / 24.04 容器端到端驗證通過。**v0.4.131（客戶回報 Ubuntu 26.04 裝不起來）**：安裝腳本原本寫死 `postgresql-16`，但 26.04 預設庫沒有 PG16（出 17/18），舊退路去加 PGDG 對新 codename 的庫（PGDG 對剛發布的 Ubuntu 常延遲數月）→ `apt-get update` 404、整個安裝中斷。改成**偵測已啟用庫裡可用的 PG 版本**（優先 16，否則用發行版自帶 17/18…）+ 對應 `postgresql-N-pgvector`，只有完全沒有 `postgresql-N(>=16)` 才退回 PGDG；app 對 PG 16/17/18 相容；Python 偵測加入 `python3.14`。⚠️ 26.04 尚未實機端到端驗證（缺 26.04 容器），客戶若仍失敗需取得 pip/apt 實際錯誤（可能另有 Python 3.14 套件編譯問題）。
+已公開發布於 GitHub（Apache-2.0，程式碼最新 v0.4.175）。**v0.4.134~0.4.175 一大主軸＝憑證集中保管與派送（一輪輪客戶實測回饋）**：商業／自簽憑證集中保管（私鑰 AES-GCM）→ 純 bash 代理（`agent/jt_ipam_cert_agent.sh`，只相依 curl，跨發行版 installer）pull 派送到各服務（nginx/apache/caddy/traefik/haproxy/postfix/dovecot/pve/pmg/pbs/pdm/zimbra…，設定測試→失敗還原→reload→TSV 回報）→ URL/SFTP 來源定期自動同步＋抓進來自動補完整鏈（`analyze_chain` 缺中繼/根用系統信任庫 `_system_trust()` 補，解 Let's Encrypt 缺 ISRG Root X1／Zimbra·PDM 嚴格驗鏈）→ 到期/飄移告警、自簽續簽、多格式下載（PEM/DER/PKCS#12）、設定檔產生器、刪除守門（被代理選用回 409）、同把 Key 多主機偵測（0077）。**v0.4.173 加 jitsi/coturn profile（給 docker-jitsi-meet），v0.4.174 又暫時隱藏**（docker-jitsi-meet 尚未正式支援，agent profile 程式碼保留休眠；原生非 docker jitsi 走 nginx+prosody 自訂路徑）。v0.4.175：設定檔產生器服務多選格 `wazuh-dashboard` 不再折行 + 文案「憑證檔案可手動上傳或設 URL/SFTP 來源同步」。MCP 也加 `list_certificates`/`list_cert_distribution` 唯讀工具（絕不回私鑰/PEM）。⚠️**prod build 多次踩 ssh npm build 沒 `cd /opt/jt-ipam/frontend`**（rsync 後第一次必中，記得帶 cd）。
+
+<details><summary>更早的 v0.4.132 狀態（asyncpg INET/CIDR 500 修補等，已歸檔）</summary>
+
+**v0.4.132（客戶回報 + issue #4）**：修一類 asyncpg INET/CIDR 回物件非 str 的 500 — CSV 實際匯入 `str(subnet.cidr)`、IP 申請列表 `IPRequestRead.requested_ip` 加 `field_validator(mode="before")`、掃描代理帶 hostname 對新 IP 500 改 `session.add(ipa)` 後 `flush()`（autoflush=False + server_default UUID）、APITokenRead/VMInterfaceRead/ARP/FDB 同類補轉型。詳見已知地雷 #10。前版 v0.4.131：install/upgrade SOP 已在乾淨 Ubuntu 22.04 / 24.04 容器端到端驗證通過。**v0.4.131（客戶回報 Ubuntu 26.04 裝不起來）**：安裝腳本原本寫死 `postgresql-16`，但 26.04 預設庫沒有 PG16（出 17/18），舊退路去加 PGDG 對新 codename 的庫（PGDG 對剛發布的 Ubuntu 常延遲數月）→ `apt-get update` 404、整個安裝中斷。改成**偵測已啟用庫裡可用的 PG 版本**（優先 16，否則用發行版自帶 17/18…）+ 對應 `postgresql-N-pgvector`，只有完全沒有 `postgresql-N(>=16)` 才退回 PGDG；app 對 PG 16/17/18 相容；Python 偵測加入 `python3.14`。⚠️ 26.04 尚未實機端到端驗證（缺 26.04 容器），客戶若仍失敗需取得 pip/apt 實際錯誤（可能另有 Python 3.14 套件編譯問題）。
+
+</details>
 
 **v0.4.129→0.4.130 重點（資安 + 重複偵測韌性）**：
 - **RBAC IDOR 收口**：devices / customers / rack_diagram 的詳情與子資源端點（`/devices/{id}`、`/integrations`〔曾洩 Wazuh CVE+Proxmox VM〕、`/librenms`、`/vlans`、`/relations`、`/customers/{id}`、`/{id}/summary`、`/racks/{id}/diagram`）全補 `require_object_perm(<type>,"read")`；MCP `get_topology` 補 `user=user` 過濾 + 歸 `GLOBAL_READ_TOOLS`，REST `/topology` 補 `require_global_read`

@@ -29,6 +29,37 @@ class LLMConfig:
     embedding_model: str
     chat_model: str
     timeout: float
+    # 對話模型的上下文長度（Ollama num_ctx）。None＝沿用模型／Ollama 預設（通常 4096）。
+    # 工具多、注入資料量大的對話容易超過預設而被截斷，可在此調高（耗更多記憶體/VRAM）。
+    num_ctx: int | None = None
+    # 對外提供 MCP（讓其它系統以 HTTP 呼叫 /api/mcp）：預設關閉，打開才接受外部 MCP 呼叫。
+    mcp_external_enabled: bool = False
+    mcp_api_key: str | None = None          # 明文（已解密）；僅程序內使用，不外傳
+    mcp_principal_user_id: str | None = None  # MCP 金鑰所代表的管理員身份（唯讀，僅供 RBAC 可見範圍）
+
+
+_MCP_AAD = b"llm:mcp_api_key"
+
+
+def _enc_mcp(plain: str) -> str:
+    import base64 as _b64
+
+    from app.core.security import encrypt_secret
+    ct, nonce = encrypt_secret(plain, aad=_MCP_AAD)
+    return "v1:" + _b64.b64encode(nonce).decode() + ":" + _b64.b64encode(ct).decode()
+
+
+def _dec_mcp(blob: str) -> str | None:
+    import base64 as _b64
+
+    from app.core.security import decrypt_secret
+    try:
+        _ver, b_nonce, b_ct = blob.split(":", 2)
+        return decrypt_secret(
+            _b64.b64decode(b_ct), _b64.b64decode(b_nonce), aad=_MCP_AAD,
+        ).decode("utf-8")
+    except Exception:
+        return None
 
 
 _cache: dict[str, tuple[float, LLMConfig]] = {}
@@ -69,6 +100,18 @@ async def get_llm_config(session: AsyncSession) -> LLMConfig:
                 cfg.timeout = float(v["timeout"])
             except (ValueError, TypeError):
                 pass
+        if v.get("num_ctx") is not None:
+            try:
+                n = int(v["num_ctx"])
+                cfg.num_ctx = n if n > 0 else None
+            except (ValueError, TypeError):
+                pass
+        if isinstance(v.get("mcp_external_enabled"), bool):
+            cfg.mcp_external_enabled = v["mcp_external_enabled"]
+        if v.get("mcp_api_key_enc"):
+            cfg.mcp_api_key = _dec_mcp(str(v["mcp_api_key_enc"]))
+        if v.get("mcp_principal_user_id"):
+            cfg.mcp_principal_user_id = str(v["mcp_principal_user_id"])
 
     _cache[LLM_KEY] = (now, cfg)
     return cfg
@@ -82,6 +125,8 @@ async def set_llm_config(
     embedding_model: str | None = None,
     chat_model: str | None = None,
     timeout: float | None = None,
+    num_ctx: int | None = None,
+    mcp_external_enabled: bool | None = None,
     updated_by_user_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     row = await session.get(SystemSetting, LLM_KEY)
@@ -94,6 +139,8 @@ async def set_llm_config(
     if embedding_model is not None: current["embedding_model"] = embedding_model.strip()
     if chat_model is not None: current["chat_model"] = chat_model.strip()
     if timeout is not None: current["timeout"] = float(timeout)
+    if num_ctx is not None: current["num_ctx"] = int(num_ctx) if int(num_ctx) > 0 else None
+    if mcp_external_enabled is not None: current["mcp_external_enabled"] = bool(mcp_external_enabled)
     row.value = current
     row.updated_by = updated_by_user_id
     # JSONB 變更 SQLAlchemy 對 dict in-place 不會偵測 — flag_modified 保險
@@ -102,6 +149,32 @@ async def set_llm_config(
     await session.commit()
     _bust()
     return current
+
+
+async def rotate_mcp_api_key(
+    session: AsyncSession,
+    *,
+    principal_user_id: uuid.UUID,
+    updated_by_user_id: uuid.UUID | None = None,
+) -> str:
+    """產生一把新的對外 MCP 金鑰（唯讀），加密保存並綁定代表身份；回傳明文（僅此一次完整顯示）。"""
+    import secrets
+
+    key = "jtmcp_" + secrets.token_urlsafe(32)
+    row = await session.get(SystemSetting, LLM_KEY)
+    if row is None:
+        row = SystemSetting(key=LLM_KEY, value={}, updated_by=updated_by_user_id)
+        session.add(row)
+    current: dict[str, Any] = dict(row.value or {})
+    current["mcp_api_key_enc"] = _enc_mcp(key)
+    current["mcp_principal_user_id"] = str(principal_user_id)
+    row.value = current
+    row.updated_by = updated_by_user_id
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(row, "value")
+    await session.commit()
+    _bust()
+    return key
 
 
 # ─────────────────── AI chat 歷程保留設定 ───────────────────
@@ -129,6 +202,68 @@ async def set_ai_chat_retention_days(
         session.add(row)
     current = dict(row.value or {})
     current["retention_days"] = days
+    row.value = current
+    row.updated_by = updated_by_user_id
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(row, "value")
+    await session.commit()
+    return days
+
+
+# ─────────────────── 連線管理資安設定（console security）───────────────────
+CONSOLE_SECURITY_KEY = "console_security"
+
+
+async def get_rdp_clipboard_paste(session: AsyncSession) -> bool:
+    """是否允許 RDP 控制端把文字貼到被控端（剪貼簿單向重導）。預設關閉（deny by default）。"""
+    row = await session.get(SystemSetting, CONSOLE_SECURITY_KEY)
+    if row and isinstance(row.value, dict):
+        return bool(row.value.get("rdp_clipboard_paste", False))
+    return False
+
+
+async def set_rdp_clipboard_paste(
+    session: AsyncSession, *, enabled: bool, updated_by_user_id: uuid.UUID | None = None,
+) -> bool:
+    row = await session.get(SystemSetting, CONSOLE_SECURITY_KEY)
+    if row is None:
+        row = SystemSetting(key=CONSOLE_SECURITY_KEY, value={}, updated_by=updated_by_user_id)
+        session.add(row)
+    current = dict(row.value or {})
+    current["rdp_clipboard_paste"] = bool(enabled)
+    row.value = current
+    row.updated_by = updated_by_user_id
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(row, "value")
+    await session.commit()
+    return bool(enabled)
+
+
+# ─────────────────── 介面顯示設定（UI display）───────────────────
+UI_DISPLAY_KEY = "ui_display"
+_DEFAULT_CHANGE_LOG_DIM_DAYS = 30
+
+
+async def get_change_log_dim_days(session: AsyncSession) -> int:
+    """異動記錄超過幾天的項目以淡色顯示；0 = 不淡化。預設 30 天。"""
+    row = await session.get(SystemSetting, UI_DISPLAY_KEY)
+    if row and isinstance(row.value, dict):
+        v = row.value.get("change_log_dim_days")
+        if isinstance(v, int) and v >= 0:
+            return v
+    return _DEFAULT_CHANGE_LOG_DIM_DAYS
+
+
+async def set_change_log_dim_days(
+    session: AsyncSession, *, days: int, updated_by_user_id: uuid.UUID | None = None,
+) -> int:
+    days = max(0, min(3650, int(days)))
+    row = await session.get(SystemSetting, UI_DISPLAY_KEY)
+    if row is None:
+        row = SystemSetting(key=UI_DISPLAY_KEY, value={}, updated_by=updated_by_user_id)
+        session.add(row)
+    current = dict(row.value or {})
+    current["change_log_dim_days"] = days
     row.value = current
     row.updated_by = updated_by_user_id
     from sqlalchemy.orm.attributes import flag_modified
@@ -661,3 +796,57 @@ async def set_notification_channels(
     await session.commit()
     _ncfg_cache.pop(NOTIFY_CH_KEY, None)
     return await get_notification_channels(session)
+
+
+# ─────────────────── 通知矩陣（哪些事件、走哪些管道）───────────────────
+NOTIFY_MATRIX_KEY = "notification_matrix"
+# 可通知事件登錄（矩陣的列）：(key, 預設站內, 預設 email)。新增事件只要在這裡加一列。
+NOTIFY_EVENTS: tuple[tuple[str, bool, bool], ...] = (
+    ("ip_request.created", True, True),    # 審核者：有新 IP 申請待審
+    ("ip_request.approved", True, True),   # 申請人：申請已核准（含配發 IP）
+    ("ip_request.rejected", True, True),   # 申請人：申請已拒絕
+    ("cert.expiring", True, False),        # 憑證即將到期 / 已過期
+    ("cert.deployed", True, False),        # 代理成功部署新憑證
+    ("cert.drift", True, False),           # 憑證飄移（某代理未套到最新版）
+    ("anomaly.detected", True, False),     # 異常偵測有新發現
+)
+
+
+def _default_matrix() -> dict[str, dict[str, bool]]:
+    return {k: {"in_app": ia, "email": em} for k, ia, em in NOTIFY_EVENTS}
+
+
+async def get_notification_matrix(session: AsyncSession) -> dict[str, dict[str, bool]]:
+    """回傳通知矩陣 {event: {in_app, email}}，未設定的事件用預設值補齊。"""
+    out = _default_matrix()
+    row = await session.get(SystemSetting, NOTIFY_MATRIX_KEY)
+    if row and isinstance(row.value, dict):
+        for k, v in row.value.items():
+            if k in out and isinstance(v, dict):
+                if isinstance(v.get("in_app"), bool):
+                    out[k]["in_app"] = v["in_app"]
+                if isinstance(v.get("email"), bool):
+                    out[k]["email"] = v["email"]
+    return out
+
+
+async def set_notification_matrix(
+    session: AsyncSession, *, data: dict[str, Any], updated_by_user_id: uuid.UUID,
+) -> dict[str, dict[str, bool]]:
+    from sqlalchemy.orm.attributes import flag_modified
+    row = await session.get(SystemSetting, NOTIFY_MATRIX_KEY)
+    if row is None:
+        row = SystemSetting(key=NOTIFY_MATRIX_KEY, value={}, updated_by=updated_by_user_id)
+        session.add(row)
+    defaults = _default_matrix()
+    val: dict[str, dict[str, bool]] = {}
+    for k, dflt in defaults.items():
+        v = data.get(k) if isinstance(data, dict) else None
+        ia = bool(v["in_app"]) if isinstance(v, dict) and isinstance(v.get("in_app"), bool) else dflt["in_app"]
+        em = bool(v["email"]) if isinstance(v, dict) and isinstance(v.get("email"), bool) else dflt["email"]
+        val[k] = {"in_app": ia, "email": em}
+    row.value = val
+    row.updated_by = updated_by_user_id
+    flag_modified(row, "value")
+    await session.commit()
+    return await get_notification_matrix(session)

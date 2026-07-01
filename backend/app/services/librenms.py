@@ -10,6 +10,7 @@ OWASP 對應：
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ from typing import Any
 import httpx
 from sqlalchemy import delete, select
 from sqlalchemy import true as sa_true
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.safe_http import UnsafeOutboundURL, safe_request
@@ -31,6 +33,7 @@ from app.models.librenms import (
     LibreNMSInstance,
 )
 from app.models.physical import DevicePort
+from app.models.subnet import Subnet
 from app.models.vlan import VLAN, DeviceVLAN, VLANDomain
 from app.services.hostname import apply_observation
 from app.services.ip_history import log_change
@@ -266,6 +269,44 @@ async def link_librenms_device(
 # ─────────────────── 同步：裝置 ───────────────────
 
 
+async def _addable_subnets(
+    session: AsyncSession, scope_ids: set[Any],
+) -> list[tuple[Any, Any]]:
+    """回傳可自動建立 IP 的候選子網路 [(ip_network, subnet_id)]，依首碼長度由長到短排序
+    （最精確的子網路優先），給 auto_create_ips 用 longest-prefix 比對落點子網路。
+    scope_ids 有值＝只在這些子網路內建（重疊網段安全）；空＝全部既有子網路。"""
+    stmt = select(Subnet.id, Subnet.cidr)
+    if scope_ids:
+        stmt = stmt.where(Subnet.id.in_(scope_ids))
+    rows = (await session.execute(stmt)).all()
+    nets: list[tuple[Any, Any]] = []
+    for sid, cidr in rows:
+        try:
+            nets.append((ipaddress.ip_network(str(cidr), strict=False), sid))
+        except ValueError:
+            continue
+    nets.sort(key=lambda x: x[0].prefixlen, reverse=True)
+    return nets
+
+
+def _pick_subnet_for_ip(nets: list[tuple[Any, Any]], aip: Any) -> Any | None:
+    """從候選子網路挑「唯一且最精確」包含此 IP 的子網路，回 subnet_id。
+
+    避免建錯子網路：
+    - 多層巢狀（如 10.0.0.0/8 與 10.1.1.0/24 都包含）→ 取最長首碼（最精確）那個。
+    - **重疊網段歧義**（多個「相同最長首碼」都包含，如兩個客戶各有 192.168.1.0/24）
+      → 回 None：寧可不建，也不要建到錯的單位。要消除歧義就在該 LibreNMS 實例設
+      scope_subnet_ids，把候選縮到自己的子網路（整合設定頁的 ScopeOverlapWarning 會提醒）。
+    - 沒有任何既有子網路包含 → 回 None（不憑空建子網路）。
+    """
+    containing = [(net, sid) for net, sid in nets if aip in net]
+    if not containing:
+        return None
+    maxlen = max(net.prefixlen for net, _ in containing)
+    best = [sid for net, sid in containing if net.prefixlen == maxlen]
+    return best[0] if len(best) == 1 else None
+
+
 async def sync_devices(
     session: AsyncSession, instance: LibreNMSInstance,
 ) -> tuple[int, int, int]:
@@ -276,6 +317,10 @@ async def sync_devices(
     # 重疊網段：同一 IP 可能存在多個子網路。限定 instance 的 scope_subnet_ids
     # （留空＝全域）並一律取第一筆，避免 scalar_one_or_none 在重複 IP 上炸掉整個 sync。
     scope_ids = _scope_uuids(instance)
+
+    # auto_create_ips：把裝置主 IP（落在既有且符合 scope 的子網路）自動建成 IPAddress。
+    # 只在開啟時才查候選子網路（省掉一次 query）。
+    addable_nets = await _addable_subnets(session, scope_ids) if instance.auto_create_ips else []
 
     for d in devices:
         legacy = int(d.get("device_id"))
@@ -307,6 +352,28 @@ async def sync_devices(
                     .limit(1)
                 )
             ).scalars().first()
+            # auto_create_ips：IPAM 還沒有這個裝置主 IP，且它落在既有/符合 scope 的子網路
+            # → 自動建一筆（discovery_source='librenms'）。只建裝置主 IP、不碰 ARP 鄰居。
+            if ipa is None and instance.auto_create_ips and addable_nets:
+                try:
+                    aip = ipaddress.ip_address(str(primary_ip).split("/")[0])
+                except ValueError:
+                    aip = None
+                # 唯一最精確的子網路；重疊網段歧義或無容器 → None（不猜、不建錯單位）
+                sub_id = _pick_subnet_for_ip(addable_nets, aip) if aip is not None else None
+                if sub_id is not None:
+                    ipa = IPAddress(
+                        subnet_id=sub_id, ip=str(primary_ip).split("/")[0],
+                        state="active", discovery_source="librenms",
+                        description="LibreNMS 自動探索新增",
+                        note=(f"此 IP 由 LibreNMS 整合「{instance.name}」於 "
+                              f"{datetime.now(UTC).astimezone().strftime('%Y-%m-%d %H:%M')} "
+                              f"同步裝置時，依裝置主 IP 自動建立。"),
+                    )
+                    session.add(ipa)
+                    # session 設 autoflush=False；不 flush 則 ipa.id 仍 None，
+                    # 下面 apply_observation 會用 ip_id=None 建 FK → NOT NULL 違規 500。
+                    await session.flush()
             if ipa is not None:
                 if is_up:
                     ipa.last_seen_librenms = datetime.now(UTC)
@@ -843,21 +910,24 @@ async def sync_device_ports(session: AsyncSession, instance: LibreNMSInstance) -
             name_mac[nm] = _norm_mac(p.get("ifPhysAddress"))
         if not name_mac:
             continue
-        existing = {
-            p.name: p for p in (await session.execute(
-                select(DevicePort).where(DevicePort.device_id == d.jt_ipam_device_id)
-            )).scalars().all()
-        }
+        existing_names = set((await session.execute(
+            select(DevicePort.name).where(DevicePort.device_id == d.jt_ipam_device_id)
+        )).scalars().all())
         for n in sorted(name_mac):
             mac = name_mac[n]
-            if n in existing:
-                # 回填 / 更新埠自身 MAC（不動其他使用者編輯的欄位）
-                if mac and existing[n].mac_address != mac:
-                    existing[n].mac_address = mac
-                continue
-            session.add(DevicePort(
-                device_id=d.jt_ipam_device_id, name=n, type="network", mac_address=mac))
-            created += 1
+            # 用 ON CONFLICT upsert：避免「多台 LibreNMS 裝置對映到同一台 jt-ipam 裝置」或同一輪
+            # 重複處理時，INSERT 撞 device_port_unique_name (device_id, name) 而中斷整批同步（issue #12）。
+            ins = pg_insert(DevicePort).values(
+                device_id=d.jt_ipam_device_id, name=n, type="network", mac_address=mac)
+            if mac:  # 有埠 MAC 才覆寫；沒有就不動既有欄位
+                stmt = ins.on_conflict_do_update(
+                    index_elements=["device_id", "name"], set_={"mac_address": mac})
+            else:
+                stmt = ins.on_conflict_do_nothing(index_elements=["device_id", "name"])
+            await session.execute(stmt)
+            if n not in existing_names:
+                created += 1
+                existing_names.add(n)
     return created
 
 

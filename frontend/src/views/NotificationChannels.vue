@@ -3,12 +3,13 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NSpace, NSwitch, NInput, NInputNumber, NSelect, NButton, NIcon,
-  NFormItem, NAlert, NTag, NGrid, NGridItem, useMessage,
+  NFormItem, NAlert, NTag, NGrid, NGridItem, NCheckbox, useMessage,
 } from "naive-ui";
 import { SettingsIcon, SaveIcon } from "@/icons";
 import {
   getNotificationChannels, setNotificationChannels, sendTestEmail,
-  type NotificationChannels,
+  getNotificationMatrix, setNotificationMatrix,
+  type NotificationChannels, type NotifyMatrix,
 } from "@/api/notify_channels";
 
 const { t } = useI18n();
@@ -95,7 +96,35 @@ function channelLabel(key: string): string {
   return m[key] ?? key;
 }
 
-onMounted(load);
+// ── 通知矩陣 ──
+const matrix = ref<NotifyMatrix>({});
+const matrixEvents = ref<string[]>([]);
+const matrixSaving = ref(false);
+function eventLabel(ev: string): string {
+  return t(`notify_ch.ev.${ev.replace(/\./g, "_")}`);
+}
+async function loadMatrix() {
+  try {
+    const r = await getNotificationMatrix();
+    matrix.value = r.matrix;
+    matrixEvents.value = r.events;
+  } catch { /* ignore */ }
+}
+async function saveMatrix() {
+  matrixSaving.value = true;
+  try {
+    const r = await setNotificationMatrix(matrix.value);
+    matrix.value = r.matrix;
+    matrixEvents.value = r.events;
+    msg.success(t("common.saved"));
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? t("errors.network"));
+  } finally {
+    matrixSaving.value = false;
+  }
+}
+
+onMounted(() => { void load(); void loadMatrix(); });
 </script>
 
 <template>
@@ -154,6 +183,41 @@ onMounted(load);
       </n-space>
     </n-card>
 
+    <!-- 通知矩陣：哪些事件、走哪些管道 -->
+    <n-card :title="t('notify_ch.matrix_title')">
+      <p class="nmx-hint">{{ t("notify_ch.matrix_hint") }}</p>
+      <table class="nmx">
+        <thead>
+          <tr>
+            <th>{{ t("notify_ch.matrix_event") }}</th>
+            <th class="nmx-c">{{ t("notify_ch.matrix_in_app") }}</th>
+            <th class="nmx-c">{{ t("notify_ch.matrix_email") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="ev in matrixEvents" :key="ev">
+            <td>
+              <div class="nmx-ev">{{ eventLabel(ev) }}</div>
+              <code class="nmx-key">{{ ev }}</code>
+            </td>
+            <td class="nmx-c">
+              <n-checkbox v-if="matrix[ev]" v-model:checked="matrix[ev].in_app" />
+            </td>
+            <td class="nmx-c">
+              <n-checkbox v-if="matrix[ev]" v-model:checked="matrix[ev].email" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="nmx-hint">{{ t("notify_ch.matrix_email_note") }}</p>
+      <n-space justify="end" style="margin-top: 12px">
+        <n-button type="success" :loading="matrixSaving" @click="saveMatrix">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
+      </n-space>
+    </n-card>
+
     <!-- 其他管道（開發中，反灰）-->
     <n-card :title="t('notify_ch.other_title')">
       <n-grid :cols="3" :x-gap="12" :y-gap="12" responsive="screen">
@@ -179,4 +243,11 @@ onMounted(load);
   opacity: 0.6;
 }
 .ch-name { font-weight: 600; }
+.nmx { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.nmx th, .nmx td { padding: 8px 12px; border-bottom: 1px solid var(--n-border-color, rgba(128,128,128,.18)); text-align: left; }
+.nmx th { font-weight: 600; opacity: .7; font-size: 12.5px; }
+.nmx-c { text-align: center; width: 90px; }
+.nmx-ev { font-weight: 500; }
+.nmx-key { font-size: 11px; opacity: .5; }
+.nmx-hint { font-size: 12px; opacity: .65; line-height: 1.5; margin: 4px 0 10px; }
 </style>

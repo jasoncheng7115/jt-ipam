@@ -21,6 +21,7 @@ import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
 import { getRackDiagram } from "@/api/racks";
 type RackDiagramData = Awaited<ReturnType<typeof getRackDiagram>>;
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
+import DeviceEditModal from "@/components/DeviceEditModal.vue";
 import LiveStatusDot from "@/components/LiveStatusDot.vue";
 import type { IPAddress } from "@/types";
 import { autoSort } from "@/composables/useTableSort";
@@ -64,6 +65,7 @@ const router = useRouter();
 const msg = useMessage();
 
 const device = ref<Device | null>(null);
+const editShow = ref(false);
 const relations = ref<RelationNode[]>([]);
 const location = ref<Location | null>(null);
 const rack = ref<Rack | null>(null);
@@ -255,8 +257,7 @@ onMounted(() => {
         </template>
         <template #header-extra>
           <n-space :size="8">
-            <n-button type="primary" size="small"
-                      @click="router.push({ name: 'devices', query: { edit: device.id } })">
+            <n-button type="primary" size="small" @click="editShow = true">
               <template #icon><n-icon><EditIcon /></n-icon></template>
               {{ t("common.edit") }}
             </n-button>
@@ -424,6 +425,8 @@ onMounted(() => {
     @saved="onSaved"
     @deleted="onDeleted"
   />
+  <DeviceEditModal v-model:show="editShow" :device="device"
+                   @saved="() => load(String(route.params.id))" />
 </template>
 
 <style scoped>

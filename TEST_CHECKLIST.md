@@ -91,6 +91,31 @@ Release flow: run the checklist → all green → bump version → deploy
 - [ ] Topology: nodes / links, VPN pairing links, legend
 - [ ] Scan agents / sync jobs: pages render, no console errors
 
+## 7. pfSense integration (Admin → 整合 pfSense)
+
+> Prereq on the pfSense (CE 2.8.x): install **pfSense-pkg-RESTAPI** (pfrest.org), then System →
+> REST API → Settings add **"API Key"** to auth methods, and create a key under Keys.
+
+- [ ] Add instance: API URL + X-API-Key, **Verify TLS off** for a self-signed cert; save (key write-only, never returned).
+- [ ] **Test connection** → success with the pfSense version.
+- [ ] **Sync now** (ARP + aliases + rules on; **DHCP off** if another DHCP server owns the LAN) → counts return; an
+  in-scope ARP IP gets `last_seen` (source `pfsense`) + MAC; aliases/rules counts reflect the box.
+- [ ] **Field-name regression**: ARP/DHCP use `ip_address`/`mac_address` (not `ip`/`mac`); `hostname == "?"` → blank.
+- [ ] **Scope safety**: with `scope_subnet_ids` set, stamping only hits IPs in those subnets (overlap-safe `.limit(1)`).
+- [ ] **Rules / NAT viewer** (eye action) renders synced rules + NAT counts.
+- [ ] **Graylog DSV** (Expose DSV on + a Graylog DSV token set): `GET /api/v1/lookup/pfsense/{id}/aliases?token=…`
+  and `…/rules?token=…` return CSV/TSV; **wrong token → 401**; `expose_dsv` off → 404.
+- [ ] Delete instance; periodic `jt-ipam-sync` picks up enabled instances every ~5 min without errors.
+
+## 8. Recent feature spot-checks
+
+- [ ] **Notification matrix** (Admin → 通知發送設定): toggle events × (in-app / email); save persists; events fire
+  per matrix (IP request, cert expiring/deployed/drift, anomaly).
+- [ ] **Cert distribution `files` profile**: writes cert files only, no reload/restart.
+- [ ] **Anomaly page**: tabs, per-table column picker, `ip_address_id` hidden by default, MAC drift shows IP/hostname.
+- [ ] **MCP client-config generator** (LLM/AI): button outputs Claude Desktop / opencode / mcpo / generic snippets.
+- [ ] **Add address in a subnet**: the create form has a required IP field (issue #14).
+
 ---
 
 ### Appendix: throwaway test DB commands (on the prod host, **never the prod DB**)

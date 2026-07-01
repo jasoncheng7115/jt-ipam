@@ -66,6 +66,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 log.info("default_circuit_types_seeded", created=n)
     except Exception as exc:
         log.warning("seed_default_circuit_types_failed", error=str(exc))
+    # 背景作業是用 asyncio.create_task 跑在 worker 程序內；程序一重啟（部署/升級/當機）
+    # 在跑的作業就消失了，但 DB 的 status 還停在 pending/running → 在「作業」頁永遠殘留「執行中」。
+    # 啟動時把這些孤兒作業標成 failed（已中斷），確保不會卡在進行中清不掉。
+    try:
+        from datetime import UTC, datetime
+
+        from sqlalchemy import update
+
+        from app.core.db import SessionLocal
+        from app.models.background_task import BackgroundTask
+        async with SessionLocal() as s:
+            res = await s.execute(
+                update(BackgroundTask)
+                .where(BackgroundTask.status.in_(("pending", "running")))
+                .values(status="failed", error="interrupted: backend restarted",
+                        finished_at=datetime.now(UTC))
+            )
+            await s.commit()
+            if res.rowcount:
+                log.info("orphan_tasks_reconciled", count=res.rowcount)
+    except Exception as exc:
+        log.warning("orphan_task_reconcile_failed", error=str(exc))
     yield
     log.info("shutdown")
 

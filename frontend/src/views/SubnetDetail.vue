@@ -37,6 +37,7 @@ import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import SubnetEditModal from "@/components/SubnetEditModal.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
+import IpRoleTags from "@/components/IpRoleTags.vue";
 import OsIcon from "@/components/OsIcon.vue";
 import { useScanProbes, osFamilyLabel } from "@/api/scanProbes";
 const { t, locale } = useI18n();
@@ -77,13 +78,14 @@ const ipColumnPickerItems = [
   { key: "stale_days", label: t("stale.col_stale") },
   { key: "note", label: t("cols.note") },
 ];
-import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon, SearchIcon, AddressesIcon } from "@/icons";
+import { SubnetsIcon, RefreshIcon, UsageIcon, GridIcon, ListIcon, PinIcon, PlusIcon, MissingIcon, SearchIcon, AddressesIcon, DeleteIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";
 import { listDhcpRanges } from "@/api/integrations";
-import { getSubnetUsage } from "@/api/subnets";
+import { getSubnetUsage, deleteSubnet } from "@/api/subnets";
 import { getSection } from "@/api/sections";
+import { useSubnetTree } from "@/composables/useSubnetTree";
 import { listVLANs, listVRFs, type VLAN, type VRF } from "@/api/basic";
 import SubnetGrid from "@/components/SubnetGrid.vue";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
@@ -93,6 +95,24 @@ import type { IPAddress, Section, Subnet, SubnetUsage } from "@/types";
 const route = useRoute();
 const router = useRouter();
 const msg = useMessage();
+const { bump: bumpSubnetTree } = useSubnetTree();
+
+// 刪除此子網路（詳情頁工具列，帶確認框；刪除後刷新側邊樹並回子網路清單）
+const deleting = ref(false);
+async function delThisSubnet() {
+  if (!subnet.value) return;
+  deleting.value = true;
+  try {
+    await deleteSubnet(subnet.value.id);
+    bumpSubnetTree();
+    msg.success(t("common.deleted"));
+    void router.push({ name: "subnets" });
+  } catch (e: any) {
+    msg.error(e?.response?.data?.detail ?? t("common.delete_failed"));
+  } finally {
+    deleting.value = false;
+  }
+}
 
 const subnet = ref<Subnet | null>(null);
 const usage = ref<SubnetUsage | null>(null);
@@ -339,7 +359,7 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
     colSpan: (r: any) => r.__gap ? gapSpan.value : 1,
     render: (r) => (r as any).__gap
       ? h("div", { style: "text-align: center; color: var(--n-text-color-3, #999); font-style: italic" }, gapLabel(r))
-      : r.ip },
+      : h("span", { style: "display:inline-flex;align-items:center;white-space:nowrap" }, [String(r.ip), h(IpRoleTags, { row: r, hideRange: true })]) },
   { title: t("addresses.hostname"), key: "hostname", minWidth: 120,
     ellipsis: { tooltip: true }, render: (r) => (r as any).__gap ? "" : (r.hostname ?? "") },
   { title: t("common.status"), key: "state", width: 100,
@@ -364,7 +384,7 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
   { title: t("addresses.mac"), key: "mac", width: 150, render: (r) => r.mac ?? "" },
   { title: t("cols.vendor"), key: "mac_vendor", width: 140,
     ellipsis: { tooltip: true }, render: (r) => r.mac_vendor ?? "—" },
-  { title: t("cols.os"), key: "os", width: 110,
+  { title: t("cols.os"), key: "os", width: 150,
     render: (r) => {
       if ((r as any).__gap || !r.os_family) return "—";
       const label = osFamilyLabel(catalog.value.os_families, r.os_family, locale.value);
@@ -379,7 +399,7 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
     } },
   { title: t("addresses.owner"), key: "owner", width: 120,
     ellipsis: { tooltip: true }, render: (r) => r.owner ?? "" },
-  { title: t("addresses.switch_port"), key: "switch_port", width: 160,
+  { title: t("addresses.switch_port"), key: "switch_port", width: 210,
     ellipsis: { tooltip: false },   // 裁切但不開 cell tooltip，否則會跟下方 NTooltip 疊成兩個彈框
     render: (r) => !r.switch_port ? ""
       : h(NTooltip, null, {
@@ -675,6 +695,15 @@ onMounted(() => {
               </n-space>
             </n-popover>
             <n-button size="small" @click="handleExport">{{ t("csv_import.export_button") }}</n-button>
+            <n-popconfirm v-if="subnet" @positive-click="delThisSubnet">
+              <template #trigger>
+                <n-button size="small" type="error" :loading="deleting">
+                  <template #icon><n-icon><DeleteIcon /></n-icon></template>
+                  {{ t("common.delete") }}
+                </n-button>
+              </template>
+              {{ t("subnet_detail.delete_confirm") }}
+            </n-popconfirm>
           </n-space>
         </template>
         <n-descriptions bordered :column="3" size="small" label-placement="left">

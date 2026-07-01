@@ -23,15 +23,26 @@ if [[ $EUID -ne 0 ]]; then echo "Please run as root / sudo" >&2; exit 1; fi
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
 command -v ping >/dev/null || { echo "ping is required (iputils-ping)" >&2; exit 1; }
 
-# Optional probe tooling — unlocks extra probes the agent can run (capability auto-detected):
-#   nmap            → OS detection      | samba-common-bin → NetBIOS (nmblookup)
-#   avahi-utils     → mDNS (avahi-resolve)
+# Base tools this installer and the agent rely on: curl (downloads the agent below),
+# git and sudo (commonly needed on minimal images). Best-effort.
+# Probe tooling — unlocks extra probes the agent can run (capability auto-detected):
+#   nmap → OS detection | samba-common-bin → NetBIOS (nmblookup) | avahi-utils → mDNS (avahi-resolve)
+# NOTE: avahi-utils pulls in avahi-daemon, a resident service that listens on UDP 5353 and
+# announces this host over mDNS. It is installed by default here so mDNS name resolution works;
+# set JT_IPAM_NO_MDNS=1 to leave it out. JT_IPAM_SKIP_PROBE_TOOLS=1 skips all probe tools (not base).
 # Best-effort: skipped if apt-get is unavailable or offline; install manually otherwise.
-if [[ -z "${JT_IPAM_SKIP_PROBE_TOOLS:-}" ]] && command -v apt-get >/dev/null; then
-  echo "==> Installing optional probe tools (nmap / samba-common-bin / avahi-utils)…"
+if command -v apt-get >/dev/null; then
   DEBIAN_FRONTEND=noninteractive apt-get update -qq || true
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nmap samba-common-bin avahi-utils || \
-    echo "    (some probe tools failed to install; NetBIOS/mDNS/OS probes may stay unavailable)"
+  echo "==> Installing base tools (curl git sudo)…"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git sudo || \
+    echo "    (some base tools failed to install)"
+  if [[ -z "${JT_IPAM_SKIP_PROBE_TOOLS:-}" ]]; then
+    PROBE_PKGS=(nmap samba-common-bin)
+    [[ -z "${JT_IPAM_NO_MDNS:-}" ]] && PROBE_PKGS+=(avahi-utils)   # avahi-utils → avahi-daemon (UDP 5353)
+    echo "==> Installing probe tools (${PROBE_PKGS[*]})…"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PROBE_PKGS[@]}" || \
+      echo "    (some probe tools failed to install; NetBIOS/OS/mDNS probes may stay unavailable)"
+  fi
 fi
 
 echo "==> Installing agent program to ${DEST}"

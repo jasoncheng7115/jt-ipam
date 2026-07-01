@@ -1830,6 +1830,71 @@ async def power_calc(
 
 
 # 每個 tool entry：name → (callable, description, json schema for parameters)
+async def list_connection_targets(
+    session: AsyncSession, *, user: User, protocol: str | None = None, limit: int = 200,
+) -> dict[str, Any]:
+    """瀏覽器遠端連線管理（SSH / RDP / VNC）已啟用、且呼叫者可連線的 IP / 裝置。唯讀，絕不回帳密。"""
+    from app.services.permission import get_object_permission, has_permission
+    if limit > 500:
+        limit = 500
+    proto = (protocol or "").lower().strip()
+    if proto == "ssh":
+        stmt = select(IPAddress).where(IPAddress.ssh_enabled.is_(True))
+    elif proto == "rdp":
+        stmt = select(IPAddress).where(IPAddress.rdp_enabled.is_(True))
+    elif proto == "vnc":
+        stmt = select(IPAddress).where(IPAddress.vnc_enabled.is_(True))
+    else:
+        stmt = select(IPAddress).where(
+            IPAddress.ssh_enabled.is_(True)
+            | IPAddress.rdp_enabled.is_(True)
+            | IPAddress.vnc_enabled.is_(True)
+        )
+    if not user.is_admin:
+        vis = await visible_ids(session, user=user, object_type="subnet")
+        if vis is not None:
+            if not vis:
+                return {"items": [], "count": 0}
+            stmt = stmt.where(IPAddress.subnet_id.in_(vis))
+    rows = list((await session.execute(stmt)).scalars().all())
+    perm_cache: dict[Any, str] = {}
+    kept: list[IPAddress] = []
+    for ip in rows:
+        if user.is_admin:
+            usable = True
+        else:
+            lvl = perm_cache.get(ip.subnet_id)
+            if lvl is None:
+                lvl = await get_object_permission(
+                    session, user=user, object_type="subnet", object_id=ip.subnet_id,
+                )
+                perm_cache[ip.subnet_id] = lvl
+            if lvl == "none":
+                continue
+            usable = has_permission(lvl, "write") or bool(user.can_ssh)
+        if not usable:
+            continue
+        kept.append(ip)
+        if len(kept) >= limit:
+            break
+    dev_ids = {ip.device_id for ip in kept if ip.device_id}
+    dev_names: dict[Any, str] = {}
+    if dev_ids:
+        drows = (await session.execute(
+            select(Device.id, Device.name).where(Device.id.in_(dev_ids))
+        )).all()
+        dev_names = {d[0]: d[1] for d in drows}
+    items = [{
+        "ip": str(ip.ip).split("/")[0],
+        "hostname": ip.hostname,
+        "device": dev_names.get(ip.device_id) if ip.device_id else None,
+        "ssh": bool(ip.ssh_enabled),
+        "rdp": bool(ip.rdp_enabled),
+        "vnc": bool(ip.vnc_enabled),
+    } for ip in kept]
+    return {"items": items, "count": len(items)}
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "search_ip": {
         "fn": search_ip,
@@ -2046,6 +2111,18 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Global search across IP / CIDR / MAC / VLAN / text (subnets, IPs, devices).",
         "parameters": {"type": "object", "properties": {"q": {"type": "string"}},
                        "required": ["q"]},
+    },
+    "list_connection_targets": {
+        "fn": list_connection_targets,
+        "description": (
+            "List IPs/devices that have a browser remote console enabled (SSH / RDP / VNC) and "
+            "that you may connect to. Read-only — returns ip, hostname, device and which of "
+            "ssh/rdp/vnc are enabled; NEVER returns credentials. Optional protocol=ssh|rdp|vnc "
+            "to filter to one transport."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "protocol": {"type": "string", "enum": ["ssh", "rdp", "vnc"]},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
     "oui_lookup": {
         "fn": oui_lookup,

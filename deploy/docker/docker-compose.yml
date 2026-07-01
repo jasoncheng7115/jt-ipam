@@ -1,0 +1,105 @@
+# jt-ipam — OPTIONAL Docker Compose deployment (secondary; the primary supported
+# install is systemd + apt via scripts/jt-ipam.sh). See deploy/docker/README.md.
+#
+# Quick start (from this directory):
+#   ./gen-env.sh            # create .env with random secrets (once)
+#   docker compose up -d --build
+#   open https://localhost  (self-signed cert on first run)
+# Update to a newer version later:
+#   ./update.sh             # git pull + rebuild + up -d (migrations run automatically)
+
+name: jt-ipam
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jt_ipam}
+      POSTGRES_USER: ${POSTGRES_USER:-jt_ipam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (run ./gen-env.sh)}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jt_ipam} -d ${POSTGRES_DB:-jt_ipam}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: backend
+    image: jt-ipam-backend:local
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # becomes healthy only once uvicorn is listening — which is AFTER the entrypoint
+    # has finished `alembic upgrade head` (migrations run before uvicorn starts).
+    # sync/web wait on this so they never touch a half-migrated DB.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3).close()"]
+      interval: 5s
+      timeout: 4s
+      retries: 40
+      start_period: 30s
+    restart: unless-stopped
+
+  # background sync loop (replaces the systemd jt-ipam-sync.timer). Skips the
+  # migration entrypoint (the backend service owns migrations) and just loops.
+  sync:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: backend
+    image: jt-ipam-backend:local
+    env_file: .env
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cd /app/backend
+        while true; do
+          python /app/scripts/jt-ipam-sync.py || true
+          sleep "$${SYNC_INTERVAL_SECONDS:-300}"
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: web
+    image: jt-ipam-web:local
+    environment:
+      JT_IPAM_SERVER_NAME: ${JT_IPAM_SERVER_NAME:-localhost}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./certs:/etc/nginx/certs
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

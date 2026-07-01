@@ -4,7 +4,8 @@
  * 原生 HTML5 拖拉排序，無額外相依。
  */
 import { onMounted, ref } from "vue";
-import { NButton, NCard, NSpin, NText, NSwitch, NSpace, useMessage } from "naive-ui";
+import { NButton, NCard, NSpin, NText, NSwitch, NSpace, NIcon, useMessage } from "naive-ui";
+import { SaveIcon } from "@/icons";
 import { useI18n } from "vue-i18n";
 import {
   getHostnamePrecedence, setHostnamePrecedence,
@@ -257,6 +258,7 @@ onMounted(load);
       </ul>
 
       <n-button type="primary" :loading="saving" style="margin-top: 16px" @click="save">
+        <template #icon><n-icon><SaveIcon /></n-icon></template>
         {{ t("hostnameSrc.save") }}
       </n-button>
     </n-card>
@@ -293,6 +295,7 @@ onMounted(load);
           </li>
         </ul>
         <n-button type="primary" :loading="arpSaving" style="margin-top: 16px" @click="saveArp">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
           {{ t("hostnameSrc.save") }}
         </n-button>
     </n-card>
@@ -329,6 +332,7 @@ onMounted(load);
           </li>
         </ul>
         <n-button type="primary" :loading="devSaving" style="margin-top: 16px" @click="saveDev">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
           {{ t("hostnameSrc.save") }}
         </n-button>
     </n-card>
@@ -365,6 +369,7 @@ onMounted(load);
           </li>
         </ul>
         <n-button type="primary" :loading="modelSaving" style="margin-top: 16px" @click="saveModel">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
           {{ t("hostnameSrc.save") }}
         </n-button>
     </n-card>
@@ -391,6 +396,7 @@ onMounted(load);
           </li>
         </ul>
         <n-button type="primary" :loading="osSaving" style="margin-top: 16px" @click="saveOs">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
           {{ t("hostnameSrc.save") }}
         </n-button>
     </n-card>

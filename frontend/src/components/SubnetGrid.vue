@@ -11,11 +11,15 @@
  */
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { NEmpty } from "naive-ui";
+import { NEmpty, NTooltip } from "naive-ui";
 import type { IPAddress } from "@/types";
-import { classifyAddressLiveness } from "@/composables/useLivenessSettings";
+import { classifyAddressLiveness, onlineGraceMinutes } from "@/composables/useLivenessSettings";
 
 const { t } = useI18n();
+
+// 圖例 tooltip 用的存活門檻（與 classifyLiveness 一致：上線=grace、近期出現=grace~grace*4）
+const graceMin = computed(() => onlineGraceMinutes.value || 30);
+const staleMaxMin = computed(() => graceMin.value * 4);
 
 // 自製 tooltip — 原生 title 屬性會有 500-1500ms 延遲，這個 0 延遲
 const tip = ref<{ x: number; y: number; text: string } | null>(null);
@@ -298,12 +302,12 @@ function aggColor(pct: number): string {
       >{{ tip.text }}</div>
     </Teleport>
     <div class="legend">
-      <span class="legend-item"><i :style="{ background: 'var(--jt-cell-active, #22c55e)' }"></i>{{ t("visualisation.online") }} ({{ legendCounts.online }})</span>
-      <span class="legend-item"><i :style="{ background: 'var(--jt-cell-dhcp, #f59e0b)' }"></i>{{ t("visualisation.stale") }} ({{ legendCounts.stale }})</span>
-      <span class="legend-item"><i :style="{ background: 'var(--jt-cell-offline, #ef4444)' }"></i>{{ t("visualisation.offline") }} ({{ legendCounts.offline }})</span>
-      <span class="legend-item"><i :style="{ background: 'var(--jt-cell-reserved, #3b82f6)' }"></i>{{ t("visualisation.reserved") }} ({{ legendCounts.reserved }})</span>
-      <span class="legend-item"><i :style="{ background: 'var(--jt-cell-unknown, rgba(127,127,127,0.45))' }"></i>{{ t("visualisation.unknown") }} ({{ legendCounts.unknown }})</span>
-      <span class="legend-item"><i :style="{ background: 'var(--jt-cell-free, rgba(127,127,127,0.16))', border: '1px solid rgba(127,127,127,0.4)' }"></i>{{ t("visualisation.free") }} ({{ legendCounts.free }})</span>
+      <n-tooltip><template #trigger><span class="legend-item"><i :style="{ background: 'var(--jt-cell-active, #22c55e)' }"></i>{{ t("visualisation.online") }} ({{ legendCounts.online }})</span></template>{{ t("visualisation.tip_online", { grace: graceMin }) }}</n-tooltip>
+      <n-tooltip><template #trigger><span class="legend-item"><i :style="{ background: 'var(--jt-cell-dhcp, #f59e0b)' }"></i>{{ t("visualisation.stale") }} ({{ legendCounts.stale }})</span></template>{{ t("visualisation.tip_stale", { grace: graceMin, staleMax: staleMaxMin }) }}</n-tooltip>
+      <n-tooltip><template #trigger><span class="legend-item"><i :style="{ background: 'var(--jt-cell-offline, #ef4444)' }"></i>{{ t("visualisation.offline") }} ({{ legendCounts.offline }})</span></template>{{ t("visualisation.tip_offline", { staleMax: staleMaxMin }) }}</n-tooltip>
+      <n-tooltip><template #trigger><span class="legend-item"><i :style="{ background: 'var(--jt-cell-reserved, #3b82f6)' }"></i>{{ t("visualisation.reserved") }} ({{ legendCounts.reserved }})</span></template>{{ t("visualisation.tip_reserved") }}</n-tooltip>
+      <n-tooltip><template #trigger><span class="legend-item"><i :style="{ background: 'var(--jt-cell-unknown, rgba(127,127,127,0.45))' }"></i>{{ t("visualisation.unknown") }} ({{ legendCounts.unknown }})</span></template>{{ t("visualisation.tip_unknown") }}</n-tooltip>
+      <n-tooltip><template #trigger><span class="legend-item"><i :style="{ background: 'var(--jt-cell-free, rgba(127,127,127,0.16))', border: '1px solid rgba(127,127,127,0.4)' }"></i>{{ t("visualisation.free") }} ({{ legendCounts.free }})</span></template>{{ t("visualisation.tip_free") }}</n-tooltip>
     </div>
   </div>
 </template>

@@ -12,7 +12,7 @@ import {
   NSpace,
 } from "naive-ui";
 import { listNotifications, markAllRead, markRead, type Notification } from "@/api/notifications";
-import { BellIcon } from "@/icons";
+import { BellIcon, CheckIcon } from "@/icons";
 import { fmtDateTime, fmtRelative } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
@@ -79,25 +79,33 @@ onUnmounted(() => {
     </template>
     <n-space vertical :size="8">
       <n-space justify="space-between" align="center">
-        <strong>{{ t("notifications.title") }}</strong>
-        <n-button v-if="unread > 0" size="tiny" @click="clearAll">{{ t("notifications.mark_all_read") }}</n-button>
+        <n-space :size="6" align="center" :wrap-item="false">
+          <n-icon :size="16"><BellIcon /></n-icon>
+          <strong>{{ t("notifications.title") }}</strong>
+        </n-space>
+        <n-button v-if="unread > 0" size="tiny" @click="clearAll">
+          <template #icon><n-icon><CheckIcon /></n-icon></template>
+          {{ t("notifications.mark_all_read") }}
+        </n-button>
       </n-space>
-      <n-list v-if="items.length" hoverable>
-        <n-list-item
-          v-for="n in items"
-          :key="n.id"
-          style="cursor: pointer"
-          :class="{ unread: !n.read_at }"
-          @click="clickItem(n)"
-        >
-          <n-space vertical :size="2" style="width: 100%">
-            <strong class="notif-text">{{ n.title }}</strong>
-            <n-text v-if="n.body" depth="3" class="notif-text" style="font-size: 12px">{{ n.body }}</n-text>
-            <n-text depth="3" style="font-size: 11px" :title="fmtDateTime(n.created_at)">{{ fmtRelative(n.created_at) }}</n-text>
-          </n-space>
-        </n-list-item>
-      </n-list>
-      <n-empty v-else size="small" :description="t('notifications.empty')" />
+      <div class="notif-scroll">
+        <n-list v-if="items.length" hoverable>
+          <n-list-item
+            v-for="n in items"
+            :key="n.id"
+            style="cursor: pointer"
+            :class="{ unread: !n.read_at }"
+            @click="clickItem(n)"
+          >
+            <n-space vertical :size="2" style="width: 100%">
+              <strong class="notif-text">{{ n.title }}</strong>
+              <n-text v-if="n.body" depth="3" class="notif-text" style="font-size: 12px">{{ n.body }}</n-text>
+              <n-text depth="3" style="font-size: 11px" :title="fmtDateTime(n.created_at)">{{ fmtRelative(n.created_at) }}</n-text>
+            </n-space>
+          </n-list-item>
+        </n-list>
+        <n-empty v-else size="small" :description="t('notifications.empty')" />
+      </div>
       <div style="text-align: center; border-top: 1px solid var(--n-divider-color); padding-top: 6px">
         <n-button text size="small" @click="goAll">{{ t("notifications.view_all") }}</n-button>
       </div>
@@ -106,6 +114,12 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* 通知過多時內部捲動，不讓彈窗長過畫面（標題與「查看全部」維持固定可見） */
+.notif-scroll {
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  margin: 0 -2px;
+}
 .unread {
   background: rgba(64, 128, 255, 0.06);
 }

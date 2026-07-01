@@ -28,13 +28,13 @@ const { visibleKeys: grpVis, setVisible: grpSet, reset: grpReset } = useColumnPr
   ["name", "description", "member_count", "is_builtin", "actions"],
   ["name", "description", "member_count", "is_builtin", "actions"],
 );
-const grpPicker = [
+const grpPicker = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "description", label: t("cols.description") },
   { key: "member_count", label: t("cols.member_count") },
   { key: "is_builtin", label: t("cols.builtin") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<Group[]>([]);

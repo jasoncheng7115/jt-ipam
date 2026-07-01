@@ -24,6 +24,22 @@ log()  { echo -e "\033[1;32m[jt-ipam]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[warn]\033[0m $*" >&2; }
 die()  { echo -e "\033[1;31mFATAL:\033[0m $*" >&2; exit 1; }
 
+# Best-effort install of the optional RDP dependency (aardwolf, pinned to a wheel-having
+# version). --only-binary=:all: means: if there is no prebuilt wheel for this platform/Python,
+# fail FAST instead of pulling an sdist and triggering a Rust toolchain build. Failure is
+# non-fatal: RDP features are simply disabled, the core install is unaffected.
+install_rdp_optional() {
+    local bd="${REPO_ROOT}/backend"
+    local u; u="$(stat -c '%U' "$bd/.venv" 2>/dev/null || echo jtipam)"
+    [ -x "$bd/.venv/bin/pip" ] || return 0
+    log "Installing optional RDP dependency (aardwolf, prebuilt wheel only)…"
+    if ( cd "$bd" && sudo -u "$u" "$bd/.venv/bin/pip" install --quiet --only-binary=:all: -e ".[rdp]" ); then
+        log "RDP support installed."
+    else
+        warn "Optional RDP dependency not installed (no prebuilt wheel for this platform/Python, or offline). RDP features disabled; core install unaffected."
+    fi
+}
+
 # Ensure a modern Node.js (>=18) is available to root. Three cases this handles:
 #  - distro 'nodejs' on Ubuntu 22.04 is v12 (too old for pnpm/vite)
 #  - invoked via sudo: an nvm-managed node in the caller's home is not on root's PATH
@@ -36,8 +52,11 @@ ensure_node() {
     fi
     if [[ -n "${SUDO_USER:-}" ]]; then
         local h nb
-        h=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-        nb=$(find "$h/.nvm/versions/node" -maxdepth 2 -name node -type f 2>/dev/null | sort -Vr | head -1)
+        # ⚠️ `set -e` + `pipefail`：`var=$(pipeline)` 若 pipeline 失敗，整個賦值就失敗 → 腳本「靜默」
+        # 結束（無錯誤訊息）。這裡 find 對不存在的 ~/.nvm 會非零、`| head` 也可能 SIGPIPE 上游 →
+        # 一定要 `|| true`。客戶 Debian 13 安裝「印完 Building frontend… 就回到提示字元」的真凶就是這行。
+        h=$(getent passwd "$SUDO_USER" | cut -d: -f6 || true)
+        nb=$(find "$h/.nvm/versions/node" -maxdepth 2 -name node -type f 2>/dev/null | sort -Vr | head -1 || true)
         if [[ -n "$nb" ]] && [[ "$("$nb" -v 2>/dev/null | sed 's/^v//; s/\..*//')" -ge 18 ]]; then
             ln -sf "$nb" /usr/local/bin/node
             ln -sf "$(dirname "$nb")/npm" /usr/local/bin/npm 2>/dev/null || true
@@ -87,6 +106,87 @@ build_frontend() {
     chown -R "$owner" node_modules dist 2>/dev/null || true
 }
 
+# Idempotently add WebSocket upgrade support (SSH terminal) to an EXISTING nginx
+# site on upgrade. Fresh installs already ship the correct template; upgrade
+# deliberately leaves the (often hand-customized) site config alone, so we patch
+# only the two WS bits in-place when missing.
+#
+# Safe by design: only-if-missing (marker grep), back up first, gate on `nginx -t`,
+# restore on failure, and NEVER abort the upgrade (always returns 0).
+patch_nginx_websocket() {
+    local site=/etc/nginx/sites-available/jt-ipam
+    [[ -f "$site" ]] || return 0                       # not nginx mode → nothing to do
+    command -v nginx >/dev/null 2>&1 || return 0
+    grep -qE 'bmc\)/ws' "$site" && return 0     # already fully patched (incl. BMC SOL)
+
+    local bak="${site}.pre-ws.bak"
+
+    # Existing WS location (any older subset) → widen it to ssh+rdp+vnc+novnc+bmc.
+    if grep -qE '/(ssh|rdp|vnc|novnc)[/)]' "$site" || grep -q '/ssh/ws' "$site"; then
+        log "Widening nginx WebSocket location to cover SSH + RDP + VNC + noVNC + BMC…"
+        cp -p "$site" "$bak" 2>/dev/null || true
+        sed -i 's#/ssh/ws$ {#/(ssh|rdp|vnc|novnc|bmc)/ws$ {#' "$site"
+        sed -i 's#(ssh|rdp)/ws$ {#(ssh|rdp|vnc|novnc|bmc)/ws$ {#' "$site"
+        sed -i 's#(ssh|rdp|vnc)/ws$ {#(ssh|rdp|vnc|novnc|bmc)/ws$ {#' "$site"
+        sed -i 's#(ssh|rdp|vnc|novnc)/ws$ {#(ssh|rdp|vnc|novnc|bmc)/ws$ {#' "$site"
+        if nginx -t >/dev/null 2>&1; then
+            systemctl reload nginx 2>/dev/null || true
+            log "nginx WebSocket location widened (SSH + RDP + VNC + noVNC + BMC) + reloaded."
+        else
+            warn "nginx -t failed after widening WS location; restoring previous config."
+            cp -p "$bak" "$site" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    log "Patching nginx site for WebSocket (SSH + RDP + VNC + BMC console)…"
+    cp -p "$site" "$bak" 2>/dev/null || true
+
+    # 1) http-level map (skip if some connection_upgrade map already exists)
+    if ! grep -q 'connection_upgrade' "$site"; then
+        { printf '%s\n' \
+            '# jt-ipam-conn-ws: WebSocket upgrade map (added on upgrade)' \
+            'map $http_upgrade $connection_upgrade { default upgrade; '\'''\'' close; }' \
+            ''; cat "$site"; } > "${site}.tmp" && mv "${site}.tmp" "$site"
+    fi
+
+    # 2) dedicated WS location, inserted before the first "location /api/ {"
+    # NB: set headers explicitly (do NOT include jt-ipam-proxy.conf) — that snippet
+    # already sets proxy_read_timeout, and re-declaring it here = "duplicate directive".
+    awk '
+      !ins && /location \/api\/ \{/ {
+        print "    # jt-ipam-conn-ws: SSH + RDP + VNC console WebSocket (long-lived)";
+        print "    location ~ ^/api/v1/addresses/[0-9a-fA-F-]+/(ssh|rdp|vnc|novnc|bmc)/ws$ {";
+        print "        proxy_pass http://127.0.0.1:8000;";
+        print "        proxy_http_version 1.1;";
+        print "        proxy_set_header Host               $host;";
+        print "        proxy_set_header X-Real-IP          $remote_addr;";
+        print "        proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;";
+        print "        proxy_set_header X-Forwarded-Proto  $scheme;";
+        print "        proxy_set_header X-Request-ID       $request_id;";
+        print "        proxy_set_header Upgrade            $http_upgrade;";
+        print "        proxy_set_header Connection         $connection_upgrade;";
+        print "        proxy_read_timeout 3600s;";
+        print "        proxy_send_timeout 3600s;";
+        print "        proxy_buffering off;";
+        print "    }";
+        print "";
+        ins = 1;
+      }
+      { print }
+    ' "$site" > "${site}.tmp" && mv "${site}.tmp" "$site"
+
+    if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx 2>/dev/null || true
+        log "nginx WebSocket patch applied + reloaded."
+    else
+        warn "nginx -t failed after WebSocket patch; restoring previous config."
+        warn "  SSH terminal needs a manual nginx update — see deploy/nginx/jt-ipam.conf."
+        cp -p "$bak" "$site" 2>/dev/null || true
+    fi
+    return 0
+}
+
 # -- root guard (used by install/upgrade/uninstall; not by help/usage) --
 require_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -130,6 +230,28 @@ USAGE
 # =============================================================================
 # cmd_install — fresh install (original scripts/install-debian.sh logic, preserved verbatim)
 # =============================================================================
+# OWASP A05 — security headers are a required part of the deployment. The bundled nginx config
+# applies them; but if the operator fronts this box with their own edge proxy, that proxy must
+# set them too (they don't survive an extra hop). Print a clear, required notice.
+security_headers_notice() {
+    local mode="${1:-nginx}" fqdn="${2:-your-fqdn}"
+    echo
+    echo "  === SECURITY HEADERS (required) ============================="
+    if [[ "$mode" == "nginx" ]]; then
+        echo "   This install's nginx applies HSTS / CSP (frame-src 'self') / X-Frame-Options /"
+        echo "   nosniff / Referrer-Policy / Permissions-Policy / COOP / CORP and hides the banner."
+    fi
+    echo "   ⚠  If you put your OWN reverse proxy / load balancer in FRONT of this box, that edge"
+    echo "      proxy MUST set the same security headers — they do NOT survive an extra hop, or the"
+    echo "      public site ships with no CSP/HSTS. Apply on that edge box:"
+    echo "        deploy/nginx/jt-ipam-external-proxy.conf  (+ jt-ipam-external-proxy-snippet.conf)"
+    echo "   Verify through the PUBLIC url users actually hit:"
+    echo "     curl -skI https://${fqdn}/ | grep -iE 'strict-transport|content-security|x-frame|cross-origin|^server'"
+    echo "     (each header exactly once; Server: nginx, no version)"
+    echo "  ============================================================"
+    echo
+}
+
 cmd_install() {
     # -- default parameters --
     local TLS_MODE="nginx"
@@ -184,13 +306,21 @@ cmd_install() {
     #    → `sudo: command not found`（客戶回報手動補 PG 後卡住的第二關多半是這個）。
     apt-get install -y -qq ca-certificates curl gnupg sudo
 
+    # 套件是否可安裝：用命令替換、**不要** `apt-cache madison X | grep -q .`。
+    # 在 `set -o pipefail` 下，madison 對「有多個候選版本」的套件（如 Debian 13 的 postgresql-17
+    # 同時有 17.10 安全更新與 17.9）會輸出多行，`grep -q` 命中第一行就關閉管線 → 上游 apt-cache 寫
+    # 第二行時收到 SIGPIPE(141) → pipefail 把整條管線判失敗 → 套件「明明有」卻被當成沒有。這正是
+    # 客戶 Debian 13 native PG17 沒被選到、白繞 PGDG 又 FATAL 的真正主因（單一版本的發行版只有一行、
+    # 不會 SIGPIPE，所以一直沒被發現）。命令替換會把 stdout 全收完，無管線、不會 SIGPIPE。
+    _pkg_installable() { [ -n "$(apt-cache madison "$1" 2>/dev/null)" ]; }
+
     # Detect available Python (newest to oldest, needs >= 3.11).
-    # Use apt-cache madison: only counts if actually installable (apt-cache show matches Provides, unreliable).
+    # madison 只認「真的裝得到」的（apt-cache show 會比對 Provides、不可靠）。
     local PYTHON_BIN=""
     local PYTHON_PKGS=()
     local ver
     for ver in python3.14 python3.13 python3.12 python3.11; do
-        if apt-cache madison "${ver}-venv" 2>/dev/null | grep -q .; then
+        if _pkg_installable "${ver}-venv"; then
             PYTHON_BIN="$ver"
             PYTHON_PKGS=("$ver" "${ver}-venv" "${ver}-dev")
             break
@@ -227,29 +357,39 @@ cmd_install() {
             > /etc/apt/sources.list.d/pgdg.list
         apt-get update -qq
     }
-    local PG_VER="" v
-    for v in 16 17 18 19 20; do
-        if apt-cache madison "postgresql-$v" 2>/dev/null | grep -q .; then PG_VER="$v"; break; fi
-    done
+    # 關鍵：只挑「server 套件」與「對應 postgresql-N-pgvector」**兩者都裝得到**的 PG 版本。
+    # 不能只看 server 再硬退回 16：客戶 Debian 13（trixie）回報——native 未被選到、退回 PGDG 16，
+    # 但 PGDG 對 trixie 目前只出 17/18 的 pgvector、沒有 postgresql-16-pgvector → 整支安裝 FATAL。
+    # 改成：先在預設庫找「server+pgvector 成對」的版本（16→17→18，app 三者皆相容），
+    # 找不到才補 PGDG 再找一次（PGDG/trixie 會給 17+pgvector）。
+    _pick_pg() {   # echo 第一個 server 與 pgvector 都可安裝的版本，否則回非零
+        local v                                   # （用 _pkg_installable，避免 grep -q SIGPIPE 雷）
+        for v in 16 17 18; do
+            _pkg_installable "postgresql-$v"          || continue
+            _pkg_installable "postgresql-$v-pgvector" || continue
+            echo "$v"; return 0
+        done
+        return 1
+    }
+    local PG_VER
+    PG_VER="$(_pick_pg || true)"
     if [[ -z "$PG_VER" ]]; then
-        warn "no postgresql-NN (>=16) in default repos; adding PGDG repo for postgresql-16…"
-        _add_pgdg_repo || die "apt-get update failed after adding the PGDG repo for codename '$(lsb_release -cs)'. PGDG may not carry this Ubuntu release yet — install PostgreSQL >= 16 + matching pgvector manually, then re-run install."
-        PG_VER=16
+        # 預設庫沒找到成對版本，先重跑一次 apt-get update 再試：涵蓋「安裝當下 apt index 還沒
+        # 更新好/上一輪抓取暫時失敗」的情況——客戶 Debian 13 native 明明有 postgresql-17 +
+        # postgresql-17-pgvector 卻沒被選到、白繞 PGDG 退回 16。重整索引後多半就能直接走原生。
+        warn "no PostgreSQL (>=16) with matching pgvector yet; refreshing apt index and retrying…"
+        apt-get update -qq || true
+        PG_VER="$(_pick_pg || true)"
     fi
-    log "Using PostgreSQL $PG_VER"
+    if [[ -z "$PG_VER" ]]; then
+        warn "still none in default repos; adding PGDG…"
+        _add_pgdg_repo || die "apt-get update failed after adding the PGDG repo for codename '$(lsb_release -cs)'. PGDG may not carry this release yet — install PostgreSQL >= 16 + matching pgvector manually, then re-run install."
+        PG_VER="$(_pick_pg || true)"
+        [[ -n "$PG_VER" ]] || die "no PostgreSQL 16/17/18 with a matching postgresql-N-pgvector is installable, even after adding PGDG (codename '$(lsb_release -cs)'). Install PostgreSQL + pgvector manually, then re-run install."
+    fi
+    log "Using PostgreSQL $PG_VER (with pgvector)"
 
-    local PG_PKGS=("postgresql-$PG_VER" "postgresql-contrib-$PG_VER")
-    if apt-cache madison "postgresql-$PG_VER-pgvector" 2>/dev/null | grep -q .; then
-        PG_PKGS+=("postgresql-$PG_VER-pgvector")
-    else
-        warn "postgresql-$PG_VER-pgvector not in current repos; adding PGDG repo for pgvector…"
-        _add_pgdg_repo || true
-        if apt-cache madison "postgresql-$PG_VER-pgvector" 2>/dev/null | grep -q .; then
-            PG_PKGS+=("postgresql-$PG_VER-pgvector")
-        else
-            die "pgvector for PostgreSQL $PG_VER not installable (package postgresql-$PG_VER-pgvector). Install it manually, then re-run install."
-        fi
-    fi
+    local PG_PKGS=("postgresql-$PG_VER" "postgresql-contrib-$PG_VER" "postgresql-$PG_VER-pgvector")
 
     local PKGS=(
         "${PG_PKGS[@]}"
@@ -257,6 +397,7 @@ cmd_install() {
         "${PYTHON_PKGS[@]}"
         build-essential libpq-dev pkg-config
         curl ca-certificates gnupg openssl
+        ipmitool freeipmi-tools
     )
 
     # Node.js is handled by ensure_node() right before the frontend build — distro 'nodejs'
@@ -358,6 +499,7 @@ SQL
     sudo -u "$JTIPAM_USER" .venv/bin/pip install --upgrade pip wheel
     # prod installs runtime deps only (matching upgrade); for dev/test tools run pip install -e ".[dev]" separately
     sudo -u "$JTIPAM_USER" .venv/bin/pip install -e .
+    install_rdp_optional
 
     # -- 6. backend.env --
     log "Generating /etc/jt-ipam/backend.env…"
@@ -457,7 +599,9 @@ EOF
     INITIAL_ADMIN_PW=""
     if [[ ! -f "$ADMIN_PW_RECORD" ]]; then
         local _gen_pw _tmp_pw
-        _gen_pw="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
+        # `head -c 20` 提早關管線會 SIGPIPE 上游 tr → pipefail+set -e 會中斷安裝；20 字早已截到、
+        # 加 `|| true` 只消化退出碼、不影響已擷取的密碼內容。
+        _gen_pw="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20 || true)"
         _tmp_pw="$(mktemp)"; chmod 600 "$_tmp_pw"; printf '%s' "$_gen_pw" > "$_tmp_pw"; chown "$JTIPAM_USER" "$_tmp_pw"
         # create-admin errors (non-zero) if an admin already exists → then we just skip silently
         if sudo -u "$JTIPAM_USER" --preserve-env=PATH bash -c \
@@ -570,6 +714,7 @@ EOF
             ;;
     esac
     log "Review /etc/jt-ipam/backend.env (especially APP_PUBLIC_URL / CORS_ORIGINS)"
+    security_headers_notice "$TLS_MODE" "$PUBLIC_FQDN"
 
     # -- first-admin credentials --
     if [[ -n "$INITIAL_ADMIN_PW" ]]; then
@@ -648,7 +793,7 @@ cmd_upgrade() {
     if [[ -x "$ROOT/scripts/jt-ipam-backup.sh" ]]; then
       log "Backing up the database…"
       "$ROOT/scripts/jt-ipam-backup.sh"
-      DUMP_PATH="$(find /var/backups/jt-ipam -name '*.dump' -newermt '-2 min' 2>/dev/null | sort | tail -1)"
+      DUMP_PATH="$(find /var/backups/jt-ipam -name '*.dump' -newermt '-2 min' 2>/dev/null | sort | tail -1 || true)"
       [[ -n "$DUMP_PATH" ]] && log "Backup file: $DUMP_PATH"
     else
       warn "cannot find jt-ipam-backup.sh, skipping automatic backup (strongly recommend a manual pg_dump first)"
@@ -661,6 +806,13 @@ cmd_upgrade() {
     # -- 4. backend dependencies --
     log "Updating backend dependencies (pip install -e .)…"
     ( cd "$ROOT/backend"; as_user .venv/bin/pip install --quiet -e . )
+    install_rdp_optional
+    # IPMI tools for the BMC console (install on upgrade of existing setups; best-effort)
+    if command -v apt-get >/dev/null 2>&1 && ! command -v ipmitool >/dev/null 2>&1; then
+        log "Installing IPMI tools (ipmitool freeipmi-tools) for the BMC console…"
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ipmitool freeipmi-tools || \
+            warn "ipmitool install failed; BMC console unavailable until installed."
+    fi
 
     # -- 5. database migration --
     log "alembic upgrade head…"
@@ -671,6 +823,9 @@ cmd_upgrade() {
     log "Building frontend…"
     build_frontend "$ROOT/frontend" "$JTIPAM_USER:$JTIPAM_USER"
 
+    # -- 6b. ensure nginx forwards WebSocket (SSH terminal); idempotent, safe no-op if already present --
+    patch_nginx_websocket
+
     # -- 7. restart backend --
     log "Restarting $SVC…"
     systemctl restart "$SVC"
@@ -680,6 +835,8 @@ cmd_upgrade() {
     trap - ERR
     log "Upgrade complete: ${OLD_VER} (${OLD_REV}) -> ${NEW_VER} (${NEW_REV})  alembic $(alembic_head)"
     log "Frontend rebuilt (nginx serves dist directly, no restart needed)."
+    security_headers_notice "$(grep -oP 'BACKEND_TLS_MODE=\K\S+' "$ENV_FILE" 2>/dev/null || echo nginx)" \
+        "$(grep -oP 'APP_PUBLIC_URL=https?://\K[^/]+' "$ENV_FILE" 2>/dev/null || echo your-fqdn)"
 }
 
 # =============================================================================

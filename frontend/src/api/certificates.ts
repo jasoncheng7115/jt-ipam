@@ -61,6 +61,9 @@ export interface CertAgent {
   description: string | null;
   enabled: boolean;
   scope_cert_ids: string[] | null;
+  device_id: string | null;
+  device_name: string | null;
+  source_ip_id: string | null;
   last_seen_at: string | null;
   last_source_ip: string | null;
   recent_source_ips: string[];
@@ -145,12 +148,14 @@ export async function listCertAgents(): Promise<Paginated<CertAgent>> {
 }
 export async function createCertAgent(payload: {
   name: string; description?: string | null; enabled?: boolean; scope_cert_ids: string[];
+  device_id?: string | null;
 }): Promise<CertAgentCreated> {
   const { data } = await apiClient.post("/api/v1/cert-agents", payload);
   return data;
 }
 export async function updateCertAgent(id: string, payload: Partial<{
   name: string; description: string | null; enabled: boolean; scope_cert_ids: string[];
+  device_id: string | null;
 }>): Promise<CertAgent> {
   const { data } = await apiClient.patch(`/api/v1/cert-agents/${id}`, payload);
   return data;
@@ -188,6 +193,9 @@ export interface CertStatusDeployment {
 export interface CertAgentStatus {
   agent: string;
   enabled: boolean;
+  device_id: string | null;
+  device_name: string | null;
+  source_ip_id: string | null;
   last_seen_at: string | null;
   last_source_ip: string | null;
   recent_source_ips: string[];

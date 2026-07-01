@@ -23,6 +23,7 @@ class OPNsenseFirewallBase(StrictModel):
     sync_rules: bool = False
     sync_nat: bool = False
     sync_aliases: bool = True
+    expose_dsv: bool = False
     description: Annotated[str | None, Field(max_length=2048)] = None
     # 關聯範圍（NAT 對應）；留空 = 沿用全域 IP 字串比對
     scope_location_id: uuid.UUID | None = None
@@ -50,6 +51,7 @@ class OPNsenseFirewallUpdate(StrictModel):
     sync_rules: bool | None = None
     sync_nat: bool | None = None
     sync_aliases: bool | None = None
+    expose_dsv: bool | None = None
     description: Annotated[str | None, Field(max_length=2048)] = None
     scope_location_id: uuid.UUID | None = None
     scope_customer_id: uuid.UUID | None = None

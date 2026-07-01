@@ -1,75 +1,77 @@
-# jt-ipam 部署
+# jt-ipam deployment
 
-> 不使用 Docker。預設目標：**Proxmox LXC**（Debian 12 / Ubuntu 24.04）或裸機。
+> 繁體中文：[README_zh-TW.md](README_zh-TW.md)
+
+> The primary deployment does not use Docker (an optional docker-compose path is in [`docker/`](docker/README.md)). Default target: **Proxmox LXC** (Debian 12 / Ubuntu 24.04) or bare metal.
 
 ---
 
-## 一、快速安裝（單機 / LXC）
+## 1. Quick install (single host / LXC)
 
-### 1.1 系統需求
+### 1.1 System requirements
 
-- Debian 12 / Ubuntu 22.04+（Proxmox LXC 範本即可）
-- 2 vCPU / 4 GB RAM / 20 GB 磁碟（最小）
-- Python 3.12、PostgreSQL 16、Redis 7、Node 20+
-- **TLS 強制**（兩種模式擇一，見 §1.3）
+- Debian 12 / Ubuntu 22.04+ (a Proxmox LXC template is fine)
+- 2 vCPU / 4 GB RAM / 20 GB disk (minimum)
+- Python 3.12, PostgreSQL 16, Redis 7, Node 20+
+- **TLS enforced** (pick one of two modes, see §1.3)
 
-### 1.2 一鍵安裝
+### 1.2 One-click install
 
-腳本支援 `--tls-mode {nginx|direct|self-signed}`：
+The script supports `--tls-mode {nginx|direct|self-signed}`:
 
 ```bash
-# 模式 A：nginx 反代 HTTPS（建議；公開服務 / 已有 FQDN）
+# Mode A: nginx reverse-proxy HTTPS (recommended; public service / existing FQDN)
 sudo ./scripts/install-debian.sh \
     --tls-mode nginx \
     --public-fqdn ipam.your-domain.tld
 
-# 模式 B：後端 uvicorn 直接吃自簽憑證（極簡 / 內網 / 沒有 FQDN）
+# Mode B: backend uvicorn directly serves a self-signed certificate (minimal / intranet / no FQDN)
 sudo ./scripts/install-debian.sh \
     --tls-mode self-signed \
     --public-fqdn ipam.local \
     --bind-port 8443
 ```
 
-腳本自動：
+The script automatically:
 
-1. `apt install postgresql-16 redis-server python3.12 nginx*¹ pnpm` 等依賴
-2. 建立系統使用者 `jtipam`（無 shell）
-3. 建立 PostgreSQL role + DB（SCRAM-SHA-256；密碼自動產生）
-4. 設定 Redis `requirepass`
-5. 建 Python venv + 安裝 backend
-6. 自動產生 `SECRET_KEY` / `ENCRYPTION_KEY` / `AUDIT_CHAIN_GENESIS`
-7. 跑 `alembic upgrade head`
-8. `pnpm build` 前端到 `frontend/dist`
-9. **依 TLS 模式產生 `/etc/jt-ipam/backend.env`**
-10. 安裝 systemd unit：`jt-ipam-backend.service`
-11. 模式 A：安裝 nginx site；模式 B：產生自簽憑證
+1. `apt install postgresql-16 redis-server python3.12 nginx*¹ pnpm` and other dependencies
+2. Creates the system user `jtipam` (no shell)
+3. Creates the PostgreSQL role + DB (SCRAM-SHA-256; password auto-generated)
+4. Configures Redis `requirepass`
+5. Builds the Python venv + installs the backend
+6. Auto-generates `SECRET_KEY` / `ENCRYPTION_KEY` / `AUDIT_CHAIN_GENESIS`
+7. Runs `alembic upgrade head`
+8. `pnpm build` the frontend into `frontend/dist`
+9. **Generates `/etc/jt-ipam/backend.env` according to the TLS mode**
+10. Installs the systemd unit: `jt-ipam-backend.service`
+11. Mode A: installs the nginx site; Mode B: generates a self-signed certificate
 
-> *¹ 模式 A 才裝 nginx；B 不裝。
+> *¹ nginx is only installed in Mode A; not installed in B.
 
-完成後：
+When finished:
 
 ```bash
 systemctl status jt-ipam-backend
-# 模式 A
+# Mode A
 curl -fsS http://127.0.0.1:8000/healthz
-# 模式 B
+# Mode B
 curl -fsSk https://127.0.0.1:8443/healthz
 ```
 
-### 1.3 兩種 TLS 模式詳解
+### 1.3 The two TLS modes in detail
 
-#### 模式 A：nginx 反代 HTTPS（建議，預設）
+#### Mode A: nginx reverse-proxy HTTPS (recommended, default)
 
-架構：
+Architecture:
 
 ```
 browser ── HTTPS ──► nginx :443 ── HTTP ──► uvicorn 127.0.0.1:8000
             ▲
-            │ 憑證放這裡（Let's Encrypt / 內網 CA / 自簽）
+            │ certificate goes here (Let's Encrypt / intranet CA / self-signed)
             └─ /etc/letsencrypt/... or /etc/ssl/...
 ```
 
-`/etc/jt-ipam/backend.env`：
+`/etc/jt-ipam/backend.env`:
 
 ```ini
 BACKEND_TLS_MODE=nginx
@@ -80,7 +82,7 @@ API_PUBLIC_URL=https://ipam.your-domain.tld
 CORS_ORIGINS=https://ipam.your-domain.tld
 ```
 
-取得憑證（公網）：
+Obtain a certificate (public internet):
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
@@ -88,7 +90,7 @@ sudo certbot --nginx -d ipam.your-domain.tld
 sudo systemctl reload nginx
 ```
 
-或內網自簽（給 nginx 用）：
+Or an intranet self-signed certificate (for nginx):
 
 ```bash
 sudo ./scripts/generate-self-signed-cert.sh \
@@ -96,29 +98,29 @@ sudo ./scripts/generate-self-signed-cert.sh \
     --cn ipam.local \
     --san "DNS:ipam.local,IP:192.168.1.10"
 
-# 編輯 /etc/nginx/sites-available/jt-ipam，把 ssl_certificate 路徑改為：
+# Edit /etc/nginx/sites-available/jt-ipam and change the ssl_certificate paths to:
 #   ssl_certificate     /etc/jt-ipam/tls/server.crt;
 #   ssl_certificate_key /etc/jt-ipam/tls/server.key;
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-優點：成熟、效能好、可掛 ACME 自動續期、可加 HTTP/2 / HTTP/3、可同時掛多個 site。
-缺點：多一個元件要維運。
+Pros: mature, good performance, can attach ACME auto-renewal, can add HTTP/2 / HTTP/3, can host multiple sites at once.
+Cons: one more component to operate.
 
 ---
 
-#### 模式 B：後端直接 TLS + 自簽憑證
+#### Mode B: backend direct TLS + self-signed certificate
 
-架構：
+Architecture:
 
 ```
 browser ── HTTPS ──► uvicorn 0.0.0.0:8443
                        │
-                       └─ 直接吃 cert/key
+                       └─ serves cert/key directly
                           /etc/jt-ipam/tls/server.{crt,key}
 ```
 
-`/etc/jt-ipam/backend.env`：
+`/etc/jt-ipam/backend.env`:
 
 ```ini
 BACKEND_TLS_MODE=direct
@@ -131,7 +133,7 @@ API_PUBLIC_URL=https://ipam.local:8443
 CORS_ORIGINS=https://ipam.local:8443
 ```
 
-產生 / 重發自簽憑證（ECDSA P-384、5 年；自動偵測 hostname / IP 加入 SAN）：
+Generate / reissue a self-signed certificate (ECDSA P-384, 5 years; auto-detects hostname / IP and adds them to the SAN):
 
 ```bash
 sudo ./scripts/generate-self-signed-cert.sh \
@@ -142,53 +144,53 @@ sudo ./scripts/generate-self-signed-cert.sh \
     --owner root:jtipam
 ```
 
-驗證：
+Verify:
 
 ```bash
 openssl x509 -in /etc/jt-ipam/tls/server.crt -noout -text \
     | grep -E 'Subject:|DNS:|IP Address:|Not After'
 ```
 
-想用 443 而不是 8443？預設 systemd unit `CapabilityBoundingSet=` 全 drop（A05 hardening），瀏覽器要訪問 `https://host/` 而不是 `:8443` 的話需給 backend `CAP_NET_BIND_SERVICE`：
+Want to use 443 instead of 8443? The default systemd unit has `CapabilityBoundingSet=` fully dropped (A05 hardening), so if the browser should reach `https://host/` instead of `:8443`, the backend needs `CAP_NET_BIND_SERVICE`:
 
 ```bash
 sudo systemctl edit jt-ipam-backend
-# 把 deploy/systemd/override-direct-tls-port443.conf.example 內容貼進去
+# Paste the contents of deploy/systemd/override-direct-tls-port443.conf.example here
 sudo systemctl daemon-reload
 sudo systemctl restart jt-ipam-backend
 ```
 
-> **注意**：自簽憑證瀏覽器會出現警告。可選擇：(1) 使用者端匯入 CA／信任憑證；(2) 內網架小型 CA（step-ca、smallstep）；(3) 改回模式 A 走 Let's Encrypt。
+> **Note**: a self-signed certificate triggers a browser warning. Options: (1) import the CA / trust the certificate on the client side; (2) stand up a small intranet CA (step-ca, smallstep); (3) switch back to Mode A with Let's Encrypt.
 
-優點：少一個元件、設定簡單、適合 LXC 小型部署。
-缺點：HTTP/2 / HTTP/3 / 多 site 不便、自簽憑證信任問題、效能不如 nginx。
+Pros: one fewer component, simpler configuration, suitable for small LXC deployments.
+Cons: HTTP/2 / HTTP/3 / multiple sites are inconvenient, self-signed trust issues, performance not as good as nginx.
 
 ---
 
-### 1.4 切換模式
+### 1.4 Switching modes
 
-之後想換模式，**不用重裝**：
+To change mode later, **no reinstall is needed**:
 
-1. 編輯 `/etc/jt-ipam/backend.env`，更新 `BACKEND_TLS_MODE` / 相關欄位
-2. 視情況裝 / 移除 nginx site
+1. Edit `/etc/jt-ipam/backend.env`, update `BACKEND_TLS_MODE` / related fields
+2. Install / remove the nginx site as appropriate
 3. `sudo systemctl restart jt-ipam-backend`
 
 ---
 
-## 二、目錄與檔案佈局
+## 2. Directory and file layout
 
 ```
-/opt/jt-ipam/                      # 程式碼（git checkout）
+/opt/jt-ipam/                      # source code (git checkout)
 ├── backend/
-│   ├── .venv/                     # Python venv (jtipam 擁有)
+│   ├── .venv/                     # Python venv (owned by jtipam)
 │   └── ...
 └── frontend/
-    └── dist/                      # vite build 後的靜態檔（nginx 指向此）
+    └── dist/                      # static files after vite build (nginx points here)
 
 /etc/jt-ipam/
-├── backend.env                    # 應用設定（含密鑰，0640 root:jtipam）
-├── .db-password                   # 由腳本產生（0600 root:root）
-└── .redis-password                # 由腳本產生（0600 root:root）
+├── backend.env                    # application config (includes secrets, 0640 root:jtipam)
+├── .db-password                   # generated by the script (0600 root:root)
+└── .redis-password                # generated by the script (0600 root:root)
 
 /etc/systemd/system/
 └── jt-ipam-backend.service
@@ -198,81 +200,81 @@ sudo systemctl restart jt-ipam-backend
 ├── sites-enabled/jt-ipam → ../sites-available/jt-ipam
 └── snippets/jt-ipam-proxy.conf
 
-/var/lib/jt-ipam/                  # state（StateDirectory；jtipam:jtipam）
-/var/log/jt-ipam/                  # log（LogsDirectory；jtipam:jtipam）
+/var/lib/jt-ipam/                  # state (StateDirectory; jtipam:jtipam)
+/var/log/jt-ipam/                  # log (LogsDirectory; jtipam:jtipam)
 ```
 
 ---
 
-## 三、systemd hardening（OWASP A05）
+## 3. systemd hardening (OWASP A05)
 
-`jt-ipam-backend.service` 已預設套用：
+`jt-ipam-backend.service` already applies by default:
 
-| Directive | 用途 |
+| Directive | Purpose |
 |---|---|
-| `User=jtipam` / `Group=jtipam` | 非 root 執行 |
-| `NoNewPrivileges=true` | 阻擋 setuid / setcap 提權 |
-| `ProtectSystem=strict` | 整個 `/` 唯讀，僅 ReadWritePaths 可寫 |
-| `ProtectHome=true` | 看不到使用者 home |
-| `PrivateTmp=true` | 隔離 `/tmp` |
-| `PrivateDevices=true` | 隱藏除 `/dev/null` 等以外的裝置 |
-| `ProtectKernelTunables/Modules/Logs` | 不能改 sysctl / 載入模組 |
-| `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` | 只允許 IP socket |
-| `RestrictNamespaces=true` | 阻擋容器/namespace 操作 |
-| `MemoryDenyWriteExecute=true` | 阻擋 W^X 違反 |
-| `SystemCallFilter=@system-service` | seccomp 白名單 |
-| `CapabilityBoundingSet=` | 全部 capability drop |
-| `LimitNOFILE=65536` / `TasksMax=1024` | 資源限制 |
+| `User=jtipam` / `Group=jtipam` | Runs as non-root |
+| `NoNewPrivileges=true` | Blocks setuid / setcap privilege escalation |
+| `ProtectSystem=strict` | Entire `/` is read-only, only ReadWritePaths are writable |
+| `ProtectHome=true` | Cannot see user homes |
+| `PrivateTmp=true` | Isolates `/tmp` |
+| `PrivateDevices=true` | Hides devices except `/dev/null` and similar |
+| `ProtectKernelTunables/Modules/Logs` | Cannot change sysctl / load modules |
+| `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` | Only IP sockets allowed |
+| `RestrictNamespaces=true` | Blocks container/namespace operations |
+| `MemoryDenyWriteExecute=true` | Blocks W^X violations |
+| `SystemCallFilter=@system-service` | seccomp allowlist |
+| `CapabilityBoundingSet=` | All capabilities dropped |
+| `LimitNOFILE=65536` / `TasksMax=1024` | Resource limits |
 
-驗證：
+Verify:
 
 ```bash
 sudo systemd-analyze security jt-ipam-backend
-# 期望分數 ≤ 3.5（OK）；若 > 5.0 表示 hardening 未生效
+# Expected score ≤ 3.5 (OK); a score > 5.0 means hardening is not in effect
 ```
 
 ---
 
-## 四、升級流程
+## 4. Upgrade procedure
 
 ```bash
 cd /opt/jt-ipam
 sudo -u jtipam git pull --ff-only
 
-# 後端依賴
+# Backend dependencies
 sudo -u jtipam backend/.venv/bin/pip install -e backend
 
-# DB migration（先備份）
+# DB migration (back up first)
 sudo -u postgres pg_dump jt_ipam | gzip > /var/backups/jt-ipam-$(date +%F).sql.gz
 sudo -u jtipam --preserve-env=PATH bash -c \
   'set -a; source /etc/jt-ipam/backend.env; set +a; cd backend && .venv/bin/alembic upgrade head'
 
-# 前端
+# Frontend
 cd /opt/jt-ipam/frontend
 sudo -u jtipam pnpm install --frozen-lockfile
 sudo -u jtipam pnpm build
 
-# 重啟
+# Restart
 sudo systemctl restart jt-ipam-backend
 sudo systemctl reload nginx
 ```
 
 ---
 
-## 五、備份與還原
+## 5. Backup and restore
 
-### 5.1 備份
+### 5.1 Backup
 
 ```bash
-# 每日（建議放 /etc/cron.daily/jt-ipam-backup）
+# Daily (recommended to place in /etc/cron.daily/jt-ipam-backup)
 pg_dump -U jt_ipam jt_ipam | zstd -19 > /var/backups/jt-ipam/db-$(date +%F).sql.zst
 
-# /etc/jt-ipam（含金鑰）— 保險櫃 / Vault
+# /etc/jt-ipam (includes keys) — safe / Vault
 tar czf - /etc/jt-ipam | gpg --encrypt --recipient backup@example.com \
     > /var/backups/jt-ipam/etc-$(date +%F).tar.gz.gpg
 ```
 
-### 5.2 還原
+### 5.2 Restore
 
 ```bash
 systemctl stop jt-ipam-backend
@@ -282,28 +284,28 @@ zstdcat db-2026-05-09.sql.zst | sudo -u postgres psql jt_ipam
 systemctl start jt-ipam-backend
 ```
 
-> **注意（A02）**：`/etc/jt-ipam/backend.env` 中的 `ENCRYPTION_KEY` 與 `AUDIT_CHAIN_GENESIS` **不可遺失**，否則無法解密既有敏感欄位、無法驗證稽核鏈。建議用 GPG 加密後存於異地（Proxmox Backup Server 雙站、Vault）。
+> **Note (A02)**: the `ENCRYPTION_KEY` and `AUDIT_CHAIN_GENESIS` in `/etc/jt-ipam/backend.env` **must not be lost**, otherwise existing sensitive fields cannot be decrypted and the audit chain cannot be verified. Recommended to encrypt with GPG and store off-site (Proxmox Backup Server dual-site, Vault).
 
 ---
 
-## 六、HA 架構（Phase 3+ 規劃）
+## 6. HA architecture (Phase 3+ plan)
 
-> 第一版只支援單機。HA 文件由 Phase 3 補完，框架預先列出：
+> The first release only supports a single host. HA documentation will be completed in Phase 3; the framework is listed in advance:
 
-- PostgreSQL **streaming replication**（pg-primary + pg-standby）+ pgBouncer + patroni
-- Redis **Sentinel**（3 節點）
-- 應用層多副本：`jt-ipam-backend.service` 跑多台 LXC，前端統一 nginx upstream
-- 共用儲存：靜態前端可 rsync 同步，或統一從 CDN/物件儲存提供
+- PostgreSQL **streaming replication** (pg-primary + pg-standby) + pgBouncer + patroni
+- Redis **Sentinel** (3 nodes)
+- Application layer with multiple replicas: `jt-ipam-backend.service` running on multiple LXCs, with a unified nginx upstream for the frontend
+- Shared storage: the static frontend can be synced via rsync, or served uniformly from a CDN/object storage
 
 ---
 
-## 七、Proxmox LXC 範本
+## 7. Proxmox LXC template
 
-（規劃中）jt-ipam 將提供 Proxmox LXC `.tar.zst` 範本：
+(Planned) jt-ipam will provide a Proxmox LXC `.tar.zst` template:
 
 - Debian 12 base
-- 已安裝 PG 16、Redis 7、Python 3.12、nginx
-- 首次啟動 cloud-init 跑 `install-debian.sh`
-- 預設帳號 `jtipam`，systemd 已啟用
+- PG 16, Redis 7, Python 3.12, nginx already installed
+- On first boot, cloud-init runs `install-debian.sh`
+- Default account `jtipam`, systemd already enabled
 
-下載與部署文件待 Phase 1 後期釋出。
+Download and deployment documentation will be released in late Phase 1.

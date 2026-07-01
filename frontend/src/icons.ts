@@ -49,6 +49,11 @@ import {
   ScaleFrameEnlarge,
   SendDiagonal,
   Hammer,
+  Terminal,
+  Expand,
+  Reduce,
+  NavArrowDown,
+  OpenNewWindow,
   // Admin / 安全
   ShieldCheck,
   Shield,
@@ -85,6 +90,7 @@ import {
   List,
   ChatBubbleQuestion,
   Download,
+  PasteClipboard,
 } from "@iconoir/vue";
 
 // ── 通用 ──
@@ -134,6 +140,9 @@ export const LinkIcon = Link;
 export const NatIcon = RefreshDouble;
 export const DevicesIcon = Server;
 export const RacksIcon = ServerConnection;
+// IP 角色標記（清單視覺化，緊湊 icon）：閘道 / DHCP 伺服器
+export const GatewayIcon = Internet;
+export const DhcpServerIcon = Server;
 export const LocationsIcon = MapPin;
 export const PinIcon = Pin;
 export const RequestsIcon = MultiplePages;
@@ -185,7 +194,34 @@ export const TestIcon = CheckCircle;
  */
 export const ChatHistoryIcon = ChatBubbleQuestion;
 export const ExportIcon = Download;
+export const PasteIcon = PasteClipboard;
 export const CopyIcon = Copy;
+export const TerminalIcon = Terminal;
+// 螢幕外框 + 字母圖示：RDP=R / VNC=V，靠字母直接區分（比找近似 glyph 更直觀）。
+function screenLetterIcon(letter: string) {
+  return () => h("svg", {
+    xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24",
+    width: "1em", height: "1em", fill: "none",
+  }, [
+    h("rect", { x: 2.5, y: 4, width: 19, height: 13, rx: 2,
+      stroke: "currentColor", "stroke-width": 1.7 }),
+    h("path", { d: "M12 17v3.4", stroke: "currentColor", "stroke-width": 1.7 }),
+    h("path", { d: "M8.5 20.5h7", stroke: "currentColor", "stroke-width": 1.7,
+      "stroke-linecap": "round" }),
+    h("text", {
+      x: 12, y: 13.9, "text-anchor": "middle", "font-size": 10, "font-weight": 700,
+      fill: "currentColor", "font-family": "system-ui, -apple-system, sans-serif",
+    }, letter),
+  ]);
+}
+export const DisplayIcon = screenLetterIcon("R");  // RDP
+export const VncIcon = screenLetterIcon("V");      // VNC
+export const NoVncIcon = screenLetterIcon("N");    // noVNC（PVE 圖形主控台）
+export const ExpandIcon = Expand;                  // 重新調整大小 / 自動縮放
+export const ReduceIcon = Reduce;                  // 原始解析度（1:1）
+export const KeyIcon = Key;                        // 送出按鍵
+export const ChevronDownIcon = NavArrowDown;
+export const OpenNewWindowIcon = OpenNewWindow;
 
 export function renderIcon(Icon: any, size = 18) {
   return () => h(NIcon, { size }, () => h(Icon));

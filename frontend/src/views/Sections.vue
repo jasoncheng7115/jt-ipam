@@ -6,7 +6,7 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NTag, NPopconfirm, NTooltip,
-  NModal, NForm, NFormItem, NInput, NSelect, NCheckbox, NInputNumber,
+  NModal, NForm, NFormItem, NInput, NSelect, NInputNumber,
   useMessage, type DataTableColumns, type DataTableRowKey,
 } from "naive-ui";
 import {
@@ -126,14 +126,13 @@ async function doBulkDelete() {
 
 const { visibleKeys, setVisible, reset } = useColumnPrefs(
   "sections",
-  ["name", "description", "subnet_count", "strict_mode", "customer_id", "actions"],
-  ["name", "description", "subnet_count", "strict_mode", "customer_id", "actions"],
+  ["name", "description", "subnet_count", "customer_id", "actions"],
+  ["name", "description", "subnet_count", "customer_id", "actions"],
 );
 const columnPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "description", label: t("cols.description") },
   { key: "subnet_count", label: t("cols.subnet_count") },
-  { key: "strict_mode", label: t("cols.strict_mode") },
   { key: "customer_id", label: t("cols.unit") },
   { key: "actions", label: t("cols.actions") },
 ]);
@@ -159,9 +158,6 @@ const allColumns: DataTableColumns<Section> = [
     render: (r) => h(NTag, { type: r.subnet_count > 0 ? "success" : "default", size: "small" }, () => String(r.subnet_count ?? 0)),
     sorter: (a, b) => (a.subnet_count ?? 0) - (b.subnet_count ?? 0),
   },
-  { title: () => t("sections.strict_mode"), key: "strict_mode", width: 110,
-    render: (r) => (r.strict_mode ? "✓" : "—"),
-    sorter: (a, b) => Number(a.strict_mode) - Number(b.strict_mode) },
   {
     title: () => t("nav.customers"),
     key: "customer_id", width: 160, ellipsis: { tooltip: true },
@@ -284,9 +280,6 @@ onMounted(() => {
         <n-form-item :label="t('cols.unit')">
           <n-select v-model:value="form.customer_id" :options="customerOptions"
                     :placeholder="t('common.not_specified')" clearable filterable />
-        </n-form-item>
-        <n-form-item :label="t('sections.strict_mode')">
-          <n-checkbox v-model:checked="form.strict_mode">{{ t("common.enable") }}</n-checkbox>
         </n-form-item>
         <n-form-item :label="t('sections.order')">
           <n-input-number v-model:value="form.display_order" :min="0" :max="10000" />

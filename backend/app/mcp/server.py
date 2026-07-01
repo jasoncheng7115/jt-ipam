@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from typing import Any
 
@@ -68,9 +69,14 @@ async def resolve_token(token: str):  # type: ignore[no-untyped-def]
         return user
 
 
-async def _dispatch_call(name: str, arguments: dict[str, Any], user, session):  # type: ignore[no-untyped-def]
+async def _dispatch_call(name: str, arguments: dict[str, Any], user, session, *, readonly: bool = False):  # type: ignore[no-untyped-def]
     if name not in TOOLS:
         raise IPAMToolError(f"unknown tool: {name}")
+    # 對外唯讀 MCP 金鑰：一律擋下會異動資料的工具（外部呼叫沒有「異動前確認」這道關）
+    if readonly:
+        from app.mcp.tools import MUTATING_TOOLS
+        if name in MUTATING_TOOLS:
+            raise IPAMToolError(f"read-only MCP key: tool '{name}' changes data and is disabled")
     # RBAC 閘（與 NL chat 共用）：零權限擋全部、全域基礎設施需萬用讀取、異動需 admin
     from app.mcp.tools import authorize_tool
     denied = await authorize_tool(session, user, name)
@@ -85,8 +91,9 @@ def _is_notification(body: dict[str, Any]) -> bool:
     return "id" not in body or method.startswith("notifications/")
 
 
-async def process_message(body: dict[str, Any], user) -> dict[str, Any] | None:  # type: ignore[no-untyped-def]
-    """處理單筆 JSON-RPC 訊息；notification 回 None（不回應）。HTTP 與 stdio 共用。"""
+async def process_message(body: dict[str, Any], user, *, readonly: bool = False) -> dict[str, Any] | None:  # type: ignore[no-untyped-def]
+    """處理單筆 JSON-RPC 訊息；notification 回 None（不回應）。HTTP 與 stdio 共用。
+    readonly=True（對外 MCP 金鑰）時，工具清單隱藏、且呼叫一律擋下會異動資料的工具。"""
     if not isinstance(body, dict):
         return {"jsonrpc": "2.0", "id": None,
                 "error": {"code": -32600, "message": "Invalid Request"}}
@@ -108,9 +115,13 @@ async def process_message(body: dict[str, Any], user) -> dict[str, Any] | None: 
         elif method == "ping":
             result = {}
         elif method == "tools/list":
-            from app.mcp.tools import allowed_tool_names
+            from app.mcp.tools import MUTATING_TOOLS, allowed_tool_names
             async with SessionLocal() as s:
                 allowed = await allowed_tool_names(s, user)
+            if readonly:
+                # 唯讀金鑰：把異動工具從清單拿掉（None＝全部 → 全部扣掉異動）
+                base = set(TOOLS) if allowed is None else set(allowed)
+                allowed = base - MUTATING_TOOLS
             result = {"tools": _build_tool_list(allowed)}
         elif method == "tools/call":
             name = params.get("name")
@@ -118,7 +129,7 @@ async def process_message(body: dict[str, Any], user) -> dict[str, Any] | None: 
             if not isinstance(name, str):
                 raise IPAMToolError("params.name is required")
             async with SessionLocal() as s:
-                tool_result = await _dispatch_call(name, arguments, user, s)
+                tool_result = await _dispatch_call(name, arguments, user, s, readonly=readonly)
                 await s.commit()   # 寫入類工具要 commit，否則 async with 結束會回滾
             result = {
                 "content": [{"type": "text", "text": _safe_json(tool_result)}],
@@ -145,19 +156,57 @@ def _extract_token(request: Request) -> str:
     )
 
 
+async def _load_principal(user_id: str):  # type: ignore[no-untyped-def]
+    """對外 MCP 金鑰所代表的身份（須仍為啟用中的帳號）。"""
+    from app.models.user import User
+    try:
+        uid = uuid.UUID(user_id)
+    except (ValueError, TypeError):
+        return None
+    async with SessionLocal() as session:
+        user = await session.get(User, uid)
+        if user is None or not user.is_active:
+            return None
+        return user
+
+
 def build_mcp_app() -> FastAPI:
-    """掛在 /mcp 的 Streamable-HTTP 子應用。"""
-    sub = FastAPI(title="jt-ipam MCP", description="Model Context Protocol server")
+    """掛在 /mcp 的 Streamable-HTTP 子應用。
+
+    MCP 用 JSON-RPC（initialize → tools/list → tools/call）探索工具，**不是** OpenAPI；
+    FastAPI 自動產生的 /openapi.json、/docs 對 MCP client 無意義且未經認證，故一律關閉。
+    """
+    sub = FastAPI(
+        title="jt-ipam MCP", description="Model Context Protocol server", version=__version__,
+        docs_url=None, redoc_url=None, openapi_url=None,
+    )
 
     @sub.post("/")
     @sub.post("/messages")   # 舊路徑相容
     async def streamable_post(request: Request) -> Response:
+        # 對外提供 MCP 是 opt-in：管理員未在「管理 → LLM / AI」打開就一律拒絕（deny by default）
+        from app.services.system_config import get_llm_config
+        async with SessionLocal() as _s:
+            mcfg = await get_llm_config(_s)
+        if not mcfg.mcp_external_enabled:
+            return JSONResponse({"jsonrpc": "2.0", "id": None,
+                                 "error": {"code": -32001, "message": "MCP external access is disabled"}},
+                                status_code=403)
         token = _extract_token(request)
         if not token:
             return JSONResponse({"jsonrpc": "2.0", "id": None,
                                  "error": {"code": -32001, "message": "X-Auth-Token required"}},
                                 status_code=401)
-        user = await resolve_token(token)
+        # 兩種認證：① 對外唯讀 MCP 金鑰（jtmcp_…，擋異動工具）② 既有 API 權杖（依該使用者權限）
+        user = None
+        readonly = False
+        if (mcfg.mcp_api_key and mcfg.mcp_principal_user_id
+                and secrets.compare_digest(token, mcfg.mcp_api_key)):
+            user = await _load_principal(mcfg.mcp_principal_user_id)
+            readonly = True
+        if user is None:
+            user = await resolve_token(token)
+            readonly = False
         if user is None:
             return JSONResponse({"jsonrpc": "2.0", "id": None,
                                  "error": {"code": -32001, "message": "invalid or expired token"}},
@@ -175,7 +224,7 @@ def build_mcp_app() -> FastAPI:
 
         responses: list[dict[str, Any]] = []
         for m in messages:
-            resp = await process_message(m, user)
+            resp = await process_message(m, user, readonly=readonly)
             if resp is not None:
                 responses.append(resp)
 

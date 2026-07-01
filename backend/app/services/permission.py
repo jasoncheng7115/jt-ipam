@@ -164,6 +164,108 @@ async def has_any_write(session: AsyncSession, *, user: User) -> bool:
     return row is not None
 
 
+async def can_use_ssh(session: AsyncSession, *, user: User, ip: Any) -> bool:
+    """是否可對此 IP 開 SSH 終端機（deny-by-default）。
+
+    條件：IP 已啟用 SSH，且使用者為 (a) admin、(b) 對該 IP 所屬子網路有 write、
+    或 (c) 具獨立「連線管理權限」(can_ssh) 且至少對該子網路有 read。
+    看不到該 IP（子網路權限為 none）一律不可用。
+    """
+    if not getattr(ip, "ssh_enabled", False):
+        return False
+    if user.is_admin:
+        return True
+    level = await get_object_permission(
+        session, user=user, object_type="subnet", object_id=ip.subnet_id
+    )
+    if level == "none":
+        return False
+    if has_permission(level, "write"):
+        return True
+    return bool(getattr(user, "can_ssh", False))
+
+
+async def can_use_rdp(session: AsyncSession, *, user: User, ip: Any) -> bool:
+    """是否可對此 IP 開 RDP 連線（deny-by-default）。
+
+    與 can_use_ssh 完全相同的授權模型，唯一差別是檢查 rdp_enabled；
+    連線管理權限沿用同一個 can_ssh（泛用遠端主控）。
+    """
+    if not getattr(ip, "rdp_enabled", False):
+        return False
+    if user.is_admin:
+        return True
+    level = await get_object_permission(
+        session, user=user, object_type="subnet", object_id=ip.subnet_id
+    )
+    if level == "none":
+        return False
+    if has_permission(level, "write"):
+        return True
+    return bool(getattr(user, "can_ssh", False))
+
+
+async def can_use_vnc(session: AsyncSession, *, user: User, ip: Any) -> bool:
+    """是否可對此 IP 開 VNC 連線（deny-by-default）。
+
+    與 can_use_ssh/can_use_rdp 相同授權模型，唯一差別是檢查 vnc_enabled。
+    """
+    if not getattr(ip, "vnc_enabled", False):
+        return False
+    if user.is_admin:
+        return True
+    level = await get_object_permission(
+        session, user=user, object_type="subnet", object_id=ip.subnet_id
+    )
+    if level == "none":
+        return False
+    if has_permission(level, "write"):
+        return True
+    return bool(getattr(user, "can_ssh", False))
+
+
+async def can_use_bmc(session: AsyncSession, *, user: User, ip: Any) -> bool:
+    """是否可對此 IP 開 BMC OOB主控台（IPMI SOL；deny-by-default）。
+
+    與 can_use_ssh 相同授權模型（同等級），唯一差別是檢查 bmc_enabled。
+    """
+    if not getattr(ip, "bmc_enabled", False):
+        return False
+    if user.is_admin:
+        return True
+    level = await get_object_permission(
+        session, user=user, object_type="subnet", object_id=ip.subnet_id
+    )
+    if level == "none":
+        return False
+    if has_permission(level, "write"):
+        return True
+    return bool(getattr(user, "can_ssh", False))
+
+
+async def can_use_novnc(session: AsyncSession, *, user: User, ip: Any) -> bool:
+    """是否可對此 IP 開 PVE 主控台（noVNC/xterm，deny-by-default）。
+
+    與 can_use_vnc 相同的 jt-ipam 物件層級授權，外加：此 IP 必須對應到 Proxmox VE 的 VM/CT。
+    （連線當下仍以使用者輸入的 PVE 帳密 + PVE 端權限把關，這裡只是 jt-ipam 這側的閘門。）
+    """
+    if not getattr(ip, "novnc_enabled", False):
+        return False
+    from app.services.pve_console import resolve_pve_target
+    if await resolve_pve_target(session, ip) is None:
+        return False
+    if user.is_admin:
+        return True
+    level = await get_object_permission(
+        session, user=user, object_type="subnet", object_id=ip.subnet_id
+    )
+    if level == "none":
+        return False
+    if has_permission(level, "write"):
+        return True
+    return bool(getattr(user, "can_ssh", False))
+
+
 async def visible_ids(
     session: AsyncSession, *, user: User, object_type: ObjectType, required: PermLevel = "read",
 ) -> set[uuid.UUID] | None:

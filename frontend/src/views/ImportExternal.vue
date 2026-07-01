@@ -89,8 +89,8 @@ onMounted(() => { void loadSections(); });
           <template #icon><n-icon><InfoIcon /></n-icon></template>
           {{ t("import.ripe_help") }}
         </n-alert>
-        <n-form>
-          <n-alert type="info" style="margin-bottom: 12px">
+        <n-form class="import-form">
+          <n-alert type="info" style="margin-bottom: 16px">
             <template #icon><n-icon><InfoIcon /></n-icon></template>
             {{ t("import.either_or_hint") }}
           </n-alert>
@@ -140,3 +140,10 @@ onMounted(() => { void loadSections(); });
     </n-tabs>
   </n-card>
 </template>
+
+<style scoped>
+/* 讓 Handle / CIDR / 目標 section 各欄之間有呼吸空間，提示文字不再緊貼下一個標籤 */
+.import-form :deep(.n-form-item) { margin-bottom: 14px; }
+.import-form :deep(.n-form-item:last-child) { margin-bottom: 0; }
+.import-form :deep(.n-form-item-feedback__line) { line-height: 1.5; opacity: .72; }
+</style>

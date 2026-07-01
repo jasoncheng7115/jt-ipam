@@ -7,12 +7,13 @@ authors = [
 ]
 license = {text = "AGPL-3.0-or-later"}
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 
 dependencies = [
     # ── Web framework ──
     "fastapi[standard]>=0.115",
     "uvicorn[standard]>=0.32",
+    "websockets>=13",             # PVE 主控台（noVNC/xterm）後端對接 PVE vncwebsocket 的 client WS
     "starlette>=0.41",
 
     # ── Validation ──
@@ -64,6 +65,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# RDP 連線管理（選用）：純瀏覽器 RDP，後端用 aardwolf 橋接。
+# pin 0.2.13 — PyPI 有 cp311/312/313 manylinux x86_64 wheel（內含已編譯的 librlers
+# Rust 擴充）→ 安裝免 Rust 工具鏈。最新 0.2.14 只有 sdist（要 Rust）故不可用 latest。
+# 安裝腳本以 `pip install --only-binary=:all: -e ".[rdp]"` best-effort 裝；沒 wheel 即快速
+# 失敗、不觸發 Rust 編譯，RDP 功能自動停用、不影響主安裝。
+rdp = [
+    "aardwolf==0.2.13",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
@@ -134,7 +143,8 @@ ignore = [
 "app/api/v1/endpoints/auth.py" = ["E402"]
 "app/api/v1/endpoints/migration.py" = ["E402"]
 "app/api/v1/endpoints/notifications.py" = ["E402"]
-"app/api/v1/endpoints/system_settings.py" = ["E402"]
+# E402: 刻意的 late import；PT019: `test_notification_email` 等是 FastAPI 端點（非 pytest），`_user` 是依賴注入非 fixture
+"app/api/v1/endpoints/system_settings.py" = ["E402", "PT019"]
 
 # ─────────────────────────────────────────────────────────
 # Mypy

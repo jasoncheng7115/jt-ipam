@@ -16,8 +16,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDPrimaryKeyMixin
 
-# 與 IPAddress.discovery_source enum 對齊
-HOSTNAME_SOURCES = ("manual", "scanner", "librenms", "dns", "proxmox", "opnsense", "wazuh", "adguard")
+# 主機名稱觀測來源（此表 source 欄 String(16)、無 CHECK；非 IPAddress.discovery_source）。
+# netbios / mdns 由掃描代理分別以 nmblookup / avahi-resolve 取得，是獨立於 scanner(rDNS) 的來源。
+HOSTNAME_SOURCES = ("manual", "scanner", "librenms", "dns", "proxmox", "opnsense", "pfsense", "wazuh", "adguard", "netbios", "mdns")
 
 
 class IPHostnameObservation(Base, UUIDPrimaryKeyMixin):

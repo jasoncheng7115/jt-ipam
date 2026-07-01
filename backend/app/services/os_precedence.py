@@ -24,7 +24,7 @@ from app.models.system_setting import SystemSetting
 
 OS_KEY = "os_precedence"
 OS_SOURCES: list[str] = ["scanner", "librenms", "wazuh"]
-DEFAULT_ORDER: list[str] = ["scanner", "librenms", "wazuh"]
+DEFAULT_ORDER: list[str] = ["librenms", "wazuh", "scanner"]
 _TTL_SEC = 60.0
 _cache: dict[str, tuple[float, list[str]]] = {}
 

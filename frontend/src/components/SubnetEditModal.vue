@@ -60,6 +60,8 @@ const sections = ref<Section[]>([]);
 const vlans = ref<VLAN[]>([]);
 const vrfs = ref<VRF[]>([]);
 const allSubnets = ref<Subnet[]>([]);
+// 掃描代理下拉的「本機直接掃」哨兵值（對應後端 scan_agent_id=null）；與真正的代理 UUID 區分
+const LOCAL_SCAN = "__local__";
 const scanAgentOpts = ref<{ label: string; value: string }[]>([]);
 const agentAvail = ref<Record<string, string[]>>({});
 // 選定掃描代理「實際能跑」的探測集合；代理沒回報(空)時回 null = 不限制
@@ -129,7 +131,10 @@ async function loadAuxOpts() {
   } catch { /* silent */ }
   try {
     const ag = await listScanAgents();
-    scanAgentOpts.value = ag.items.map((a) => ({ label: a.name, value: a.id }));
+    scanAgentOpts.value = [
+      { label: t("subnets.scan_agent_local"), value: LOCAL_SCAN },
+      ...ag.items.map((a) => ({ label: a.name, value: a.id })),
+    ];
     // 記錄每個代理「實際能跑」的探測（available_probes）→ 子網路勾選時據此反灰不支援項
     agentAvail.value = Object.fromEntries(
       ag.items.map((a) => [a.id, (a as any).available_probes ?? []]),
@@ -161,7 +166,8 @@ function resetForm() {
       scan_enabled: r.scan_enabled,
       scan_method: [...(r.scan_method ?? ["icmp"])],
       threshold_pct: r.threshold_pct,
-      scan_agent_id: r.scan_agent_id ?? null,
+      // 既有已啟用掃描但沒代理的子網路＝本機直掃 → 顯示為「本機直接掃」(不強迫重選)
+      scan_agent_id: r.scan_agent_id ?? (r.scan_enabled ? LOCAL_SCAN : null),
       gateway: r.gateway ?? "",
       dns_servers: r.dns_servers ?? "",
       location_id: r.location_id ?? null,
@@ -196,6 +202,13 @@ watch(() => props.show, (open) => {
 async function submit() {
   if (!form.value.section_id) { msg.error(t("subnets.err_section_required")); return; }
   if (!props.editing && !form.value.cidr.trim()) { msg.error(t("subnets.err_cidr_required")); return; }
+  // 啟用掃描時必須明確選擇掃描方式（本機直接掃 或 指定代理）；不可留空
+  if (form.value.scan_enabled && !form.value.scan_agent_id) {
+    msg.error(t("subnets.err_scan_agent_required")); return;
+  }
+  // "__local__" 哨兵＝由 jt-ipam 主機本機掃 → 後端存 scan_agent_id=null
+  const scanAgentId = (form.value.scan_agent_id === LOCAL_SCAN || !form.value.scan_enabled)
+    ? null : form.value.scan_agent_id;
   saving.value = true;
   try {
     if (props.editing) {
@@ -212,7 +225,7 @@ async function submit() {
         scan_enabled: form.value.scan_enabled,
         scan_method: form.value.scan_method,
         threshold_pct: form.value.threshold_pct ?? null,
-        scan_agent_id: form.value.scan_agent_id ?? null,
+        scan_agent_id: scanAgentId,
         gateway: form.value.gateway.trim() || null,
         dns_servers: form.value.dns_servers.trim() || null,
         location_id: form.value.location_id ?? null,
@@ -230,7 +243,7 @@ async function submit() {
         scan_enabled: form.value.scan_enabled,
         scan_method: form.value.scan_method,
         threshold_pct: form.value.threshold_pct ?? null,
-        scan_agent_id: form.value.scan_agent_id ?? null,
+        scan_agent_id: scanAgentId,
         gateway: form.value.gateway.trim() || null,
         dns_servers: form.value.dns_servers.trim() || null,
         location_id: form.value.location_id ?? null,

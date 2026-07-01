@@ -29,11 +29,11 @@ const { visibleKeys: snVis, setVisible: snSet, reset: snReset } = useColumnPrefs
   ["cidr", "description", "usage"],
   ["cidr", "description", "usage"],
 );
-const snPicker = [
+const snPicker = computed(() => [
   { key: "cidr", label: "CIDR" },
   { key: "description", label: t("cols.description") },
   { key: "usage", label: t("cols.usage") },
-];
+]);
 
 const route = useRoute();
 const router = useRouter();

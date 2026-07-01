@@ -34,43 +34,42 @@ const route = useRoute();
 const adminMode = computed(() => route.name === "firewall_admin");
 
 const fwPrefs = useColumnPrefs("opnsense_fws",
-  ["name", "api_url", "enabled", "verify_tls", "sync_dhcp", "sync_arp", "sync_openvpn", "sync_rules", "sync_nat", "last_sync_at", "actions"],
-  ["name", "api_url", "enabled", "verify_tls", "sync_dhcp", "sync_arp", "sync_openvpn", "sync_rules", "sync_nat", "last_sync_at", "actions"]);
-const fwPicker = [
+  ["name", "api_url", "verify_tls", "last_sync_at", "last_error", "actions"],
+  ["name", "api_url", "verify_tls", "last_sync_at", "actions"]);
+const fwPicker = computed(() => [
   { key: "name", label: t("cols.name") }, { key: "api_url", label: "API URL" },
-  { key: "enabled", label: t("cols.status") }, { key: "verify_tls", label: "Verify TLS" },
-  { key: "sync_dhcp", label: "DHCP" }, { key: "sync_arp", label: "ARP" },
-  { key: "sync_openvpn", label: "OpenVPN" }, { key: "sync_rules", label: "Rules" },
-  { key: "sync_nat", label: "NAT" }, { key: "last_sync_at", label: t("cols.last_sync") },
+  { key: "verify_tls", label: "TLS" },
+  { key: "last_sync_at", label: t("cols.last_sync") },
+  { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 const mapPrefs = useColumnPrefs("opnsense_maps",
   ["firewall_id", "object_type", "object_id", "alias_name", "mode", "last_synced_at", "actions"],
   ["firewall_id", "object_type", "object_id", "alias_name", "mode", "last_synced_at", "actions"]);
-const mapPicker = [
+const mapPicker = computed(() => [
   { key: "firewall_id", label: "Firewall" }, { key: "object_type", label: t("cols.object_type") },
   { key: "object_id", label: t("cols.object_id") }, { key: "alias_name", label: t("cols.alias_name") },
   { key: "mode", label: t("cols.mode") }, { key: "last_synced_at", label: t("cols.last_sync") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 const rulePrefs = useColumnPrefs("opnsense_rules",
   ["enabled", "sequence", "action", "interface", "direction", "protocol", "source_net", "destination_net", "description"],
   ["enabled", "sequence", "action", "interface", "direction", "protocol", "source_net", "destination_net", "description"]);
-const rulePicker = [
+const rulePicker = computed(() => [
   { key: "enabled", label: t("cols.enabled") }, { key: "sequence", label: t("cols.order") },
   { key: "action", label: t("cols.action") }, { key: "interface", label: t("cols.iface") },
   { key: "direction", label: t("cols.direction") }, { key: "protocol", label: t("cols.proto") },
   { key: "source_net", label: t("cols.source") }, { key: "destination_net", label: t("cols.destination") },
   { key: "description", label: t("cols.description") },
-];
+]);
 const aliasPrefs = useColumnPrefs("opnsense_aliases",
   ["name", "alias_type", "enabled", "member_count", "content", "description"],
   ["name", "alias_type", "enabled", "member_count", "content", "description"]);
-const aliasPicker = [
+const aliasPicker = computed(() => [
   { key: "name", label: t("common.name") }, { key: "alias_type", label: t("cols.type") },
   { key: "enabled", label: t("cols.enabled") }, { key: "member_count", label: t("firewall_admin.members") },
   { key: "content", label: t("firewall_admin.content") }, { key: "description", label: t("common.description") },
-];
+]);
 
 const msg = useMessage();
 const tab = ref<"firewalls" | "mappings" | "rules" | "aliases">("firewalls");
@@ -210,7 +209,7 @@ interface FwForm {
   name: string; api_url: string; api_key: string; api_secret: string;
   verify_tls: boolean;
   sync_dhcp: boolean; sync_arp: boolean; sync_openvpn: boolean;
-  sync_rules: boolean; sync_nat: boolean; sync_aliases: boolean;
+  sync_rules: boolean; sync_nat: boolean; sync_aliases: boolean; expose_dsv: boolean;
   sync_interval_seconds: number;
   description: string;
   scope_location_id: string | null;
@@ -222,7 +221,7 @@ function blankFwForm(): FwForm {
   return {
     name: "", api_url: "", api_key: "", api_secret: "", verify_tls: true,
     sync_dhcp: false, sync_arp: false, sync_openvpn: false,
-    sync_rules: false, sync_nat: false, sync_aliases: true,
+    sync_rules: false, sync_nat: false, sync_aliases: true, expose_dsv: false,
     sync_interval_seconds: 300, description: "",
     scope_location_id: null, scope_customer_id: null,
     scope_subnet_ids: [], iface_map_rows: [],
@@ -243,6 +242,7 @@ function openFwEdit(r: OPNsenseFirewall) {
     verify_tls: r.verify_tls,
     sync_dhcp: r.sync_dhcp, sync_arp: r.sync_arp, sync_openvpn: r.sync_openvpn,
     sync_rules: r.sync_rules, sync_nat: r.sync_nat, sync_aliases: (r as any).sync_aliases ?? true,
+    expose_dsv: (r as any).expose_dsv ?? false,
     sync_interval_seconds: r.sync_interval_seconds ?? 300,
     description: r.description ?? "",
     scope_location_id: r.scope_location_id ?? null,
@@ -351,6 +351,7 @@ async function submitFw() {
         sync_rules: newFw.value.sync_rules,
         sync_nat: newFw.value.sync_nat,
         sync_aliases: newFw.value.sync_aliases,
+        expose_dsv: newFw.value.expose_dsv,
         sync_interval_seconds: newFw.value.sync_interval_seconds,
         description: newFw.value.description || undefined,
         ...scopePayload(),
@@ -372,6 +373,7 @@ async function submitFw() {
         sync_rules: newFw.value.sync_rules,
         sync_nat: newFw.value.sync_nat,
         sync_aliases: newFw.value.sync_aliases,
+        expose_dsv: newFw.value.expose_dsv,
         sync_interval_seconds: newFw.value.sync_interval_seconds,
         description: newFw.value.description || undefined,
         ...scopePayload(),
@@ -710,6 +712,7 @@ onMounted(() => {
             <n-checkbox v-model:checked="newFw.sync_rules">{{ t("firewall_admin.sync_filter_rules") }}</n-checkbox>
             <n-checkbox v-model:checked="newFw.sync_nat">{{ t("firewall_admin.sync_nat_rules") }}</n-checkbox>
             <n-checkbox v-model:checked="newFw.sync_aliases">{{ t("firewall_admin.sync_aliases_label") }}</n-checkbox>
+            <n-checkbox v-model:checked="newFw.expose_dsv">{{ t("firewall_admin.expose_dsv_label") }}</n-checkbox>
           </n-space>
           <template #feedback>
             <span style="opacity: 0.7; font-size: 12px;">

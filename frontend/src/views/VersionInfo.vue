@@ -20,6 +20,22 @@ const pkgRows = computed(() =>
   Object.entries(info.value?.packages ?? {})
     .map(([name, version]) => ({ name, version: version ?? "—" })));
 
+const frontendRows = computed(() =>
+  Object.entries(info.value?.frontend ?? {})
+    .map(([name, version]) => ({ name, version: version ?? "—" })));
+
+const hostRows = computed(() => {
+  const h = info.value?.host;
+  if (!h) return [];
+  return [
+    { name: t("version.host_os"), version: h.os ?? "—" },
+    { name: t("version.host_kernel"), version: h.kernel ?? "—" },
+    { name: "nginx", version: h.nginx ?? "—" },
+    { name: "Node.js", version: h.node ?? "—" },
+    { name: "PostgreSQL", version: h.postgres ?? "—" },
+  ];
+});
+
 async function load() {
   loading.value = true;
   try {
@@ -88,9 +104,23 @@ onMounted(load);
         </div>
       </div>
 
-      <!-- 套件版本 -->
+      <!-- 本機環境（OS / kernel / nginx / Node.js / PostgreSQL）-->
+      <template v-if="hostRows.length">
+        <div class="ver-pkg-head">
+          <span class="ver-pkg-title">{{ t("version.section_host") }}</span>
+          <span class="ver-pkg-hint">{{ t("version.section_host_hint") }}</span>
+        </div>
+        <div class="ver-pkg-grid">
+          <div v-for="p in hostRows" :key="p.name" class="ver-pkg">
+            <span class="ver-pkg__name">{{ p.name }}</span>
+            <span class="ver-pkg__ver">{{ p.version }}</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- 後端套件 -->
       <div class="ver-pkg-head">
-        <span class="ver-pkg-title">{{ t("version.packages") }}</span>
+        <span class="ver-pkg-title">{{ t("version.section_backend") }}</span>
         <span class="ver-pkg-hint">{{ t("version.packages_hint") }}</span>
       </div>
       <div class="ver-pkg-grid">
@@ -99,6 +129,19 @@ onMounted(load);
           <span class="ver-pkg__ver">{{ p.version }}</span>
         </div>
       </div>
+
+      <!-- 前端框架 -->
+      <template v-if="frontendRows.length">
+        <div class="ver-pkg-head">
+          <span class="ver-pkg-title">{{ t("version.section_frontend") }}</span>
+        </div>
+        <div class="ver-pkg-grid">
+          <div v-for="p in frontendRows" :key="p.name" class="ver-pkg">
+            <span class="ver-pkg__name">{{ p.name }}</span>
+            <span class="ver-pkg__ver">{{ p.version }}</span>
+          </div>
+        </div>
+      </template>
     </n-spin>
   </n-card>
 </template>
@@ -120,7 +163,7 @@ onMounted(load);
   background: linear-gradient(135deg, rgba(24,160,88,.14), rgba(20,184,166,.10));
   border-color: rgba(24,160,88,.35);
 }
-.ver-tile--action { grid-column: 1 / -1; }
+/* 「檢查 GitHub 最新版」與「現行版本 / Python」同一排（第三格），不再獨佔整列 */
 .ver-tile__label {
   font-size: 12.5px; opacity: .7; letter-spacing: .3px; margin-bottom: 4px;
 }
@@ -131,7 +174,7 @@ onMounted(load);
 
 .ver-pkg-head {
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-  margin: 4px 0 12px;
+  margin: 20px 0 12px;
 }
 .ver-pkg-title { font-weight: 600; font-size: 15px; }
 .ver-pkg-hint { font-size: 12.5px; opacity: .6; }

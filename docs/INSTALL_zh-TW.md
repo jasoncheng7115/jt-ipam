@@ -2,8 +2,8 @@
 
 > English: [INSTALL.md](INSTALL.md)
 
-針對 **Proxmox LXC、裸機、虛擬機**（Ubuntu 22.04+/Debian 12+）。本專案
-**不使用 Docker**；以 systemd + apt 直裝。
+針對 **Proxmox LXC、裸機、虛擬機**（Ubuntu 22.04+/Debian 12+）。**主力且建議**的安裝方式是
+**systemd + apt** 直裝（不使用 Docker）。另有 Docker Compose 路徑，但**屬選用 / 次要、並非優先模式**——見下方 §2.8。
 
 > 安全為 day-one 需求：所有環境強制 HTTPS；憑證可走 nginx 反代或
 > uvicorn 直接吃自簽。SSL 沒設好 backend **不會啟動**（A02）。
@@ -44,6 +44,8 @@ sudo systemctl reboot
 最快：一鍵 bootstrap（自動 clone 到 /opt/jt-ipam 後執行統一部署腳本，可附帶安裝參數）：
 
 ```bash
+# 前置：最小化系統可能沒有 curl（一行式安裝需要它）
+sudo apt-get update && sudo apt-get install -y curl
 curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts/bootstrap.sh \
   | sudo bash -s -- --tls-mode nginx --public-fqdn ipam.example.com
 ```
@@ -57,7 +59,7 @@ cd /opt/jt-ipam
 # 三種 TLS 模式擇一：
 #
 #   nginx         — nginx 終結 HTTPS，後端 loopback；缺憑證時自動產自簽 bootstrap
-#   self-signed   — uvicorn direct 自帶自簽（不裝 nginx；最快上線）
+#   self-signed   — uvicorn direct 內建自簽（不裝 nginx；最快上線）
 #   direct        — uvicorn direct，憑證自備（缺則 fallback 產自簽）
 
 # (A) nginx + 暫用自簽（之後 cp 正式憑證即可）— 推薦生產環境
@@ -162,6 +164,106 @@ openssl s_client -connect ipam.example.com:443 -servername ipam.example.com </de
 > 想自己重新產自簽憑證：`sudo bash /opt/jt-ipam/scripts/generate-self-signed-cert.sh` 後 `systemctl restart jt-ipam-backend`。
 > 從 direct 改走 nginx 反代：把 `/etc/jt-ipam/backend.env` 的 `BACKEND_TLS_MODE` 改成 `nginx`、裝好 nginx site，再重啟 backend + reload nginx。
 
+### 2.7 正式環境標準：高安全性 nginx 反向代理
+
+任何對外或正式環境，**標準做法都是讓 jt-ipam 跑在內建的高安全性 nginx 反向代理之後**（`--tls-mode nginx`，
+參考設定 `deploy/nginx/jt-ipam.conf`）。由 nginx 終結 TLS、後端只綁在 loopback，代理層強制套上嚴格的安全基線，
+應用伺服器絕不直接對外曝露：
+
+- **TLS**：僅 TLS 1.2/1.3、現代化加密套件、OCSP stapling、關閉 session tickets。
+- **HSTS**：`max-age` 2 年 + `includeSubDomains` + `preload`。
+- **CSP**：`default-src 'self'`、`script-src 'self'`、`connect-src 'self'`、`frame-src 'self'`、
+  `frame-ancestors 'none'`、`base-uri 'self'`、`form-action 'self'`——不含任何第三方 script／frame 來源。
+- **標頭**：`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、
+  `Permissions-Policy`（關閉定位／麥克風／相機／付款／USB）、`Cross-Origin-Opener-Policy` 與
+  `Cross-Origin-Resource-Policy: same-origin`。
+- **不洩漏版本指紋**：`server_tokens off`，並隱藏上游（uvicorn）的 `Server`／`X-Powered-By` 標頭。
+- 後端只監聽 `127.0.0.1`，nginx 是唯一對外監聽者。
+
+> **請勿**把 uvicorn 直接對外。`--tls-mode self-signed`／`direct` 只適用於內部／開發。
+
+> ### ⚠️ 自己在前面再擋一層反向代理時（Mode C）＝必要設定
+> 上述安全標頭是由「**在公開邊緣終結 TLS 的那台 nginx**」送出的。如果你用另一台反向代理（例如公司邊緣 nginx／
+> 負載平衡器）擋在 jt-ipam 前面，**那台代理必須自己也設這些安全標頭**——它們不會自動跨多一跳存活，否則對外網站就會
+> **完全沒有** CSP／HSTS／Permissions-Policy。這是部署的**必要**步驟，不是選用。
+>
+> 把內建的硬化外部代理設定套到那台邊緣機：
+> [`deploy/nginx/jt-ipam-external-proxy.conf`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/nginx/jt-ipam-external-proxy.conf)
+> ＋ [`jt-ipam-external-proxy-snippet.conf`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/nginx/jt-ipam-external-proxy-snippet.conf)
+> （含 HSTS preload、收緊的 CSP、X-Frame-Options DENY、nosniff、Referrer-Policy、Permissions-Policy、COOP＋CORP、
+> `server_tokens off`，並用 `proxy_hide_header` 擋掉上游重複的標頭，讓每個標頭只出現一次）。
+
+**請從「使用者實際連的對外網址」驗證**（也就是要穿過你的邊緣代理，而不只是本機）：
+
+```bash
+curl -skI https://ipam.example.com/ \
+  | grep -iE 'strict-transport|content-security|x-frame|x-content|referrer|permissions|cross-origin|^server'
+# 應看到：HSTS、Content-Security-Policy（frame-src 'self'）、X-Frame-Options、X-Content-Type-Options、
+# Referrer-Policy、Permissions-Policy、COOP、CORP——每個各一份，且 Server: nginx（無版本）。
+```
+
+### 2.8 選用：Docker Compose（非本專案優先使用模式）
+
+> ⚠️ **Docker Compose 是次要 / 選用的部署路徑，並非本專案優先或主力的部署模式。** 受支援且建議的安裝方式是
+> **systemd + apt**（上面各節）。Compose 適合快速試用或本來就以容器為主的環境；systemd 路徑測試最完整。
+
+檔案在 [`deploy/docker/`](https://github.com/jasoncheng7115/jt-ipam/tree/main/deploy/docker)。一組 compose 會起：
+`postgres`（pgvector）、`redis`、`backend`（FastAPI/uvicorn）、`sync`（背景同步迴圈，取代 systemd timer）、
+`web`（nginx：服務前端 + 反代 `/api`，首次啟動自動產自簽 HTTPS 憑證）。
+
+前置需求：**git** 與 **Docker Engine（含 `docker compose` v2 外掛）**。建議用官方腳本 `get.docker.com` 安裝
+（同時裝好引擎與 compose 外掛）；**不要用 `apt install docker.io`**，那個版本沒有 `docker compose` 子指令。
+非 Debian 系發行版請用各自的套件管理員裝 git。
+
+```bash
+# 前置：先裝 curl/git，再裝 Docker Engine（含 compose 外掛）
+sudo apt-get update && sudo apt-get install -y curl git
+curl -fsSL https://get.docker.com | sudo sh
+docker compose version         # 應印出 v2.x
+
+# 先 git clone 取得專案——gen-env.sh / docker-compose.yml 都在 repo 的 deploy/docker/ 內
+git clone https://github.com/jasoncheng7115/jt-ipam.git
+cd jt-ipam/deploy/docker
+./gen-env.sh                   # 產生 .env 並填入隨機密鑰（只需一次）
+docker compose up -d --build   # 建置映像並啟動
+# 開瀏覽器到 https://localhost（首次自簽憑證，瀏覽器跳警告自行信任）
+```
+
+- **第一個管理員：** `gen-env.sh` 會自動產生一組隨機 `admin` 密碼（印在它的輸出、並存進 `.env` 的
+  `JT_IPAM_ADMIN_PASSWORD`，檔案 0600），backend 首次啟動就用它建立 admin——登入後請立即更換。想自己指定就在
+  第一次 `up` 前改 `.env` 的 `JT_IPAM_ADMIN_PASSWORD`；或留空、之後用
+  `docker compose exec backend python -m app.cli.bootstrap create-admin --username admin --email admin@example.com --password-stdin` 建立。
+- **正式憑證：** 把 `server.crt` / `server.key` 放到 `deploy/docker/certs/` 即蓋過自簽。
+- **連接埠 / 網域：** 改 `.env` 的 `HTTP_PORT` / `HTTPS_PORT` / `JT_IPAM_SERVER_NAME`，並把 `APP_PUBLIC_URL` / `CORS_ORIGINS` 一起改成相符的 `https://...`。
+
+**升版只要一個指令：**
+
+```bash
+./update.sh    # git pull  →  docker compose build  →  docker compose up -d
+```
+
+backend 容器啟動時會**自動**跑資料庫遷移（entrypoint 執行 `alembic upgrade head`），不需另外手動跑 migration。
+
+**內網／無外網主機**（外網 build、內網 run）：在有外網的主機把映像 build 好、帶進內網載入 —— 安裝與升級同一套流程。
+
+```bash
+# 在有外網的主機：先取得原始碼，再 build + 打包
+git clone https://github.com/jasoncheng7115/jt-ipam.git
+cd jt-ipam/deploy/docker
+./offline-export.sh                    # → jt-ipam-images-<sha>.tar.gz（app + postgres/redis 映像）
+                                       #（之後要升級：先 git pull 取新版，再重跑 offline-export.sh）
+
+# 把壓縮檔 + 整個 jt-ipam repo 資料夾複製到內網主機，在 deploy/docker/ 下執行：
+./gen-env.sh                           # 僅首次安裝（需 openssl，免外網）
+./offline-import.sh jt-ipam-images-<sha>.tar.gz   # docker load + up -d --no-build --pull never
+```
+
+要升級內網主機：在外網主機 `git pull` 後重跑 `./offline-export.sh`，把新的壓縮檔複製過去，再跑一次
+`./offline-import.sh <新壓縮檔>`（`.env` 不動）。
+
+> Compose 版未內含：Graylog DSV 的明文 8088 埠、以及 GeoIP / OUI 排程更新。完整說明見
+> [`deploy/docker/README.md`](https://github.com/jasoncheng7115/jt-ipam/blob/main/deploy/docker/README_zh-TW.md)。
+
 ---
 
 ## 3. 環境變數
@@ -199,6 +301,16 @@ openssl s_client -connect ipam.example.com:443 -servername ipam.example.com </de
 1. OPNsense → System → Access → Users → 加 service user → 拿 API key/secret
 2. jt-ipam → 防火牆 → 新增 → 填 `https://opnsense:443`、key、secret
 3. 加 alias mapping（selector JSON 例：`{"type":"section","section_id":"<uuid>"}`）
+
+### pfSense 防火牆
+
+pfSense 無內建 REST API，需安裝第三方 **pfSense-pkg-RESTAPI** 套件（pfrest.org）：
+
+1. pfSense → System → Package Manager → 安裝 **pfSense-pkg-RESTAPI**
+2. System → REST API → Settings → 把 **API Key** 加進認證方式（auth methods；預設只有 BasicAuth）
+3. System → REST API → Keys → 建立一把 key
+4. jt-ipam → 整合 pfSense → 新增 → 填 `https://pfsense`、API key；憑證自簽請關閉 Verify TLS
+5. 同步 DHCP / ARP / 別名 / 規則 / NAT（base path `/api/v2`、`X-API-Key` 認證）。pfSense 有獨立設定頁（不與 OPNsense 共用）
 
 ### Wazuh
 

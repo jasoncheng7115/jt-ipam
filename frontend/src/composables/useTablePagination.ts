@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { useI18n } from "vue-i18n";
 import { useUiStore } from "@/stores/ui";
 
 /**
@@ -16,10 +17,13 @@ export function useTablePagination(
   extra: Record<string, unknown> = {},
 ) {
   const ui = useUiStore();
+  const { t } = useI18n();
   const pg = reactive({
     pageSize: ui.pageSize,
     showSizePicker: true,
     pageSizes: [10, 20, 50, 100, 200, 500],
+    // 分頁列最左顯示總筆數（client-side 分頁時 naive 自動帶入 itemCount）
+    prefix: (info: { itemCount?: number }) => t("common.total_rows", { n: info.itemCount ?? 0 }),
     onUpdatePageSize: (ps: number) => {
       pg.pageSize = ps;
       ui.setPageSize(ps);

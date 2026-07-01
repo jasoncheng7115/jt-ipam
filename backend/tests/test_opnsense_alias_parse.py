@@ -43,3 +43,31 @@ def test_opn_members_list_and_empty():
     assert _opn_members(["x", 1]) == ["x", "1"]
     assert _opn_members(None) == []
     assert _opn_members(123) == []
+
+
+def test_parse_pf_rule_labels_label_and_alias():
+    """pf_statistics/rules → label → alias 名（真實格式：規則文字是 key）。"""
+    from app.services.opnsense_firewall import _parse_pf_rule_labels
+    data = {"rules": {"filter rules": {
+        '@21 block drop in log quick inet from <crowdsec_blocklists:21502> to any label "031d9d1edc75c3c8c634a8aee47134ef"': {},
+        '@55 pass in log quick on pppoe0 inet proto tcp from <jasontools:1> to (pppoe0:1) port = 39443 label "7df315ceb66dc1bb2fd503f69343a8b3"': {},
+        '@5 block drop in log inet all label "ecd3a310894625657c6591b80daa956a"': {},  # 無 alias → 不收
+    }}}
+    out = _parse_pf_rule_labels(data)
+    assert out["031d9d1edc75c3c8c634a8aee47134ef"]["alias_names"] == ["crowdsec_blocklists"]
+    assert out["031d9d1edc75c3c8c634a8aee47134ef"]["action"] == "block"
+    assert out["7df315ceb66dc1bb2fd503f69343a8b3"]["alias_names"] == ["jasontools"]
+    assert out["7df315ceb66dc1bb2fd503f69343a8b3"]["interface"] == "pppoe0"
+    assert "ecd3a310894625657c6591b80daa956a" not in out  # 無引用 alias 的規則略過
+
+
+def test_parse_pf_rule_labels_uuid_label():
+    """rid（filterlog rule label）也可能是含「-」的 UUID 格式；舊 regex 漏抓整條。"""
+    from app.services.opnsense_firewall import _parse_pf_rule_labels
+    rid = "ace97705-b0f1-4058-ba15-4991f3d1dd0d"
+    data = {"rules": {"filter rules": {
+        f'@70 block drop in log quick on igb0 from <blocklist_talos:8080> to any label "{rid}"': {},
+    }}}
+    out = _parse_pf_rule_labels(data)
+    assert out[rid]["alias_names"] == ["blocklist_talos"]
+    assert out[rid]["action"] == "block"

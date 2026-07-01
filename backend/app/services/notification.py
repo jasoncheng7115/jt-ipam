@@ -70,6 +70,55 @@ async def push_notification(
     return n
 
 
+# ─────────────────── 通知矩陣分派（站內 + Email，依矩陣設定）───────────────────
+async def email_users(
+    session: AsyncSession, recipients: list[str | None], subject: str, body_text: str,
+) -> None:
+    """對一組收件者寄信（best-effort；email 管道沒開或單筆失敗都不會中斷流程）。"""
+    tos = [r for r in recipients if r]
+    if not tos:
+        return
+    from app.services.email import send_email_via_config
+    from app.services.system_config import get_notification_channels
+    try:
+        cfg = await get_notification_channels(session)
+    except Exception:
+        return
+    if not cfg.get("email_enabled"):
+        return
+    for to in tos:
+        try:
+            await send_email_via_config(cfg, to=to, subject=subject, body_text=body_text)
+        except Exception:  # 寄信失敗不影響主流程
+            pass
+
+
+async def notify_admins_event(
+    session: AsyncSession, *, event: str, title: str, body: str | None = None,
+    severity: str = "info", link: str | None = None,
+    object_type: str | None = None, object_id: uuid.UUID | None = None,
+) -> int:
+    """依通知矩陣把單一事件發給所有 admin（站內 + Email）。回傳收到站內通知的人數。"""
+    from app.models.user import User
+    from app.services.system_config import get_notification_matrix
+    ch = (await get_notification_matrix(session)).get(event, {"in_app": True, "email": False})
+    if not (ch.get("in_app") or ch.get("email")):
+        return 0
+    admins = (await session.execute(
+        select(User).where(User.is_admin.is_(True), User.is_active.is_(True))
+    )).scalars().all()
+    sent = 0
+    if ch.get("in_app"):
+        for a in admins:
+            await push_notification(
+                session, user_id=a.id, title=title, body=body, severity=severity,
+                link=link, object_type=object_type, object_id=object_id)
+            sent += 1
+    if ch.get("email"):
+        await email_users(session, [a.email for a in admins], f"[jt-ipam] {title}", body or title)
+    return sent
+
+
 # ─────────────────── Webhook 出站 ───────────────────
 def _sign(secret: str, body: bytes, ts: int) -> str:
     msg = f"{ts}.".encode("ascii") + body

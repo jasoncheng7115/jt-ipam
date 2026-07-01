@@ -478,7 +478,7 @@ Switch + Port
 | 偵測項 | 邏輯 |
 |--------|------|
 | IP 衝突 | 同一 IP 在不同時間有不同 MAC（短時間內） |
-| MAC 漂移 | 同一 MAC 在多個 switch port 跳動 |
+| MAC 變動 | 同一 MAC 在多個 switch port 跳動 |
 | 鬼 IP | IPAM 有但 ARP/FDB 從未出現過超過 N 天 |
 | 未授權設備 | ARP 出現但 IPAM 沒有，且不在白名單內 |
 | 跨 VLAN 異常 | MAC 出現在預期之外的 VLAN |
@@ -665,7 +665,7 @@ Switch + Port
 ### 11.2 應用場景
 1. **自然語言查詢**：「列出所有過保的 Dell PowerEdge 且接在 VLAN 100」
 2. **智慧配發**：「我要部署 5 台新 Proxmox 節點，幫我規劃 IP 與 VLAN」
-3. **異常偵測**：MAC 漂移、IP 衝突、鬼 IP、未授權設備
+3. **異常偵測**：MAC 變動、IP 衝突、鬼 IP、未授權設備
 4. **文件生成**：自動產出網路拓樸說明、機櫃配置報告（繁中/英文）
 5. **OCR 匯入**：拍機房白板照片，自動辨識手寫網段規劃（qwen3-vl）
 6. **合規檢查**：自動檢視 IP 配發是否符合內部政策
@@ -751,7 +751,7 @@ Switch + Port
 -  上線狀態互補（effective_status §6.4.2 真值表）
 -  自動加入 LibreNMS 監控
 -  IP → MAC → Switch Port 自動推導 trace
--  異常偵測（IP 衝突 / MAC 漂移 / 鬼 IP / 未授權 IP）
+-  異常偵測（IP 衝突 / MAC 變動 / 鬼 IP / 未授權 IP）
 -  SHA-256 異動鏈、Graylog 外送
 -  現代 REST API + GraphQL（Strawberry，read-only）
 -  AI 語意搜尋（pgvector + LLM Server embedding）
@@ -834,7 +834,7 @@ Switch + Port
 | LibreNMS | 上線狀態互補（effective_status） | 2 |
 | LibreNMS | 自動加入監控（個別決定） | 2 |
 | LibreNMS | IP→MAC→Switch Port 自動推導 | 2 |
-| LibreNMS | MAC 漂移、鬼 IP 異常偵測 | 2 |
+| LibreNMS | MAC 變動、鬼 IP 異常偵測 | 2 |
 | UI | 繁中/英文雙語 | 1 |
 | UI | 深淺主題（含 Auto） | 1 |
 | AI | MCP Server | 4 |
@@ -874,5 +874,5 @@ Switch + Port
    - FDB table 抓取（自動定位 IP 接在哪個 Switch Port）
    - 上線狀態互補（自家測不到時用 LibreNMS 結果）
    - 自動加入監控（以單一裝置為單位個別決定）
-6. 異常偵測：IP 衝突、MAC 漂移、鬼 IP、未授權設備
+6. 異常偵測：IP 衝突、MAC 變動、鬼 IP、未授權設備
 7. **資安內建**：對齊 OWASP Top 10:2025

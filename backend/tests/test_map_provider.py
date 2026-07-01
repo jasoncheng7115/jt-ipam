@@ -27,7 +27,7 @@ async def test_nonadmin_can_read_map_provider(client, db_session):
     r = await client.get("/api/v1/system/map-provider",
                          headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
-    assert r.json()["provider"] in ("osm", "google")
+    assert r.json()["provider"] in ("osm", "google", "builtin")
 
 
 async def test_admin_can_set_map_provider(client, auth_headers):

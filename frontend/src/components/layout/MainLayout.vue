@@ -11,9 +11,7 @@ import {
   NLayoutContent,
   NMenu,
   NSpace,
-  NSelect,
   NDropdown,
-  NButton,
   NIcon,
   NTooltip,
   type MenuOption,
@@ -28,6 +26,7 @@ import type { Subnet } from "@/types";
 import NotificationBell from "@/components/NotificationBell.vue";
 import GlobalSearch from "@/components/GlobalSearch.vue";
 import ChatWidget from "@/components/ChatWidget.vue";
+import ChangePasswordModal from "@/components/ChangePasswordModal.vue";
 import {
   // 主導覽
   DashboardIcon, SectionsIcon, SubnetsIcon, AddressesIcon, IPChangesIcon, VlansIcon, VrfsIcon,
@@ -37,7 +36,7 @@ import {
   Phase3Icon, VirtualizationIcon, PhysicalIcon, PowerIcon, VpnIcon,
   AdminIcon, AuditIcon, UsersIcon, GroupsIcon, CustomFieldsIcon, CustomersIcon, AnomalyIcon, ChatHistoryIcon,
   DnsIcon, LibreNMSIcon, FirewallIcon, WazuhIcon, ScanAgentsIcon, WebhooksIcon, LockIcon,
-  MigrationIcon, ImportIcon, PluginsIcon, ExportIcon,
+  MigrationIcon, ImportIcon, PluginsIcon, ExportIcon, TerminalIcon,
   // topbar / user menu
   LogoutIcon, AccountIcon, LanguageIcon, ThemeDarkIcon, ThemeLightIcon,
   renderIcon,
@@ -203,8 +202,10 @@ const menuOptions = computed<MenuOption[]>(() => {
         { label: () => t("advanced.wireless"),   key: "adv-wireless", icon: renderIcon(ScanAgentsIcon) },
         { label: () => t("nav.dns_records"),     key: "adv-dns-records", icon: renderIcon(DnsIcon) },
         { label: () => t("nav.cert_status"),     key: "adv-cert-status", icon: renderIcon(LockIcon) },
+        { label: () => t("nav.connections"),     key: "adv-connections", icon: renderIcon(TerminalIcon) },
         { label: () => t("nav.virtualization"), key: "virt",     icon: renderIcon(VirtualizationIcon) },
         { label: () => t("nav.firewall"),       key: "firewall",    icon: renderIcon(FirewallIcon) },
+        { label: () => t("nav.pfsense_fw"),     key: "pfsense_fw",  icon: renderIcon(FirewallIcon) },
         { label: () => t("nav.nat"),            key: "nat",         icon: renderIcon(NatIcon) },
         { label: () => t("nav.cabling"),        key: "cabling",     icon: renderIcon(PhysicalIcon) },
         { label: () => t("nav.power"),          key: "power",       icon: renderIcon(PowerIcon) },
@@ -234,6 +235,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           { label: () => t("nav.adguard"),       key: "adguard",        icon: renderIcon(DnsIcon) },
           { label: () => t("nav.librenms"),      key: "librenms",       icon: renderIcon(LibreNMSIcon) },
           { label: () => t("nav.firewall_admin"), key: "firewall_admin", icon: renderIcon(FirewallIcon) },
+          { label: () => t("nav.pfsense"),        key: "pfsense",        icon: renderIcon(FirewallIcon) },
           { label: () => t("nav.virt_admin"),    key: "virt_admin",     icon: renderIcon(VirtualizationIcon) },
           { label: () => t("nav.wazuh"),         key: "wazuh",          icon: renderIcon(WazuhIcon) },
           { label: () => t("nav.graylog_dsv"),   key: "graylog_dsv",    icon: renderIcon(ExportIcon) },
@@ -274,6 +276,28 @@ const localeOptions = [
   { label: "English",  value: "en-US" },
 ];
 
+// 進入（或從別處點進）某頁時，自動展開其所屬的左側群組（管理 / 進階 / 子網路群組），
+// 讓使用者一眼看到目前位置。只加不減 → 其他已展開群組維持原狀。
+function ancestorGroupKeys(opts: MenuOption[], target: string, trail: string[] = []): string[] | null {
+  for (const o of opts) {
+    if (o.key === target) return trail;
+    const kids = (o as { children?: MenuOption[] }).children;
+    if (kids) {
+      const r = ancestorGroupKeys(kids, target, [...trail, o.key as string]);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+watch([menuValue, menuOptions], () => {
+  const trail = ancestorGroupKeys(menuOptions.value, menuValue.value);
+  if (!trail || !trail.length) return;
+  const keys = new Set(expandedKeys.value);
+  const before = keys.size;
+  trail.forEach((k) => keys.add(k));
+  if (keys.size !== before) expandedKeys.value = [...keys];
+}, { immediate: true });
+
 const themeOptions = computed(() => [
   { label: t("topbar.theme.light"), value: "light" },
   { label: t("topbar.theme.dark"),  value: "dark" },
@@ -294,9 +318,14 @@ const userMenuOptions = computed(() => [
   { label: t("topbar.user_menu.profile"),     key: "profile",     icon: renderIcon(UserOutline, 16) },
   { label: t("topbar.user_menu.preferences"), key: "preferences", icon: renderIcon(SettingsIcon, 16) },
   { label: t("topbar.user_menu.my_chat_history"), key: "my_chat_history", icon: renderIcon(ChatHistoryIcon, 16) },
+  // 變更密碼：僅本機帳號（外部 IdP / LDAP 由來源端管理）
+  ...(me.value?.auth_provider === "local"
+    ? [{ label: t("account.change_password"), key: "change_password", icon: renderIcon(LockIcon, 16) }]
+    : []),
   { type: "divider" as const, key: "d" },
   { label: t("topbar.user_menu.logout"),      key: "logout",      icon: renderIcon(LogoutIcon, 16) },
 ]);
+const pwModalShow = ref(false);
 
 function handleMenu(key: string) {
   if (key === "subnets-all" || key === "subnets") {
@@ -319,6 +348,8 @@ async function handleUserMenu(key: string) {
     router.push({ name: "settings" });
   } else if (key === "my_chat_history") {
     router.push({ name: "my_chat_history" });
+  } else if (key === "change_password") {
+    pwModalShow.value = true;
   }
 }
 
@@ -507,7 +538,8 @@ function startDrag(e: MouseEvent) {
         <router-view />
       </n-layout-content>
     </n-layout>
-    <chat-widget v-if="me" />
+    <chat-widget v-if="me?.ai_enabled" />
+    <change-password-modal v-model:show="pwModalShow" />
   </n-layout>
 </template>
 

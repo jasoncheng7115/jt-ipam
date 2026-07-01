@@ -27,7 +27,12 @@ from app.models.device import Device
 from app.models.dhcp import DHCPPoolRange
 from app.models.dns import DNSRecord, DNSServer, DNSZone
 from app.models.encrypted_secret import EncryptedSecret
-from app.models.firewall import OPNsenseAliasMapping, OPNsenseFirewall, OPNsenseSyncedAlias
+from app.models.firewall import (
+    OPNsenseAliasMapping,
+    OPNsenseFirewall,
+    OPNsenseRuleLabel,
+    OPNsenseSyncedAlias,
+)
 from app.models.firewall_rule import OPNsenseRule
 from app.models.ip_change_log import IPChangeLog
 from app.models.ip_hostname import IPHostnameObservation
@@ -39,6 +44,7 @@ from app.models.nat import NATTranslation
 from app.models.notification import Notification, WebhookSubscription
 from app.models.oui import OUIVendor
 from app.models.permission import Permission
+from app.models.pfsense import PfSenseFirewall, PfSenseSyncedAlias
 from app.models.physical import (
     Cable,
     CableTermination,
@@ -51,6 +57,7 @@ from app.models.physical import (
 )
 from app.models.scan_agent import ScanAgent
 from app.models.section import Section
+from app.models.ssh_credential import SSHCredential
 from app.models.subnet import Subnet
 from app.models.system_setting import SystemSetting
 from app.models.user import APIToken, Group, User, UserGroupMember, UserPreference
@@ -110,8 +117,11 @@ __all__ = [
     "Notification",
     "OPNsenseAliasMapping",
     "OPNsenseFirewall",
+    "OPNsenseRuleLabel",
     "OPNsenseSyncedAlias",
     "Permission",
+    "PfSenseFirewall",
+    "PfSenseSyncedAlias",
     "PhpIPAMMigrationMapping",
     "PowerFeed",
     "PowerOutlet",
@@ -119,6 +129,7 @@ __all__ = [
     "Provider",
     "ProxmoxInstance",
     "Rack",
+    "SSHCredential",
     "ScanAgent",
     "Section",
     "Subnet",

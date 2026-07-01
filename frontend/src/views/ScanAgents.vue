@@ -16,6 +16,7 @@ import {
   listScanAgents, createScanAgent, updateScanAgent, deleteScanAgent, rotateScanAgentKey, scanNowAgent,
   getAgentSubnets, setAgentSubnets,
   type ScanAgent,
+  type ScanAgentTool,
 } from "@/api/phase3";
 import { listSubnets } from "@/api/subnets";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
@@ -27,22 +28,25 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 const { t, locale } = useI18n();
 const { catalog } = useScanProbes();
 
+// 所有欄位 = 預設可見（含新加的 tools「相依套件」）。tools 同時在 allKeys（才點得動/開得起來）
+// 與 defaultVisible（才預設打開；在此 → withNewDefaults 讓舊用戶升級後也自動帶出這欄）。
+const SA_COLS = ["name", "enabled", "has_key", "agent_version", "source_ip", "subnet_count",
+  "tools", "last_seen_at", "last_error", "actions"];
 const { visibleKeys: saVis, setVisible: saSet, reset: saReset } = useColumnPrefs(
-  "scan_agents",
-  ["name", "enabled", "has_key", "agent_version", "source_ip", "subnet_count", "last_seen_at", "last_error", "actions"],
-  ["name", "enabled", "has_key", "agent_version", "source_ip", "subnet_count", "last_seen_at", "last_error", "actions"],
+  "scan_agents", SA_COLS, SA_COLS,
 );
-const saPicker = [
+const saPicker = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "enabled", label: t("cols.enabled") },
   { key: "has_key", label: t("cols.key") },
   { key: "agent_version", label: t("cols.version") },
   { key: "source_ip", label: t("cols.source_ip") },
   { key: "subnet_count", label: t("cols.subnet") },
+  { key: "tools", label: t("scan_agent.deps") },
   { key: "last_seen_at", label: t("cols.last_report") },
   { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<ScanAgent[]>([]);
@@ -68,7 +72,7 @@ const PROBE_INSTALL: Record<string, string> = {
   os: `${SUDO} apt install nmap`,
   ports: `${SUDO} apt install nmap`,
   netbios: `${SUDO} apt install samba-common-bin   # 提供 nmblookup`,
-  mdns: `${SUDO} apt install avahi-utils   # 提供 avahi-resolve`,
+  mdns: `${SUDO} apt install avahi-utils   # 提供 avahi-resolve（會一併啟動 avahi-daemon，監聽 UDP 5353）`,
 };
 function probeInstall(key: string): string {
   return (
@@ -246,17 +250,32 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
     },
   },
   {
-    title: t("cols.source_ip"), key: "source_ip", width: 128,
+    title: t("cols.source_ip"), key: "source_ip", width: 150,
     render: (r) => r.last_source_ip
-      ? h("span", { style: "font-family:monospace" }, r.last_source_ip) : "—",
+      ? h("span", { style: "font-family:monospace;white-space:nowrap" }, r.last_source_ip) : "—",
   },
   {
     title: t("scanAgentHelp.col_subnets"), key: "subnet_count", width: 64,
     render: (r) => r.subnet_count ?? 0,
   },
+  {
+    title: t("scan_agent.deps"), key: "tools", width: 96,
+    render: (r) => {
+      const ts = r.tools ?? [];
+      if (!ts.length) return h("span", { style: "opacity:.5" }, "—");
+      // 以「可用」為準：已裝 + 替代可略 都算 OK；只有真正缺工具的探測才算問題
+      const missing = ts.filter((x) => toolState(r, x) === "missing").length;
+      const ok = ts.length - missing;
+      return h(NTag, {
+        size: "small", round: true, style: "cursor:pointer",
+        type: missing ? "warning" : "success",
+        onClick: () => openTools(r),
+      }, () => `${ok}/${ts.length}`);
+    },
+  },
   { title: t("scanAgentHelp.col_last_seen"), key: "last_seen_at", width: 168,
     render: (r) => h("span", { style: "white-space:nowrap" }, fmtDateTime(r.last_seen_at)) },
-  { title: t("scanAgentHelp.col_last_error"), key: "last_error", width: 150, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
+  { title: t("scanAgentHelp.col_last_error"), key: "last_error", minWidth: 150, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
   {
     title: t("common.actions"), key: "actions", className: "col-actions", width: 140,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
@@ -276,6 +295,31 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
 const cols = computed<DataTableColumns<ScanAgent>>(() =>
   allCols.value.filter((c: any) => saVis.value.includes(c.key)),
 );
+
+// 相依套件詳情
+const toolsShow = ref(false);
+const toolsRow = ref<ScanAgent | null>(null);
+function openTools(r: ScanAgent) { toolsRow.value = r; toolsShow.value = true; }
+
+// 工具狀態（以「探測是否可用」為準）：
+//  installed＝已裝；redundant＝沒裝但它負責的探測已被同類工具滿足（如有 nmblookup 時的 nbtscan）→ 可略；
+//  missing＝沒裝且該探測還缺工具 → 真正要裝。available_probes 已是 server 端「任一工具即可」的判定結果。
+type ToolState = "installed" | "redundant" | "missing";
+function toolState(agent: ScanAgent | null, tdep: ScanAgentTool): ToolState {
+  if (tdep.installed) return "installed";
+  const probes = tdep.probes ?? [];
+  const avail = agent?.available_probes ?? [];
+  if (probes.length && probes.every((p: string) => avail.includes(p))) return "redundant";
+  return "missing";
+}
+const TOOL_STATE_TYPE: Record<ToolState, "success" | "default" | "error"> = {
+  installed: "success", redundant: "default", missing: "error",
+};
+function toolStateLabel(s: ToolState): string {
+  return s === "installed" ? t("scan_agent.dep_installed")
+    : s === "redundant" ? t("scan_agent.dep_redundant")
+      : t("scan_agent.dep_missing");
+}
 
 onMounted(() => { void refresh(); });
 </script>
@@ -306,7 +350,40 @@ onMounted(() => { void refresh(); });
                     @update:visible="saSet" @reset="saReset" />
       <ExportButton :columns="cols" :rows="rows" filename="scan-agents" :title="t('nav.scan_agents')" />
     </n-space>
-    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1058" :pagination="pg" />
+    <n-data-table :columns="cols" :data="filteredRows" :loading="loading" :bordered="false" :scroll-x="1080" :pagination="pg" />
+
+    <!-- 相依套件詳情 -->
+    <n-modal v-model:show="toolsShow" preset="card" :title="t('scan_agent.deps_title')" style="width: 720px; max-width: 94vw">
+      <p class="hint" style="margin-top:0">{{ t("scan_agent.deps_hint") }}</p>
+      <table class="dep-tbl">
+        <thead>
+          <tr>
+            <th>{{ t("scan_agent.dep_tool") }}</th>
+            <th>{{ t("common.status") }}</th>
+            <th>{{ t("scanAgentHelp.col_version") }}</th>
+            <th>{{ t("scan_agent.dep_probes") }}</th>
+            <th>{{ t("scan_agent.dep_install") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="tdep in (toolsRow?.tools ?? [])" :key="tdep.name">
+            <td><code>{{ tdep.name }}</code></td>
+            <td>
+              <n-tag size="tiny" :bordered="false" :type="TOOL_STATE_TYPE[toolState(toolsRow, tdep)]">
+                {{ toolStateLabel(toolState(toolsRow, tdep)) }}
+              </n-tag>
+            </td>
+            <td>{{ tdep.version || "—" }}</td>
+            <td>{{ tdep.probes.length ? tdep.probes.join(", ") : "—" }}</td>
+            <td>
+              <code v-if="toolState(toolsRow, tdep) === 'missing' && tdep.package">sudo apt install {{ tdep.package }}</code>
+              <span v-else style="opacity:.4">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">{{ t("scan_agent.deps_note") }}</p>
+    </n-modal>
 
     <!-- 建立 / 編輯 -->
     <n-modal v-model:show="show" preset="card" style="width: 460px">
@@ -525,4 +602,11 @@ onMounted(() => { void refresh(); });
   white-space: pre-wrap;
   word-break: break-all;
 }
+.dep-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dep-tbl th, .dep-tbl td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--n-border-color, rgba(128,128,128,.18)); white-space: nowrap; }
+/* 只讓「安裝指令」那欄（最後一欄）可換行；工具名/版本/用於探測不換行 */
+.dep-tbl td:last-child, .dep-tbl th:last-child { white-space: normal; }
+.dep-tbl th { font-weight: 600; opacity: .7; font-size: 12px; }
+.dep-tbl code { font-size: 12px; background: rgba(128,128,128,.1); border-radius: 4px; padding: 1px 5px; }
+.hint { font-size: 12px; opacity: .65; line-height: 1.5; margin: 8px 0; }
 </style>

@@ -29,7 +29,7 @@ const { visibleKeys: lnVis, setVisible: lnSet, reset: lnReset } = useColumnPrefs
   ["name", "api_url", "enabled", "sync_interval_seconds", "last_sync_at", "last_error", "actions"],
   ["name", "api_url", "enabled", "sync_interval_seconds", "last_sync_at", "last_error", "actions"],
 );
-const lnPicker = [
+const lnPicker = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "api_url", label: "API URL" },
   { key: "enabled", label: t("cols.status") },
@@ -37,7 +37,7 @@ const lnPicker = [
   { key: "last_sync_at", label: t("cols.last_sync") },
   { key: "last_error", label: t("cols.last_error") },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<LibreNMSInstance[]>([]);
@@ -50,7 +50,7 @@ const form = ref({
   name: "", api_url: "", api_token: "",
   enabled: true,
   sync_devices: true, sync_arp: true, sync_fdb: true, sync_vlans: true,
-  use_for_status: true, auto_add_devices: false,
+  use_for_status: true, auto_add_devices: true, auto_create_ips: true,
   sync_interval_seconds: 300,
   scope_subnet_ids: [] as string[],
 });
@@ -75,7 +75,7 @@ function openCreate() {
     name: "", api_url: "", api_token: "",
     enabled: true,
     sync_devices: true, sync_arp: true, sync_fdb: true, sync_vlans: true,
-    use_for_status: true, auto_add_devices: false,
+    use_for_status: true, auto_add_devices: true, auto_create_ips: true,
     sync_interval_seconds: 300, scope_subnet_ids: [],
   };
   show.value = true;
@@ -93,6 +93,7 @@ function openEdit(r: LibreNMSInstance) {
     sync_vlans: r.sync_vlans,
     use_for_status: r.use_for_status,
     auto_add_devices: r.auto_add_devices,
+    auto_create_ips: r.auto_create_ips,
     sync_interval_seconds: r.sync_interval_seconds,
     scope_subnet_ids: r.scope_subnet_ids ?? [],
   };
@@ -117,6 +118,7 @@ async function submit() {
         sync_vlans: form.value.sync_vlans,
         use_for_status: form.value.use_for_status,
         auto_add_devices: form.value.auto_add_devices,
+        auto_create_ips: form.value.auto_create_ips,
         sync_interval_seconds: form.value.sync_interval_seconds,
         scope_subnet_ids: form.value.scope_subnet_ids,
       };
@@ -263,14 +265,18 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
           <div class="row"><span>{{ t('librenms_admin.sync_vlans') }}</span><n-switch size="small" v-model:value="form.sync_vlans" /></div>
           <div class="row"><span>{{ t('librenms_admin.use_for_status') }}</span><n-switch size="small" v-model:value="form.use_for_status" /></div>
           <div class="row"><span>{{ t('librenms_admin.auto_add_devices') }}</span><n-switch size="small" v-model:value="form.auto_add_devices" /></div>
+          <div class="row"><span>{{ t('librenms_admin.auto_create_ips') }}</span><n-switch size="small" v-model:value="form.auto_create_ips" /></div>
         </div>
+        <p class="hint">{{ t('librenms_admin.auto_create_ips_hint') }}</p>
         <n-form-item :label="t('librenms_admin.sync_interval')">
           <n-input-number v-model:value="form.sync_interval_seconds" :min="60" :max="86400" />
         </n-form-item>
         <n-form-item :label="t('librenms_admin.scope_subnets')">
-          <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
-                    multiple filterable clearable :placeholder="t('librenms_admin.scope_all')" />
-          <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
+          <div style="width: 100%">
+            <n-select v-model:value="form.scope_subnet_ids" :options="subnetOptions"
+                      multiple filterable clearable :placeholder="t('librenms_admin.scope_all')" />
+            <ScopeOverlapWarning :scope-empty="!form.scope_subnet_ids?.length" />
+          </div>
           <template #feedback>
             <span style="font-size: 11px; opacity: .7">{{ t("librenms_admin.scope_hint") }}</span>
           </template>
@@ -308,4 +314,5 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
   padding: 4px 0;
 }
 .sync-toggles .row span { font-size: 13px; }
+.hint { font-size: 12px; color: var(--n-text-color-disabled, #888); margin: -8px 0 14px; line-height: 1.5; }
 </style>

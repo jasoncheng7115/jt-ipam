@@ -30,3 +30,10 @@ class TokenResponse(StrictModel):
 
 class RefreshRequest(StrictModel):
     refresh_token: Annotated[str, Field(min_length=1, max_length=4096)]
+
+
+class ChangePasswordRequest(StrictModel):
+    """本機帳號自助變更密碼（外部 IdP / LDAP 帳號不適用）。"""
+
+    current_password: Annotated[str, Field(min_length=1, max_length=256)]
+    new_password: Annotated[str, Field(min_length=12, max_length=256)]

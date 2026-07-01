@@ -12,6 +12,7 @@ OWASP A04 / A06：ollama_url 走 safe_request（私網允許）；任何回到 O
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -34,6 +35,15 @@ class AIError(RuntimeError):
 
 # 單一工具結果回填上下文的字元上限（避免超大清單拖慢/逾時模型）
 _TOOL_RESULT_CAP = 12000
+
+
+def _chat_options(cfg: Any) -> dict[str, Any]:
+    """Ollama 對話請求的 options：低溫度減少亂插字；num_ctx 有設才帶（None＝用模型/Ollama 預設）。"""
+    opts: dict[str, Any] = {"temperature": 0.2}
+    n = getattr(cfg, "num_ctx", None)
+    if n:
+        opts["num_ctx"] = int(n)
+    return opts
 
 
 async def embed(session: AsyncSession, text_in: str) -> list[float]:
@@ -235,6 +245,120 @@ def _lang_instruction(locale: str | None) -> str:
     return f"Always respond to the user in {name}, regardless of the language of tool outputs."
 
 
+# 模型偶爾會把工具呼叫當成「文字」吐出來（而非結構化 tool_calls）——即使是支援工具呼叫的
+# 模型也會偶發如此。常見痕跡：<tool_call>…</tool_call> 標記 / call:name(args) / JSON {"name":…,"arguments":…}
+_TOOL_LEAK_RE = re.compile(
+    r"</?tool_?call>"
+    r"|\bcall\s*:\s*[A-Za-z_]\w*\s*\("
+    r'|\{[^{}]*"name"\s*:\s*"[^"]+"[^{}]*"(?:arguments|parameters)"',
+    re.I | re.S,
+)
+
+
+def _norm_tool(n: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", n.lower())
+
+
+def _looks_like_tool_leak(content: str) -> bool:
+    """內容看起來是「被當成文字吐出來的工具呼叫」而非正常答案。"""
+    return bool(content and _TOOL_LEAK_RE.search(content))
+
+
+def _parse_inline_args(raw: str) -> dict[str, Any]:
+    """解析 gemma 式參數字串 `arg:</~/>value</~/>, n:3`（值內可能含冒號，如 MAC）。"""
+    raw = raw.replace("</~/>", '"').replace("<~>", '"').strip()
+    if not raw:
+        return {}
+    if raw.startswith("{"):
+        try:
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return obj
+        except (ValueError, TypeError):
+            pass
+    args: dict[str, Any] = {}
+    for part in re.split(r",(?![^{\[]*[}\]])", raw):
+        part = part.strip()
+        if not part:
+            continue
+        seps = [i for i in (part.find(":"), part.find("=")) if i >= 0]
+        if not seps:
+            continue
+        cut = min(seps)
+        key = part[:cut].strip().strip("\"'")
+        val = part[cut + 1:].strip().strip("\"'")
+        if not key:
+            continue
+        if re.fullmatch(r"-?\d+", val):
+            args[key] = int(val)
+        elif val.lower() in ("true", "false"):
+            args[key] = val.lower() == "true"
+        else:
+            args[key] = val
+    return args
+
+
+def _inline_tool_calls(content: str, allowed: set[str] | None) -> list[dict[str, Any]]:
+    """後援：模型偶發把工具呼叫寫成文字時，盡量還原成 Ollama 結構化 tool_calls。
+    僅在偵測到 tool-call 痕跡、且名稱對得上已知（且該使用者可用）的工具時才接受，
+    避免把一般文句誤判成呼叫。"""
+    from app.mcp.tools import TOOLS
+    if not _looks_like_tool_leak(content):
+        return []
+    known = {_norm_tool(n): n for n in TOOLS if allowed is None or n in allowed}
+    found: list[tuple[str, dict[str, Any]]] = []
+    # (a) JSON 物件 {"name": "...", "arguments"/"parameters": {...}}
+    for m in re.finditer(
+        r'\{[^{}]*?"name"\s*:\s*"([^"]+)"'
+        r'(?:[^{}]*?"(?:arguments|parameters)"\s*:\s*(\{[^{}]*\}))?[^{}]*\}',
+        content, re.S,
+    ):
+        real = known.get(_norm_tool(m.group(1)))
+        if not real:
+            continue
+        args: dict[str, Any] = {}
+        if m.group(2):
+            try:
+                args = json.loads(m.group(2))
+            except (ValueError, TypeError):
+                args = {}
+        found.append((real, args))
+    # (b) 函式式 `[call:]name(args)`（含 gemma 的 <toolcall> 標記）
+    if not found:
+        for m in re.finditer(r"(?:call\s*:\s*)?([A-Za-z_]\w*)\s*\(([^()]*)\)", content):
+            real = known.get(_norm_tool(m.group(1)))
+            if not real:
+                continue
+            found.append((real, _parse_inline_args(m.group(2))))
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for name, args in found:
+        key = name + "|" + json.dumps(args, sort_keys=True, default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"function": {"name": name, "arguments": args}})
+        if len(out) >= 4:
+            break
+    return out
+
+
+def _tool_leak_message(locale: str | None) -> str:
+    """偵測到工具呼叫外洩、但無法還原執行時，給使用者的友善說明（取代原始亂碼）。
+
+    注意：模型本身支援工具呼叫，只是這次偶發地把呼叫寫成了無法解析的文字 → 請使用者重試即可，
+    不要誤導成「模型不支援」或叫他換模型。
+    """
+    if (locale or "").lower().startswith("en"):
+        return (
+            "This reply contained a tool call I couldn't parse, so no data was fetched. "
+            "Please try again or rephrase your question."
+        )
+    return (
+        "這次的回應裡有一段工具呼叫無法解析，因此沒有取得資料。請再試一次，或換個說法重新詢問。"
+    )
+
+
 async def chat(
     session: AsyncSession,
     *,
@@ -277,7 +401,7 @@ async def chat(
             "tools": ollama_tools,
             "stream": False,
             # 低溫度：減少模型亂插字（如把 192.168 寫成「19 kiếm 168」之類的跨語言錯字）
-            "options": {"temperature": 0.2},
+            "options": _chat_options(cfg),
         }
         try:
             resp = await safe_request(
@@ -298,7 +422,16 @@ async def chat(
 
         tool_calls = msg.get("tool_calls") or []
         if not tool_calls:
-            return {"answer": msg.get("content") or "", "messages": convo, **_meta()}
+            # 後援：模型偶發把工具呼叫寫成文字（而非結構化 tool_calls）→ 還原執行
+            inline = _inline_tool_calls(msg.get("content") or "", _allowed)
+            if inline:
+                msg["tool_calls"] = inline
+                msg["content"] = ""
+                tool_calls = inline
+            elif _looks_like_tool_leak(msg.get("content") or ""):
+                return {"answer": _tool_leak_message(locale), "messages": convo, **_meta()}
+            else:
+                return {"answer": msg.get("content") or "", "messages": convo, **_meta()}
 
         # 異動類工具不直接執行 → 回傳待確認動作，等使用者按「確認」
         pending = _pending_mutations(tool_calls)
@@ -326,7 +459,7 @@ async def _force_final_answer(cfg: Any, convo: list[dict[str, Any]]) -> str:
         ),
     }
     body = {"model": cfg.chat_model, "messages": [*convo, nudge],
-            "stream": False, "options": {"temperature": 0.2}}
+            "stream": False, "options": _chat_options(cfg)}
     try:
         resp = await safe_request(
             "POST", url, headers={"Content-Type": "application/json"},
@@ -372,7 +505,7 @@ def _build_chat_context(
 ) -> Any:
     """共用：把 IPAM tools 轉 Ollama schema + 組 system prompt + 接上對話。
 
-    回傳 (ollama_tools, convo)。chat / chat_stream 共用，避免兩份 prompt 漂移。
+    回傳 (ollama_tools, convo)。chat / chat_stream 共用，避免兩份 prompt 不一致。
     allowed_tools 給定時依 RBAC 過濾掉使用者不可呼叫的工具（避免 LLM 浪費回合）。
     """
     from app.mcp.tools import TOOLS
@@ -544,7 +677,7 @@ async def chat_stream(
             "messages": convo,
             "tools": ollama_tools,
             "stream": True,
-            "options": {"temperature": 0.2},
+            "options": _chat_options(cfg),
         }
         content_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
@@ -589,8 +722,21 @@ async def chat_stream(
         convo.append(assistant_msg)
 
         if not tool_calls:
-            yield {"type": "done", "answer": full_content, "trace_messages": convo, **_meta()}
-            return
+            # 後援：模型偶發把工具呼叫寫成文字（而非結構化 tool_calls）→ 還原；
+            # 後面的 tool_round 事件會叫前端清掉剛串流出去的呼叫文字。
+            inline = _inline_tool_calls(full_content, _allowed)
+            if inline:
+                assistant_msg["tool_calls"] = inline
+                assistant_msg["content"] = ""
+                tool_calls = inline
+            elif _looks_like_tool_leak(full_content):
+                yield {"type": "tool_round"}
+                yield {"type": "done", "answer": _tool_leak_message(locale),
+                       "trace_messages": convo, **_meta()}
+                return
+            else:
+                yield {"type": "done", "answer": full_content, "trace_messages": convo, **_meta()}
+                return
 
         # 異動類工具：不直接執行，回傳待確認動作給前端，等使用者按「確認」
         pending = _pending_mutations(tool_calls)
@@ -607,7 +753,7 @@ async def chat_stream(
     # max_iterations 用完 → 不給工具，串流最後一次強制作答
     yield {"type": "tool_round"}
     final_parts: list[str] = []
-    body = {"model": cfg.chat_model, "messages": convo, "stream": True, "options": {"temperature": 0.2}}
+    body = {"model": cfg.chat_model, "messages": convo, "stream": True, "options": _chat_options(cfg)}
     try:
         async with safe_stream(
             "POST", url, headers={"Content-Type": "application/json"},

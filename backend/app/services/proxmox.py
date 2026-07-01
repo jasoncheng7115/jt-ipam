@@ -96,7 +96,7 @@ def _candidate_urls(instance: ProxmoxInstance) -> list[str]:
 
 async def _api_get(
     session: AsyncSession, instance: ProxmoxInstance, path: str,
-    *, base_url: str | None = None,
+    *, base_url: str | None = None, timeout: float = 20.0,
 ) -> dict[str, Any]:
     secret = await _get_secret(session, instance)
     base = (base_url or instance.api_url).rstrip("/")
@@ -104,7 +104,7 @@ async def _api_get(
     try:
         resp = await safe_request(
             "GET", url, headers=_auth_header(instance, secret),
-            timeout=20.0, verify=instance.verify_tls,
+            timeout=timeout, verify=instance.verify_tls,
         )
     except UnsafeOutboundURL as exc:
         raise ProxmoxError(f"SSRF guard rejected URL: {exc}") from exc
@@ -212,16 +212,16 @@ def _agent_ipv4_by_mac(agent_data: dict[str, Any]) -> dict[str, str]:
 
 async def _link_ip_to_ipam(
     session: AsyncSession, ip_text: str | None, mac: str | None, hostname: str | None,
-) -> bool:
+) -> Any:
     """把 Proxmox 撈到的 VM/CT IP+MAC+主機名稱對應進 IPAM 的 ip_addresses。
 
     - 找出包含此 IP 的子網路（沒有就跳過，不亂建）
     - 既有 IP：補 MAC（原本空才補，避免蓋掉 scanner/ARP）；記 proxmox 主機名稱觀測
     - 沒有的 IP：在該子網路新建一筆（discovery_source=proxmox）
-    回傳是否有寫入/異動。
+    回傳對應到的 IPAddress（給呼叫端回填 VM.primary_ip_id），無對應子網路則 None。
     """
     if not ip_text:
-        return False
+        return None
     from sqlalchemy import func, text
 
     from app.models.address import IPAddress
@@ -233,7 +233,7 @@ async def _link_ip_to_ipam(
         {"ip": ip_text},
     )).first()
     if not row:
-        return False  # 沒對應子網路 → 不建
+        return None  # 沒對應子網路 → 不建
     subnet_id = row[0]
 
     ipa = (await session.execute(
@@ -255,7 +255,7 @@ async def _link_ip_to_ipam(
     if hostname:
         # 多台 PVE guest 可能回報同一 IP（共用/浮動 IP）→ 用 tiebreak 穩定收斂，避免每次同步翻轉洗版
         await apply_observation(session, ip=ipa, source="proxmox", hostname=hostname, tiebreak_min=True)
-    return True
+    return ipa
 
 
 _NODE_IFACE_TYPES = ("eth", "bridge", "bond", "vlan", "ovs")   # 實體NIC / bridge / bond / vlan / OVS*
@@ -591,11 +591,11 @@ async def sync_instance(
                         session, instance,
                         f"/api2/json/nodes/{node_name}/qemu/{vmid}"
                         "/agent/network-get-interfaces",
-                        base_url=base,
+                        base_url=base, timeout=6.0,
                     )).get("data") or {}
                     agent_ips = _agent_ipv4_by_mac(agent)
                 except ProxmoxError:
-                    pass  # agent 沒裝 / VM 沒開 → 略過
+                    pass  # agent 沒裝 / VM 沒開 / 無回應逾時 → 略過（best-effort，不拖垮整批同步）
 
             # cloud-init ipconfigN → 對應 netN 的靜態 IP（qemu 無 agent 時的後援）
             ipcfg: dict[str, str] = {}
@@ -617,8 +617,14 @@ async def sync_instance(
                 ip = ip or ipcfg.get(key)
                 await _upsert_iface(session, vm.id, key, mac, bridge, ip)
                 # IP↔MAC↔主機名稱 對應進 IPAM
-                if ip and await _link_ip_to_ipam(session, ip, mac, vm.name):
-                    summary.ipam_linked += 1
+                if ip:
+                    linked = await _link_ip_to_ipam(session, ip, mac, vm.name)
+                    if linked is not None:
+                        summary.ipam_linked += 1
+                        # 回填 VM 主 IP（給 PVE 主控台 noVNC/xterm 用：IP→VM 解析）。
+                        # 取此次同步第一個對應到的 IP 為主 IP。
+                        if vm.primary_ip_id is None:
+                            vm.primary_ip_id = linked.id
 
     instance.last_sync_at = datetime.now(UTC)
     instance.last_error = None

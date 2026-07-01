@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { NCard, NDescriptions, NDescriptionsItem, NSpin, NSpace, NTag, NTooltip, useMessage } from "naive-ui";
+import { NCard, NDescriptions, NDescriptionsItem, NSpin, NSpace, NTag, useMessage } from "naive-ui";
 import { getAddress } from "@/api/addresses";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
@@ -16,6 +16,65 @@ const { catalog } = useScanProbes();
 
 const addr = ref<IPAddress | null>(null);
 const loading = ref(false);
+
+function sshHref(): string {
+  return router.resolve({ name: "ssh-console", params: { id: addr.value!.id } }).href;
+}
+// 主按鈕 → 新分頁；下拉 → 新視窗（彈出）
+function openSsh() {
+  if (!addr.value) return;
+  window.open(sshHref(), "_blank");
+}
+function openSshPopout() {
+  if (!addr.value) return;
+  window.open(sshHref(), `ssh-${addr.value.id}`, "width=960,height=640");
+}
+
+function rdpHref(): string {
+  return router.resolve({ name: "rdp-console", params: { id: addr.value!.id } }).href;
+}
+function openRdp() {
+  if (!addr.value) return;
+  window.open(rdpHref(), "_blank");
+}
+function openRdpPopout() {
+  if (!addr.value) return;
+  window.open(rdpHref(), `rdp-${addr.value.id}`, "width=1320,height=900");
+}
+
+function vncHref(): string {
+  return router.resolve({ name: "vnc-console", params: { id: addr.value!.id } }).href;
+}
+function openVnc() {
+  if (!addr.value) return;
+  window.open(vncHref(), "_blank");
+}
+function openVncPopout() {
+  if (!addr.value) return;
+  window.open(vncHref(), `vnc-${addr.value.id}`, "width=1320,height=900");
+}
+function novncHref(): string {
+  return router.resolve({ name: "novnc-console", params: { id: addr.value!.id } }).href;
+}
+function openNovnc() {
+  if (!addr.value) return;
+  window.open(novncHref(), "_blank");
+}
+function openNovncPopout() {
+  if (!addr.value) return;
+  window.open(novncHref(), `novnc-${addr.value.id}`, "width=1320,height=900");
+}
+function bmcHref(): string {
+  return router.resolve({ name: "bmc-console", params: { id: addr.value!.id } }).href;
+}
+function openBmc() {
+  if (!addr.value) return;
+  window.open(bmcHref(), "_blank");
+}
+function openBmcPopout() {
+  if (!addr.value) return;
+  window.open(bmcHref(), `bmc-${addr.value.id}`, "width=1040,height=680");
+}
 
 // 把探測 key 轉成顯示 label（比不到目錄就直接顯示 key）
 function labelForProbe(key: string): string {
@@ -56,6 +115,16 @@ watch(() => route.params.id, (id) => { if (id) load(String(id)); });
         @saved="onSaved"
         @deleted="onDeleted"
         @back="back"
+        @ssh-open="openSsh"
+        @ssh-popout="openSshPopout"
+        @rdp-open="openRdp"
+        @rdp-popout="openRdpPopout"
+        @vnc-open="openVnc"
+        @vnc-popout="openVncPopout"
+        @novnc-open="openNovnc"
+        @novnc-popout="openNovncPopout"
+        @bmc-open="openBmc"
+        @bmc-popout="openBmcPopout"
       />
 
       <!-- 掃描項目（唯讀，由探測結果推導）；OS 已併入上方主要欄位表 -->

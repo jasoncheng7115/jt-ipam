@@ -1,6 +1,6 @@
 import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
-import { useI18n } from "vue-i18n";
+import { i18n } from "@/i18n";
 
 type Theme = "light" | "dark" | "auto";
 type Locale = "zh-TW" | "en-US";
@@ -56,12 +56,10 @@ export const useUiStore = defineStore("ui", () => {
   function setLocale(value: Locale, persist = true) {
     locale.value = value;
     localStorage.setItem("locale", value);
-    try {
-      const i18n = useI18n();
-      i18n.locale.value = value;
-    } catch {
-      // i18n 尚未注入時略過 (store 初始化時會發生)
-    }
+    // 直接改全域 i18n 的 locale（單例，隨時可用）→ 全站 t() 立即重繪，不必重新整理。
+    // 不能用 useI18n()：它只能在 component setup 內呼叫，在 store action（按鈕點擊）裡會 throw。
+    // legacy:false 時 global.locale 執行期是 ref，但型別被推成字串 → 用 cast 設 .value。
+    (i18n.global.locale as unknown as { value: Locale }).value = value;
     if (persist) void persistPref({ locale: value });
   }
 

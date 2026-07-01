@@ -232,6 +232,8 @@ const vmCols = computed<DataTableColumns<any>>(() => autoSort([
     render: (r) => h(NTag, { size: "small", type: r.kind === "ct" ? "warning" : "info" },
       () => r.kind === "ct" ? "CT" : "VM"),
   },
+  // VMID（Proxmox 的 VM/CT 編號）；預設不顯示，可在「欄位」勾選
+  { title: "VMID", key: "legacy_vmid", width: 90, render: (r) => r.legacy_vmid ?? "—" },
   {
     title: t("virt.cluster"), key: "cluster_id",
     render: (r) => clusters.value.find((c) => c.id === r.cluster_id)?.name ?? "—",
@@ -298,21 +300,23 @@ const proxmoxCols = computed<DataTableColumns<ProxmoxInstance>>(() => autoSort([
 ]));
 
 // 每張表的欄位顯示偏好 + 即時篩選。操作欄(key="actions"/"_")永遠保留。
-function useVirtPrefs(name: string, cols: typeof clusterCols, rows: typeof clusters) {
+function useVirtPrefs(name: string, cols: typeof clusterCols, rows: typeof clusters, defaultHidden: string[] = []) {
   const allKeys = cols.value
     .filter((c: any) => c.key && c.key !== "actions" && c.key !== "_")
     .map((c: any) => String(c.key));
-  const { visibleKeys, setVisible, reset } = useColumnPrefs(`virt_${name}`, allKeys, allKeys);
+  const defaults = allKeys.filter((k: string) => !defaultHidden.includes(k));
+  const { visibleKeys, setVisible, reset } = useColumnPrefs(`virt_${name}`, defaults, allKeys);
   const items = computed(() => cols.value
     .filter((c: any) => c.key && c.key !== "actions" && c.key !== "_")
     .map((c: any) => ({ key: String(c.key), label: typeof c.title === "string" ? c.title : String(c.key) })));
   const visibleCols = computed<DataTableColumns<any>>(() =>
     cols.value.filter((c: any) => c.key === "actions" || c.key === "_" || visibleKeys.value.includes(String(c.key))));
-  const { query, filtered } = useTableQuickFilter(rows);
+  // 只比對「目前顯示的欄位」，避免查數字（如 102）誤中 memory_mb / disk_gb 等內部欄位
+  const { query, filtered } = useTableQuickFilter(rows, () => visibleKeys.value);
   return reactive({ visibleKeys, setVisible, reset, items, visibleCols, query, filtered });
 }
 const clusterP = useVirtPrefs("clusters", clusterCols, clusters);
-const vmP = useVirtPrefs("vms", vmCols, vms);
+const vmP = useVirtPrefs("vms", vmCols, vms, ["legacy_vmid"]);
 const proxmoxP = useVirtPrefs("proxmox", proxmoxCols, proxmox);
 
 onMounted(() => {
@@ -440,9 +444,11 @@ onMounted(() => {
           </n-form-item>
         </n-space>
         <n-form-item :label="t('virt.scope_subnets')">
-          <n-select v-model:value="pxForm.scope_subnet_ids" :options="subnetOptions"
-                    multiple filterable clearable :placeholder="t('virt.scope_all')" />
-          <ScopeOverlapWarning :scope-empty="!pxForm.scope_subnet_ids?.length" />
+          <div style="width: 100%">
+            <n-select v-model:value="pxForm.scope_subnet_ids" :options="subnetOptions"
+                      multiple filterable clearable :placeholder="t('virt.scope_all')" />
+            <ScopeOverlapWarning :scope-empty="!pxForm.scope_subnet_ids?.length" />
+          </div>
         </n-form-item>
         <div style="margin: -8px 0 4px">
           <span style="font-size: 11px; opacity: .7">{{ t("virt.scope_hint") }}</span>

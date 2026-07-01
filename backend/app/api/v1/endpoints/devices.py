@@ -280,6 +280,47 @@ async def get_device_relations(
         rk = await session.get(Rack, dev.rack_id)
         if rk is not None:
             chain.append({"type": "rack", "id": str(rk.id), "label": rk.name})
+    # 若這台「裝置」其實是某台 Proxmox VM 的客體（無機櫃/機房），補上它所在的 PVE 節點
+    # （節點的機房 / 機櫃 → 節點 → 本客體）。
+    if not dev.location_id and not dev.rack_id:
+        from sqlalchemy import func as _func
+
+        from app.models.virt import VirtCluster, VirtualMachine
+        vm = (await session.execute(
+            select(VirtualMachine).where(_func.lower(VirtualMachine.name) == dev.name.lower()).limit(1)
+        )).scalar_one_or_none()
+        if vm is None:
+            ip_ids = [r for (r,) in (await session.execute(
+                select(IPAddress.id).where(IPAddress.device_id == dev.id)
+            )).all()]
+            if ip_ids:
+                vm = (await session.execute(
+                    select(VirtualMachine).where(VirtualMachine.primary_ip_id.in_(ip_ids)).limit(1)
+                )).scalar_one_or_none()
+        if vm is not None:
+            node_dev = await session.get(Device, vm.device_id) if vm.device_id else None
+            if node_dev is None and vm.node:
+                node_dev = (await session.execute(
+                    select(Device).where(_func.lower(Device.name) == vm.node.lower()).limit(1)
+                )).scalar_one_or_none()
+                if node_dev is None:
+                    node_dev = (await session.execute(
+                        select(Device).where(_func.lower(Device.fqdn) == vm.node.lower()).limit(1)
+                    )).scalar_one_or_none()
+            cluster = await session.get(VirtCluster, vm.cluster_id) if vm.cluster_id else None
+            csub = cluster.name if cluster is not None else None
+            if node_dev is not None and node_dev.id != dev.id:
+                if node_dev.location_id:
+                    nloc = await session.get(Location, node_dev.location_id)
+                    if nloc is not None:
+                        chain.append({"type": "location", "id": str(nloc.id), "label": nloc.name})
+                if node_dev.rack_id:
+                    nrk = await session.get(Rack, node_dev.rack_id)
+                    if nrk is not None:
+                        chain.append({"type": "rack", "id": str(nrk.id), "label": nrk.name})
+                chain.append({"type": "vmnode", "id": str(node_dev.id), "label": node_dev.name, "sub": csub})
+            elif vm.node:
+                chain.append({"type": "vmnode", "id": "pve:" + vm.node, "label": vm.node, "sub": csub})
     chain.append({"type": "device", "id": str(dev.id), "label": dev.name})
     # 主要 IP（沒設就抓任一連到本裝置的 IP）→ 子網路 → 區段
     ip = None

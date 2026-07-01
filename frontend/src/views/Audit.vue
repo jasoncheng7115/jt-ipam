@@ -99,10 +99,13 @@ const detailRow = ref<AuditLog | null>(null);
 function rowProps(row: AuditLog) {
   return { style: "cursor: pointer", onClick: () => { detailRow.value = row; } };
 }
-function fmtVal(v: unknown): string {
+function fmtVal(v: unknown, field?: string): string {
   if (v == null) return "—";
   if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
+  const s = String(v);
+  // switch_port 與其他頁一致：交換器 / 連接埠 顯示為 device@port
+  if (field === "switch_port") return s.replace(" / ", "@");
+  return s;
 }
 const detailDiff = computed<{ mode: string; rows: any[] }>(() => {
   const d = detailRow.value?.diff as any;
@@ -111,12 +114,12 @@ const detailDiff = computed<{ mode: string; rows: any[] }>(() => {
     return {
       mode: "update",
       rows: Object.keys(d.changes).map((f) => ({
-        field: f, before: fmtVal(d.before?.[f]), after: fmtVal(d.changes[f]),
+        field: f, before: fmtVal(d.before?.[f], f), after: fmtVal(d.changes[f], f),
       })),
     };
   }
   const obj = d.changes ?? d.after ?? d;
-  return { mode: "single", rows: Object.entries(obj).map(([k, v]) => ({ field: k, value: fmtVal(v) })) };
+  return { mode: "single", rows: Object.entries(obj).map(([k, v]) => ({ field: k, value: fmtVal(v, k) })) };
 });
 
 const allColumns = computed<DataTableColumns<AuditLog>>(() => autoSort([
@@ -273,6 +276,7 @@ onMounted(() => { void refresh(); });
         page: Math.floor(offset / limit) + 1,
         pageSize: limit,
         itemCount: total,
+        prefix: ({ itemCount }) => t('common.total_rows', { n: itemCount ?? 0 }),
         onUpdatePage: (p) => { offset = (p - 1) * limit; void refresh(); },
       }"
       remote :bordered="false" :scroll-x="1240" :row-props="rowProps"

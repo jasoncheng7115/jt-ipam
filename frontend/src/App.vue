@@ -129,7 +129,9 @@ const themeOverrides = computed(() =>
 </script>
 
 <template>
-  <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides"
+  <!-- inline-theme-disabled：把主題樣式從 inline style 屬性改寫進 <style> 區塊，縮小 CSP
+       style-src 的 inline 面積（補償控制，見 SECURITY.md「Accepted risks」）＋ SSR/效能。 -->
+  <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides" :inline-theme-disabled="true"
                      :locale="naiveLocale" :date-locale="naiveDateLocale">
     <n-loading-bar-provider>
       <n-dialog-provider>

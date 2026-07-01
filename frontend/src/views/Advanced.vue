@@ -240,6 +240,18 @@ const providerCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("provider", "providers", r) },
 ]));
+// kbps → 易讀速率（Gbps / Mbps / kbps），0/空回 —
+function fmtKbps(k?: number | null): string {
+  if (k == null) return "—";
+  if (k >= 1_000_000) return `${+(k / 1_000_000).toFixed(2)} Gbps`;
+  if (k >= 1000) return `${+(k / 1000).toFixed(0)} Mbps`;
+  return `${k} kbps`;
+}
+function fmtBandwidth(r: any): string {
+  if (r.down_kbps != null || r.up_kbps != null) return `↓${fmtKbps(r.down_kbps)} / ↑${fmtKbps(r.up_kbps)}`;
+  if (r.commit_rate_kbps != null) return fmtKbps(r.commit_rate_kbps);
+  return "—";
+}
 const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("cols.cid"), key: "cid", minWidth: 160, ellipsis: { tooltip: true } },
   { title: t("circuits.provider"), key: "provider_id", width: 180, ellipsis: { tooltip: true },
@@ -248,6 +260,9 @@ const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
     render: (r) => circuitTypes.value.find((p) => p.id === r.type_id)?.name ?? "—" },
   { title: t("common.status"), key: "status", width: 120,
     render: (r) => { const k = `circuits.status_${r.status}`; const o = t(k); return o === k ? (r.status ?? "—") : o; } },
+  { title: t("circuits.bandwidth"), key: "down_kbps", width: 170, render: (r) => fmtBandwidth(r) },
+  { title: t("circuits.ip_address"), key: "ip_address", width: 150, ellipsis: { tooltip: true }, render: (r) => r.ip_address || "—" },
+  { title: t("circuits.gateway"), key: "gateway", width: 140, ellipsis: { tooltip: true }, render: (r) => r.gateway || "—" },
   { title: t("circuits.device"), key: "device_id", width: 160, ellipsis: { tooltip: true },
     render: (r) => devices.value.find((d) => d.id === r.device_id)?.name ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true },
@@ -420,7 +435,7 @@ onMounted(() => { void loadAll(); });
                             @update:visible="circuitP.setVisible" @reset="circuitP.reset" />
               <ExportButton :columns="circuitP.visibleCols" :rows="circuitP.filtered" filename="circuits" :title="t('advanced.circuits')" />
             </n-space>
-            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="1000" :pagination="pg" />
+            <n-data-table :columns="circuitP.visibleCols" :data="circuitP.filtered" :loading="loading" :bordered="false" :scroll-x="1460" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="circuit_types">
             <template #tab>

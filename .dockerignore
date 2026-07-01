@@ -1,0 +1,19 @@
+# Keep the Docker build context small and avoid copying host-only artifacts
+# (the images install deps fresh, so host venv / node_modules must not leak in).
+.git/
+github/
+images/
+.claude/
+.claude.json
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+**/.env
+**/*.log
+**/*.sqlite
+deploy/docker/certs/

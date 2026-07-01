@@ -23,7 +23,7 @@ const { visibleKeys: cfVis, setVisible: cfSet, reset: cfReset } = useColumnPrefs
   ["object_type", "name", "field_type", "label_zh_tw", "required", "display_order", "actions"],
   ["object_type", "name", "field_type", "label_zh_tw", "required", "display_order", "actions"],
 );
-const cfPicker = [
+const cfPicker = computed(() => [
   { key: "object_type", label: "Object" },
   { key: "name", label: "Name" },
   { key: "field_type", label: "Type" },
@@ -31,7 +31,7 @@ const cfPicker = [
   { key: "required", label: "Required" },
   { key: "display_order", label: "Order" },
   { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const rows = ref<CustomField[]>([]);

@@ -199,13 +199,14 @@ export interface Location {
   rack_count?: number; device_count?: number;
   created_at: string; updated_at: string;
 }
-export async function getMapProvider(): Promise<"osm" | "google"> {
+export type MapProvider = "builtin" | "osm" | "google";
+export async function getMapProvider(): Promise<MapProvider> {
   try {
     const { data } = await apiClient.get<{ provider: string }>("/api/v1/system/map-provider");
-    return data.provider === "google" ? "google" : "osm";
-  } catch { return "osm"; }
+    return (["builtin", "osm", "google"].includes(data.provider) ? data.provider : "builtin") as MapProvider;
+  } catch { return "builtin"; }
 }
-export async function setMapProvider(provider: "osm" | "google"): Promise<void> {
+export async function setMapProvider(provider: MapProvider): Promise<void> {
   await apiClient.put("/api/v1/system/map-provider", { provider });
 }
 

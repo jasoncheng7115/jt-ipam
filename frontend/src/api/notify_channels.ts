@@ -40,3 +40,19 @@ export async function setNotificationChannels(
 export async function sendTestEmail(to: string): Promise<void> {
   await apiClient.post("/api/v1/system/notification-channels/test-email", { to });
 }
+
+// ── 通知矩陣：哪些事件走哪些管道（站內 / Email）──
+export type NotifyMatrix = Record<string, { in_app: boolean; email: boolean }>;
+export interface NotifyMatrixResp { matrix: NotifyMatrix; events: string[]; }
+
+export async function getNotificationMatrix(): Promise<NotifyMatrixResp> {
+  const { data } = await apiClient.get<NotifyMatrixResp>("/api/v1/system/notification-matrix");
+  return data;
+}
+
+export async function setNotificationMatrix(matrix: NotifyMatrix): Promise<NotifyMatrixResp> {
+  const { data } = await apiClient.put<NotifyMatrixResp>(
+    "/api/v1/system/notification-matrix", { matrix },
+  );
+  return data;
+}

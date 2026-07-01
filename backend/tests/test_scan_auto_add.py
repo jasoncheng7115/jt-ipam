@@ -78,6 +78,34 @@ async def test_auto_add_with_hostname_records_observation(client, db_session):
     assert any(o.hostname == "host43.lan" for o in obs), "hostname observation not recorded"
 
 
+async def test_netbios_mdns_recorded_as_distinct_sources(client, db_session):
+    """NetBIOS / mDNS 名稱各自記成獨立來源（netbios / mdns），不是混進 scanner，
+    這樣使用者才能在來源優先序頁分別排序/停用（v0.4.185）。"""
+    from app.models.ip_hostname import IPHostnameObservation
+    await _setup_agent_subnet(db_session, scan_enabled=True)
+    r = await client.post(
+        "/api/v1/scan-agents/report",
+        headers={"X-Agent-Key": RAW_KEY},
+        json={"results": [{
+            "ip": "10.88.0.44", "alive": True,
+            "rdns": "host44.lan", "netbios": "DESKTOP-ABC", "mdns": "host44.local",
+        }]},
+    )
+    assert r.status_code == 200, r.text
+    ipa = (await db_session.execute(
+        select(IPAddress).where(func.host(IPAddress.ip) == "10.88.0.44")
+    )).scalar_one()
+    obs = {
+        o.source: o.hostname
+        for o in (await db_session.execute(
+            select(IPHostnameObservation).where(IPHostnameObservation.ip_id == ipa.id)
+        )).scalars().all()
+    }
+    assert obs.get("scanner") == "host44.lan"
+    assert obs.get("netbios") == "DESKTOP-ABC"
+    assert obs.get("mdns") == "host44.local"
+
+
 async def test_no_add_when_out_of_assigned_range(client, db_session):
     await _setup_agent_subnet(db_session, scan_enabled=True)
     r = await client.post(

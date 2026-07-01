@@ -27,26 +27,26 @@ const { t } = useI18n();
 const wzInst = useColumnPrefs("wazuh_inst",
   ["name", "api_url", "api_user", "last_sync_at", "last_error", "actions"],
   ["name", "api_url", "api_user", "last_sync_at", "last_error", "actions"]);
-const wzInstPicker = [
+const wzInstPicker = computed(() => [
   { key: "name", label: t("cols.name") }, { key: "api_url", label: "API URL" },
   { key: "api_user", label: "User" }, { key: "last_sync_at", label: t("cols.last_sync") },
   { key: "last_error", label: t("cols.last_error") }, { key: "actions", label: t("cols.actions") },
-];
+]);
 const wzAg = useColumnPrefs("wazuh_agents",
   ["agent_id", "name", "ip", "status", "os_platform", "agent_version", "last_keep_alive"],
   ["agent_id", "name", "ip", "status", "os_platform", "agent_version", "last_keep_alive"]);
-const wzAgPicker = [
+const wzAgPicker = computed(() => [
   { key: "agent_id", label: "Agent ID" }, { key: "name", label: t("cols.name") },
   { key: "ip", label: "IP" }, { key: "status", label: t("cols.status") },
   { key: "os_platform", label: "OS" }, { key: "agent_version", label: t("cols.version") },
   { key: "last_keep_alive", label: t("cols.last_alive") },
-];
+]);
 const wzMiss = useColumnPrefs("wazuh_missing",
   ["ip", "hostname", "actions"],
   ["ip", "hostname", "actions"]);
-const wzMissPicker = [
+const wzMissPicker = computed(() => [
   { key: "ip", label: "IP" }, { key: "hostname", label: t("cols.hostname") }, { key: "actions", label: t("cols.actions") },
-];
+]);
 
 const msg = useMessage();
 const router = useRouter();
@@ -94,15 +94,26 @@ function openEdit(r: WazuhInstance) {
   showInst.value = true;
 }
 
+async function fetchAllAgents() {
+  // 逐頁抓完整 agent 清單（後端 limit 上限 500）→ 超過 500 台也不會被截斷
+  const all: typeof agents.value = [];
+  for (let offset = 0; offset < 200_000; offset += 500) {
+    const r = await listWazuhAgents(undefined, undefined, 500, offset);
+    all.push(...r.items);
+    if (r.items.length < 500 || all.length >= r.total) break;
+  }
+  return all;
+}
+
 async function refresh() {
   loading.value = true;
   try {
     const [i, a, m] = await Promise.all([
-      listWazuh(50, 0), listWazuhAgents(undefined, undefined, 200, 0),
+      listWazuh(50, 0), fetchAllAgents(),
       listMissingAgents(),
     ]);
     insts.value = i.items;
-    agents.value = a.items;
+    agents.value = a;
     missing.value = m;
   } catch { msg.error(t("errors.network")); }
   finally { loading.value = false; }
@@ -326,9 +337,11 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         </n-form-item>
         <n-form-item label="Verify TLS"><n-switch v-model:value="newInst.verify_tls" /></n-form-item>
         <n-form-item :label="t('wazuh_admin.scope_subnets')">
-          <n-select v-model:value="newInst.scope_subnet_ids" :options="subnetOptions"
-                    multiple filterable clearable :placeholder="t('wazuh_admin.scope_all')" />
-          <ScopeOverlapWarning :scope-empty="!newInst.scope_subnet_ids?.length" />
+          <div style="width: 100%">
+            <n-select v-model:value="newInst.scope_subnet_ids" :options="subnetOptions"
+                      multiple filterable clearable :placeholder="t('wazuh_admin.scope_all')" />
+            <ScopeOverlapWarning :scope-empty="!newInst.scope_subnet_ids?.length" />
+          </div>
         </n-form-item>
         <div style="margin: -8px 0 4px">
           <span style="font-size: 11px; opacity: .7">{{ t("wazuh_admin.scope_hint") }}</span>
