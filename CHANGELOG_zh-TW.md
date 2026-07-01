@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.70] — 2026-07-01
+
+### 變更
+- **連線按鈕改為單純按鈕** —— 移除分割按鈕右側的下拉箭頭（「另開視窗」選單），SSH／RDP／VNC／noVNC／BMC 在連線清單頁與 IP 詳情卡片都改成點一下就開主控台（新分頁）。連線清單列高收緊。BMC 空白提示精簡成一行（細節收進「看設定教學」）。
+
+
 ## [0.5.69] — 2026-07-01
 
 ### 變更

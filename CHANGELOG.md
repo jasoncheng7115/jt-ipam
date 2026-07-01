@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.70] — 2026-07-01
+
+### Changed
+- **Connection buttons are now single buttons** — dropped the split-button dropdown chevron (the "open in popout window" menu) on SSH/RDP/VNC/noVNC/BMC in both the Connections list and the IP detail card; the button just opens the console (new tab). Tighter connection-list row height. BMC blank-screen hint trimmed to one line (details behind the Setup-guide link).
+
+
 ## [0.5.69] — 2026-07-01
 
 ### Changed

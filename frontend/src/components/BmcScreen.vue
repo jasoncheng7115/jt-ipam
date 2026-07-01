@@ -222,10 +222,10 @@ onBeforeUnmount(() => { window.removeEventListener("resize", onWinResize); teard
         </n-space>
       </div>
       <n-alert v-if="phase === 'error'" type="error" :show-icon="true" style="margin:8px 0">{{ errorMsg }}</n-alert>
-      <n-alert v-if="phase === 'connected' && !blankDismissed" type="info" closable :show-icon="true"
+      <n-alert v-if="phase === 'connected' && !blankDismissed" class="bmc-blank" type="info" closable :show-icon="true"
                style="margin:6px 0" @close="blankDismissed = true">
         {{ t("bmc.blank_hint") }}
-        <n-button text type="primary" size="small" style="margin-left:6px" @click="guideOpen = true">
+        <n-button text type="primary" size="small" style="margin-left:4px" @click="guideOpen = true">
           {{ t("bmc.guide_open") }}
         </n-button>
       </n-alert>
@@ -337,6 +337,9 @@ proxmox-boot-tool refresh</pre>
 .conn-proto { font-weight: 700; font-size: 11px; letter-spacing: .4px; line-height: 1; padding: 2px 7px; border-radius: 999px; }
 .conn-proto--bmc { color: #d99812; background: rgba(217,152,18,.16); }
 .term-dim { filter: grayscale(1) brightness(.45); pointer-events: none; transition: filter .25s; }
+/* 空白提示列收緊：行距、上下內距不要那麼高 */
+.bmc-blank :deep(.n-alert-body) { padding: 7px 12px; }
+.bmc-blank :deep(.n-alert-body__content) { line-height: 1.5; font-size: 13px; }
 /* 設定教學彈窗 */
 .bmc-guide-intro { margin: 0 0 16px; color: #555; }
 html[data-theme="dark"] .bmc-guide-intro { color: #b6c2d4; }

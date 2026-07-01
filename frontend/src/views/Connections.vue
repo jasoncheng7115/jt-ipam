@@ -166,18 +166,12 @@ const allColumns = computed<DataTableColumns<IPAddress>>(() => {
         // 只有頁面（卡片）真的窄時才收成 icon；寬度夠就顯示文字（欄寬已留可容 3 組帶文字按鈕）
         const ic = cz;
         const grp = (key: string, icon: any, label: string, title: string, onMain: () => void,
-                     menu: any, onMenu: (k: string) => void, btnType: "info" | "warning" = "info") =>
+                     _menu: any, _onMenu: (k: string) => void, btnType: "info" | "warning" = "info") =>
           h(NTooltip, { key, delay: 200 }, {
-            // 用系統自己的即時彈窗，不要瀏覽器原生 title
-            trigger: () => h(NButtonGroup, null, () => [
-              h(NButton, { type: btnType, size: "small", onClick: onMain },
-                ic ? { icon: () => h(NIcon, null, () => h(icon)) }
-                   : { icon: () => h(NIcon, null, () => h(icon)), default: () => label }),
-              h(NDropdown, { trigger: "click", options: menu, onSelect: onMenu },
-                () => h(NButton, { type: btnType, size: "small",
-                  style: "width:20px;min-width:0;padding:0;border-left:1px solid rgba(255,255,255,.45)" },
-                  { icon: () => h(NIcon, { size: 13 }, () => h(ChevronDownIcon)) })),
-            ]),
+            // 單純按鈕（主鍵新分頁）；不再有右側下拉箭頭。用系統即時彈窗，不用瀏覽器原生 title
+            trigger: () => h(NButton, { type: btnType, size: "small", onClick: onMain },
+              ic ? { icon: () => h(NIcon, null, () => h(icon)) }
+                 : { icon: () => h(NIcon, null, () => h(icon)), default: () => label }),
             default: () => title,
           });
         const groups = [];
@@ -263,4 +257,6 @@ const columns = computed(() =>
 <style scoped>
 /* 卡片標題 icon+文字垂直置中（覆蓋主題預設，避免內容偏上） */
 :deep(.n-card > .n-card-header) { display: flex; align-items: center; padding-top: 12px; padding-bottom: 12px; }
+/* 列高收緊：連線清單每列上下內距不要那麼高 */
+:deep(.n-data-table-td) { padding-top: 6px; padding-bottom: 6px; }
 </style>

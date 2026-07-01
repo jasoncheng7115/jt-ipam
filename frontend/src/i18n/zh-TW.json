@@ -2563,7 +2563,7 @@
     "state_connected": "已連線",
     "state_closed": "已斷線",
     "state_error": "連線失敗",
-    "blank_hint": "畫面空白是正常的：SOL 只在主機「有輸出」時才顯示。按一下 Enter 叫出登入提示。要全程看到開機需「兩層」都開：① BIOS 的 Console Redirection（POST／BIOS／開機選單）；② OS 的序列主控台（核心 cmdline 加 console=ttySx,115200n8 + 啟用 serial-getty，才看得到核心開機到 login；ttyS 由該機 ACPI SPCR/dmesg 判定，PVE 走 /etc/kernel/cmdline + proxmox-boot-tool refresh）。設定後重開機。",
+    "blank_hint": "畫面空白是正常的：SOL 只在主機有輸出時才顯示。按一下 Enter 叫出登入提示；要看 BIOS／完整開機，需先設定序列主控台 ——",
     "font_smaller": "縮小文字",
     "font_larger": "放大文字",
     "use_saved_hint": "使用已存帳密連線（明文不離開後端）。",

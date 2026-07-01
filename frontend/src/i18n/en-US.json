@@ -2565,7 +2565,7 @@
     "state_connected": "Connected",
     "state_closed": "Disconnected",
     "state_error": "Failed",
-    "blank_hint": "A blank screen is normal: SOL only shows output when the host produces some. Press Enter for a login prompt. To see the whole boot you need BOTH layers: (1) BIOS Console Redirection (POST/BIOS/boot menu); (2) an OS serial console (add console=ttySx,115200n8 to the kernel cmdline + enable serial-getty, otherwise it goes blank once the kernel loads; pick ttyS from the host's ACPI SPCR/dmesg — PVE uses /etc/kernel/cmdline + proxmox-boot-tool refresh). Reboot after configuring.",
+    "blank_hint": "A blank screen is normal — SOL only shows output when the host produces some. Press Enter for a login prompt; to see BIOS / the full boot, set up the serial console first —",
     "font_smaller": "Smaller text",
     "font_larger": "Larger text",
     "use_saved_hint": "Connect with a saved credential (plaintext never leaves the backend).",
