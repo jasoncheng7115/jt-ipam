@@ -1,4 +1,4 @@
-# jt-ipam v0.5.67
+# jt-ipam v0.5.68
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -61,6 +61,13 @@ SOL only relays the host's **serial port**, so the host needs a serial console c
 5. **Reboot** so `console=` takes effect — then SOL shows the whole boot and kernel panics. The physical monitor is unaffected.
 
 Just want a login now? Step 3 alone is enough. The same guide is built into the app, from the BMC console's **Setup guide** button.
+
+**Troubleshooting (gotchas seen in the field):**
+
+- **Connected but blank / Enter does nothing** — SOL may not map to the port SPCR declares. With SOL connected, `echo test > /dev/ttyS0` (and `/dev/ttyS1`) and see which one appears — that's the real SOL port.
+- **Output appears but is garbled** — the serial baud doesn't match SOL. Check `ipmitool -I open sol info 1 | grep 'Bit Rate'` and set `serial-getty` to the same baud.
+- **Boxes / colors look broken (e.g. glances)** — set the serial login's `TERM` to `xterm-256color` (serial-getty often defaults to `vt220`).
+- **Console area is tiny with black margins** — serial can't auto-negotiate window size; use the console's **Fit to window** button (it sends an `stty rows/cols` command — press it at a shell prompt), or run `stty rows N cols N` yourself.
 
 ## Core entities
 

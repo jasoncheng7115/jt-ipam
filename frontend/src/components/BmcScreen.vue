@@ -8,14 +8,14 @@ import { nextTick, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NForm, NFormItem, NInput, NSelect, NSwitch, NButton, NButtonGroup, NIcon, NSpace,
-  NTag, NAlert, NSpin, NModal, useMessage,
+  NTag, NAlert, NSpin, NModal, NTooltip, useMessage,
 } from "naive-ui";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { requestBmcTicket, buildBmcWsUrl, listBmcCredentials, createBmcCredential } from "@/api/bmc";
 import type { SshCredential } from "@/api/ssh";
-import { TerminalIcon, CancelIcon, RefreshIcon, InfoIcon } from "@/icons";
+import { TerminalIcon, CancelIcon, RefreshIcon, InfoIcon, FitIcon } from "@/icons";
 
 const props = withDefaults(defineProps<{
   addressId: string; ip: string; hostname?: string | null; deviceName?: string | null; fullHeight?: boolean;
@@ -115,11 +115,22 @@ async function connect() {
   ws.onerror = () => { if (phase.value === "connecting") { phase.value = "error"; errorMsg.value = t("bmc.ws_failed"); } };
 }
 
+// 符合視窗：序列主控台無法自動傳視窗大小，按一下把 stty rows/cols 對齊 xterm.js 實際大小
+// 送進當前 shell（呼叫端需在提示字元）。不必在被控端裝任何腳本。
+function fitRemote() {
+  if (!term || !fit || !ws || ws.readyState !== WebSocket.OPEN) return;
+  fit.fit();
+  ws.send(enc.encode(`stty rows ${term.rows} cols ${term.cols}\r`));
+  term.focus();
+}
+function onWinResize() { if (term && fit) fit.fit(); }
+window.addEventListener("resize", onWinResize);
+
 function cleanupWs() { try { ws?.close(); } catch { /* */ } ws = null; }
 function disconnect() { cleanupWs(); phase.value = "closed"; }
 function teardown() { cleanupWs(); try { term?.dispose(); } catch { /* */ } term = null; fit = null; }
 function backToForm() { teardown(); phase.value = "form"; errorMsg.value = ""; connInfo.value = ""; void loadCreds(); }
-onBeforeUnmount(teardown);
+onBeforeUnmount(() => { window.removeEventListener("resize", onWinResize); teardown(); });
 </script>
 
 <template>
@@ -187,6 +198,14 @@ onBeforeUnmount(teardown);
           <span v-if="connInfo" class="bmc-meta">{{ connInfo }}</span>
         </span>
         <n-space :size="8" align="center">
+          <n-tooltip v-if="phase === 'connected'" :delay="0" trigger="hover" placement="bottom">
+            <template #trigger>
+              <n-button size="tiny" @click="fitRemote">
+                <template #icon><n-icon :component="FitIcon" /></template>{{ t("bmc.fit_window") }}
+              </n-button>
+            </template>
+            <span style="display:inline-block;max-width:300px">{{ t("bmc.fit_hint") }}</span>
+          </n-tooltip>
           <n-button size="tiny" quaternary :title="t('bmc.guide_btn')" @click="guideOpen = true">
             <template #icon><n-icon :component="InfoIcon" /></template>{{ t("bmc.guide_btn") }}
           </n-button>
@@ -273,6 +292,16 @@ proxmox-boot-tool refresh</pre>
         <n-alert type="success" :show-icon="true" :bordered="false" style="margin-top:6px">
           {{ t("bmc.guide_tip") }}
         </n-alert>
+
+        <h4 class="bmc-ts-head">{{ t("bmc.guide_ts") }}</h4>
+        <ul class="bmc-ts">
+          <li><b>{{ t("bmc.guide_ts_blank") }}</b><br>{{ t("bmc.guide_ts_blank_d") }}
+            <code>echo test &gt; /dev/ttyS0</code> / <code>/dev/ttyS1</code></li>
+          <li><b>{{ t("bmc.guide_ts_baud") }}</b><br>{{ t("bmc.guide_ts_baud_d") }}
+            <code>ipmitool -I open sol info 1 | grep 'Bit Rate'</code></li>
+          <li><b>{{ t("bmc.guide_ts_term") }}</b><br>{{ t("bmc.guide_ts_term_d") }}</li>
+          <li><b>{{ t("bmc.guide_ts_size") }}</b><br>{{ t("bmc.guide_ts_size_d") }}</li>
+        </ul>
       </div>
     </n-modal>
   </div>
@@ -322,4 +351,10 @@ html[data-theme="dark"] .bmc-guide-body p { color: #a6b2c4; }
 .bmc-guide-body pre { margin: 0 0 8px; padding: 10px 12px; background: #1e1e1e; color: #e6e6e6;
   border-radius: 8px; font-size: 12.5px; line-height: 1.55; overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.bmc-ts-head { margin: 18px 0 8px; font-size: 14px; }
+.bmc-ts { margin: 0; padding-left: 18px; }
+.bmc-ts li { margin-bottom: 9px; font-size: 13px; color: #555; line-height: 1.5; }
+html[data-theme="dark"] .bmc-ts li { color: #a6b2c4; }
+.bmc-ts code { background: rgba(128,128,128,.16); padding: 1px 6px; border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 </style>

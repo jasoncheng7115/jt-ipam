@@ -2587,6 +2587,17 @@
     "guide_s4_d": "To see POST / BIOS / the boot menu over SOL, point the BIOS Serial Port Console Redirection at the same COM port, 115200 8N1.",
     "guide_s5": "Reboot so console= takes effect",
     "guide_s5_d": "console= only applies on the next boot; after rebooting, SOL shows the full boot and kernel panics. The physical monitor (tty0) is unaffected.",
-    "guide_tip": "Just want to log in now? Step 3 is enough. Seeing crash / boot messages needs step 2 plus a reboot."
+    "guide_tip": "Just want to log in now? Step 3 is enough. Seeing crash / boot messages needs step 2 plus a reboot.",
+    "fit_window": "Fit to window",
+    "fit_hint": "⚠️ This SENDS an stty rows/cols command into the current session to match the terminal to the browser window (serial consoles can't auto-negotiate size). Press it at a shell prompt, not while an app is running — otherwise it inserts stray text.",
+    "guide_ts": "Troubleshooting (gotchas seen in the field)",
+    "guide_ts_blank": "Connected but blank / Enter does nothing",
+    "guide_ts_blank_d": "SOL may not map to the port SPCR declares. With SOL connected, echo a test string to each port and see which one shows up:",
+    "guide_ts_baud": "Output appears but is garbled",
+    "guide_ts_baud_d": "The serial baud doesn't match SOL. Check SOL's bit rate, then set serial-getty to the same baud:",
+    "guide_ts_term": "Boxes / colors look broken (e.g. glances)",
+    "guide_ts_term_d": "Set the serial login's TERM to xterm-256color (serial-getty often defaults to vt220).",
+    "guide_ts_size": "Console area is tiny with black margins",
+    "guide_ts_size_d": "Serial can't auto-negotiate size — use the toolbar's Fit to window button (sends stty), or run stty rows N cols N yourself."
   }
 }

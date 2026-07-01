@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.68] — 2026-07-01
+
+### Added
+- **BMC console — "Fit to window" button** — serial consoles carry no window-size negotiation, so full-screen apps default to 80×24 with black margins. The button sends an `stty rows/cols` command (using xterm.js's real dimensions) into the session to match the browser window. Hovering shows an immediate tooltip that it **sends a command** and must be pressed at a shell prompt. No per-host script needed.
+- **BMC setup guide — Troubleshooting section** — SPCR can point to the wrong ttyS (echo-test each port), baud must match SOL's bit rate, `TERM=xterm-256color` for clean curses rendering (glances), and the fit-to-window note. README (EN/zh) mirrors it.
+
+
 ## [0.5.67] — 2026-07-01
 
 ### Fixed

@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.68] — 2026-07-01
+
+### 新增
+- **BMC 主控台 —— 「符合視窗」按鈕** —— 序列主控台沒有視窗大小協商，全螢幕程式預設 80×24、四周留黑。此按鈕會把 `stty rows/cols`（用 xterm.js 的真實大小）指令送進 session，對齊瀏覽器視窗。滑過去立即彈出提示，說明它是**送指令**、需在 shell 提示字元按。被控端免裝任何腳本。
+- **BMC 設定教學 —— 疑難排解區** —— SPCR 可能指錯 ttyS（用 echo 逐埠測）、baud 要對齊 SOL 的 Bit Rate、`TERM=xterm-256color` 讓 glances 這類 curses 工具不亂碼、以及符合視窗說明。README（中英）同步。
+
+
 ## [0.5.67] — 2026-07-01
 
 ### 修正
