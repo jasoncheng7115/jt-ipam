@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.67] — 2026-07-01
+
+### Fixed
+- **BMC "remember credentials" never saved** — the credential-vault create/list endpoint rejected `protocol='bmc'` (400, swallowed by the UI), so BMC passwords were never stored and every session re-prompted. `bmc` is now accepted in create/list/permission dispatch (password-only, `can_use_bmc`).
+
+### Added
+- **BMC console — built-in serial-console setup guide** — a **Setup guide** button (form + toolbar + blank-screen hint) opens a step-by-step modal: find the ttyS SOL maps to (ACPI SPCR / dmesg), add `console=tty0 console=ttySx,115200n8` (GRUB or PVE `/etc/kernel/cmdline`), enable `serial-getty`, optional BIOS Console Redirection, reboot. README (EN/zh) + docs landing page document the same.
+
+
 ## [0.5.66] — 2026-07-01
 
 ### Changed

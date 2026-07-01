@@ -1,4 +1,4 @@
-# jt-ipam v0.5.66
+# jt-ipam v0.5.67
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -27,7 +27,7 @@ Familiar to phpIPAM users so they are productive from day one, but built from sc
 - **Graylog** — exposes an IP→hostname/FQDN DSV lookup endpoint for Graylog's "DSV File from HTTP" data adapter
 - **Local AI** — natural-language queries and semantic search over LLM Server (data never leaves the host), plus an MCP server (stdio and Streamable HTTP transports) so external LLM clients can drive the IPAM; `gemma4:26b` works well in our testing
 
-Also built in: a **browser-based remote console** — an SSH terminal plus RDP and VNC desktops (RDP/VNC are **Beta**), in the browser — credentials are not stored by default, with an optional per-user **encrypted credential vault**, object-level RBAC, single-use ticket→WebSocket sessions and full audit (RDP/VNC use an optional dependency that is installed only when a prebuilt wheel is available, so the base install is unchanged), an **IP request approval workflow** (configurable multi-stage / parallel sign-off, with in-app + email notifications), **DNS record review** (find records with no matching IPAM address), a **scan agent** (ICMP/ARP/rDNS/NetBIOS/mDNS/OS probes), **central certificate storage & distribution** (upload a commercial / self-signed cert once; a pure-bash agent pulls it on a schedule and deploys it to nginx / apache / caddy / haproxy / Proxmox VE·PMG·PBS / Zimbra and more, reloading the service — with encrypted private keys, expiry alerts and manual renew), **floor plans + rack U-diagrams** (half-U, front/rear, SVG/PNG/draw.io export), **cable tracing** (multi-hop), an IP change log with stale-IP reclaim, and a universal table column-picker + multi-format export.
+Also built in: a **browser-based remote console** — an SSH terminal plus RDP and VNC desktops and a **BMC out-of-band serial console** (IPMI SOL) (RDP/VNC/BMC are **Beta**), in the browser — credentials are not stored by default, with an optional per-user **encrypted credential vault**, object-level RBAC, single-use ticket→WebSocket sessions and full audit (RDP/VNC use an optional dependency that is installed only when a prebuilt wheel is available, so the base install is unchanged), an **IP request approval workflow** (configurable multi-stage / parallel sign-off, with in-app + email notifications), **DNS record review** (find records with no matching IPAM address), a **scan agent** (ICMP/ARP/rDNS/NetBIOS/mDNS/OS probes), **central certificate storage & distribution** (upload a commercial / self-signed cert once; a pure-bash agent pulls it on a schedule and deploys it to nginx / apache / caddy / haproxy / Proxmox VE·PMG·PBS / Zimbra and more, reloading the service — with encrypted private keys, expiry alerts and manual renew), **floor plans + rack U-diagrams** (half-U, front/rear, SVG/PNG/draw.io export), **cable tracing** (multi-hop), an IP change log with stale-IP reclaim, and a universal table column-picker + multi-format export.
 
 ## Graylog log enrichment (DSV lookup)
 
@@ -45,6 +45,22 @@ jt-ipam generates a **live** IP → hostname / FQDN lookup table that Graylog's 
 
 - In Graylog's "DSV File from HTTP" adapter: set the URL above, separator to comma or tab per format, and **Key column = 0, Value column = 1** (Graylog's column indices are 0-based)
 - The token is validated per request and can be regenerated anytime; the settings page shows a ready-to-copy full lookup URL
+
+## BMC out-of-band console (IPMI SOL, Beta)
+
+Open a keyboard + text console to a server's **BMC** (IPMI 2.0 Serial-over-LAN) straight from its IP — no vendor Java/HTML5 KVM. Enable it per IP (same RBAC level as SSH), keep the BMC credentials in the same encrypted vault, and every session is audited. It is **non-destructive**: keyboard + text screen only, no power control or mouse.
+
+SOL only relays the host's **serial port**, so the host needs a serial console configured or the screen stays blank. One-time host setup:
+
+1. **Find the port SOL maps to** — `dmesg | grep -iE 'ttyS|SPCR'` (e.g. `SPCR: console: uart,io,0x3f8,115200` → `0x3f8` = ttyS0, `0x2f8` = ttyS1). The wrong port stays blank.
+2. **Add the kernel console** (keep `tty0` so the physical monitor keeps its output):
+   - Generic Linux (GRUB): add `console=tty0 console=ttyS0,115200n8` to `GRUB_CMDLINE_LINUX` in `/etc/default/grub`, then `update-grub`.
+   - Proxmox VE (systemd-boot / ZFS): append the same to `/etc/kernel/cmdline`, then `proxmox-boot-tool refresh`.
+3. **Enable serial login** (immediate, no reboot): `systemctl enable --now serial-getty@ttyS0`.
+4. **(Optional) BIOS Console Redirection** — point it at the same COM port (115200 8N1) to also see POST / BIOS over SOL.
+5. **Reboot** so `console=` takes effect — then SOL shows the whole boot and kernel panics. The physical monitor is unaffected.
+
+Just want a login now? Step 3 alone is enough. The same guide is built into the app, from the BMC console's **Setup guide** button.
 
 ## Core entities
 

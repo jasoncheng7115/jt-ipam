@@ -2570,6 +2570,23 @@
     "font_larger": "Larger text",
     "use_saved_hint": "Connect with a saved credential (plaintext never leaves the backend).",
     "store_hint": "The credential will be saved to your encrypted vault (AES-GCM).",
-    "no_store_hint": "The credential is not saved; used only for this session."
+    "no_store_hint": "The credential is not saved; used only for this session.",
+    "guide_btn": "Setup guide",
+    "guide_open": "Open setup guide",
+    "guide_title": "Make BMC SOL show the host: serial console setup",
+    "guide_intro": "SOL can only show what the host writes to its serial port. A blank screen means the host has no serial console configured yet. Set it up with the steps below (generic Linux or Proxmox VE):",
+    "guide_s1": "Find the serial port SOL maps to",
+    "guide_s1_d": "BMC SOL is wired to one of the board's COM ports (usually ttyS0 or ttyS1). Confirm via ACPI SPCR / dmesg — the wrong port stays blank.",
+    "guide_s2": "Add the kernel console parameter",
+    "guide_s2_d": "Keep tty0 so the physical monitor still gets output; replace ttyS0 with the port from step 1.",
+    "guide_s2_grub": "Generic Linux (GRUB)",
+    "guide_s2_pve": "Proxmox VE (systemd-boot / ZFS)",
+    "guide_s3": "Enable serial login (takes effect immediately, no reboot)",
+    "guide_s3_d": "After this, pressing Enter in SOL brings up a login prompt you can use right away.",
+    "guide_s4": "(Optional) Enable BIOS Console Redirection",
+    "guide_s4_d": "To see POST / BIOS / the boot menu over SOL, point the BIOS Serial Port Console Redirection at the same COM port, 115200 8N1.",
+    "guide_s5": "Reboot so console= takes effect",
+    "guide_s5_d": "console= only applies on the next boot; after rebooting, SOL shows the full boot and kernel panics. The physical monitor (tty0) is unaffected.",
+    "guide_tip": "Just want to log in now? Step 3 is enough. Seeing crash / boot messages needs step 2 plus a reboot."
   }
 }

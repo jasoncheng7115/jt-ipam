@@ -8,14 +8,14 @@ import { nextTick, onBeforeUnmount, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NForm, NFormItem, NInput, NSelect, NSwitch, NButton, NButtonGroup, NIcon, NSpace,
-  NTag, NAlert, NSpin, useMessage,
+  NTag, NAlert, NSpin, NModal, useMessage,
 } from "naive-ui";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { requestBmcTicket, buildBmcWsUrl, listBmcCredentials, createBmcCredential } from "@/api/bmc";
 import type { SshCredential } from "@/api/ssh";
-import { TerminalIcon, CancelIcon, RefreshIcon } from "@/icons";
+import { TerminalIcon, CancelIcon, RefreshIcon, InfoIcon } from "@/icons";
 
 const props = withDefaults(defineProps<{
   addressId: string; ip: string; hostname?: string | null; deviceName?: string | null; fullHeight?: boolean;
@@ -28,6 +28,7 @@ const phase = ref<Phase>("form");
 const errorMsg = ref("");
 const connInfo = ref("");
 const blankDismissed = ref(false);
+const guideOpen = ref(false);
 
 const FONT_MIN = 9, FONT_MAX = 24;
 const fontSize = ref(13);
@@ -131,6 +132,9 @@ onBeforeUnmount(teardown);
             <n-icon :component="TerminalIcon" :size="18" />
             <span>{{ t("bmc.connect_to", { ip }) }}</span>
             <n-tag size="tiny" type="warning" :bordered="false">Beta</n-tag>
+            <n-button size="tiny" quaternary style="margin-left:auto" @click="guideOpen = true">
+              <template #icon><n-icon :component="InfoIcon" /></template>{{ t("bmc.guide_btn") }}
+            </n-button>
           </span>
         </template>
         <!-- 已存帳密 -->
@@ -183,6 +187,9 @@ onBeforeUnmount(teardown);
           <span v-if="connInfo" class="bmc-meta">{{ connInfo }}</span>
         </span>
         <n-space :size="8" align="center">
+          <n-button size="tiny" quaternary :title="t('bmc.guide_btn')" @click="guideOpen = true">
+            <template #icon><n-icon :component="InfoIcon" /></template>{{ t("bmc.guide_btn") }}
+          </n-button>
           <n-button-group v-if="phase === 'connected'" size="tiny">
             <n-button :disabled="fontSize <= FONT_MIN" :title="t('bmc.font_smaller')" @click="setFont(-1)">A−</n-button>
             <n-button :disabled="fontSize >= FONT_MAX" :title="t('bmc.font_larger')" @click="setFont(1)">A+</n-button>
@@ -197,9 +204,77 @@ onBeforeUnmount(teardown);
       </div>
       <n-alert v-if="phase === 'error'" type="error" :show-icon="true" style="margin:8px 0">{{ errorMsg }}</n-alert>
       <n-alert v-if="phase === 'connected' && !blankDismissed" type="info" closable :show-icon="true"
-               style="margin:6px 0" @close="blankDismissed = true">{{ t("bmc.blank_hint") }}</n-alert>
+               style="margin:6px 0" @close="blankDismissed = true">
+        {{ t("bmc.blank_hint") }}
+        <n-button text type="primary" size="small" style="margin-left:6px" @click="guideOpen = true">
+          {{ t("bmc.guide_open") }}
+        </n-button>
+      </n-alert>
       <div ref="termEl" class="bmc-term" :class="{ 'bmc-full': fullHeight, 'term-dim': phase === 'closed' }" />
     </div>
+
+    <!-- 設定教學：讓 SOL 顯示主機畫面（序列主控台設定） -->
+    <n-modal v-model:show="guideOpen" preset="card" :title="t('bmc.guide_title')"
+             style="width:720px;max-width:94vw" :bordered="false">
+      <div class="bmc-guide">
+        <p class="bmc-guide-intro">{{ t("bmc.guide_intro") }}</p>
+
+        <div class="bmc-guide-step">
+          <span class="bmc-guide-num">1</span>
+          <div class="bmc-guide-body">
+            <h4>{{ t("bmc.guide_s1") }}</h4>
+            <p>{{ t("bmc.guide_s1_d") }}</p>
+            <pre>dmesg | grep -iE 'ttyS|SPCR'
+# 例：ACPI: SPCR: console: uart,io,0x3f8,115200  → 0x3f8=ttyS0, 0x2f8=ttyS1</pre>
+          </div>
+        </div>
+
+        <div class="bmc-guide-step">
+          <span class="bmc-guide-num">2</span>
+          <div class="bmc-guide-body">
+            <h4>{{ t("bmc.guide_s2") }}</h4>
+            <p>{{ t("bmc.guide_s2_d") }}</p>
+            <div class="bmc-guide-label">{{ t("bmc.guide_s2_grub") }}</div>
+            <pre># /etc/default/grub 的 GRUB_CMDLINE_LINUX 內加：
+console=tty0 console=ttyS0,115200n8
+update-grub          # RHEL 系：grub2-mkconfig -o /boot/grub2/grub.cfg</pre>
+            <div class="bmc-guide-label">{{ t("bmc.guide_s2_pve") }}</div>
+            <pre># 編輯 /etc/kernel/cmdline，同一行末尾加：
+console=tty0 console=ttyS0,115200n8
+proxmox-boot-tool refresh</pre>
+          </div>
+        </div>
+
+        <div class="bmc-guide-step">
+          <span class="bmc-guide-num">3</span>
+          <div class="bmc-guide-body">
+            <h4>{{ t("bmc.guide_s3") }}</h4>
+            <p>{{ t("bmc.guide_s3_d") }}</p>
+            <pre>systemctl enable --now serial-getty@ttyS0</pre>
+          </div>
+        </div>
+
+        <div class="bmc-guide-step">
+          <span class="bmc-guide-num">4</span>
+          <div class="bmc-guide-body">
+            <h4>{{ t("bmc.guide_s4") }}</h4>
+            <p>{{ t("bmc.guide_s4_d") }}</p>
+          </div>
+        </div>
+
+        <div class="bmc-guide-step">
+          <span class="bmc-guide-num">5</span>
+          <div class="bmc-guide-body">
+            <h4>{{ t("bmc.guide_s5") }}</h4>
+            <p>{{ t("bmc.guide_s5_d") }}</p>
+          </div>
+        </div>
+
+        <n-alert type="success" :show-icon="true" :bordered="false" style="margin-top:6px">
+          {{ t("bmc.guide_tip") }}
+        </n-alert>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -233,4 +308,18 @@ onBeforeUnmount(teardown);
 .conn-proto { font-weight: 700; font-size: 11px; letter-spacing: .4px; line-height: 1; padding: 2px 7px; border-radius: 999px; }
 .conn-proto--bmc { color: #d99812; background: rgba(217,152,18,.16); }
 .term-dim { filter: grayscale(1) brightness(.45); pointer-events: none; transition: filter .25s; }
+/* 設定教學彈窗 */
+.bmc-guide-intro { margin: 0 0 16px; color: #555; }
+html[data-theme="dark"] .bmc-guide-intro { color: #b6c2d4; }
+.bmc-guide-step { display: flex; gap: 12px; margin-bottom: 16px; }
+.bmc-guide-num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #18a058; color: #fff;
+  font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.bmc-guide-body { flex: 1; min-width: 0; }
+.bmc-guide-body h4 { margin: 2px 0 4px; font-size: 14px; }
+.bmc-guide-body p { margin: 0 0 8px; color: #666; font-size: 13px; }
+html[data-theme="dark"] .bmc-guide-body p { color: #a6b2c4; }
+.bmc-guide-label { font-size: 12px; font-weight: 600; color: #888; margin: 6px 0 3px; }
+.bmc-guide-body pre { margin: 0 0 8px; padding: 10px 12px; background: #1e1e1e; color: #e6e6e6;
+  border-radius: 8px; font-size: 12.5px; line-height: 1.55; overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 </style>

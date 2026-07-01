@@ -1,4 +1,4 @@
-# jt-ipam v0.5.66
+# jt-ipam v0.5.67
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -27,7 +27,7 @@ phpIPAM 老使用者幾乎零學習成本；以現代技術全新打造（非基
 - **Graylog**：提供 IP→主機名稱/FQDN 的 DSV 對照表端點，供 Graylog「DSV File from HTTP」資料配接器抓取
 - **本地 AI**：LLM Server 自然語言查詢 + 語意搜尋（資料不外送），並提供 MCP server（stdio / Streamable HTTP）；實測搭配 `gemma4:26b` 效果良好
 
-也內建：**瀏覽器內遠端連線管理** —— SSH 終端機，外加 RDP、VNC 桌面（RDP/VNC 為 **Beta**），全部在瀏覽器內，連線帳密預設不儲存、可選用**個人加密憑證金庫**（by-user、AES-GCM），物件層級 RBAC、單次 ticket→WebSocket 連線與完整稽核（RDP/VNC 走選用相依，僅在有預編譯 wheel 時才安裝，不影響基礎安裝）、**IP 申請審核流程**（可設多關卡會簽 / 依序關卡，站內 + Email 通知）、**DNS 記錄檢視**（找出沒有對應 IPAM 的記錄）、**掃描代理**（ICMP/ARP/反解/NetBIOS/mDNS/OS 探測）、**憑證集中保管與派送**（商業 / 自簽憑證一次上傳，純 bash 代理依排程自動派送到 nginx/apache/caddy/haproxy/Proxmox VE·PMG·PBS/Zimbra…等服務並重載，私鑰加密保存、到期告警、可手動續簽）、**機房平面圖 + 機櫃 U 位圖**（含半 U / 正背面、SVG/PNG/draw.io 匯出）、**纜線追蹤**（多跳穿透）、IP 異動記錄與失聯 IP 回收、通用表格欄位選擇 + 多格式匯出。
+也內建：**瀏覽器內遠端連線管理** —— SSH 終端機，外加 RDP、VNC 桌面與 **BMC 帶外序列主控台**（IPMI SOL）（RDP/VNC/BMC 為 **Beta**），全部在瀏覽器內，連線帳密預設不儲存、可選用**個人加密憑證金庫**（by-user、AES-GCM），物件層級 RBAC、單次 ticket→WebSocket 連線與完整稽核（RDP/VNC 走選用相依，僅在有預編譯 wheel 時才安裝，不影響基礎安裝）、**IP 申請審核流程**（可設多關卡會簽 / 依序關卡，站內 + Email 通知）、**DNS 記錄檢視**（找出沒有對應 IPAM 的記錄）、**掃描代理**（ICMP/ARP/反解/NetBIOS/mDNS/OS 探測）、**憑證集中保管與派送**（商業 / 自簽憑證一次上傳，純 bash 代理依排程自動派送到 nginx/apache/caddy/haproxy/Proxmox VE·PMG·PBS/Zimbra…等服務並重載，私鑰加密保存、到期告警、可手動續簽）、**機房平面圖 + 機櫃 U 位圖**（含半 U / 正背面、SVG/PNG/draw.io 匯出）、**纜線追蹤**（多跳穿透）、IP 異動記錄與失聯 IP 回收、通用表格欄位選擇 + 多格式匯出。
 
 ## Graylog 記錄補實（DSV 對照表）
 
@@ -45,6 +45,22 @@ jt-ipam 會**即時**產生一份 IP → 主機名稱 / FQDN 的對照表，讓 
 
 - 在 Graylog 的「DSV File from HTTP」配接器：URL 填上方網址、分隔符依格式選逗號或 Tab、**Key column = 0、Value column = 1**（Graylog 欄位索引從 0 起算）
 - token 逐次驗證、可隨時重新產生；設定頁直接提供可複製的完整對照表網址
+
+## BMC 帶外主控台（IPMI SOL，Beta）
+
+直接從伺服器的 IP 開一個鍵盤 + 文字主控台到它的 **BMC**（IPMI 2.0 Serial-over-LAN），免裝各廠 Java／HTML5 KVM。逐 IP 啟用（RBAC 與 SSH 同級），BMC 帳密收進同一個加密金庫，每次連線都留稽核。**非破壞**：只有鍵盤 + 文字畫面，不含電源控制或滑鼠。
+
+SOL 只是把主機的**序列埠**轉播出來，所以主機端要先設好序列主控台，否則畫面一片空白。主機一次性設定：
+
+1. **找出 SOL 對應的埠** —— `dmesg | grep -iE 'ttyS|SPCR'`（例：`SPCR: console: uart,io,0x3f8,115200` → `0x3f8`＝ttyS0、`0x2f8`＝ttyS1）。插錯埠一樣空白。
+2. **加入核心 console 參數**（保留 `tty0` 讓實體螢幕不失輸出）：
+   - 一般 Linux（GRUB）：在 `/etc/default/grub` 的 `GRUB_CMDLINE_LINUX` 加 `console=tty0 console=ttyS0,115200n8`，再 `update-grub`。
+   - Proxmox VE（systemd-boot／ZFS）：把同一段加到 `/etc/kernel/cmdline`，再 `proxmox-boot-tool refresh`。
+3. **啟用序列登入**（立即生效、免重開機）：`systemctl enable --now serial-getty@ttyS0`。
+4. **（選用）BIOS Console Redirection** —— 指到同一個 COM 埠（115200 8N1），SOL 才看得到 POST／BIOS。
+5. **重新開機**讓 `console=` 生效 —— 之後 SOL 就能看到完整開機與 kernel panic。實體螢幕不受影響。
+
+只想馬上能登入？做步驟 3 就夠了。同一份教學也內建在 App 裡，從 BMC 主控台的 **設定教學** 按鈕打開。
 
 ## 核心物件
 

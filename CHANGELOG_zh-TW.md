@@ -4,6 +4,15 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.67] — 2026-07-01
+
+### 修正
+- **BMC「記住帳密」從未存檔** —— 憑證金庫的建立／列表端點不接受 `protocol='bmc'`（回 400、被 UI 吞掉），導致 BMC 密碼從未儲存、每次連線都重問。現已在建立／列表／權限分派都納入 `bmc`（僅密碼、`can_use_bmc`）。
+
+### 新增
+- **BMC 主控台 —— 內建序列主控台設定教學** —— 表單／工具列／空白畫面提示都有 **設定教學** 按鈕，點開逐步彈窗：找出 SOL 對應的 ttyS（ACPI SPCR／dmesg）、加 `console=tty0 console=ttySx,115200n8`（GRUB 或 PVE `/etc/kernel/cmdline`）、啟用 `serial-getty`、選用 BIOS Console Redirection、重新開機。README（中英）與 docs 首頁同步補上。
+
+
 ## [0.5.66] — 2026-07-01
 
 ### 變更

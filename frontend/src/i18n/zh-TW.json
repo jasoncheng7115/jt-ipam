@@ -2568,6 +2568,23 @@
     "font_larger": "放大文字",
     "use_saved_hint": "使用已存帳密連線（明文不離開後端）。",
     "store_hint": "帳密會存進你的個人加密金庫（AES-GCM）。",
-    "no_store_hint": "不儲存帳密，只用於這次連線。"
+    "no_store_hint": "不儲存帳密，只用於這次連線。",
+    "guide_btn": "設定教學",
+    "guide_open": "看設定教學",
+    "guide_title": "讓 BMC SOL 顯示主機畫面：序列主控台設定",
+    "guide_intro": "SOL 只能顯示主機「往序列埠輸出」的內容。若畫面空白，代表主機還沒設好序列主控台。依下列步驟設定（一般 Linux 或 Proxmox VE）：",
+    "guide_s1": "找出 SOL 對應的序列埠",
+    "guide_s1_d": "BMC SOL 對應主機板某個 COM 埠（多為 ttyS0 或 ttyS1）；用 ACPI SPCR／dmesg 確認，插錯埠一樣空白。",
+    "guide_s2": "加入核心 console 參數",
+    "guide_s2_d": "保留 tty0 讓機房實體螢幕不失輸出；ttyS0 換成上一步確認的埠。",
+    "guide_s2_grub": "一般 Linux（GRUB）",
+    "guide_s2_pve": "Proxmox VE（systemd-boot／ZFS）",
+    "guide_s3": "啟用序列登入（立即生效、免重新開機）",
+    "guide_s3_d": "做完這步，SOL 按一下 Enter 就會出現 login 提示，可立即登入操作。",
+    "guide_s4": "（選用）BIOS 開啟 Console Redirection",
+    "guide_s4_d": "要在 SOL 看到 POST／BIOS／開機選單，需在 BIOS 把 Serial Port Console Redirection 指到同一個 COM 埠、115200 8N1。",
+    "guide_s5": "重新開機讓 console= 生效",
+    "guide_s5_d": "console= 於下次開機才生效；重開機後 SOL 才看得到完整開機過程與 kernel panic。實體螢幕（tty0）輸出不受影響。",
+    "guide_tip": "只想馬上能登入：做步驟 3 即可。要看崩潰／開機訊息才需要步驟 2 加重新開機。"
   }
 }

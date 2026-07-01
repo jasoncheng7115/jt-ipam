@@ -84,7 +84,7 @@ async def list_ssh_credentials(
     帶 protocol（ssh/rdp/vnc）→ 只回該協定的憑證。
     """
     stmt = select(SSHCredential).where(SSHCredential.owner_user_id == user.id)
-    if protocol in ("ssh", "rdp", "vnc", "pve"):
+    if protocol in ("ssh", "rdp", "vnc", "pve", "bmc"):
         stmt = stmt.where(SSHCredential.protocol == protocol)
     if target_ip_id is not None:
         stmt = stmt.where(
@@ -103,11 +103,11 @@ async def create_ssh_credential(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Any:
-    if payload.protocol not in ("ssh", "rdp", "vnc", "pve"):
-        raise HTTPException(400, detail="protocol must be 'ssh', 'rdp', 'vnc' or 'pve'")
+    if payload.protocol not in ("ssh", "rdp", "vnc", "pve", "bmc"):
+        raise HTTPException(400, detail="protocol must be 'ssh', 'rdp', 'vnc', 'pve' or 'bmc'")
     if payload.auth_type not in ("password", "key"):
         raise HTTPException(400, detail="auth_type must be 'password' or 'key'")
-    if payload.protocol in ("rdp", "vnc", "pve") and payload.auth_type != "password":
+    if payload.protocol in ("rdp", "vnc", "pve", "bmc") and payload.auth_type != "password":
         raise HTTPException(400, detail=f"{payload.protocol.upper()} credentials only support password auth")
 
     secrets_enc: dict[str, Any] = {}
@@ -135,6 +135,9 @@ async def create_ssh_credential(
             elif payload.protocol == "pve":
                 from app.services.permission import can_use_novnc
                 ok = await can_use_novnc(session, user=user, ip=ip)
+            elif payload.protocol == "bmc":
+                from app.services.permission import can_use_bmc
+                ok = await can_use_bmc(session, user=user, ip=ip)
             else:
                 ok = await can_use_ssh(session, user=user, ip=ip)
         if not ok:
