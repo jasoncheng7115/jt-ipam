@@ -42,6 +42,10 @@ class Notification(Base, UUIDPrimaryKeyMixin):
     severity: Mapped[str] = mapped_column(String(8), default="info", nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str | None] = mapped_column(Text)
+    # i18n：有 key 就前端 t(key, params) 依當前語言渲染；沒有則退回 title/body（向下相容）
+    title_key: Mapped[str | None] = mapped_column(String(64))
+    body_key: Mapped[str | None] = mapped_column(String(64))
+    params: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     link: Mapped[str | None] = mapped_column(Text)
     object_type: Mapped[str | None] = mapped_column(String(32))
     object_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))

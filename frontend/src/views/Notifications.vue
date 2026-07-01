@@ -10,6 +10,14 @@ const { t } = useI18n();
 const router = useRouter();
 const message = useMessage();
 
+// 有 i18n key 就依當前語言渲染（帶參數）；沒有則退回原字串（向下相容舊通知）
+function dispTitle(n: Notification): string {
+  return n.title_key ? t(n.title_key, (n.params || {}) as Record<string, unknown>) : n.title;
+}
+function dispBody(n: Notification): string {
+  return n.body_key ? t(n.body_key, (n.params || {}) as Record<string, unknown>) : (n.body || "");
+}
+
 const items = ref<Notification[]>([]);
 const page = ref(1);
 const pageSize = ref(50);
@@ -80,9 +88,9 @@ onMounted(load);
         <n-space vertical :size="2">
           <n-space align="center" :size="8">
             <n-tag :type="sevType(n.severity)" size="small" round>{{ n.severity }}</n-tag>
-            <strong>{{ n.title }}</strong>
+            <strong>{{ dispTitle(n) }}</strong>
           </n-space>
-          <n-text v-if="n.body" depth="3" style="font-size: 13px">{{ n.body }}</n-text>
+          <n-text v-if="dispBody(n)" depth="3" style="font-size: 13px">{{ dispBody(n) }}</n-text>
           <n-text depth="3" style="font-size: 12px" :title="fmtDateTime(n.created_at)">
             {{ fmtRelative(n.created_at) }}
           </n-text>

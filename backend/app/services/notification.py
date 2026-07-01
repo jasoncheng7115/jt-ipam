@@ -55,12 +55,19 @@ async def push_notification(
     link: str | None = None,
     object_type: str | None = None,
     object_id: uuid.UUID | None = None,
+    title_key: str | None = None,
+    body_key: str | None = None,
+    params: dict | None = None,
 ) -> Notification:
+    # title/body 仍存（Email + 舊前端退路）；title_key/body_key/params 給前端依語言渲染
     n = Notification(
         user_id=user_id,
         severity=severity,
         title=title,
         body=body,
+        title_key=title_key,
+        body_key=body_key,
+        params=params,
         link=link,
         object_type=object_type,
         object_id=object_id,
@@ -97,6 +104,7 @@ async def notify_admins_event(
     session: AsyncSession, *, event: str, title: str, body: str | None = None,
     severity: str = "info", link: str | None = None,
     object_type: str | None = None, object_id: uuid.UUID | None = None,
+    title_key: str | None = None, body_key: str | None = None, params: dict | None = None,
 ) -> int:
     """依通知矩陣把單一事件發給所有 admin（站內 + Email）。回傳收到站內通知的人數。"""
     from app.models.user import User
@@ -112,7 +120,8 @@ async def notify_admins_event(
         for a in admins:
             await push_notification(
                 session, user_id=a.id, title=title, body=body, severity=severity,
-                link=link, object_type=object_type, object_id=object_id)
+                link=link, object_type=object_type, object_id=object_id,
+                title_key=title_key, body_key=body_key, params=params)
             sent += 1
     if ch.get("email"):
         await email_users(session, [a.email for a in admins], f"[jt-ipam] {title}", body or title)

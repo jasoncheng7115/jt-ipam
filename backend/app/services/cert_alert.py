@@ -74,11 +74,15 @@ async def check_cert_alerts(
         body = (f"{cert.name} 於 {ver.not_after.date()} "
                 f"{'已過期' if expired else f'到期(剩 {days} 天)'};請上傳新版並讓代理派送。")
         if exp_ch.get("in_app"):
+            _p = {"name": cert.name, "date": str(ver.not_after.date()), "days": days}
             for a in admins:
                 await push_notification(
                     session, user_id=a.id, title=title, body=body,
                     severity="error" if expired else "warning",
                     link="/certificates", object_type="certificate", object_id=cert.id,
+                    title_key="notif.cert_expired" if expired else "notif.cert_expiring",
+                    body_key="notif.cert_expired_body" if expired else "notif.cert_expiring_body",
+                    params=_p,
                 )
         if exp_ch.get("email"):
             await email_users(session, admin_emails, f"[jt-ipam] {title}", body)
@@ -103,11 +107,13 @@ async def check_cert_alerts(
             dbody = (f"代理「{agent.name}」上的「{cname}」指紋為 {str(fp)[:12]}…,"
                      f"並非目前版本 {want[:12]}…;該站台可能沒換成功,請查代理紀錄。")
             if drift_ch.get("in_app"):
+                _dp = {"agent": agent.name, "cert": cname, "fp": str(fp)[:12], "want": want[:12]}
                 for a in admins:
                     await push_notification(
                         session, user_id=a.id, title=dtitle, body=dbody,
                         severity="warning", link="/certificates",
                         object_type="certificate", object_id=cid,
+                        title_key="notif.cert_drift", body_key="notif.cert_drift_body", params=_dp,
                     )
             if drift_ch.get("email"):
                 await email_users(session, admin_emails, f"[jt-ipam] {dtitle}", dbody)

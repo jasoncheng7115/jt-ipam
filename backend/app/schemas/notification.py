@@ -16,6 +16,9 @@ class NotificationRead(StrictModel):
     severity: str
     title: str
     body: str | None
+    title_key: str | None = None
+    body_key: str | None = None
+    params: dict | None = None
     link: str | None
     object_type: str | None
     object_id: uuid.UUID | None

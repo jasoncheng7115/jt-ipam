@@ -2600,5 +2600,32 @@
     "guide_ts_term_d": "把序列登入的 TERM 設成 xterm-256color（serial-getty 預設常是 vt220）。",
     "guide_ts_size": "畫面範圍很小、四周留黑",
     "guide_ts_size_d": "序列無法自動傳視窗大小，按工具列的「符合視窗」（送 stty 對齊），或自行 stty rows N cols N。"
+  },
+  "notif": {
+    "ipreq_approved": "IP 申請已核准",
+    "ipreq_approved_body": "已配發 {ip} 給 {host}",
+    "ipreq_approved_body_nohost": "已配發 {ip}（無主機名稱）",
+    "ipreq_rejected": "IP 申請已拒絕",
+    "ipreq_pending": "IP 申請待審核",
+    "ipreq_pending_body": "{who} 申請 {cidr} 的 IP（{host}）",
+    "ipreq_pending_body_nohost": "{who} 申請 {cidr} 的 IP",
+    "ipreq_pending_stage": "IP 申請待審核（{stage}）",
+    "ipreq_pending_stage_body": "申請 {cidr} 的 IP 已進入「{stage}」關卡，待你審核。",
+    "anom_ip_conflict": "IP 衝突：新增 {count} 筆",
+    "anom_mac_drift": "MAC 變動：新增 {count} 筆",
+    "anom_ghost": "失聯 IP：新增 {count} 筆",
+    "anom_unauthorized": "未授權 IP：新增 {count} 筆",
+    "anom_body": "詳見「異常偵測」頁面。",
+    "cert_expired": "憑證已過期：{name}",
+    "cert_expiring": "憑證即將到期：{name}",
+    "cert_expired_body": "{name} 於 {date} 已過期；請上傳新版並讓代理派送。",
+    "cert_expiring_body": "{name} 於 {date} 到期（剩 {days} 天）；請上傳新版並讓代理派送。",
+    "cert_drift": "憑證飄移：{agent} 未套用最新版",
+    "cert_drift_body": "代理「{agent}」上的「{cert}」指紋為 {fp}…，並非目前版本 {want}…；該站台可能沒換成功，請查代理紀錄。",
+    "cert_deployed": "憑證已更換成功：{cert}",
+    "cert_deployed_body": "代理「{agent}」已在 {profile} 套用「{cert}」的新版憑證。",
+    "cert_deployed_body_nosvc": "代理「{agent}」已套用「{cert}」的新版憑證。",
+    "ghost_reminder": "失聯 IP 提醒：{cidr}",
+    "ghost_reminder_body": "子網路 {cidr} 有 {n} 個 IP 失聯超過 {days} 天（由 {user} 提出）。"
   }
 }

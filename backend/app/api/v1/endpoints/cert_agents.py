@@ -631,6 +631,10 @@ async def agent_report(
             title=f"憑證已更換成功:{cert}",
             body=f"代理「{agent.name}」已在 {profile or '目標服務'} 套用「{cert}」的新版憑證。",
             severity="info", link="/certificates",
+            title_key="notif.cert_deployed",
+            body_key="notif.cert_deployed_body" if profile else "notif.cert_deployed_body_nosvc",
+            params=({"agent": agent.name, "profile": profile, "cert": cert} if profile
+                    else {"agent": agent.name, "cert": cert}),
         )
     if changed:
         await session.commit()

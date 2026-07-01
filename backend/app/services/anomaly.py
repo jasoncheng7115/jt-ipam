@@ -226,11 +226,11 @@ async def run_detection(
         ).scalars().all()
 
         if ch.get("in_app") or ch.get("email"):
-            for category, items in (
-                ("IP 衝突", report.ip_conflicts),
-                ("MAC 變動", report.mac_drifts),
-                ("失聯 IP", report.ghost_ips),
-                ("未授權 IP", report.unauthorized_ips),
+            for category, tkey, items in (
+                ("IP 衝突", "notif.anom_ip_conflict", report.ip_conflicts),
+                ("MAC 變動", "notif.anom_mac_drift", report.mac_drifts),
+                ("失聯 IP", "notif.anom_ghost", report.ghost_ips),
+                ("未授權 IP", "notif.anom_unauthorized", report.unauthorized_ips),
             ):
                 if not items:
                     continue
@@ -240,6 +240,7 @@ async def run_detection(
                         await push_notification(
                             session, user_id=admin.id, severity="warning", title=title,
                             body="詳見「異常偵測」頁面。", link="/anomalies", object_type="anomaly",
+                            title_key=tkey, body_key="notif.anom_body", params={"count": len(items)},
                         )
                 if ch.get("email"):
                     await email_users(session, [a.email for a in admins],

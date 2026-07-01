@@ -944,6 +944,7 @@ async def notify_stale(
     )
     title = f"失聯 IP 提醒：{cidr}"
     body = f"子網路 {cidr} 有 {n} 個 IP 失聯超過 {payload.days} 天（由 {user.username} 提出）。"
+    _gp = {"cidr": cidr, "n": n, "days": payload.days, "user": user.username}
     for admin in admins:
         await push_notification(
             session,
@@ -954,6 +955,9 @@ async def notify_stale(
             link=f"/subnets/{payload.subnet_id}",
             object_type="subnet",
             object_id=payload.subnet_id,
+            title_key="notif.ghost_reminder",
+            body_key="notif.ghost_reminder_body",
+            params=_gp,
         )
     await session.commit()
     return {"notified_admins": len(admins), "ip_count": n}

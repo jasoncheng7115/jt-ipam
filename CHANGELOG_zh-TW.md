@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.76] — 2026-07-01
+
+### 變更
+- **站內通知改為跟隨介面語言** —— 通知改存 i18n key + 參數（migration 0093）；鈴鐺與通知頁依當前語言渲染（舊通知退回原字串）。涵蓋 IP 申請核准／拒絕／待審、異常告警、憑證到期／飄移／派送、失聯 IP 提醒。Email 仍用預設語言文字。
+
+
 ## [0.5.75] — 2026-07-01
 
 ### 變更

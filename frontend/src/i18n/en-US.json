@@ -2602,5 +2602,32 @@
     "guide_ts_term_d": "Set the serial login's TERM to xterm-256color (serial-getty often defaults to vt220).",
     "guide_ts_size": "Console area is tiny with black margins",
     "guide_ts_size_d": "Serial can't auto-negotiate size — use the toolbar's Fit to window button (sends stty), or run stty rows N cols N yourself."
+  },
+  "notif": {
+    "ipreq_approved": "IP request approved",
+    "ipreq_approved_body": "Assigned {ip} to {host}",
+    "ipreq_approved_body_nohost": "Assigned {ip} (no hostname)",
+    "ipreq_rejected": "IP request rejected",
+    "ipreq_pending": "IP request pending review",
+    "ipreq_pending_body": "{who} requested an IP in {cidr} ({host})",
+    "ipreq_pending_body_nohost": "{who} requested an IP in {cidr}",
+    "ipreq_pending_stage": "IP request pending review ({stage})",
+    "ipreq_pending_stage_body": "The IP request for {cidr} has reached the “{stage}” stage and awaits your review.",
+    "anom_ip_conflict": "IP conflicts: {count} new",
+    "anom_mac_drift": "MAC changes: {count} new",
+    "anom_ghost": "Stale IPs: {count} new",
+    "anom_unauthorized": "Unauthorized IPs: {count} new",
+    "anom_body": "See the Anomalies page for details.",
+    "cert_expired": "Certificate expired: {name}",
+    "cert_expiring": "Certificate expiring soon: {name}",
+    "cert_expired_body": "{name} expired on {date}; upload a new version and let the agent deploy it.",
+    "cert_expiring_body": "{name} expires on {date} ({days} days left); upload a new version and let the agent deploy it.",
+    "cert_drift": "Certificate drift: {agent} is not on the latest version",
+    "cert_drift_body": "On agent “{agent}”, “{cert}” has fingerprint {fp}…, not the current version {want}…; that host may not have switched over — check the agent log.",
+    "cert_deployed": "Certificate deployed: {cert}",
+    "cert_deployed_body": "Agent “{agent}” applied the new “{cert}” certificate to {profile}.",
+    "cert_deployed_body_nosvc": "Agent “{agent}” applied the new “{cert}” certificate.",
+    "ghost_reminder": "Stale IP reminder: {cidr}",
+    "ghost_reminder_body": "Subnet {cidr} has {n} IPs stale for over {days} days (raised by {user})."
   }
 }

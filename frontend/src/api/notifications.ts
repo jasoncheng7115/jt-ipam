@@ -6,6 +6,9 @@ export interface Notification {
   severity: string;
   title: string;
   body: string | null;
+  title_key: string | null;
+  body_key: string | null;
+  params: Record<string, unknown> | null;
   link: string | null;
   object_type: string | null;
   object_id: string | null;
