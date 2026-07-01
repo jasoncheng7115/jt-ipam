@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.71] — 2026-07-01
+
+### 新增
+- **遠端主控台 —— 明顯的「連線已中斷」覆蓋層** —— SSH／RDP／VNC／noVNC／xterm／BMC 連線中斷時，顯示區中央會蓋一層大字 +斷鏈 icon「連線已中斷」，一眼就看得出斷線；重連後自動淡出移除。所有主控台共用 `ConsoleDisconnectedOverlay`。
+
+
 ## [0.5.70] — 2026-07-01
 
 ### 變更

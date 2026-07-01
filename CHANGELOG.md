@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.71] — 2026-07-01
+
+### Added
+- **Remote console — clear "Disconnected" overlay** — when an SSH / RDP / VNC / noVNC / xterm / BMC session drops, a large centered overlay with a broken-link icon and "Disconnected" appears over the display so it's obvious at a glance; it fades out automatically on reconnect. Shared `ConsoleDisconnectedOverlay` across all console types.
+
+
 ## [0.5.70] — 2026-07-01
 
 ### Changed

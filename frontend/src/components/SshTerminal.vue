@@ -18,6 +18,7 @@ import {
   listSshCredentials, createSshCredential, deleteSshCredential, type SshCredential,
 } from "@/api/ssh";
 import { TerminalIcon, CancelIcon, RefreshIcon, DeleteIcon } from "@/icons";
+import ConsoleDisconnectedOverlay from "@/components/ConsoleDisconnectedOverlay.vue";
 
 const props = withDefaults(defineProps<{
   addressId: string;
@@ -387,6 +388,7 @@ onBeforeUnmount(teardown);
         {{ errorMsg }}
       </n-alert>
       <div ref="termEl" class="ssh-term" :class="{ 'ssh-full': fullHeight, 'term-dim': phase === 'closed' }" />
+      <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
     </div>
 
     <!-- host key TOFU 確認 -->
@@ -411,7 +413,7 @@ onBeforeUnmount(teardown);
 .ssh-wrap.ssh-center .ssh-form { width: 560px; max-width: 92vw; }
 .ssh-form { max-width: 560px; }
 .ssh-title { font-weight: 600; display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-.ssh-term-area { display: flex; flex-direction: column; }
+.ssh-term-area { display: flex; flex-direction: column; position: relative; }
 .ssh-term-area.ssh-full { flex: 1; min-height: 0; }
 .ssh-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .ssh-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

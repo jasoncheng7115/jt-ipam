@@ -16,6 +16,7 @@ import {
 } from "@/api/vnc";
 import { buildSendKeysMenu, makeSendCombo } from "@/composables/useSendKeys";
 import { VncIcon, CancelIcon, RefreshIcon, DeleteIcon, ChevronDownIcon, KeyIcon, ExpandIcon, ReduceIcon } from "@/icons";
+import ConsoleDisconnectedOverlay from "@/components/ConsoleDisconnectedOverlay.vue";
 
 const props = withDefaults(defineProps<{
   addressId: string;
@@ -369,6 +370,7 @@ onBeforeUnmount(teardown);
                 @wheel.prevent="onWheel" @contextmenu.prevent
                 @keydown="onKey($event, true)" @keyup="onKey($event, false)" />
       </div>
+      <ConsoleDisconnectedOverlay :show="phase === 'closed' || phase === 'error'" :error="phase === 'error'" />
     </div>
   </div>
 </template>
@@ -379,7 +381,7 @@ onBeforeUnmount(teardown);
 .vnc-wrap.vnc-center { justify-content: center; align-items: center; }
 .vnc-wrap.vnc-center .vnc-form { width: 520px; max-width: 92vw; }
 .vnc-form { max-width: 520px; }
-.vnc-screen-area { display: flex; flex-direction: column; }
+.vnc-screen-area { display: flex; flex-direction: column; position: relative; }
 .vnc-screen-area.vnc-full { flex: 1; min-height: 0; }
 .vnc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .vnc-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

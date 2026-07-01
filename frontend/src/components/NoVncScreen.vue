@@ -13,6 +13,7 @@ import {
 import {
   NoVncIcon, TerminalIcon, DeleteIcon, CancelIcon, RefreshIcon, KeyIcon, ExpandIcon, ReduceIcon, ChevronDownIcon, InfoIcon,
 } from "@/icons";
+import ConsoleDisconnectedOverlay from "@/components/ConsoleDisconnectedOverlay.vue";
 import { buildSendKeysMenu } from "@/composables/useSendKeys";
 import {
   requestNovncTicket, buildNovncWsUrl, listPveCredentials, createPveCredential,
@@ -343,6 +344,7 @@ async function removeCred() {
       </div>
       <div ref="screenBox" class="vnc-canvas-box"
            :class="{ 'vnc-full': fullHeight, 'vnc-native': scaleMode === 'native', 'vnc-term': !isVm, 'term-dim': phase === 'closed' }"></div>
+      <ConsoleDisconnectedOverlay :show="phase === 'closed'" />
     </div>
   </div>
 </template>
@@ -355,7 +357,7 @@ async function removeCred() {
 .vnc-form { max-width: 520px; }
 .vnc-saved-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .vnc-saved-label { font-size: 12px; opacity: .75; white-space: nowrap; }
-.vnc-screen-area { display: flex; flex-direction: column; }
+.vnc-screen-area { display: flex; flex-direction: column; position: relative; }
 .vnc-screen-area.vnc-full { flex: 1; min-height: 0; }
 .vnc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; gap: 8px; }
 .vnc-status { font-size: 13px; display: inline-flex; align-items: center; gap: 7px;

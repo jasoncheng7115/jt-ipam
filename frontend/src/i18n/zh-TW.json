@@ -369,7 +369,10 @@
     "confirm": "確定",
     "select": "選擇",
     "download": "下載",
-    "please_enter": "請輸入"
+    "please_enter": "請輸入",
+    "disconnected": "連線已中斷",
+    "disconnected_err": "連線發生錯誤",
+    "disconnected_hint": "請點右上「重新連線」重試"
   },
   "scan_agent": {
     "outdated": "可更新",
