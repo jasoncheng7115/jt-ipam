@@ -1,4 +1,4 @@
-# jt-ipam v0.5.85
+# jt-ipam v0.5.86
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -64,9 +64,11 @@ SOL 只是把主機的**序列埠**轉播出來，所以主機端要先設好序
 
 **疑難排解（實測常見坑）：**
 
-- **連上但一片空白／按 Enter 沒反應** —— SOL 對應的埠未必是 SPCR 宣告的那個。連著 SOL 時 `echo test > /dev/ttyS0`（與 `/dev/ttyS1`），看哪個出現，那才是真正的 SOL 埠。
+- **連上但一片空白／按 Enter 沒反應** —— SOL 對應的埠未必是 SPCR 宣告的那個。連著 SOL 時 `echo test > /dev/ttyS0`（與 `/dev/ttyS1`）看哪個出現；或看 `/proc/tty/driver/serial`，`rx` 有值的 ttyS 就是 SOL。
+- **有 login 但看不到開機訊息** —— 核心 console 掛到錯的 ttyS（非 SOL 埠），serial-getty 卻在對的埠。`console=` **只掛 SOL 那一個埠**（如 `console=tty0 console=ttyS1,115200n8`），不要同時掛多個 `ttyS`——掛多個核心可能挑錯。用 `cat /proc/consoles` 確認。
 - **有畫面但亂碼** —— 序列 baud 沒對齊 SOL。查 `ipmitool -I open sol info 1 | grep 'Bit Rate'`，把 `serial-getty` 設成同一個 baud。
 - **方框字／顏色亂（例如 glances）** —— 把序列登入的 `TERM` 設成 `xterm-256color`（serial-getty 預設常是 `vt220`）。
+- **OS 開機訊息有 emoji（⚠️ 等）** —— 那是 systemd 自己的符號；核心 cmdline 加 `systemd.setenv=SYSTEMD_EMOJI=0`。**BIOS** 畫面的 emoji 則把 BIOS Console Redirection 的 **Terminal Type 設 VT100+**（不要 VT-UTF8）。
 - **畫面範圍很小、四周留黑** —— 序列無法自動傳視窗大小；按主控台的 **符合視窗**（它會送一段 `stty rows/cols` 指令，請在 shell 提示字元按），或自行 `stty rows N cols N`。
 
 ## 核心物件

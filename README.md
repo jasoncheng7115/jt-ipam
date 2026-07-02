@@ -1,4 +1,4 @@
-# jt-ipam v0.5.85
+# jt-ipam v0.5.86
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -64,9 +64,11 @@ Just want a login now? Step 3 alone is enough. The same guide is built into the 
 
 **Troubleshooting (gotchas seen in the field):**
 
-- **Connected but blank / Enter does nothing** — SOL may not map to the port SPCR declares. With SOL connected, `echo test > /dev/ttyS0` (and `/dev/ttyS1`) and see which one appears — that's the real SOL port.
+- **Connected but blank / Enter does nothing** — SOL may not map to the port SPCR declares. With SOL connected, `echo test > /dev/ttyS0` (and `/dev/ttyS1`) and see which appears; or check `/proc/tty/driver/serial` — the ttyS with a non-zero `rx` is the SOL port.
+- **Login prompt shows but no boot messages** — the kernel console landed on the wrong ttyS (a non-SOL port) while `serial-getty` is on the right one. Put **only** the SOL port in `console=` (e.g. `console=tty0 console=ttyS1,115200n8`), not multiple `ttyS` — the kernel may pick the wrong one. Verify with `cat /proc/consoles`.
 - **Output appears but is garbled** — the serial baud doesn't match SOL. Check `ipmitool -I open sol info 1 | grep 'Bit Rate'` and set `serial-getty` to the same baud.
 - **Boxes / colors look broken (e.g. glances)** — set the serial login's `TERM` to `xterm-256color` (serial-getty often defaults to `vt220`).
+- **Emoji (⚠️ etc.) in the OS boot messages** — those are systemd's own glyphs; add `systemd.setenv=SYSTEMD_EMOJI=0` to the kernel cmdline. For emoji on the **BIOS** screen, set the BIOS Console Redirection **Terminal Type = VT100+** (not VT-UTF8).
 - **Console area is tiny with black margins** — serial can't auto-negotiate window size; use the console's **Fit to window** button (it sends an `stty rows/cols` command — press it at a shell prompt), or run `stty rows N cols N` yourself.
 
 ## Core entities

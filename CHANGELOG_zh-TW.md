@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.86] — 2026-07-02
+
+### 變更
+- **BMC 設定教學 —— 補上實測序列主控台重點** —— 內建教學 + README 疑難排解新增:`console=` **只掛 SOL 那一個埠**（掛多個 `ttyS` 核心可能挑錯→有 login 但沒開機訊息;用 `/proc/consoles` 確認）、用 `/proc/tty/driver/serial` 的 `rx` 找 SOL 埠、`systemd.setenv=SYSTEMD_EMOJI=0` 關掉 OS 開機訊息的 emoji、BIOS Terminal Type 設 VT100+（非 VT-UTF8）免 BIOS 畫面 emoji。
+
+
 ## [0.5.85] — 2026-07-02
 
 ### 變更

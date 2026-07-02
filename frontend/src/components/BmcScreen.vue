@@ -300,10 +300,14 @@ proxmox-boot-tool refresh</pre>
         <h4 class="bmc-ts-head">{{ t("bmc.guide_ts") }}</h4>
         <ul class="bmc-ts">
           <li><b>{{ t("bmc.guide_ts_blank") }}</b><br>{{ t("bmc.guide_ts_blank_d") }}
-            <code>echo test &gt; /dev/ttyS0</code> / <code>/dev/ttyS1</code></li>
+            <code>echo test &gt; /dev/ttyS0</code> / <code>/dev/ttyS1</code>；<code>cat /proc/tty/driver/serial</code></li>
+          <li><b>{{ t("bmc.guide_ts_login") }}</b><br>{{ t("bmc.guide_ts_login_d") }}
+            <code>cat /proc/consoles</code></li>
           <li><b>{{ t("bmc.guide_ts_baud") }}</b><br>{{ t("bmc.guide_ts_baud_d") }}
             <code>ipmitool -I open sol info 1 | grep 'Bit Rate'</code></li>
           <li><b>{{ t("bmc.guide_ts_term") }}</b><br>{{ t("bmc.guide_ts_term_d") }}</li>
+          <li><b>{{ t("bmc.guide_ts_bootemoji") }}</b><br>{{ t("bmc.guide_ts_bootemoji_d") }}
+            <code>systemd.setenv=SYSTEMD_EMOJI=0</code></li>
           <li><b>{{ t("bmc.guide_ts_size") }}</b><br>{{ t("bmc.guide_ts_size_d") }}</li>
         </ul>
       </div>
