@@ -137,6 +137,12 @@ Release flow: run the checklist → all green → bump version → deploy
   save (encrypted token/webhook; “set — leave blank to keep”), the per-channel **Test** button delivers, and an
   enabled channel receives a matrix-fired event (e.g. an IP request) alongside Email/in-app.
 - [ ] **Export button** on table pages is bordered (matches Columns / Refresh).
+- [ ] **DHCP-server / gateway IP marking** (migration 0090 `is_dhcp_server`): OPNsense/pfSense DHCP-server IPs
+  and gateways are flagged; IP detail shows the DHCP-server / gateway / in-DHCP-range badges.
+- [ ] **LibreNMS auto-create device IPs** (migration 0091 default on): a LibreNMS-only device's primary IP is
+  created in the matching (scoped) subnet; ambiguous overlaps are skipped, not mis-placed.
+- [ ] **PVE browser console** (noVNC for VMs / xterm for CTs, migration 0089): per-IP toggle on PVE VM/CT IPs;
+  connects with the PVE account; orange button + PVE badge on IP detail + Connections.
 
 ---
 

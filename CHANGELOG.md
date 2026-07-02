@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.78] — 2026-07-02
+
+### Changed
+- **Notification wording: 鈴鐺 → 站內通知** (Taiwan usage) in the notification-settings copy and matrix column; the intro now lists all supported channels (Email + Telegram/Slack/Teams/Nextcloud/Zulip) instead of “in development”.
+- docs: TEST_CHECKLIST spot-checks for the recent features; graylog DSV docstring uses RFC 5737 example IPs.
+
+
 ## [0.5.77] — 2026-07-01
 
 ### Added

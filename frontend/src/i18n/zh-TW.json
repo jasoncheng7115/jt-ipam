@@ -2351,7 +2351,7 @@
   },
   "notify_ch": {
     "title": "通知發送設定",
-    "intro": "設定通知的對外發送管道。目前已支援 Email；其他通訊軟體陸續開發中。站內鈴鐺通知不需設定即可使用。",
+    "intro": "設定通知的對外發送管道。已支援 Email、Telegram、Slack、Microsoft Teams、Nextcloud Talk、Zulip。站內通知不需設定即可使用。",
     "email_enabled": "啟用 Email 通知",
     "username": "帳號（選填）",
     "password": "密碼（選填）",
@@ -2371,9 +2371,9 @@
     "matrix_title": "通知矩陣",
     "matrix_hint": "勾選每個事件要發送的通知管道。",
     "matrix_event": "事件",
-    "matrix_in_app": "站內（鈴鐺）",
+    "matrix_in_app": "站內通知",
     "matrix_email": "Email",
-    "matrix_email_note": "Email 欄需上方「Email (SMTP)」管道已啟用才會實際寄出；站內鈴鐺一律可用。",
+    "matrix_email_note": "Email 欄需上方「Email (SMTP)」管道已啟用才會實際寄出；站內通知一律可用。",
     "ev": {
       "ip_request_created": "IP 申請待審核（通知審核者）",
       "ip_request_approved": "IP 申請已核准（通知申請人）",

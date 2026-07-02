@@ -2353,7 +2353,7 @@
   },
   "notify_ch": {
     "title": "Notification Channels",
-    "intro": "Configure outbound notification delivery. Email is supported now; other messengers are in development. In-app bell notifications work without any setup.",
+    "intro": "Configure outbound notification delivery. Email, Telegram, Slack, Microsoft Teams, Nextcloud Talk and Zulip are supported. In-app notifications work without any setup.",
     "email_enabled": "Enable email notifications",
     "username": "Username (optional)",
     "password": "Password (optional)",
@@ -2373,9 +2373,9 @@
     "matrix_title": "Notification matrix",
     "matrix_hint": "Choose which channels each event notifies through.",
     "matrix_event": "Event",
-    "matrix_in_app": "In-app (bell)",
+    "matrix_in_app": "In-app",
     "matrix_email": "Email",
-    "matrix_email_note": "The Email column only sends if the Email (SMTP) channel above is enabled; the in-app bell always works.",
+    "matrix_email_note": "The Email column only sends if the Email (SMTP) channel above is enabled; in-app notifications always work.",
     "ev": {
       "ip_request_created": "IP request awaiting approval (notify approvers)",
       "ip_request_approved": "IP request approved (notify requester)",

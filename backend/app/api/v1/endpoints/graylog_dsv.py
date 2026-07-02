@@ -4,8 +4,8 @@
 定時抓取，key=IP、value=主機名稱 / FQDN。功能預設關閉，於管理區開啟並設定路徑。
 
   GET /api/v1/lookup/{name}?token=<token>   →  text/csv 或 text/tab-separated-values
-       192.168.1.10,host-a.example.com
-       192.168.1.11,host-b.example.com
+       192.0.2.10,host-a.example.com
+       192.0.2.11,host-b.example.com
 """
 
 from __future__ import annotations

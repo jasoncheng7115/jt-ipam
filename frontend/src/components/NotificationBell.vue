@@ -138,7 +138,7 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
   white-space: normal;
 }
-/* 有未讀時鈴鐺本身也變色（不只紅色數字） */
+/* 有未讀時通知圖示本身也變色（不只紅色數字） */
 .bell-active {
   color: #f0a020;
   animation: bell-pulse 1.6s ease-in-out infinite;

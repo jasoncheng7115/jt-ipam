@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.78] — 2026-07-02
+
+### 變更
+- **通知用詞：鈴鐺 → 站內通知**（台灣慣用）—— 通知設定頁文案與矩陣欄位；intro 改列出已支援的所有管道（Email＋Telegram/Slack/Teams/Nextcloud/Zulip），不再寫「開發中」。
+- docs：TEST_CHECKLIST 補上近期功能點檢；graylog DSV docstring 範例改用 RFC 5737 文件用 IP。
+
+
 ## [0.5.77] — 2026-07-01
 
 ### 新增
