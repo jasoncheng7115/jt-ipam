@@ -2402,7 +2402,11 @@
     "zulip_bot_email": "Bot email",
     "zulip_key_ph": "the bot's API key",
     "zulip_stream": "Stream",
-    "zulip_topic": "Topic"
+    "zulip_topic": "Topic",
+    "webhook_title": "Generic Webhook",
+    "webhook_hint": "POSTs JSON to your URL: { \"app\":\"jt-ipam\", \"subject\":..., \"text\":... }. Works with n8n, custom endpoints, etc.; an optional Bearer token is sent as the Authorization header.",
+    "webhook_token": "Bearer token (optional)",
+    "webhook_token_ph": "leave blank for no Authorization header"
   },
   "system_settings": {
     "title": "System Settings (global)",

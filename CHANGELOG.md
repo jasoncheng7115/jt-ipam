@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.82] — 2026-07-02
+
+### Added
+- **Generic Webhook notification channel** — POSTs `{app, subject, text}` JSON to a custom URL (optional Bearer token via Authorization header); config form + Test button like the other channels. For n8n / custom endpoints / anything not covered by the built-in channels.
+
+
 ## [0.5.81] — 2026-07-02
 
 ### Fixed

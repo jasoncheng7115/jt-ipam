@@ -2400,7 +2400,11 @@
     "zulip_bot_email": "Bot Email",
     "zulip_key_ph": "bot 的 API key",
     "zulip_stream": "串流 (Stream)",
-    "zulip_topic": "主題 (Topic)"
+    "zulip_topic": "主題 (Topic)",
+    "webhook_title": "通用 Webhook",
+    "webhook_hint": "POST 一段 JSON 到你指定的 URL：{ \"app\":\"jt-ipam\", \"subject\":..., \"text\":... }。可串 n8n、自寫端點等；選填 Bearer token 會以 Authorization 標頭帶上。",
+    "webhook_token": "Bearer Token（選填）",
+    "webhook_token_ph": "留空＝不帶授權標頭"
   },
   "system_settings": {
     "title": "系統設定（全域）",

@@ -32,6 +32,10 @@ export interface NotificationChannels {
   zulip_stream: string | null;
   zulip_topic: string | null;
   zulip_api_key_set: boolean;
+  // Generic webhook
+  webhook_enabled: boolean;
+  webhook_url_set: boolean;
+  webhook_token_set: boolean;
   channels: NotifyChannelInfo[];
 }
 
@@ -60,6 +64,9 @@ export interface NotificationChannelsUpdate {
   zulip_stream?: string | null;
   zulip_topic?: string | null;
   zulip_api_key?: string | null;
+  webhook_enabled?: boolean;
+  webhook_url?: string | null;
+  webhook_token?: string | null;
 }
 
 export async function getNotificationChannels(): Promise<NotificationChannels> {

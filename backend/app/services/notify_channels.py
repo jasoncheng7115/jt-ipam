@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 log = logging.getLogger("notify_channels")
 
 # webhook 型通知的管道鍵（email 另外由 email_users 處理）
-WEBHOOK_CHANNELS = ("telegram", "slack", "teams", "nextcloud", "zulip")
+WEBHOOK_CHANNELS = ("telegram", "slack", "teams", "nextcloud", "zulip", "webhook")
 
 _TIMEOUT = httpx.Timeout(12.0)
 
@@ -109,12 +109,26 @@ async def send_nextcloud(cfg: dict[str, Any], subject: str, text: str | None) ->
     )
 
 
+async def send_webhook(cfg: dict[str, Any], subject: str, text: str | None) -> None:
+    # 通用 webhook：POST JSON 到自訂 URL；選填 Bearer token。方便串 n8n / 自寫端點等。
+    url = cfg.get("webhook_url")
+    if not url:
+        raise RuntimeError("Webhook URL not set")
+    headers = {}
+    tok = cfg.get("webhook_token")
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+    await _post(url, json={"app": "jt-ipam", "subject": subject, "text": text or ""},
+                headers=headers or None)
+
+
 _SENDERS = {
     "telegram": send_telegram,
     "slack": send_slack,
     "teams": send_teams,
     "zulip": send_zulip,
     "nextcloud": send_nextcloud,
+    "webhook": send_webhook,
 }
 
 

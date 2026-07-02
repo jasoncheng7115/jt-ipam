@@ -1069,6 +1069,10 @@ class NotificationChannelsOut(StrictModel):
     zulip_stream: str | None = None
     zulip_topic: str | None = None
     zulip_api_key_set: bool = False
+    # 通用 webhook
+    webhook_enabled: bool = False
+    webhook_url_set: bool = False
+    webhook_token_set: bool = False
     channels: list[dict[str, Any]] = []
 
 
@@ -1102,6 +1106,10 @@ class NotificationChannelsIn(StrictModel):
     zulip_stream: str | None = None
     zulip_topic: str | None = None
     zulip_api_key: str | None = None
+    # 通用 webhook
+    webhook_enabled: bool | None = None
+    webhook_url: str | None = None
+    webhook_token: str | None = None
 
 
 class TestEmailIn(StrictModel):
@@ -1135,6 +1143,9 @@ def _channels_payload(cfg: dict[str, Any]) -> NotificationChannelsOut:
         zulip_stream=cfg.get("zulip_stream"),
         zulip_topic=cfg.get("zulip_topic"),
         zulip_api_key_set=bool(cfg.get("zulip_api_key_enc")),
+        webhook_enabled=bool(cfg.get("webhook_enabled")),
+        webhook_url_set=bool(cfg.get("webhook_url_enc")),
+        webhook_token_set=bool(cfg.get("webhook_token_enc")),
         channels=[{"key": k, "available": avail} for k, avail in NOTIFY_CHANNELS],
     )
 

@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.82] — 2026-07-02
+
+### 新增
+- **通用 Webhook 通知管道** —— POST `{app, subject, text}` JSON 到自訂 URL（選填 Bearer token 走 Authorization 標頭）；設定表單 + 測試按鈕與其他管道一致。適合串 n8n／自寫端點／內建管道沒涵蓋的系統。
+
+
 ## [0.5.81] — 2026-07-02
 
 ### 修正

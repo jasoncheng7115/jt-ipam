@@ -720,12 +720,13 @@ NOTIFY_CHANNELS: tuple[tuple[str, bool], ...] = (
     ("teams", True),
     ("nextcloud", True),
     ("zulip", True),
+    ("webhook", True),
 )
 
 # 通知管道設定欄位（除 email/smtp 外的 webhook 類管道）
 _NOTIFY_BOOL_KEYS = (
     "email_enabled", "telegram_enabled", "slack_enabled",
-    "teams_enabled", "nextcloud_enabled", "zulip_enabled",
+    "teams_enabled", "nextcloud_enabled", "zulip_enabled", "webhook_enabled",
 )
 _NOTIFY_STR_KEYS = (
     "smtp_host", "smtp_username", "smtp_from",
@@ -740,6 +741,8 @@ _NOTIFY_SECRETS = {
     "teams_webhook": "teams_webhook_enc",
     "nextcloud_secret": "nextcloud_secret_enc",
     "zulip_api_key": "zulip_api_key_enc",
+    "webhook_url": "webhook_url_enc",      # 通用 webhook（URL 可能含密鑰，一律加密）
+    "webhook_token": "webhook_token_enc",  # 選填 Bearer token
 }
 
 
