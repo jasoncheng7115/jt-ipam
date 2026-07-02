@@ -23,6 +23,20 @@ from dataclasses import dataclass
 import asyncssh
 
 
+# 相容（legacy）演算法：連老舊網路裝置用（如 D-Link DGS-1510、老 switch / 防火牆，
+# 這類機種常只提供 CBC 加密、group1 / group14-sha1 金鑰交換、ssh-rsa（SHA-1）host key）。
+# 以 "+" 前綴「附加」到 asyncssh 預設集之後 → 連現代裝置時仍優先協商強演算法（chacha20 /
+# aes-gcm / curve25519 / ed25519），只有對方完全不支援時才退到這些較舊的。
+# 刻意排除真正破掉的 arcfour / blowfish / cast / des。
+LEGACY_SSH_ALGS: dict[str, str] = {
+    "encryption_algs": "+aes256-cbc,aes192-cbc,aes128-cbc,3des-cbc",
+    "kex_algs": "+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1,"
+    "diffie-hellman-group-exchange-sha1",
+    "mac_algs": "+hmac-sha1,hmac-sha1-96",
+    "server_host_key_algs": "+ssh-rsa",
+}
+
+
 class SSHTunnelError(RuntimeError):
     """SSH tunnel 任一階段失敗。"""
 
@@ -87,7 +101,12 @@ async def fetch_host_key(host: str, port: int = 22, timeout: float = 8.0) -> dic
     """
     try:
         async with asyncio.timeout(timeout):
-            key = await asyncssh.get_server_host_key(host, port=port)
+            key = await asyncssh.get_server_host_key(
+                host,
+                port=port,
+                # 相容老裝置：get_server_host_key 只吃 options=，把 legacy 演算法帶進去
+                options=asyncssh.SSHClientConnectionOptions(**LEGACY_SSH_ALGS),
+            )
     except TimeoutError as exc:
         raise SSHTunnelError(f"SSH connect timeout to {host}:{port}") from exc
     except (asyncssh.Error, OSError) as exc:
@@ -170,6 +189,7 @@ async def open_tunnel(cfg: TunnelConfig) -> AsyncIterator[int]:
                 # 安全：不繼承 agent；不允許 password fallback
                 agent_path=None,
                 preferred_auth=("publickey",),
+                **LEGACY_SSH_ALGS,
             ) as conn:
                 # 開 local TCP port → 對端 TCP 或 Unix socket
                 if cfg.remote_socket_path:

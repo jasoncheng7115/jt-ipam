@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.87] — 2026-07-03
+
+### Added
+- **SSH console — legacy-device compatibility** — the in-browser SSH terminal (and the host-key preview) now also negotiate older algorithms (aes-cbc, 3des-cbc, diffie-hellman-group14/group1-sha1, ssh-rsa host keys, hmac-sha1) so it can reach old network gear (e.g. D-Link DGS-1510 switches, legacy firewalls) that offers nothing newer. Modern devices still negotiate strong algorithms first; the truly broken ciphers (arcfour / blowfish / cast / single-DES) are deliberately excluded.
+
+
 ## [0.5.86] — 2026-07-02
 
 ### Changed

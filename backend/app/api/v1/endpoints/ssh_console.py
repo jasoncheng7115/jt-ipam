@@ -43,6 +43,7 @@ from app.services.permission import (
     visible_ids,
 )
 from app.services.ssh_tunnel import (
+    LEGACY_SSH_ALGS,
     SSHHostKeyMismatch,
     _parse_pubkey_line,
     fetch_host_key,
@@ -364,6 +365,8 @@ async def ssh_ws(websocket: WebSocket, address_id: uuid.UUID, ticket: str = "") 
                     # keepalive：目標端靜默斷線（斷電/拔線）約 45s 內偵測 → bridge 結束 → 前端顯示已斷
                     keepalive_interval=15,
                     keepalive_count_max=3,
+                    # 相容老裝置（老 switch / 防火牆只支援 CBC / sha1 / ssh-rsa）
+                    **LEGACY_SSH_ALGS,
                     **connect_kw,
                 )
         except SSHHostKeyMismatch:

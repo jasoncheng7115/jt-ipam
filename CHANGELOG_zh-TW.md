@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.87] — 2026-07-03
+
+### 新增
+- **SSH 主控台 —— 相容老舊裝置** —— 瀏覽器內 SSH 終端機（含 host key 預覽）現在也會協商較舊的演算法（aes-cbc、3des-cbc、diffie-hellman-group14／group1-sha1、ssh-rsa host key、hmac-sha1），連得上只提供這些的老網路裝置（如 D-Link DGS-1510 switch、老防火牆）。連現代裝置仍優先協商強演算法;真正破掉的 arcfour／blowfish／cast／單 DES 一律排除。
+
+
 ## [0.5.86] — 2026-07-02
 
 ### 變更
