@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.81] — 2026-07-02
+
+### Fixed
+- **Notification channels — send concurrently** — enabled webhook channels now fire in parallel (asyncio.gather) instead of sequentially, so worst-case latency is one channel's timeout, not the sum (avoids stalling IP-request/sync flows when several channels are slow).
+- **Teams webhook — support the new Workflows webhooks** — falls back to an Adaptive Card payload when the legacy `{"text"}` (O365 connector) form is rejected, so both legacy connectors and current Workflows incoming webhooks work.
+
+
 ## [0.5.80] — 2026-07-02
 
 ### Added

@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.81] — 2026-07-02
+
+### 修正
+- **通知管道改並行送出** —— 已啟用的 webhook 管道改為並行（asyncio.gather），最壞延遲＝最慢單一管道的 timeout，而非各管道相加（避免多個管道慢時拖住 IP 申請／同步流程）。
+- **Teams webhook 支援新版 Workflows** —— 舊式 `{"text"}`（O365 connector）被拒時自動改送 Adaptive Card，讓舊 connector 與新版 Workflows incoming webhook 都能用。
+
+
 ## [0.5.80] — 2026-07-02
 
 ### 新增
