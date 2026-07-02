@@ -184,6 +184,41 @@ onMounted(() => { void load(); void loadMatrix(); });
       <n-alert type="info" :show-icon="true">{{ t("notify_ch.intro") }}</n-alert>
     </n-card>
 
+    <!-- 通知矩陣：哪些事件、走哪些管道（總覽，放所有管道設定之上）-->
+    <n-card :title="t('notify_ch.matrix_title')">
+      <p class="nmx-hint">{{ t("notify_ch.matrix_hint") }}</p>
+      <table class="nmx">
+        <thead>
+          <tr>
+            <th>{{ t("notify_ch.matrix_event") }}</th>
+            <th class="nmx-c">{{ t("notify_ch.matrix_in_app") }}</th>
+            <th class="nmx-c">{{ t("notify_ch.matrix_email") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="ev in matrixEvents" :key="ev">
+            <td>
+              <div class="nmx-ev">{{ eventLabel(ev) }}</div>
+              <code class="nmx-key">{{ ev }}</code>
+            </td>
+            <td class="nmx-c">
+              <n-checkbox v-if="matrix[ev]" v-model:checked="matrix[ev].in_app" />
+            </td>
+            <td class="nmx-c">
+              <n-checkbox v-if="matrix[ev]" v-model:checked="matrix[ev].email" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="nmx-hint">{{ t("notify_ch.matrix_email_note") }}</p>
+      <n-space justify="end" style="margin-top: 12px">
+        <n-button type="success" :loading="matrixSaving" @click="saveMatrix">
+          <template #icon><n-icon><SaveIcon /></n-icon></template>
+          {{ t("common.save") }}
+        </n-button>
+      </n-space>
+    </n-card>
+
     <!-- Email（已實作）-->
     <n-card v-if="cfg" :title="'Email (SMTP)'">
       <n-space vertical :size="14" style="max-width: 640px">
@@ -225,41 +260,6 @@ onMounted(() => { void load(); void loadMatrix(); });
             <n-button :loading="testing" @click="test">{{ t("notify_ch.test_send") }}</n-button>
           </n-space>
         </n-form-item>
-      </n-space>
-    </n-card>
-
-    <!-- 通知矩陣：哪些事件、走哪些管道 -->
-    <n-card :title="t('notify_ch.matrix_title')">
-      <p class="nmx-hint">{{ t("notify_ch.matrix_hint") }}</p>
-      <table class="nmx">
-        <thead>
-          <tr>
-            <th>{{ t("notify_ch.matrix_event") }}</th>
-            <th class="nmx-c">{{ t("notify_ch.matrix_in_app") }}</th>
-            <th class="nmx-c">{{ t("notify_ch.matrix_email") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="ev in matrixEvents" :key="ev">
-            <td>
-              <div class="nmx-ev">{{ eventLabel(ev) }}</div>
-              <code class="nmx-key">{{ ev }}</code>
-            </td>
-            <td class="nmx-c">
-              <n-checkbox v-if="matrix[ev]" v-model:checked="matrix[ev].in_app" />
-            </td>
-            <td class="nmx-c">
-              <n-checkbox v-if="matrix[ev]" v-model:checked="matrix[ev].email" />
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="nmx-hint">{{ t("notify_ch.matrix_email_note") }}</p>
-      <n-space justify="end" style="margin-top: 12px">
-        <n-button type="success" :loading="matrixSaving" @click="saveMatrix">
-          <template #icon><n-icon><SaveIcon /></n-icon></template>
-          {{ t("common.save") }}
-        </n-button>
       </n-space>
     </n-card>
 

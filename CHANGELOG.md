@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.83] — 2026-07-02
+
+### Changed
+- Notification settings: the **notification matrix** card now sits above all the per-channel settings (right under the intro), so the “which event → which channel” overview comes first instead of being sandwiched between Email and the other channels.
+
+
 ## [0.5.82] — 2026-07-02
 
 ### Added

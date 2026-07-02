@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.83] — 2026-07-02
+
+### 變更
+- 通知設定頁：**通知矩陣**卡片移到所有管道設定之上（緊接 intro 下方），讓「哪個事件走哪些管道」的總覽排在最前，不再夾在 Email 與其他管道之間。
+
+
 ## [0.5.82] — 2026-07-02
 
 ### 新增
