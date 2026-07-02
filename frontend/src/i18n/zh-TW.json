@@ -2357,7 +2357,7 @@
   },
   "notify_ch": {
     "title": "通知發送設定",
-    "intro": "設定通知的對外發送管道。已支援 Email、Telegram、Slack、Microsoft Teams、Nextcloud Talk、Zulip。通知不需設定即可使用。",
+    "intro": "設定通知要不要「另外」送到外部管道：已支援 Email、Telegram、Slack、Microsoft Teams、Nextcloud Talk、Zulip。App 內的通知（右上角通知圖示）本來就能用、不需設定。",
     "email_enabled": "啟用 Email 通知",
     "username": "帳號（選填）",
     "password": "密碼（選填）",

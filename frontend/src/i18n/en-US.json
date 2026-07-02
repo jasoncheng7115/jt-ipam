@@ -2359,7 +2359,7 @@
   },
   "notify_ch": {
     "title": "Notification Channels",
-    "intro": "Configure outbound notification delivery. Email, Telegram, Slack, Microsoft Teams, Nextcloud Talk and Zulip are supported. In-app notifications work without any setup.",
+    "intro": "Configure whether notifications are also sent to external channels: Email, Telegram, Slack, Microsoft Teams, Nextcloud Talk and Zulip are supported. In-app notifications (the top-right icon) work out of the box — no setup needed.",
     "email_enabled": "Enable email notifications",
     "username": "Username (optional)",
     "password": "Password (optional)",

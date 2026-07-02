@@ -4,6 +4,15 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.85] — 2026-07-02
+
+### 變更
+- 通知設定頁 intro 改寫 —— 講清楚此頁設定的是**對外**管道（選用），App 內的通知（右上角圖示）本來就能用、不需設定（原本「通知不需設定即可使用」在拿掉「站內」後語意含糊）。
+
+### 測試
+- pfSense 解析回歸測試（別名 descr 的 `_as_text` 攤平 list；`_valid_ip` 拒絕 `Web_Test` 這類別名）—— 釘死 v0.5.48 修過的兩個 DataError。
+
+
 ## [0.5.84] — 2026-07-02
 
 ### 變更

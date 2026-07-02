@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.85] — 2026-07-02
+
+### Changed
+- Notification-settings intro reworded — clarifies this page configures **external** channels (opt-in), while in-app notifications (top-right icon) work without any setup (the old “通知不需設定即可使用” was ambiguous after dropping the 站內 prefix).
+
+### Tests
+- pfSense parse regression tests (`_as_text` list-flatten for alias descr; `_valid_ip` rejects alias names like `Web_Test`) — the two DataErrors fixed in v0.5.48.
+
+
 ## [0.5.84] — 2026-07-02
 
 ### Changed
