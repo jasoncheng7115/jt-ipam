@@ -85,6 +85,7 @@ export interface LibreNMSInstance {
   name: string;
   api_url: string;
   enabled: boolean;
+  verify_tls: boolean;
   sync_devices: boolean;
   sync_arp: boolean;
   sync_fdb: boolean;
@@ -115,6 +116,7 @@ export interface LibreNMSInstanceCreate {
   api_url: string;
   api_token: string;
   enabled?: boolean;
+  verify_tls?: boolean;
   sync_devices?: boolean;
   sync_arp?: boolean;
   sync_fdb?: boolean;

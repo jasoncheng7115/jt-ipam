@@ -1478,7 +1478,9 @@
     "sync_interval": "同步週期 (秒)",
     "error_name_required": "請填名稱",
     "error_token_too_short": "API token 至少 8 字元",
-    "url_ph": "https://librenms.example.com (不含結尾 /)"
+    "url_ph": "https://librenms.example.com (不含結尾 /)",
+    "verify_tls": "驗證 TLS 憑證",
+    "verify_tls_hint": "LibreNMS 用自簽憑證、或用 IP 連線導致主機名稱不符時，關閉此項即可連線（等同不驗證憑證）。"
   },
   "firewall": {
     "scope_title": "關聯範圍 (NAT 對應)",

@@ -42,6 +42,8 @@ class LibreNMSInstance(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     api_token_nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # 關閉＝接受自簽/主機名稱不符（httpx verify=False；與 Wazuh 同機制）
+    verify_tls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
 
     # 細分開關（規格書 §6.10）
     sync_devices: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

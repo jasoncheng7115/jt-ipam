@@ -92,7 +92,7 @@ async def _api_get(instance: LibreNMSInstance, path: str, *, timeout: float = 30
         resp = await safe_request(
             "GET", url,
             headers={"X-Auth-Token": token, "Accept": "application/json"},
-            timeout=timeout,
+            timeout=timeout, verify=instance.verify_tls,
         )
     except UnsafeOutboundURL as exc:
         raise LibreNMSError(f"SSRF guard rejected URL: {exc}") from exc
@@ -111,7 +111,7 @@ async def _api_post(instance: LibreNMSInstance, path: str, body: dict[str, Any],
         resp = await safe_request(
             "POST", url,
             headers={"X-Auth-Token": token, "Content-Type": "application/json"},
-            json=body, timeout=timeout,
+            json=body, timeout=timeout, verify=instance.verify_tls,
         )
     except UnsafeOutboundURL as exc:
         raise LibreNMSError(f"SSRF guard rejected URL: {exc}") from exc
