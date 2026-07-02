@@ -1480,7 +1480,9 @@
     "sync_interval": "Sync interval (seconds)",
     "error_name_required": "Name is required",
     "error_token_too_short": "API token must be at least 8 chars",
-    "url_ph": "https://librenms.example.com (no trailing /)"
+    "url_ph": "https://librenms.example.com (no trailing /)",
+    "verify_tls": "Verify TLS certificate",
+    "verify_tls_hint": "Turn off to connect when LibreNMS uses a self-signed cert or the hostname doesn't match (e.g. connecting by IP) — skips certificate verification."
   },
   "firewall": {
     "scope_title": "Association scope (NAT mapping)",

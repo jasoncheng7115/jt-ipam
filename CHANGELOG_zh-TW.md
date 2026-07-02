@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.80] — 2026-07-02
+
+### 新增
+- **LibreNMS 整合：驗證 TLS 開關**（migration 0094）—— 比照 Wazuh。LibreNMS 用自簽憑證、或以 IP 連線導致主機名稱不符時，關掉即可連線（API 用 `verify=False`）。解決自簽 LibreNMS 的 `transport: ConnectError`，不必再去改 venv 的 certifi 信任清單（升級會被清掉）。預設開啟。
+
+
 ## [0.5.79] — 2026-07-02
 
 ### 變更

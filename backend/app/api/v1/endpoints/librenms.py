@@ -32,6 +32,7 @@ class LibreNMSInstanceCreate(StrictModel):
     api_url: HttpUrl
     api_token: Annotated[str, Field(min_length=8, max_length=512)]
     enabled: bool = True
+    verify_tls: bool = True   # 關閉＝接受自簽/主機名稱不符（等同 Wazuh 的 Verify TLS）
     sync_devices: bool = True
     sync_arp: bool = True
     sync_fdb: bool = True
@@ -47,6 +48,7 @@ class LibreNMSInstanceUpdate(StrictModel):
     api_url: HttpUrl | None = None
     api_token: Annotated[str | None, Field(min_length=8, max_length=512)] = None
     enabled: bool | None = None
+    verify_tls: bool | None = None
     sync_devices: bool | None = None
     sync_arp: bool | None = None
     sync_fdb: bool | None = None
@@ -63,6 +65,7 @@ class LibreNMSInstanceRead(StrictModel):
     name: str
     api_url: str
     enabled: bool
+    verify_tls: bool
     sync_devices: bool
     sync_arp: bool
     sync_fdb: bool
@@ -162,6 +165,7 @@ async def create_instance(
         api_url=str(payload.api_url).rstrip("/"),
         api_token_enc=b"placeholder", api_token_nonce=b"placeholder",
         enabled=payload.enabled,
+        verify_tls=payload.verify_tls,
         sync_devices=payload.sync_devices,
         sync_arp=payload.sync_arp,
         sync_fdb=payload.sync_fdb,
@@ -214,7 +218,7 @@ async def update_instance(
     rotated = False
     if payload.api_url is not None:
         obj.api_url = str(payload.api_url).rstrip("/")
-    for field_name in ("enabled", "sync_devices", "sync_arp", "sync_fdb", "sync_vlans",
+    for field_name in ("enabled", "verify_tls", "sync_devices", "sync_arp", "sync_fdb", "sync_vlans",
                        "use_for_status", "auto_add_devices", "auto_create_ips",
                        "sync_interval_seconds", "scope_subnet_ids"):
         v = getattr(payload, field_name)

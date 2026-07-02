@@ -49,6 +49,7 @@ const editing = ref<LibreNMSInstance | null>(null);
 const form = ref({
   name: "", api_url: "", api_token: "",
   enabled: true,
+  verify_tls: true,
   sync_devices: true, sync_arp: true, sync_fdb: true, sync_vlans: true,
   use_for_status: true, auto_add_devices: true, auto_create_ips: true,
   sync_interval_seconds: 300,
@@ -74,6 +75,7 @@ function openCreate() {
   form.value = {
     name: "", api_url: "", api_token: "",
     enabled: true,
+    verify_tls: true,
     sync_devices: true, sync_arp: true, sync_fdb: true, sync_vlans: true,
     use_for_status: true, auto_add_devices: true, auto_create_ips: true,
     sync_interval_seconds: 300, scope_subnet_ids: [],
@@ -87,6 +89,7 @@ function openEdit(r: LibreNMSInstance) {
     api_url: r.api_url,
     api_token: "",  // 留空表示不變
     enabled: r.enabled,
+    verify_tls: r.verify_tls,
     sync_devices: r.sync_devices,
     sync_arp: r.sync_arp,
     sync_fdb: r.sync_fdb,
@@ -112,6 +115,7 @@ async function submit() {
       const payload: Record<string, unknown> = {
         api_url: form.value.api_url,
         enabled: form.value.enabled,
+        verify_tls: form.value.verify_tls,
         sync_devices: form.value.sync_devices,
         sync_arp: form.value.sync_arp,
         sync_fdb: form.value.sync_fdb,
@@ -257,6 +261,12 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         </n-form-item>
         <n-form-item :label="t('common.enabled')">
           <n-switch v-model:value="form.enabled" />
+        </n-form-item>
+        <n-form-item :label="t('librenms_admin.verify_tls')">
+          <n-space vertical :size="2" style="width:100%">
+            <n-switch v-model:value="form.verify_tls" />
+            <span class="hint">{{ t('librenms_admin.verify_tls_hint') }}</span>
+          </n-space>
         </n-form-item>
         <div class="sync-toggles">
           <div class="row"><span>{{ t('librenms_admin.sync_devices') }}</span><n-switch size="small" v-model:value="form.sync_devices" /></div>
