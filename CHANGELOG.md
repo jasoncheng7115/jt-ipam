@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.79] — 2026-07-02
+
+### Changed
+- Notification wording: 站內通知 → 通知 (drop the 站內 prefix per Taiwan usage).
+
+
 ## [0.5.78] — 2026-07-02
 
 ### Changed

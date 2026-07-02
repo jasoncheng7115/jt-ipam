@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.79] — 2026-07-02
+
+### 變更
+- 通知用詞：站內通知 → 通知（依台灣慣用，去掉「站內」前綴）。
+
+
 ## [0.5.78] — 2026-07-02
 
 ### 變更
