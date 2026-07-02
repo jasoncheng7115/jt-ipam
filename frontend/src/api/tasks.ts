@@ -5,6 +5,7 @@ export interface BackgroundTask {
   id: string;
   kind: string;
   status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+  trigger: "manual" | "scheduled";
   target_type: string | null;
   target_id: string | null;
   target_label: string | null;

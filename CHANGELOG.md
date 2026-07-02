@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.88] — 2026-07-03
+
+### Added
+- **Tasks table — Trigger column (Scheduled / Manual)** — the periodic sync timer now records a rolling heartbeat row per integration (one per integration, upserted each run — no flooding), tagged **Scheduled**, so scheduled syncs are visible in the Tasks table and distinguishable from **Manual** runs. Previously the timer wrote directly to the integration tables without any task record, so the Tasks table looked frozen even while syncs ran fine.
+
+### Fixed
+- **DNS pull now reports failure instead of "succeeded 0"** — a hard adapter error (e.g. UCS UDM returning HTTP 400) during a DNS pull is now surfaced as a failed task rather than a misleading success with zero counts.
+
+
 ## [0.5.87] — 2026-07-03
 
 ### Added

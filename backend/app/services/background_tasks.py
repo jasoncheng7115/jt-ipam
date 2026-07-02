@@ -30,6 +30,56 @@ _BG_TASKS: set[asyncio.Task[Any]] = set()
 TaskRunner = Callable[[AsyncSession, BackgroundTask], Awaitable[dict[str, Any] | None]]
 
 
+async def upsert_scheduled_task(
+    session: AsyncSession,
+    *,
+    kind: str,
+    target_type: str | None,
+    target_id: uuid.UUID | None,
+    target_label: str | None,
+    ok: bool,
+    summary: dict[str, Any] | None = None,
+    error: str | None = None,
+) -> None:
+    """排程同步的心跳：每個整合只保留一列 trigger='scheduled' 的 row，每輪 upsert 更新
+    （不累積），讓作業表格看得到排程同步、又不會被每 5 分鐘的排程灌爆。
+
+    絕不 raise —— 失敗只 log + rollback，以免拖垮排程迴圈。呼叫前 session 應為乾淨狀態
+    （各整合區塊 sync 成功已 commit、失敗已 rollback + 寫 last_error + commit）。
+    """
+    now = datetime.now(UTC)
+    try:
+        conds = [BackgroundTask.kind == kind, BackgroundTask.trigger == "scheduled"]
+        # 以 target_id 當心跳鍵；無 id 者退回 target_label
+        if target_id is not None:
+            conds.append(BackgroundTask.target_id == target_id)
+        else:
+            conds.append(BackgroundTask.target_label == target_label)
+        row = (
+            await session.execute(select(BackgroundTask).where(*conds).limit(1))
+        ).scalar_one_or_none()
+        if row is None:
+            row = BackgroundTask(
+                kind=kind, trigger="scheduled", target_type=target_type,
+                target_id=target_id, target_label=target_label, actor_user_id=None,
+            )
+            session.add(row)
+        row.target_type = target_type
+        row.target_label = target_label
+        row.status = "succeeded" if ok else "failed"
+        row.progress = 100
+        row.summary = summary
+        row.error = (error or None) if not ok else None
+        # queued_at 也更新成 now → 心跳列永遠排在最上面（最新）
+        row.queued_at = now
+        row.started_at = now
+        row.finished_at = now
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("upsert_scheduled_task failed for %s / %s", kind, target_label)
+        await session.rollback()
+
+
 async def spawn_task(
     *,
     session: AsyncSession,
@@ -38,6 +88,7 @@ async def spawn_task(
     target_id: uuid.UUID | None = None,
     target_label: str | None = None,
     actor_user_id: uuid.UUID | None = None,
+    trigger: str = "manual",
     runner: TaskRunner,
 ) -> BackgroundTask:
     """建立 BackgroundTask row 並背景啟動 runner。
@@ -48,6 +99,7 @@ async def spawn_task(
     task = BackgroundTask(
         kind=kind,
         status="pending",
+        trigger=trigger,
         target_type=target_type,
         target_id=target_id,
         target_label=target_label,

@@ -98,6 +98,14 @@ function fmtTs(s: string | null): string {
 const commonCols = computed<DataTableColumns<BackgroundTask>>(() => autoSort([
   { title: t("tasks.col_kind"), key: "kind", width: 180 },
   {
+    title: t("tasks.col_trigger"), key: "trigger", width: 96,
+    render: (r) => h(
+      NTag,
+      { size: "small", round: true, type: r.trigger === "scheduled" ? "info" : "default" },
+      () => r.trigger === "scheduled" ? t("tasks.trigger_scheduled") : t("tasks.trigger_manual"),
+    ),
+  },
+  {
     title: t("tasks.col_target"), key: "target_label",
     width: 200, ellipsis: { tooltip: true },
     render: (r) => r.target_label ?? (r.target_id ? r.target_id.slice(0, 8) : "—"),
@@ -274,7 +282,8 @@ const allHistoryCols = computed<DataTableColumns<BackgroundTask>>(() => autoSort
 ]));
 
 const historyCols = computed<DataTableColumns<BackgroundTask>>(() =>
-  allHistoryCols.value.filter((c: any) => tkVis.value.includes(c.key)),
+  // 觸發方式（排程／手動）永遠顯示，不受欄位選擇隱藏
+  allHistoryCols.value.filter((c: any) => c.key === "trigger" || tkVis.value.includes(c.key)),
 );
 
 onMounted(() => {

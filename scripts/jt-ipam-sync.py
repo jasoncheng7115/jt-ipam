@@ -44,6 +44,7 @@ async def _run() -> int:
     from app.services import pfsense as pfsense_svc
     from app.services import proxmox as proxmox_svc
     from app.services import wazuh as wazuh_svc
+    from app.services.background_tasks import upsert_scheduled_task as _hb
     from app.services.dns.factory import get_adapter as _dns_adapter  # noqa: F401
     from app.services.dns_sync import pull_server
 
@@ -67,6 +68,9 @@ async def _run() -> int:
                 results = await fw_svc.sync_all_for_firewall(session, fw)
                 await session.commit()
                 log.info("opnsense %s: %d mappings", name, len(results))
+                await _hb(session, kind="opnsense.sync", target_type="opnsense_firewall",
+                          target_id=fw.id, target_label=name, ok=True,
+                          summary={"mappings": len(results)})
             except Exception as exc:  # noqa: BLE001
                 # 失敗的 transaction 先 rollback，否則接著的 commit 會二次爆 → 中斷整輪 sync
                 await session.rollback()
@@ -74,6 +78,8 @@ async def _run() -> int:
                 await session.commit()
                 log.error("opnsense %s sync failed: %s", name, exc)
                 failed += 1
+                await _hb(session, kind="opnsense.sync", target_type="opnsense_firewall",
+                          target_id=fw.id, target_label=name, ok=False, error=str(exc))
 
         # ── pfSense ──
         pfws = (
@@ -90,12 +96,17 @@ async def _run() -> int:
                 counts = await pfsense_svc.sync_instance(session, fw)
                 await session.commit()
                 log.info("pfsense %s: %s", name, counts)
+                await _hb(session, kind="pfsense.sync", target_type="pfsense_firewall",
+                          target_id=fw.id, target_label=name, ok=True,
+                          summary=counts if isinstance(counts, dict) else {"result": str(counts)})
             except Exception as exc:  # noqa: BLE001
                 await session.rollback()
                 fw.last_error = str(exc)
                 await session.commit()
                 log.error("pfsense %s sync failed: %s", name, exc)
                 failed += 1
+                await _hb(session, kind="pfsense.sync", target_type="pfsense_firewall",
+                          target_id=fw.id, target_label=name, ok=False, error=str(exc))
 
         # ── Wazuh ──
         wzs = (
@@ -112,12 +123,17 @@ async def _run() -> int:
                 summary = await wazuh_svc.sync_agents(session, inst)
                 await session.commit()
                 log.info("wazuh %s: %s", name, summary)
+                await _hb(session, kind="wazuh.sync", target_type="wazuh_instance",
+                          target_id=inst.id, target_label=name, ok=True,
+                          summary=summary if isinstance(summary, dict) else None)
             except Exception as exc:  # noqa: BLE001
                 await session.rollback()
                 inst.last_error = str(exc)
                 await session.commit()
                 log.error("wazuh %s sync failed: %s", name, exc)
                 failed += 1
+                await _hb(session, kind="wazuh.sync", target_type="wazuh_instance",
+                          target_id=inst.id, target_label=name, ok=False, error=str(exc))
 
         # ── LibreNMS ──
         lns = (
@@ -134,12 +150,17 @@ async def _run() -> int:
                 summary = await librenms_svc.sync_instance(session, inst)
                 await session.commit()
                 log.info("librenms %s: %s", name, summary)
+                await _hb(session, kind="librenms.sync", target_type="librenms_instance",
+                          target_id=inst.id, target_label=name, ok=True,
+                          summary=summary if isinstance(summary, dict) else None)
             except Exception as exc:  # noqa: BLE001
                 await session.rollback()
                 inst.last_error = str(exc)
                 await session.commit()
                 log.error("librenms %s sync failed: %s", name, exc)
                 failed += 1
+                await _hb(session, kind="librenms.sync", target_type="librenms_instance",
+                          target_id=inst.id, target_label=name, ok=False, error=str(exc))
 
         # ── ARP 過期清除（每輪一次，與 instance 是否到期無關）──
         # arp_entries 只新增不回收，靠這裡刪掉超過保留天數的舊紀錄（含孤兒 row）。
@@ -170,12 +191,17 @@ async def _run() -> int:
                 summary = await adguard_svc.sync_instance(session, inst)
                 await session.commit()
                 log.info("adguard %s: %s", name, summary)
+                await _hb(session, kind="adguard.sync", target_type="adguard_instance",
+                          target_id=inst.id, target_label=name, ok=True,
+                          summary=summary if isinstance(summary, dict) else None)
             except Exception as exc:  # noqa: BLE001
                 await session.rollback()
                 inst.last_error = str(exc)
                 await session.commit()
                 log.error("adguard %s sync failed: %s", name, exc)
                 failed += 1
+                await _hb(session, kind="adguard.sync", target_type="adguard_instance",
+                          target_id=inst.id, target_label=name, ok=False, error=str(exc))
 
         # ── Proxmox（同一 cluster 多節點 → 自動挑健康節點同步，故障換手）──
         pvs = (
@@ -193,16 +219,26 @@ async def _run() -> int:
             lasts = [i.last_sync_at for i in insts if i.last_sync_at]
             if lasts and max(lasts) + interval > now:
                 continue
+            pv_label = (
+                getattr(insts[0], "name", None)
+                or getattr(insts[0], "host", None)
+                or (f"cluster {cluster_id}" if cluster_id else "proxmox")
+            )
             try:
                 summary = await proxmox_svc.sync_cluster(session, insts)
                 await session.commit()
                 log.info("proxmox cluster %s: %s", cluster_id, summary.to_dict())
+                await _hb(session, kind="proxmox.sync", target_type="proxmox_cluster",
+                          target_id=cluster_id, target_label=pv_label, ok=True,
+                          summary=summary.to_dict())
             except Exception as exc:  # noqa: BLE001
                 # 失敗的 transaction 無法 commit，先 rollback 讓 session 恢復可用，
                 # 否則下一個 cluster 的查詢會 PendingRollbackError 連鎖中斷整輪
                 await session.rollback()
                 log.error("proxmox cluster %s sync failed: %s", cluster_id, exc)
                 failed += 1
+                await _hb(session, kind="proxmox.sync", target_type="proxmox_cluster",
+                          target_id=cluster_id, target_label=pv_label, ok=False, error=str(exc))
 
         # ── DNS servers ──（沒有 sync_interval_seconds 欄；用固定 10 分鐘 throttle）
         dns_interval = timedelta(seconds=600)
@@ -220,11 +256,16 @@ async def _run() -> int:
                 summary = await pull_server(session, srv)
                 await session.commit()
                 log.info("dns %s: %s", name, summary)
+                await _hb(session, kind="dns.sync", target_type="dns_server",
+                          target_id=srv.id, target_label=name, ok=True,
+                          summary=summary if isinstance(summary, dict) else None)
             except Exception as exc:  # noqa: BLE001
                 # rollback 讓 session 恢復可用，否則下一個 DNS server 的查詢會連鎖失敗
                 await session.rollback()
                 log.error("dns %s sync failed: %s", name, exc)
                 failed += 1
+                await _hb(session, kind="dns.sync", target_type="dns_server",
+                          target_id=srv.id, target_label=name, ok=False, error=str(exc))
 
         # ── 憑證自動抓取來源（URL / SFTP，依各憑證 fetch_interval 節流）──
         try:

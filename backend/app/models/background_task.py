@@ -24,6 +24,11 @@ class BackgroundTask(Base, UUIDPrimaryKeyMixin):
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
 
+    # 觸發方式：manual（使用者 / API 手動觸發）或 scheduled（排程 timer）
+    trigger: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="manual", server_default="manual", index=True,
+    )
+
     # 對應的物件（選用）— 例如 LibreNMSInstance.id
     target_type: Mapped[str | None] = mapped_column(String(64))
     target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
@@ -52,5 +57,9 @@ class BackgroundTask(Base, UUIDPrimaryKeyMixin):
         CheckConstraint(
             "progress BETWEEN 0 AND 100",
             name="background_task_progress_range",
+        ),
+        CheckConstraint(
+            "trigger IN ('manual','scheduled')",
+            name="background_task_trigger_valid",
         ),
     )

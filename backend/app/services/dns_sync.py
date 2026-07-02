@@ -177,9 +177,10 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
     try:
         adapter = await get_adapter(session, server)
     except DNSAdapterError as exc:
+        # 連不上 / 認證錯 = 硬失敗：寫 last_error 後往上拋，讓作業顯示「失敗」而非「成功 0」
         server.last_error = str(exc)
         await session.commit()
-        return summary
+        raise
 
     try:
         zones_remote = await adapter.list_zones()
@@ -187,7 +188,7 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
         server.last_error = str(exc)
         await session.commit()
         await adapter.close()
-        return summary
+        raise
 
     try:
         # 收集每個 IP 從 DNS 看到的所有正解名稱，最後只套用一個「穩定」的，

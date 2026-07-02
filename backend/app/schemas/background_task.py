@@ -13,6 +13,7 @@ class BackgroundTaskRead(StrictModel):
     id: uuid.UUID
     kind: str
     status: str
+    trigger: str
     target_type: str | None
     target_id: uuid.UUID | None
     target_label: str | None
