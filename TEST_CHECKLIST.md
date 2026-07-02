@@ -116,6 +116,28 @@ Release flow: run the checklist → all green → bump version → deploy
 - [ ] **MCP client-config generator** (LLM/AI): button outputs Claude Desktop / opencode / mcpo / generic snippets.
 - [ ] **Add address in a subnet**: the create form has a required IP field (issue #14).
 
+### Recent (v0.5.6x–0.5.7x)
+
+- [ ] **BMC out-of-band console** (IPMI SOL, Beta): enable per IP (`bmc_enabled`, migration 0092) → connect
+  button appears on IP detail + Connections; connects with cipher auto-fallback (17→3); credential vault
+  “remember” persists (`protocol='bmc'`) and pre-fills next time; RBAC = same as SSH (per-object + can_ssh);
+  session open/close audited; **Setup guide** modal opens (form/toolbar/blank-hint) with troubleshooting;
+  **Fit to window** button sends `stty` (tooltip warns it sends a command).
+- [ ] **Disconnected overlay** (SSH / RDP / VNC / noVNC / xterm / BMC): dropping the session shows a big
+  centered “Disconnected” + broken-link icon **over the display only** (toolbar / Reconnect stay clickable);
+  fades out on reconnect.
+- [ ] **Connections OS column** matches the IP-detail page (shared `OsCell`): OS icon + localized family name
+  + （source） annotation, raw guess on hover; value is the source-precedence-resolved OS.
+- [ ] **Scan-agent OS detection** (agent ≥ 1.7.0): appliances/BMCs are no longer mis-guessed — Debian
+  appliance (SSH banner) → `Debian`, Windows via SMB/Service-Info → `Windows`, device-model-only guesses
+  (NAS / OpenWrt / router) are dropped to unknown rather than shown.
+- [ ] **Notification i18n**: switch UI language (繁中 ⇄ English) → the bell **and** the Notifications page
+  render in the current language (IP-request, anomaly, cert, stale-IP); old notifications fall back to stored text.
+- [ ] **Notification channels** (Admin → 通知發送設定): Telegram / Slack / Teams / Nextcloud Talk / Zulip each
+  save (encrypted token/webhook; “set — leave blank to keep”), the per-channel **Test** button delivers, and an
+  enabled channel receives a matrix-fired event (e.g. an IP request) alongside Email/in-app.
+- [ ] **Export button** on table pages is bordered (matches Columns / Refresh).
+
 ---
 
 ### Appendix: throwaway test DB commands (on the prod host, **never the prod DB**)
