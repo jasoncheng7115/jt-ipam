@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.84] — 2026-07-02
+
+### 變更
+- **儀表板即時狀態「來源」文字改為依實際設定顯示** —— IP 指示計下方的「來源：…」改由實際有設定（enabled）的來源組成（掃描代理／LibreNMS／OPNsense／pfSense），不再寫死「掃描代理 + LibreNMS + OPNsense ARP」。都沒設定時顯示提示。
+
+
 ## [0.5.83] — 2026-07-02
 
 ### 變更

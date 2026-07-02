@@ -547,7 +547,7 @@
     "status_online": "上線",
     "status_offline": "離線",
     "status_unknown": "未知",
-    "indicator_source": "來源：掃描代理 + LibreNMS + OPNsense ARP 綜合判定",
+    "indicator_source": "來源：{sources} 綜合判定",
     "no_subnet_data": "沒有 subnet 資料；請先建立 區段 + 子網路 並配發 IP。",
     "heat_summary": "{subnets} 子網路 · {used} / {total}",
     "heat_avg": "平均子網路使用率",
@@ -567,7 +567,11 @@
     "chart_customer_res": "各單位資源占比",
     "chart_activity_trend": "近 14 日 稽核 / IP 異動 趨勢",
     "chart_audit_events": "稽核事件",
-    "chart_rack_usage": "機櫃 U 使用率"
+    "chart_rack_usage": "機櫃 U 使用率",
+    "indicator_source_none": "尚未設定即時狀態來源（掃描代理／LibreNMS／防火牆 ARP）",
+    "src_scanner": "掃描代理",
+    "src_opnsense": "OPNsense ARP",
+    "src_pfsense": "pfSense ARP"
   },
   "sections": {
     "title": "區段",

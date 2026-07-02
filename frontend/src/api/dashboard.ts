@@ -20,6 +20,7 @@ export interface DashboardOverview {
   used: number;
   used_pct: number;
   status: { online: number; offline: number; unknown: number };
+  status_sources: string[];
   top_full_subnets: TopSubnet[];
   pinned_subnets: TopSubnet[];
   section_heat: {

@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.84] — 2026-07-02
+
+### Changed
+- **Dashboard live-status source line reflects the actual setup** — the “Source: …” caption under the IP live-status card is now built from the sources actually configured (enabled scan agents / LibreNMS / OPNsense / pfSense), instead of a fixed “scan agent + LibreNMS + OPNsense ARP”. Shows a hint when none is set up.
+
+
 ## [0.5.83] — 2026-07-02
 
 ### Changed

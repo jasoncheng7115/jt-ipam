@@ -547,7 +547,7 @@
     "status_online": "Online",
     "status_offline": "Offline",
     "status_unknown": "Unknown",
-    "indicator_source": "Source: scan agents + LibreNMS + OPNsense ARP (combined)",
+    "indicator_source": "Source: {sources} (combined)",
     "no_subnet_data": "No subnet data; create a Section + Subnet and allocate IPs first.",
     "heat_summary": "{subnets} subnets · {used} / {total}",
     "heat_avg": "Avg. subnet utilization",
@@ -567,7 +567,11 @@
     "chart_customer_res": "Per-tenant resources",
     "chart_activity_trend": "Audit / IP changes (14d)",
     "chart_audit_events": "Audit events",
-    "chart_rack_usage": "Rack U utilization"
+    "chart_rack_usage": "Rack U utilization",
+    "indicator_source_none": "No live-status source configured yet (scan agent / LibreNMS / firewall ARP)",
+    "src_scanner": "scan agent",
+    "src_opnsense": "OPNsense ARP",
+    "src_pfsense": "pfSense ARP"
   },
   "sections": {
     "title": "Sections",

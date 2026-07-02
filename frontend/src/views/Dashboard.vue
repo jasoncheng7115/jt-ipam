@@ -58,6 +58,17 @@ const usePctColor = (pct: number): string => {
 
 const donutColor = computed(() => usePctColor(data.value?.used_pct ?? 0));
 
+// 即時狀態來源文字：依實際 enabled 的來源產生（後端回 status_sources）
+const indicatorSourceText = computed(() => {
+  const labels: Record<string, string> = {
+    scanner: t("dashboard.src_scanner"), librenms: "LibreNMS",
+    opnsense: t("dashboard.src_opnsense"), pfsense: t("dashboard.src_pfsense"),
+  };
+  const src = data.value?.status_sources ?? [];
+  if (!src.length) return t("dashboard.indicator_source_none");
+  return t("dashboard.indicator_source", { sources: src.map((k) => labels[k] ?? k).join(" + ") });
+});
+
 // KPI 卡的視覺差異化：每張卡一個獨立 accent 色 + icon
 const kpiTiles = computed(() => [
   { key: "sections",  i18n: "kpi_sections",       value: data.value?.sections ?? 0,        color: "#6366f1", icon: SectionsIcon },   // indigo
@@ -280,7 +291,7 @@ onMounted(() => { void load(); void loadPins(); });
               type="line"
             />
             <p style="font-size: 12px; opacity: 0.7; margin: 0">
-              {{ t("dashboard.indicator_source") }}
+              {{ indicatorSourceText }}
             </p>
           </n-space>
         </n-card>
