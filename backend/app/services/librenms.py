@@ -450,61 +450,76 @@ async def sync_arp(
     # 重疊網段：若 instance 設了 scope_subnet_ids，IP→IPAddress 比對限定在這些子網路內
     scope_ids = _scope_uuids(instance)
 
-    for d in devices:
-        path = f"/api/v0/devices/{d.legacy_device_id}/ip/arp/all"
-        try:
-            data = await _api_get(instance, path, timeout=20.0)
-        except LibreNMSError:
-            continue   # device 可能不支援 ARP（例如非 L3）
-        for arp in data.get("arp") or []:
-            ip = arp.get("ipv4_address") or arp.get("ip_address")
-            mac = arp.get("mac_address")
-            if not ip or not mac:
-                continue
-            mac = mac.lower()
-            seen += 1
-            existing = (
-                await session.execute(
-                    select(ARPEntry).where(
-                        ARPEntry.ip == ip,
-                        ARPEntry.mac == mac,
-                        ARPEntry.device_id == d.id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if existing is None:
-                session.add(ARPEntry(
-                    ip=ip, mac=mac,
-                    instance_id=instance.id, device_id=d.id,
-                    interface=arp.get("port_name") or arp.get("interface"),
-                    vrf=arp.get("context_name"),
-                    source="librenms",
-                    first_seen_at=now, last_seen_at=now,
-                ))
-                inserted += 1
-            else:
-                existing.last_seen_at = now
-                updated += 1
+    # legacy_device_id（LibreNMS 的 device_id）→ jt-ipam LibreNMSDevice
+    legacy_map = {d.legacy_device_id: d for d in devices if d.legacy_device_id is not None}
+    # 一次取回全站 ARP：/api/v0/resources/ip/arp/all（"all" 是 {ip} 位置的關鍵字＝回全部）。
+    # 取代舊的逐 device /api/v0/devices/{id}/ip/arp/all —— 那在新版 LibreNMS 是不存在的
+    # 路由，會對「每一台」裝置各回一次 404（每輪 sync 數十筆 4xx → 被對端 Wazuh 判為
+    # web-scan/recon 告警，而且 ARP 其實一筆都同步不到）。改用單一 resources 端點正確拿到。
+    try:
+        data = await _api_get(instance, "/api/v0/resources/ip/arp/all", timeout=60.0)
+    except LibreNMSError:
+        return seen, inserted, updated, filled
 
-            # 只要 LibreNMS ARP 有看到這個 IP，就 stamp last_seen_librenms
-            # （effective_status 計算靠這個）。補 MAC 是額外副作用。
-            ipa = (
-                await session.execute(
-                    select(IPAddress).where(IPAddress.ip == ip).where(
-                        IPAddress.subnet_id.in_(scope_ids) if scope_ids else sa_true()
-                    ).limit(1)
+    # 全域 ARP 端點同一 (ip, mac, device) 可能因跨多個 port 而重複回報；arp_entries 唯一鍵是
+    # (ip, mac, device_id)，同一輪重複 add 會撞 UniqueViolation → 用 set 去重，一輪只處理一次。
+    seen_keys: set[tuple[str, str, object]] = set()
+    for arp in data.get("arp") or []:
+        ip = arp.get("ipv4_address") or arp.get("ip_address")
+        mac = arp.get("mac_address")
+        if not ip or not mac:
+            continue
+        d = legacy_map.get(arp.get("device_id"))
+        if d is None:
+            continue   # ARP 來自本 instance 未追蹤的裝置 → 跳過
+        mac = mac.lower()
+        key = (ip, mac, d.id)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        seen += 1
+        existing = (
+            await session.execute(
+                select(ARPEntry).where(
+                    ARPEntry.ip == ip,
+                    ARPEntry.mac == mac,
+                    ARPEntry.device_id == d.id,
                 )
-            ).scalar_one_or_none()
-            if ipa is not None:
-                ipa.last_seen_librenms = now
-                from app.services.arp_precedence import consider_mac
-                if await consider_mac(session, ip=ipa, mac=mac, source="librenms"):
-                    filled += 1
-                    # feature B：ARP 學到 MAC（原本沒有）
-                    await log_change(
-                        session, ip=ipa, event_type="arp_changed",
-                        field="mac", old=None, new=mac, source="librenms",
-                    )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            session.add(ARPEntry(
+                ip=ip, mac=mac,
+                instance_id=instance.id, device_id=d.id,
+                interface=arp.get("port_name") or arp.get("interface"),
+                vrf=arp.get("context_name"),
+                source="librenms",
+                first_seen_at=now, last_seen_at=now,
+            ))
+            inserted += 1
+        else:
+            existing.last_seen_at = now
+            updated += 1
+
+        # 只要 LibreNMS ARP 有看到這個 IP，就 stamp last_seen_librenms
+        # （effective_status 計算靠這個）。補 MAC 是額外副作用。
+        ipa = (
+            await session.execute(
+                select(IPAddress).where(IPAddress.ip == ip).where(
+                    IPAddress.subnet_id.in_(scope_ids) if scope_ids else sa_true()
+                ).limit(1)
+            )
+        ).scalar_one_or_none()
+        if ipa is not None:
+            ipa.last_seen_librenms = now
+            from app.services.arp_precedence import consider_mac
+            if await consider_mac(session, ip=ipa, mac=mac, source="librenms"):
+                filled += 1
+                # feature B：ARP 學到 MAC（原本沒有）
+                await log_change(
+                    session, ip=ipa, event_type="arp_changed",
+                    field="mac", old=None, new=mac, source="librenms",
+                )
 
     return seen, inserted, updated, filled
 

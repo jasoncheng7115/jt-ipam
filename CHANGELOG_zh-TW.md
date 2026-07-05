@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.93] — 2026-07-06
+
+### 修正
+- **LibreNMS ARP 同步打到已不存在的逐裝置路由** —— jt-ipam 對每台裝置呼叫 `/api/v0/devices/{id}/ip/arp/all`,此路由在新版 LibreNMS 已不存在,每輪 5 分鐘同步對「每一台」裝置都回 404。結果 ARP 存活證據一筆都同步不到,而且這串 404 會讓 LibreNMS 主機上的 IDS（如 Wazuh）把 jt-ipam 的 IP 判為掃描來源（web-scan／recon 告警）。改用單一全域端點 `/api/v0/resources/ip/arp/all`（一次請求取代 N 次）+ 同一輪 (ip, mac, device) 去重。ARP 存活現在正確同步,誤報告警也停止。
+
+
 ## [0.5.92] — 2026-07-03
 
 ### 修正

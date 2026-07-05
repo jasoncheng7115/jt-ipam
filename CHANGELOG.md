@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.93] — 2026-07-06
+
+### Fixed
+- **LibreNMS ARP sync hit a dead per-device route** — jt-ipam called `/api/v0/devices/{id}/ip/arp/all` for every device, which no longer exists in current LibreNMS, returning 404 for every device on every 5-minute sync. ARP-based liveness therefore synced nothing, and the burst of 404s tripped web-scan/recon IDS rules (e.g. Wazuh) on the LibreNMS host, flagging jt-ipam's IP as a scanner. Switched to the single global `/api/v0/resources/ip/arp/all` endpoint (one request instead of N) with in-batch de-duplication of (ip, mac, device) rows. ARP liveness now syncs correctly and the false IDS alerts stop.
+
+
 ## [0.5.92] — 2026-07-03
 
 ### Fixed
