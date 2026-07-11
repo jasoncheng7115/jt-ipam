@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.102] — 2026-07-10
+
+### Changed
+- **Dashboard capacity: split IPv4 / IPv6** — summing IPv6 address counts produced an astronomically large, unhelpful "total capacity" number. The KPI now shows **IPv4 usable** (a real, plannable number, comma-formatted) and, when any IPv6 subnet exists, a separate **IPv6** tile showing the subnet count (address space is vast, not summed). The utilization gauge is now IPv4-only (IPv6 never "runs out").
+
+
 ## [0.5.101] — 2026-07-10
 
 ### Changed

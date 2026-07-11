@@ -19,6 +19,10 @@ export interface DashboardOverview {
   total_capacity: number;
   used: number;
   used_pct: number;
+  ipv4_capacity: number;
+  ipv4_used: number;
+  ipv4_used_pct: number;
+  ipv6_subnets: number;
   status: { online: number; offline: number; unknown: number };
   status_sources: string[];
   top_full_subnets: TopSubnet[];

@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.102] — 2026-07-10
+
+### 變更
+- **儀表板容量:拆開 IPv4／IPv6** —— 加總 IPv6 位址數會得到天文級、沒意義的「總容量」。KPI 現在顯示 **IPv4 可用**（真實、可規劃的數字,加千分位）,並在有 IPv6 子網路時另出一張 **IPv6** 卡顯示網段數（位址空間極大、不加總）。用量比也只對 IPv4 算（IPv6 永遠用不完）。
+
+
 ## [0.5.101] — 2026-07-10
 
 ### 變更

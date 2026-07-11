@@ -56,7 +56,7 @@ const usePctColor = (pct: number): string => {
   return "#22c55e";
 };
 
-const donutColor = computed(() => usePctColor(data.value?.used_pct ?? 0));
+const donutColor = computed(() => usePctColor(data.value?.ipv4_used_pct ?? 0));
 
 // 即時狀態來源文字：依實際 enabled 的來源產生（後端回 status_sources）
 const indicatorSourceText = computed(() => {
@@ -69,14 +69,30 @@ const indicatorSourceText = computed(() => {
   return t("dashboard.indicator_source", { sources: src.map((k) => labels[k] ?? k).join(" + ") });
 });
 
-// KPI 卡的視覺差異化：每張卡一個獨立 accent 色 + icon
-const kpiTiles = computed(() => [
-  { key: "sections",  i18n: "kpi_sections",       value: data.value?.sections ?? 0,        color: "#6366f1", icon: SectionsIcon },   // indigo
-  { key: "subnets",   i18n: "kpi_subnets",        value: data.value?.subnets ?? 0,         color: "#0ea5e9", icon: SubnetsIcon },    // sky
-  { key: "used",      i18n: "kpi_ips_allocated",  value: data.value?.used ?? 0,            color: "#22c55e", icon: AddressesIcon },  // green
-  { key: "capacity",  i18n: "kpi_total_capacity", value: data.value?.total_capacity ?? 0,  color: "#a855f7", icon: CapacityIcon },   // purple
-  { key: "audit",     i18n: "kpi_audit_24h",      value: data.value?.audit_24h ?? 0,       color: "#f59e0b", icon: AuditIcon },      // amber
-]);
+function fmtVal(v: number | string): string {
+  return typeof v === "number" ? v.toLocaleString() : v;
+}
+
+// KPI 卡的視覺差異化：每張卡一個獨立 accent 色 + icon。
+// 容量只算 IPv4（真實可規劃）；IPv6 位址數天文級 → 另出一張卡只顯示網段數（有 IPv6 才出現）。
+const kpiTiles = computed(() => {
+  const d = data.value;
+  const tiles: { key: string; i18n: string; value: number | string; color: string; icon: unknown; sub?: string }[] = [
+    { key: "sections",  i18n: "kpi_sections",       value: d?.sections ?? 0,        color: "#6366f1", icon: SectionsIcon },   // indigo
+    { key: "subnets",   i18n: "kpi_subnets",        value: d?.subnets ?? 0,         color: "#0ea5e9", icon: SubnetsIcon },    // sky
+    { key: "used",      i18n: "kpi_ips_allocated",  value: d?.used ?? 0,            color: "#22c55e", icon: AddressesIcon },  // green
+    { key: "capacity",  i18n: "kpi_ipv4_capacity",  value: d?.ipv4_capacity ?? 0,   color: "#a855f7", icon: CapacityIcon },   // purple
+    { key: "audit",     i18n: "kpi_audit_24h",      value: d?.audit_24h ?? 0,       color: "#f59e0b", icon: AuditIcon },      // amber
+  ];
+  if (d?.ipv6_subnets) {
+    tiles.splice(4, 0, {
+      key: "ipv6", i18n: "kpi_ipv6", color: "#8b5cf6", icon: SubnetsIcon,
+      value: t("dashboard.kpi_ipv6_value", { n: d.ipv6_subnets }),
+      sub: t("dashboard.kpi_ipv6_sub"),
+    });
+  }
+  return tiles;
+});
 
 // ── 統計圖表（純 SVG/CSS，無圖表 lib）──
 const DEVICE_TYPE_COLOR: Record<string, string> = {
@@ -210,7 +226,8 @@ onMounted(() => { void load(); void loadPins(); });
           </div>
           <div class="kpi-body">
             <div class="kpi-label">{{ t(`dashboard.${k.i18n}`) }}</div>
-            <div class="kpi-value">{{ k.value }}</div>
+            <div class="kpi-value">{{ fmtVal(k.value) }}</div>
+            <div v-if="k.sub" class="kpi-sub">{{ k.sub }}</div>
           </div>
         </n-card>
       </div>
@@ -247,19 +264,19 @@ onMounted(() => { void load(); void loadPins(); });
                       :stroke="donutColor"
                       stroke-width="9"
                       pathLength="100"
-                      :stroke-dasharray="`${data.used_pct} 100`"
+                      :stroke-dasharray="`${data.ipv4_used_pct} 100`"
                       stroke-linecap="round"
                       transform="rotate(-90 50 50)"
                       style="transition: stroke-dasharray 0.5s ease, stroke 0.3s ease;" />
               <text x="50" y="49" text-anchor="middle" dominant-baseline="middle"
                     font-size="18" font-weight="700" fill="currentColor"
                     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-                {{ data.used_pct }}%
+                {{ data.ipv4_used_pct }}%
               </text>
               <text x="50" y="64" text-anchor="middle" dominant-baseline="middle"
                     font-size="7" fill="currentColor" opacity="0.6"
                     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', monospace">
-                {{ data.used }} / {{ data.total_capacity }}
+                {{ data.ipv4_used.toLocaleString() }} / {{ data.ipv4_capacity.toLocaleString() }}
               </text>
             </svg>
           </n-space>
@@ -649,6 +666,11 @@ onMounted(() => { void load(); void loadPins(); });
   font-weight: 700;
   line-height: 1.1;
   color: var(--accent);
+}
+.kpi-sub {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 2px;
 }
 .row-2col {
   display: grid;

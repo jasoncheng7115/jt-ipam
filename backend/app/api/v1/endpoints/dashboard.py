@@ -105,9 +105,14 @@ class DashboardOverview(StrictModel):
     sections: int
     subnets: int
     addresses: int
-    total_capacity: int     # 加總所有 visible subnet 的可用 host 數
+    total_capacity: int     # 加總所有 visible subnet 的可用 host 數（含 IPv6，數字可能極大）
     used: int               # 加總已配發 IP 數
     used_pct: float
+    # IPv6 位址數天文級、加總沒意義 → 容量/用量指標只對 IPv4 算，IPv6 另以網段數呈現
+    ipv4_capacity: int = 0  # 只加總 IPv4 subnet 的可用 host 數（真實可規劃）
+    ipv4_used: int = 0      # IPv4 subnet 已配發 IP 數
+    ipv4_used_pct: float = 0.0
+    ipv6_subnets: int = 0   # IPv6 子網路數（位址數極大，不加總）
     status: StatusCounts
     # 實際有設定（enabled）的即時狀態來源 key：scanner / librenms / opnsense / pfsense
     status_sources: list[str] = []
@@ -172,14 +177,26 @@ async def overview(
         ).all()
         per_subnet_used = {str(r[0]): int(r[1]) for r in rows}
 
+    ipv4_capacity = 0
+    ipv6_subnets = 0
+    ipv4_subnet_ids: set[str] = set()
     for s in visible_subnets:
         try:
-            total_capacity += host_count(ipaddress.ip_network(str(s.cidr), strict=False))
+            net = ipaddress.ip_network(str(s.cidr), strict=False)
         except ValueError:
             continue
+        total_capacity += host_count(net)
+        if net.version == 6:
+            ipv6_subnets += 1                          # IPv6：位址數極大，只計網段數
+        else:
+            ipv4_capacity += host_count(net)
+            ipv4_subnet_ids.add(str(s.id))
 
     used = sum(per_subnet_used.values())
     used_pct = round((used / total_capacity * 100), 2) if total_capacity else 0.0
+    # 容量/用量比只對 IPv4 算（IPv6 永遠「用不完」）
+    ipv4_used = sum(v for k, v in per_subnet_used.items() if k in ipv4_subnet_ids)
+    ipv4_used_pct = round((ipv4_used / ipv4_capacity * 100), 2) if ipv4_capacity else 0.0
 
     # ── status counts ──
     status_counts = StatusCounts(online=0, offline=0, unknown=0)
@@ -431,6 +448,10 @@ async def overview(
         total_capacity=total_capacity,
         used=used,
         used_pct=used_pct,
+        ipv4_capacity=ipv4_capacity,
+        ipv4_used=ipv4_used,
+        ipv4_used_pct=ipv4_used_pct,
+        ipv6_subnets=ipv6_subnets,
         status=status_counts,
         status_sources=status_sources,
         top_full_subnets=top_full,
