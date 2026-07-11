@@ -762,7 +762,7 @@ def _dec_smtp(blob: str) -> str | None:
 
 
 def _default_notify() -> dict[str, Any]:
-    cfg: dict[str, Any] = {k: False for k in _NOTIFY_BOOL_KEYS}
+    cfg: dict[str, Any] = dict.fromkeys(_NOTIFY_BOOL_KEYS, False)
     cfg.update({"smtp_port": 587, "smtp_tls": "starttls"})  # none/starttls/tls
     for k in _NOTIFY_STR_KEYS:
         cfg[k] = None

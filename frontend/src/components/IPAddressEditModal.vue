@@ -11,14 +11,14 @@ import {
   NModal, NCard, NSpace, NButton, NDescriptions, NDescriptionsItem,
   NForm, NFormItem, NInput, NSelect, NSwitch, NPopconfirm, NTag, NIcon,
   NCollapse, NCollapseItem, NTimeline, NTimelineItem, NText, NEmpty, NSpin,
-  NTooltip, NCheckbox, NCheckboxGroup, NButtonGroup, NDropdown, NDivider,
+  NTooltip, NCheckbox, NCheckboxGroup, NButtonGroup, NDivider,
   useMessage,
 } from "naive-ui";
 import type { IPAddress } from "@/types";
 import { updateAddress, deleteAddress, createAddress, type IPAddressUpdate } from "@/api/addresses";
 import { getAddressHistory, getAddressSwitchPort, type IPChangeLog, type SwitchPortInfo } from "@/api/ip_history";
 import { getHostnameSources, clearHostnameSource, type HostnameSources } from "@/api/hostname";
-import { EditIcon, SaveIcon, CancelIcon, DeleteIcon, PlusIcon, LinkIcon, TerminalIcon, DisplayIcon, VncIcon, NoVncIcon, ChevronDownIcon, OpenNewWindowIcon, renderIcon } from "@/icons";
+import { EditIcon, SaveIcon, CancelIcon, DeleteIcon, PlusIcon, LinkIcon, TerminalIcon, DisplayIcon, VncIcon, NoVncIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useCustomers } from "@/composables/useCustomers";
@@ -211,40 +211,6 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => { cro?.disconnect(); cro = null; });
-
-// SSH 連線分割按鈕的下拉選單（另開視窗）
-const sshMenuOptions = computed(() => [
-  { label: t("ssh.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onSshMenu(key: string) {
-  if (key === "popout") emit("ssh-popout");
-}
-// RDP 連線分割按鈕的下拉選單（另開視窗）
-const rdpMenuOptions = computed(() => [
-  { label: t("rdp.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onRdpMenu(key: string) {
-  if (key === "popout") emit("rdp-popout");
-}
-// VNC 連線分割按鈕的下拉選單（另開視窗）
-const vncMenuOptions = computed(() => [
-  { label: t("vnc.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onVncMenu(key: string) {
-  if (key === "popout") emit("vnc-popout");
-}
-const novncMenuOptions = computed(() => [
-  { label: t("vnc.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onNovncMenu(key: string) {
-  if (key === "popout") emit("novnc-popout");
-}
-const bmcMenuOptions = computed(() => [
-  { label: t("vnc.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onBmcMenu(key: string) {
-  if (key === "popout") emit("bmc-popout");
-}
 
 const isCreate = computed(() => !props.address && !!props.createContext);
 

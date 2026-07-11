@@ -154,7 +154,7 @@ async def broadcast_channels(session: AsyncSession, *, subject: str, text: str |
     async def _one(ch: str) -> None:
         try:
             await _SENDERS[ch](cfg, subject, text)
-        except Exception as exc:  # noqa: BLE001 — 單一管道失敗不可中斷其他管道/主流程
+        except Exception as exc:
             log.warning("notify channel %s failed: %s: %s", ch, type(exc).__name__, exc)
 
     # 並行送出：最壞情況＝最慢的單一管道（~timeout），不是各管道相加，避免拖長主流程

@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.103] — 2026-07-11
+
+### 變更
+- 內部 lint／測試清理:ruff import 排序、移除無用程式碼／匯入（eslint），並更新一個單元測試（新增的 ssh-rsa 用戶端簽章）。無功能變動。本機完整測試全綠 —— 後端 441 測試、vue-tsc、ruff、eslint、migration 至 0096。
+
+
 ## [0.5.102] — 2026-07-10
 
 ### 變更

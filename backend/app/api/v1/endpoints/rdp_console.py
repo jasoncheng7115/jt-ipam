@@ -185,8 +185,8 @@ async def list_connection_targets(
         for lr in (await session.execute(lstmt)).all():
             live_map[str(lr[0])] = (lr[1], lr[2], lr[3])
 
-    from app.services.oui import vendor_for_mac
     from app.services.os_precedence import effective_os
+    from app.services.oui import vendor_for_mac
     out: list[IPAddressRead] = []
     for ip, ssh_ok, rdp_ok, vnc_ok, bmc_ok in kept:
         r = IPAddressRead.model_validate(ip)

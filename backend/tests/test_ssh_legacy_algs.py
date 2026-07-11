@@ -12,13 +12,19 @@ import asyncssh
 from app.services.ssh_tunnel import LEGACY_SSH_ALGS
 
 
-def test_legacy_algs_cover_four_categories():
+def test_legacy_algs_cover_categories():
     assert set(LEGACY_SSH_ALGS) == {
         "encryption_algs",
         "kex_algs",
         "mac_algs",
         "server_host_key_algs",
+        "signature_algs",   # 用戶端金鑰簽章 ssh-rsa（老 sshd 相容，phpIPAM 遷移用）
     }
+
+
+def test_legacy_algs_include_client_ssh_rsa_signature():
+    # 很舊的 sshd 只收 ssh-rsa（SHA-1）用戶端簽章 → 必須附加
+    assert "ssh-rsa" in LEGACY_SSH_ALGS["signature_algs"]
 
 
 def test_legacy_algs_are_additive():

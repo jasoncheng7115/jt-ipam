@@ -1271,6 +1271,6 @@ async def test_notification_channel(
             "jt-ipam 測試通知 / test notification",
             "這是一則來自 jt-ipam 的測試通知；若你收到，代表此管道設定正確。",
         )
-    except Exception as exc:  # noqa: BLE001 — 回報可讀錯誤給前端
+    except Exception as exc:
         raise HTTPException(502, detail=f"send failed: {str(exc)[:300]}") from exc
     return {"ok": True}

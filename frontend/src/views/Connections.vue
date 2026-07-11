@@ -4,11 +4,11 @@ import { computed, h, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NSpace, NInput, NButton, NIcon, NDataTable, NButtonGroup, NDropdown,
+  NCard, NSpace, NInput, NButton, NIcon, NDataTable,
   NSelect, NTooltip, useMessage, type DataTableColumns,
 } from "naive-ui";
 import { listConnectionTargets } from "@/api/rdp";
-import { TerminalIcon, DisplayIcon, VncIcon, NoVncIcon, ChevronDownIcon, OpenNewWindowIcon, RefreshIcon, SearchIcon } from "@/icons";
+import { TerminalIcon, DisplayIcon, VncIcon, NoVncIcon, OpenNewWindowIcon, RefreshIcon, SearchIcon } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTablePagination } from "@/composables/useTablePagination";

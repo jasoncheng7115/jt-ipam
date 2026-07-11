@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NSpace, NSwitch, NInput, NInputNumber, NSelect, NButton, NIcon,
-  NFormItem, NAlert, NTag, NGrid, NGridItem, NCheckbox, useMessage,
+  NFormItem, NAlert, NCheckbox, useMessage,
 } from "naive-ui";
 import { SettingsIcon, SaveIcon } from "@/icons";
 import {
@@ -37,9 +37,6 @@ const tlsOptions = [
   { label: t("notify_ch.tls_none"), value: "none" },
 ];
 
-const otherChannels = computed(() =>
-  (cfg.value?.channels ?? []).filter((c) => c.key !== "email"),
-);
 
 async function load() {
   loading.value = true;
@@ -131,14 +128,6 @@ async function testChannel(ch: string) {
   } finally {
     testingCh.value = "";
   }
-}
-
-function channelLabel(key: string): string {
-  const m: Record<string, string> = {
-    telegram: "Telegram", slack: "Slack", teams: "Microsoft Teams",
-    nextcloud: "Nextcloud Talk", zulip: "Zulip",
-  };
-  return m[key] ?? key;
 }
 
 // ── 通知矩陣 ──

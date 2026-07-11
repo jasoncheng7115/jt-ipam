@@ -75,7 +75,7 @@ async def upsert_scheduled_task(
         row.started_at = now
         row.finished_at = now
         await session.commit()
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("upsert_scheduled_task failed for %s / %s", kind, target_label)
         await session.rollback()
 

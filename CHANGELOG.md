@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.103] — 2026-07-11
+
+### Changed
+- Internal lint/test cleanup: ruff import ordering, removed dead code / unused imports (eslint), and updated a unit test for the added ssh-rsa client signature. No functional change. Full local suite green — 441 backend tests, vue-tsc, ruff, eslint, migrations up to 0096.
+
+
 ## [0.5.102] — 2026-07-10
 
 ### Changed
