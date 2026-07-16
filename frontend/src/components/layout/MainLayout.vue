@@ -243,6 +243,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           { label: () => t("nav.certificates"),  key: "certificates",   icon: renderIcon(LockIcon) },
           { label: () => t("nav.webhooks"),      key: "webhooks",       icon: renderIcon(WebhooksIcon) },
           { label: () => t("nav.migration"),     key: "migration",      icon: renderIcon(MigrationIcon) },
+          { label: () => t("nav.system_transfer"), key: "system_transfer", icon: renderIcon(ExportIcon) },
           { label: () => t("nav.import"),        key: "import",         icon: renderIcon(ImportIcon) },
           { label: () => t("nav.plugins"),       key: "plugins",        icon: renderIcon(PluginsIcon) },
           { label: () => "LLM / AI",             key: "llm_settings",   icon: renderIcon(SettingsIcon) },

@@ -113,6 +113,7 @@ const routes: RouteRecordRaw[] = [
       { path: "vpn", name: "vpn-tunnels", component: () => import("@/views/Physical.vue"), props: { mode: "vpn" } },
       { path: "physical", redirect: { name: "cabling" } },
       { path: "migration", name: "migration", component: () => import("@/views/Migration.vue"), meta: { admin: true } },
+      { path: "system-transfer", name: "system_transfer", component: () => import("@/views/SystemTransfer.vue"), meta: { admin: true } },
       { path: "import", name: "import", component: () => import("@/views/ImportExternal.vue"), meta: { admin: true } },
     ],
   },

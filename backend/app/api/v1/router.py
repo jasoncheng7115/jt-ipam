@@ -71,6 +71,9 @@ from app.api.v1.endpoints import (
 from app.api.v1.endpoints import (
     system_settings as system_settings_ep,
 )
+from app.api.v1.endpoints import (
+    system_transfer as system_transfer_ep,
+)
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(auth.router)
@@ -126,6 +129,7 @@ api_v1_router.include_router(bg_tasks_endpoint.router)
 api_v1_router.include_router(adguard.router)
 api_v1_router.include_router(system_settings_ep.router)
 api_v1_router.include_router(system_settings_ep.public_router)
+api_v1_router.include_router(system_transfer_ep.router)
 api_v1_router.include_router(graylog_dsv_ep.admin_router)
 api_v1_router.include_router(graylog_dsv_ep.public_router)
 api_v1_router.include_router(ldap_admin_ep.admin_router)

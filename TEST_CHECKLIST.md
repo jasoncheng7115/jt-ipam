@@ -82,6 +82,30 @@ Release flow: run the checklist → all green → bump version → deploy
 - [ ] Against a deployed instance (with `E2E_BASE_URL` + `E2E_ADMIN_PASS`) run
   `pnpm test:e2e` main paths (login / sections / audit)
 
+## 5d. System export / import (cross-instance migration) — **run in full every release that touches it**
+
+- [ ] **Unit (no DB)**: `pytest tests/test_system_transfer.py -q` — crypto seal/open
+  (wrong passphrase → readable error, not 500), secrets round-trip for every
+  representation (column / central / envelope / settings-blob), `registry.validate_registry()`
+  returns empty (every table categorised), backward-compat coercion drops unknown columns
+- [ ] **DB-backed** (`JTIPAM_TEST_DATABASE_URL` at head): export→import round-trip
+  preserves UUIDs + FKs, secrets re-decrypt under the target key, `merge` is idempotent
+  (2nd run all `updated`, no dup rows), `replace` wipes first, `dry_run` writes nothing
+- [ ] **Backward compat**: an older/reduced export file (missing newer tables/columns)
+  imports without error; the target schema_version mismatch shows a warning, not a failure
+- [ ] **CLI**: `python -m app.cli.system_transfer export --scope … --out f.json --passphrase-stdin`
+  then `import --file f.json --dry-run` then real `import`; counts correct, wrong
+  passphrase exits non-zero
+- [ ] **UI (admin → System Export / Import)**: pick scope + passphrase → generate →
+  download; upload on a second instance → analyze (shows source version + counts +
+  warnings) → dry-run preview → apply (merge and replace); non-admin gets 403 / no menu
+- [ ] **End-to-end migration**: export full default scope from instance A, import into a
+  clean instance B, then log in on B and confirm subnets / IP / devices / integrations
+  are present, an integration actually connects (secret re-encrypted), SSH credential
+  works, and TOTP still logs in
+- [ ] **Security**: download / analyze / apply all require admin + validate task ownership;
+  spool files are 0600 in a 0700 dir; no plaintext secret or passphrase in logs/responses
+
 ## 6. Manual page review (browser, after deploy)
 
 - [ ] Login / logout / theme switch (light / dark / auto)
