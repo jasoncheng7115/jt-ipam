@@ -539,7 +539,7 @@
     "kpi_sections": "Sections",
     "kpi_subnets": "Subnets",
     "kpi_ips_allocated": "IPs allocated",
-    "kpi_total_capacity": "Total capacity",
+    "kpi_ipv4_capacity": "IPv4 capacity",
     "kpi_audit_24h": "Audit (24h)",
     "card_ip_usage": "IP usage",
     "card_indicator": "IP indicator (real-time status)",
