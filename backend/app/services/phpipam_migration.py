@@ -821,6 +821,13 @@ _DEVICE_TYPE_MAP = {
     "wifi": "ap",
     "ipmi": "ipmi",
     "bmc": "ipmi",
+    "patch panel": "patch_panel",
+    "patchpanel": "patch_panel",
+    "patch-panel": "patch_panel",
+    "pdu": "pdu",
+    "power distribution unit": "pdu",
+    "ups": "ups",
+    "power": "ups",
 }
 
 

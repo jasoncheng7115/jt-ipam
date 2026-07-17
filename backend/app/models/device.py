@@ -48,7 +48,8 @@ class Device(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint(
-            "type IN ('server','switch','router','firewall','ap','storage','ipmi','other')",
+            "type IN ('server','switch','router','firewall','ap','storage','ipmi',"
+            "'patch_panel','pdu','ups','other')",
             name="device_type_valid",
         ),
     )

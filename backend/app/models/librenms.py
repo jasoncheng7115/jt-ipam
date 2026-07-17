@@ -86,6 +86,8 @@ class LibreNMSDevice(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     primary_ip: Mapped[str | None] = mapped_column(INET)
     hardware: Mapped[str | None] = mapped_column(Text)
     os: Mapped[str | None] = mapped_column(Text)
+    # LibreNMS 原生 device type（network/server/firewall/power/wireless/storage/…）
+    type: Mapped[str | None] = mapped_column(Text)
     version: Mapped[str | None] = mapped_column(Text)
     serial: Mapped[str | None] = mapped_column(Text)
     sysObjectID: Mapped[str | None] = mapped_column(Text)

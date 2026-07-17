@@ -1,6 +1,7 @@
 /** 機櫃 device type → 顏色（RackDiagram U 位塊 + 共用圖例共用同一套）。 */
 export const RACK_DEVICE_TYPES = [
   "router", "switch", "firewall", "server", "storage", "ap", "ipmi",
+  "patch_panel", "pdu", "ups",
 ] as const;
 
 export function rackTypeColor(type: string): string {
@@ -19,6 +20,12 @@ export function rackTypeColor(type: string): string {
       return "rgba(245, 158, 11, 0.85)"; // amber
     case "ipmi":
       return "rgba(236, 72, 153, 0.6)";  // pink
+    case "patch_panel":
+      return "rgba(20, 184, 166, 0.75)"; // teal
+    case "pdu":
+      return "rgba(217, 119, 6, 0.8)";   // dark amber
+    case "ups":
+      return "rgba(202, 138, 4, 0.85)";  // yellow-amber
     default:
       return "rgba(107, 114, 128, 0.6)";
   }

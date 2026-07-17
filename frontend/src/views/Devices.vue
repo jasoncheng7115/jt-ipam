@@ -83,8 +83,9 @@ const form = ref<{
   primary_ip_id: null,
 });
 
-const typeOpts = ["server", "switch", "router", "firewall", "ap", "storage", "ipmi", "other"]
-  .map((v) => ({ label: v, value: v }));
+const DEVICE_TYPES = ["server", "switch", "router", "firewall", "ap", "storage", "ipmi",
+  "patch_panel", "pdu", "ups", "other"];
+const typeOpts = DEVICE_TYPES.map((v) => ({ label: t(`devices.type_${v}`), value: v }));
 const rackFaceOpts = computed(() => [
   { label: t("devices.rack_face_front"), value: "front" },
   { label: t("devices.rack_face_rear"), value: "rear" },
@@ -347,7 +348,7 @@ const allCols = computed<DataTableColumns<Device>>(() => [
   },
   {
     title: t("devices.type"), key: "type",
-    render: (r) => h(NTag, { size: "small", type: "info" }, () => r.type),
+    render: (r) => h(NTag, { size: "small", type: "info" }, () => t(`devices.type_${r.type}`)),
     sorter: (a, b) => a.type.localeCompare(b.type),
   },
   {

@@ -430,6 +430,9 @@ const cells = computed<Cell[]>(() => {
         <span class="legend-item" :style="{ background: colorFor('storage') }">storage</span>
         <span class="legend-item" :style="{ background: colorFor('ap') }">ap</span>
         <span class="legend-item" :style="{ background: colorFor('ipmi') }">ipmi</span>
+        <span class="legend-item" :style="{ background: colorFor('patch_panel') }">patch panel</span>
+        <span class="legend-item" :style="{ background: colorFor('pdu') }">pdu</span>
+        <span class="legend-item" :style="{ background: colorFor('ups') }">ups</span>
         <span class="legend-note">{{ t("racks.rear_legend") }}</span>
       </div>
     </n-space>

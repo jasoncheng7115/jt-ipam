@@ -40,8 +40,9 @@ const form = ref<{
   rack_side: "full", customer_id: null, primary_ip_id: null,
 });
 
-const typeOpts = ["server", "switch", "router", "firewall", "ap", "storage", "ipmi", "other"]
-  .map((v) => ({ label: v, value: v }));
+const typeOpts = ["server", "switch", "router", "firewall", "ap", "storage", "ipmi",
+  "patch_panel", "pdu", "ups", "other"]
+  .map((v) => ({ label: t(`devices.type_${v}`), value: v }));
 const rackFaceOpts = computed(() => [
   { label: t("devices.rack_face_front"), value: "front" },
   { label: t("devices.rack_face_rear"), value: "rear" },

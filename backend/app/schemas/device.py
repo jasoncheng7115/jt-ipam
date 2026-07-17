@@ -10,7 +10,8 @@ from pydantic import Field, field_validator
 
 from app.schemas.base import StrictModel
 
-_VALID_TYPES = {"server", "switch", "router", "firewall", "ap", "storage", "ipmi", "other"}
+_VALID_TYPES = {"server", "switch", "router", "firewall", "ap", "storage", "ipmi",
+                "patch_panel", "pdu", "ups", "other"}
 
 
 class DeviceBase(StrictModel):
