@@ -201,6 +201,7 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
       </n-alert>
     </n-card>
 
+    <div class="st-cols">
     <!-- ═══════════ 匯出 ═══════════ -->
     <n-card>
       <template #header>
@@ -322,11 +323,14 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
         </n-alert>
       </template>
     </n-card>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.st-wrap { display: flex; flex-direction: column; gap: 16px; max-width: 860px; }
+.st-wrap { display: flex; flex-direction: column; gap: 16px; }
+/* 匯出 / 匯入 並排；寬螢幕兩欄用滿版面，窄螢幕自動堆疊 */
+.st-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 16px; align-items: start; }
 .st-group { margin-bottom: 18px; }
 .st-label { font-weight: 600; margin-bottom: 8px; }
 .st-hint { font-size: 12px; opacity: 0.65; margin-top: 6px; }
