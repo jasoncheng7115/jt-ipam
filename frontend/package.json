@@ -24,7 +24,7 @@
     "@vueuse/core": "^11.2.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
-    "axios": "^1.7.9",
+    "axios": "^1.18.0",
     "cytoscape": "^3.30.4",
     "cytoscape-cose-bilkent": "^4.1.0",
     "naive-ui": "^2.40.1",
