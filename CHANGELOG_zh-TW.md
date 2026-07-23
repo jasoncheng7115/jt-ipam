@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.108] — 2026-07-22
+
+### 修正
+- 繁中：掃描代理安裝說明文案改用全形標點（逗號／分號／括號），符合專案的中文標點慣例。
+
+
 ## [0.5.107] — 2026-07-22
 
 ### 修正

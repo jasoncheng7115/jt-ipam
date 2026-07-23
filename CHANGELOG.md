@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.108] — 2026-07-22
+
+### Fixed
+- zh-TW: use full-width punctuation in the scan-agent install-help strings (commas / semicolon / parentheses), per the project's Chinese punctuation convention.
+
+
 ## [0.5.107] — 2026-07-22
 
 ### Fixed
