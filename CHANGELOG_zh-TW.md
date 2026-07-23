@@ -4,41 +4,65 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.107] — 2026-07-22
+
+### 修正
+- **雙因素驗證（TOTP）狀態現在會顯示在「安全」頁** —— 啟用 TOTP 後頁面一直沒顯示已啟用：`/me` 沒有回傳狀態、兩顆按鈕又永遠都在。`/me` 現在會回 `totp_enabled`，安全頁顯示目前狀態（已啟用／未啟用）並只出現對應的啟用／停用按鈕，啟用或停用後透過 `/me` 即時更新。並新增瀏覽器 e2e 測試涵蓋「啟用 → 重載 → 停用」完整流程。
+
+
+## [0.5.106] — 2026-07-20
+
+### 修正
+- **儀表板 IPv6／IPv4 容量 KPI 卡顯示 i18n 原始鍵** —— IPv6 網段卡（與改名後的 IPv4 容量卡）用到的鍵在語系檔裡不存在，所以直接印出鍵名而非文字。已在中英兩語系補上對應標籤。
+
+
+## [0.5.105] — 2026-07-17
+
+### 新增
+- **裝置類型新增：配線架、PDU、UPS**（issue #21）。LibreNMS 同步現在會抓取原生裝置類型，把 `power` 對應成 UPS／PDU（依廠商關鍵字再細分）、`wireless` 對應成 AP；配線架是被動設備，維持手動建立。裝置類型標籤在全站（清單、編輯視窗、機櫃圖例、儀表板）都已在地化。Migration 0097。
+
+
+## [0.5.104] — 2026-07-16
+
+### 新增
+- **系統匯出／匯入（跨機搬移）** —— 新增管理頁與 CLI（`app.cli.system_transfer`），可把整台 jt-ipam 透過一份密碼保護（scrypt + AES-256-GCM）、版本化的匯出檔搬到另一台。匯入會保留 UUID，外鍵與逐筆機密的 AAD 都自動成立；機密在匯出時解密、匯入時以目標機金鑰重新加密。支援合併與取代兩種模式並提供試跑預覽，且可向下相容舊版匯出檔。
+
+
 ## [0.5.103] — 2026-07-11
 
 ### 變更
-- 內部 lint／測試清理:ruff import 排序、移除無用程式碼／匯入（eslint），並更新一個單元測試（新增的 ssh-rsa 用戶端簽章）。無功能變動。本機完整測試全綠 —— 後端 441 測試、vue-tsc、ruff、eslint、migration 至 0096。
+- 內部 lint／測試清理：ruff import 排序、移除無用程式碼／匯入（eslint），並更新一個單元測試（新增的 ssh-rsa 用戶端簽章）。無功能變動。本機完整測試全綠 —— 後端 441 測試、vue-tsc、ruff、eslint、migration 至 0096。
 
 
 ## [0.5.102] — 2026-07-10
 
 ### 變更
-- **儀表板容量:拆開 IPv4／IPv6** —— 加總 IPv6 位址數會得到天文級、沒意義的「總容量」。KPI 現在顯示 **IPv4 可用**（真實、可規劃的數字,加千分位）,並在有 IPv6 子網路時另出一張 **IPv6** 卡顯示網段數（位址空間極大、不加總）。用量比也只對 IPv4 算（IPv6 永遠用不完）。
+- **儀表板容量：拆開 IPv4／IPv6** —— 加總 IPv6 位址數會得到天文級、沒意義的「總容量」。KPI 現在顯示 **IPv4 可用**（真實、可規劃的數字，加千分位），並在有 IPv6 子網路時另出一張 **IPv6** 卡顯示網段數（位址空間極大、不加總）。用量比也只對 IPv4 算（IPv6 永遠用不完）。
 
 
 ## [0.5.101] — 2026-07-10
 
 ### 變更
-- 儀表板:「總容量」KPI 改名為 **「IP 總容量」**,明確它是 IP 位址的總容量。
+- 儀表板：「總容量」KPI 改名為 **「IP 總容量」**，明確它是 IP 位址的總容量。
 
 
 ## [0.5.100] — 2026-07-09
 
 ### 修正
-- **時間顯示成 UTC 而非本地時間** —— 作業表格（排入／完成時間）、子網路詳情與裝置詳情的最後上線欄、以及異常偵測明細,原本只把 ISO 的 `T` 去掉、沒轉時區,所以顯示 UTC。改用全站共用的本地時間格式（跟隨觀看者瀏覽器時區）,與其他頁面一致。
+- **時間顯示成 UTC 而非本地時間** —— 作業表格（排入／完成時間）、子網路詳情與裝置詳情的最後上線欄、以及異常偵測明細，原本只把 ISO 的 `T` 去掉、沒轉時區，所以顯示 UTC。改用全站共用的本地時間格式（跟隨觀看者瀏覽器時區），與其他頁面一致。
 
 
 ## [0.5.99] — 2026-07-09
 
 ### 修正
-- **部分說明文字在正式版顯示空白** —— vue-i18n 把 `@`（連結訊息）、`{`/`}`（內插）、`|`（複數）當特殊語法,而有幾段訊息含字面的 `@`（`root@phpipam-host`、`帳號@IP`、`@BotFather`）、`{...}`（JSON 範例）或 `|`（shell pipe）。開發模式只是警告,但正式 build 會丟編譯錯誤、把周邊畫面一起弄空白 —— 最明顯是 phpIPAM 遷移的「操作流程」教學,還有 SSH/RDP/VNC 憑證名稱提示、Telegram／通用 Webhook 通知說明。已把這些字面字元轉義,恢復正常顯示。
+- **部分說明文字在正式版顯示空白** —— vue-i18n 把 `@`（連結訊息）、`{`/`}`（內插）、`|`（複數）當特殊語法，而有幾段訊息含字面的 `@`（`root@phpipam-host`、`帳號@IP`、`@BotFather`）、`{...}`（JSON 範例）或 `|`（shell pipe）。開發模式只是警告，但正式 build 會丟編譯錯誤、把周邊畫面一起弄空白 —— 最明顯是 phpIPAM 遷移的「操作流程」教學，還有 SSH/RDP/VNC 憑證名稱提示、Telegram／通用 Webhook 通知說明。已把這些字面字元轉義，恢復正常顯示。
 
 
 ## [0.5.98] — 2026-07-09
 
 ### 修正
-- **phpIPAM 遷移／SSH 通道 —— 相容老舊主機 + 更清楚的認證錯誤** —— 通道現在也提供 `ssh-rsa`（SHA-1）用戶端簽章,讓對端非常舊的 sshd 也接受合法的 RSA 金鑰（否則 asyncssh 只送 rsa-sha2）。「認證被拒」訊息改為明列要檢查項目（authorized_keys、PermitRootLogin、金鑰權限、私鑰與公鑰是否成對）。
-- **`device_ports.name` 由 64 放寬到 255** —— 真實長介面名稱（例:Windows NDIS 過濾介面描述 71 字）會撐爆 VARCHAR(64),讓 LibreNMS/Proxmox 連接埠同步 StringDataRightTruncation 中斷。同步端也加防禦性截斷（migration 0096）。
+- **phpIPAM 遷移／SSH 通道 —— 相容老舊主機 + 更清楚的認證錯誤** —— 通道現在也提供 `ssh-rsa`（SHA-1）用戶端簽章，讓對端非常舊的 sshd 也接受合法的 RSA 金鑰（否則 asyncssh 只送 rsa-sha2）。「認證被拒」訊息改為明列要檢查項目（authorized_keys、PermitRootLogin、金鑰權限、私鑰與公鑰是否成對）。
+- **`device_ports.name` 由 64 放寬到 255** —— 真實長介面名稱（例：Windows NDIS 過濾介面描述 71 字）會撐爆 VARCHAR(64)，讓 LibreNMS/Proxmox 連接埠同步 StringDataRightTruncation 中斷。同步端也加防禦性截斷（migration 0096）。
 
 ### 變更
 - 遷移頁一個遮蔽 i18n `t` 的區域變數改名。
@@ -47,24 +71,24 @@
 ## [0.5.97] — 2026-07-07
 
 ### 修正
-- **作業表格計數審查補完所有同步類型** —— Wazuh 同步現在計數正確（`new` → 新增、`fetched` → 總數;原本只抓到 `updated`），明細彈窗也為 DNS／pfSense／Wazuh／Proxmox 同步顯示可讀摘要,不再是籠統一行。所有作業類型（LibreNMS／OPNsense／pfSense／DNS／Wazuh／Proxmox／AdGuard／phpIPAM）現在都顯示實際數字。
-- 小修:作業頁「進行中 (0)」分頁的計數前補一個半形空格。
+- **作業表格計數審查補完所有同步類型** —— Wazuh 同步現在計數正確（`new` → 新增、`fetched` → 總數；原本只抓到 `updated`），明細彈窗也為 DNS／pfSense／Wazuh／Proxmox 同步顯示可讀摘要，不再是籠統一行。所有作業類型（LibreNMS／OPNsense／pfSense／DNS／Wazuh／Proxmox／AdGuard／phpIPAM）現在都顯示實際數字。
+- 小修：作業頁「進行中 (0)」分頁的計數前補一個半形空格。
 
 
 ## [0.5.96] — 2026-07-07
 
 ### 修正
-- **作業表格對 DNS／pfSense／OPNsense 同步顯示「0」** —— 接續 LibreNMS 那個修正:DNS 同步的 summary（`pulled_zones/pulled_records/hostname_obs`）、pfSense 心跳（`arp/rules/aliases/nat`）、OPNsense 心跳（`mappings`）用的 key 計數彙總不認得,所以即使有撈到資料仍顯示 0。現在都對應到了,並加上退路（總數 = 新增 + 更新），讓任何有資料的同步都顯示有意義的數字。同步本身已驗證確實有撈資料（DNS 7 zones／119 records、pfSense 6 ARP／8 rules、OPNsense 9 筆別名對應）。
+- **作業表格對 DNS／pfSense／OPNsense 同步顯示「0」** —— 接續 LibreNMS 那個修正：DNS 同步的 summary（`pulled_zones/pulled_records/hostname_obs`）、pfSense 心跳（`arp/rules/aliases/nat`）、OPNsense 心跳（`mappings`）用的 key 計數彙總不認得，所以即使有撈到資料仍顯示 0。現在都對應到了，並加上退路（總數 = 新增 + 更新），讓任何有資料的同步都顯示有意義的數字。同步本身已驗證確實有撈資料（DNS 7 zones／119 records、pfSense 6 ARP／8 rules、OPNsense 9 筆別名對應）。
 
 
 ## [0.5.95] — 2026-07-07
 
 ### 新增
-- **`jt-ipam.sh upgrade --force`** —— 當工作目錄對已追蹤檔案有本機修改（例如被手動改過或前次升級只更新一半的 `scripts/jt-ipam.sh`）時,升級原本會直接中止（"Your local changes would be overwritten by merge"）。現在會偵測到,並在互動模式詢問、或以 `--force` 放棄這些本機修改後繼續。不會動到未追蹤檔案與 repo 外的設定。
+- **`jt-ipam.sh upgrade --force`** —— 當工作目錄對已追蹤檔案有本機修改（例如被手動改過或前次升級只更新一半的 `scripts/jt-ipam.sh`）時，升級原本會直接中止（"Your local changes would be overwritten by merge"）。現在會偵測到，並在互動模式詢問、或以 `--force` 放棄這些本機修改後繼續。不會動到未追蹤檔案與 repo 外的設定。
 
 ### 修正
-- **排程 Proxmox 同步在作業表格顯示叢集 UUID** —— 目標欄原本印出原始 cluster_id UUID,改為顯示叢集名稱（無則退回節點 URL）。
-- **UCS DNS 帳密為空時的含糊錯誤** —— UCS DNS 伺服器若存成空帳號/密碼,原本會回 UCS 那句難懂的「basic auth credentials are malformed」400;jt-ipam 現在改回可行動訊息,提示你重新輸入 UCS 帳號密碼。
+- **排程 Proxmox 同步在作業表格顯示叢集 UUID** —— 目標欄原本印出原始 cluster_id UUID，改為顯示叢集名稱（無則退回節點 URL）。
+- **UCS DNS 帳密為空時的含糊錯誤** —— UCS DNS 伺服器若存成空帳號/密碼，原本會回 UCS 那句難懂的「basic auth credentials are malformed」400;jt-ipam 現在改回可行動訊息，提示你重新輸入 UCS 帳號密碼。
 
 
 ## [0.5.94] — 2026-07-07
@@ -76,56 +100,56 @@
 ## [0.5.93] — 2026-07-06
 
 ### 修正
-- **LibreNMS ARP 同步打到已不存在的逐裝置路由** —— jt-ipam 對每台裝置呼叫 `/api/v0/devices/{id}/ip/arp/all`,此路由在新版 LibreNMS 已不存在,每輪 5 分鐘同步對「每一台」裝置都回 404。結果 ARP 存活證據一筆都同步不到,而且這串 404 會讓 LibreNMS 主機上的 IDS（如 Wazuh）把 jt-ipam 的 IP 判為掃描來源（web-scan／recon 告警）。改用單一全域端點 `/api/v0/resources/ip/arp/all`（一次請求取代 N 次）+ 同一輪 (ip, mac, device) 去重。ARP 存活現在正確同步,誤報告警也停止。
+- **LibreNMS ARP 同步打到已不存在的逐裝置路由** —— jt-ipam 對每台裝置呼叫 `/api/v0/devices/{id}/ip/arp/all`，此路由在新版 LibreNMS 已不存在，每輪 5 分鐘同步對「每一台」裝置都回 404。結果 ARP 存活證據一筆都同步不到，而且這串 404 會讓 LibreNMS 主機上的 IDS（如 Wazuh）把 jt-ipam 的 IP 判為掃描來源（web-scan／recon 告警）。改用單一全域端點 `/api/v0/resources/ip/arp/all`（一次請求取代 N 次）+ 同一輪 (ip, mac, device) 去重。ARP 存活現在正確同步，誤報告警也停止。
 
 
 ## [0.5.92] — 2026-07-03
 
 ### 修正
-- **遠端主控台不再因閒置／分頁切背景而斷線** —— SSH／RDP／VNC 主控台原本閒置約 60 秒就斷,因為存活判定靠 JS 計時器 heartbeat,而瀏覽器會在背景分頁節流計時器。改為只要 WebSocket 還活著就保持連線（由傳輸層 ping/pong 維持,背景分頁也有效）;只有真正斷線或使用者主動中斷才結束。
-- **重新連線沿用已存帳密** —— 勾「保存帳密」連線後中斷,在同一分頁按「重新連線」原本又要求輸入帳密（只有整頁重新整理才撿得到已存憑證）。主控台現在把剛存的憑證記到本地,重新連線直接沿用。SSH／RDP／VNC／PVE 皆適用。
+- **遠端主控台不再因閒置／分頁切背景而斷線** —— SSH／RDP／VNC 主控台原本閒置約 60 秒就斷，因為存活判定靠 JS 計時器 heartbeat，而瀏覽器會在背景分頁節流計時器。改為只要 WebSocket 還活著就保持連線（由傳輸層 ping/pong 維持，背景分頁也有效）；只有真正斷線或使用者主動中斷才結束。
+- **重新連線沿用已存帳密** —— 勾「保存帳密」連線後中斷，在同一分頁按「重新連線」原本又要求輸入帳密（只有整頁重新整理才撿得到已存憑證）。主控台現在把剛存的憑證記到本地，重新連線直接沿用。SSH／RDP／VNC／PVE 皆適用。
 
 
 ## [0.5.91] — 2026-07-03
 
 ### 安全
-- **Graylog DSV 公開存取權杖改常數時間比對** —— token 守門的查詢端點（`/api/v1/lookup/...`,也可經明文 :8088 抓取）原本用一般 `!=` 比對 token,屬 timing side-channel。改用 `hmac.compare_digest`,並以 `surrogatepass` 編碼,讓惡意（非 UTF-8）token 安全被拒而非丟 500。內部資安檢視發現並修正。
+- **Graylog DSV 公開存取權杖改常數時間比對** —— token 守門的查詢端點（`/api/v1/lookup/...`，也可經明文 :8088 抓取）原本用一般 `!=` 比對 token，屬 timing side-channel。改用 `hmac.compare_digest`，並以 `surrogatepass` 編碼，讓惡意（非 UTF-8）token 安全被拒而非丟 500。內部資安檢視發現並修正。
 
 
 ## [0.5.90] — 2026-07-03
 
 ### 修正
-- **連線管理狀態燈（重疊子網路）** —— 同一 IP 存在於多個重疊子網路（同一台實體機被拆成多筆）時,啟用連線的那筆可能顯示離線,因為掃描／LibreNMS 每個 IP 只 stamp 一筆。連線頁現在會借用「同一 IP、使用者可見範圍內其它記錄」的最新上線時間,讓燈反映實際存活（RBAC 安全:只借用使用者看得到的記錄）。
+- **連線管理狀態燈（重疊子網路）** —— 同一 IP 存在於多個重疊子網路（同一台實體機被拆成多筆）時，啟用連線的那筆可能顯示離線，因為掃描／LibreNMS 每個 IP 只 stamp 一筆。連線頁現在會借用「同一 IP、使用者可見範圍內其它記錄」的最新上線時間，讓燈反映實際存活（RBAC 安全：只借用使用者看得到的記錄）。
 
 
 ## [0.5.89] — 2026-07-03
 
 ### 新增
-- **連線管理 —— MAC 與 MAC 製造商欄** —— 兩欄預設不顯示,可在欄位選擇開啟;製造商由 IEEE OUI 表查出。
+- **連線管理 —— MAC 與 MAC 製造商欄** —— 兩欄預設不顯示，可在欄位選擇開啟；製造商由 IEEE OUI 表查出。
 
 ### 修正
-- **上線狀態彈出時間改本地時區** —— IP 狀態燈彈出的 scanner／LibreNMS／DNS 最後上線時間原本顯示 UTC,現在跟隨瀏覽器本地時區（與全站一致）。
+- **上線狀態彈出時間改本地時區** —— IP 狀態燈彈出的 scanner／LibreNMS／DNS 最後上線時間原本顯示 UTC，現在跟隨瀏覽器本地時區（與全站一致）。
 
 
 ## [0.5.88] — 2026-07-03
 
 ### 新增
-- **作業表格 —— 觸發方式欄（排程／手動）** —— 排程 timer 現在會為每個整合寫一列滾動心跳（每整合一列、每輪 upsert，不灌爆表格），標記為**排程**,讓排程同步在作業表格看得到、並與**手動**執行區分。先前 timer 直接寫各整合表、不建作業紀錄,導致排程明明有跑、表格卻像凍住。
+- **作業表格 —— 觸發方式欄（排程／手動）** —— 排程 timer 現在會為每個整合寫一列滾動心跳（每整合一列、每輪 upsert，不灌爆表格），標記為**排程**，讓排程同步在作業表格看得到、並與**手動**執行區分。先前 timer 直接寫各整合表、不建作業紀錄，導致排程明明有跑、表格卻像凍住。
 
 ### 修正
-- **DNS 拉取失敗不再顯示「成功 0」** —— DNS 拉取遇到硬錯誤（如 UCS UDM 回 HTTP 400）時,現在會如實顯示為失敗作業,而非誤導的「成功、筆數 0」。
+- **DNS 拉取失敗不再顯示「成功 0」** —— DNS 拉取遇到硬錯誤（如 UCS UDM 回 HTTP 400）時，現在會如實顯示為失敗作業，而非誤導的「成功、筆數 0」。
 
 
 ## [0.5.87] — 2026-07-03
 
 ### 新增
-- **SSH 主控台 —— 相容老舊裝置** —— 瀏覽器內 SSH 終端機（含 host key 預覽）現在也會協商較舊的演算法（aes-cbc、3des-cbc、diffie-hellman-group14／group1-sha1、ssh-rsa host key、hmac-sha1），連得上只提供這些的老網路裝置（如 D-Link DGS-1510 switch、老防火牆）。連現代裝置仍優先協商強演算法;真正破掉的 arcfour／blowfish／cast／單 DES 一律排除。
+- **SSH 主控台 —— 相容老舊裝置** —— 瀏覽器內 SSH 終端機（含 host key 預覽）現在也會協商較舊的演算法（aes-cbc、3des-cbc、diffie-hellman-group14／group1-sha1、ssh-rsa host key、hmac-sha1），連得上只提供這些的老網路裝置（如 D-Link DGS-1510 switch、老防火牆）。連現代裝置仍優先協商強演算法；真正破掉的 arcfour／blowfish／cast／單 DES 一律排除。
 
 
 ## [0.5.86] — 2026-07-02
 
 ### 變更
-- **BMC 設定教學 —— 補上實測序列主控台重點** —— 內建教學 + README 疑難排解新增:`console=` **只掛 SOL 那一個埠**（掛多個 `ttyS` 核心可能挑錯→有 login 但沒開機訊息;用 `/proc/consoles` 確認）、用 `/proc/tty/driver/serial` 的 `rx` 找 SOL 埠、`systemd.setenv=SYSTEMD_EMOJI=0` 關掉 OS 開機訊息的 emoji、BIOS Terminal Type 設 VT100+（非 VT-UTF8）免 BIOS 畫面 emoji。
+- **BMC 設定教學 —— 補上實測序列主控台重點** —— 內建教學 + README 疑難排解新增：`console=` **只掛 SOL 那一個埠**（掛多個 `ttyS` 核心可能挑錯→有 login 但沒開機訊息；用 `/proc/consoles` 確認）、用 `/proc/tty/driver/serial` 的 `rx` 找 SOL 埠、`systemd.setenv=SYSTEMD_EMOJI=0` 關掉 OS 開機訊息的 emoji、BIOS Terminal Type 設 VT100+（非 VT-UTF8）免 BIOS 畫面 emoji。
 
 
 ## [0.5.85] — 2026-07-02
@@ -873,7 +897,7 @@
 - 主機為 Proxmox VM 客體時，關係圖會畫出它所在的 PVE 節點（及該節點的機櫃/機房）——IP 與裝置詳情頁皆是。
 
 ### 修正
-- **Proxmox 同一叢集內同名 VM 無法匯入（issue #8）。** VM 唯一鍵由 `(叢集, 名稱)` 改為 `(叢集, VMID)`
+- **Proxmox 同一叢集內同名 VM 無法匯入（issue #8）。** VM 唯一鍵由 `(叢集， 名稱)` 改為 `(叢集， VMID)`
   （migration 0085）——Proxmox 允許同名不同 VMID 的 VM，原本會撞 `vm_cluster_name_uq` 而匯入失敗。
 - **AI 對話：還原被當成文字吐出的工具呼叫。** 支援工具呼叫的模型偶發把呼叫寫成文字（而非結構化
   `tool_calls`）→ 改為解析並執行（不再把那段亂碼當答案顯示）；無法還原時顯示中性的重試提示。
@@ -1320,50 +1344,50 @@
 ## [0.4.169] — 2026-06-15
 
 ### 修正
-- **修正 `pdm`(Proxmox Datacenter Manager)profile** 為官方路徑與服務:cert+chain →
+- **修正 `pdm`(Proxmox Datacenter Manager)profile** 為官方路徑與服務：cert+chain →
   `/etc/proxmox-datacenter-manager/auth/api.pem`、key → `…/auth/api.key`(root:www-data 640),
   重載 `systemctl restart proxmox-datacenter-api.service`。(先前的路徑/服務是錯誤推測。)
 - **所有產生的含 sudo 指令都改為會判斷 root。** 抽出共用 `SUDO`(`$([ "$(id -u)" -ne 0 ] && echo sudo)`),
-  套用到:派送代理的 dry-run/正式執行指令與安裝/移除一行式、掃描代理安裝一行式、探測工具 `apt install` 提示。
+  套用到：派送代理的 dry-run/正式執行指令與安裝/移除一行式、掃描代理安裝一行式、探測工具 `apt install` 提示。
   在本來就是 root、且沒有 sudo 的主機上現在可直接執行。
 
 ### 新增
-- 派送代理新增 **`--debug`** 旗標(預設關閉):印出每個執行的指令並顯示 config-test／reload／`zmcertmgr`／
+- 派送代理新增 **`--debug`** 旗標(預設關閉)：印出每個執行的指令並顯示 config-test／reload／`zmcertmgr`／
   下載 的完整輸出 — 方便診斷例如 Zimbra `verifycrt` 失敗(常見原因是憑證鏈缺了根 CA)。
 
 ### 變更
-- 安裝說明第 3 步改成**先帶到「產生設定檔」工具**(快速路徑),手動編輯設定降為次要說明。
+- 安裝說明第 3 步改成**先帶到「產生設定檔」工具**(快速路徑)，手動編輯設定降為次要說明。
 
 ## [0.4.168] — 2026-06-15
 
 ### 修正
-- **重要:0.4.167 的條件式 sudo 一行式指令在 root 下會壞。** `$(…)` 在 root 展開成空字串時,後面的
+- **重要：0.4.167 的條件式 sudo 一行式指令在 root 下會壞。** `$(…)` 在 root 展開成空字串時，後面的
   `VAR=value` 會被當成「指令」而非賦值(`JT_IPAM_URL=…: No such file or directory`)。改用 `env` 當指令字
   (`… | $([ "$(id -u)" -ne 0 ] && echo sudo) env JT_IPAM_URL=… bash`),root / 非 root 都正確。
 - AI 對話標題列的動作鈕改為確實靠右(標題列換行時原本會偏左)。
 
 ### 變更
 - 派送代理的**安裝說明視窗不再重複放完整安裝指令** — 每個代理自己的視窗已顯示帶好 key、自動判斷 sudo 的
-  一行式指令,安裝說明改為指向那裡,只保留支援作業系統一覽。
-- 一行式指令標題由「(root)」改為「(自動判斷 root / sudo)」;「發行版」→「發行版本」。
+  一行式指令，安裝說明改為指向那裡，只保留支援作業系統一覽。
+- 一行式指令標題由「(root)」改為「(自動判斷 root / sudo)」；「發行版」→「發行版本」。
 
 ## [0.4.167] — 2026-06-15
 
 ### 修正
 - 派送代理的安裝／移除一行式指令改成**只有非 root 時才加 `sudo`**(`$([ "$(id -u)" -ne 0 ] && echo sudo)`)。
   在本來就是 root、且沒有 `sudo` 的主機(Proxmox VE／PBS／PDM 與精簡 appliance 很常見)原本 `| sudo … bash`
-  會出 `sudo: command not found`;現在直接以 root 執行。
+  會出 `sudo: command not found`；現在直接以 root 執行。
 
 ## [0.4.166] — 2026-06-15
 
 ### 修正
-- **刪除仍被派送代理選用的憑證會被擋下**(409,並列出使用它的代理名稱),不再讓代理的可取憑證殘留孤兒 UUID。
-  編輯代理視窗對已經是孤兒的項目也改顯示「<id>…（憑證已刪除）」方便移除,不再顯示裸 UUID。
+- **刪除仍被派送代理選用的憑證會被擋下**(409，並列出使用它的代理名稱)，不再讓代理的可取憑證殘留孤兒 UUID。
+  編輯代理視窗對已經是孤兒的項目也改顯示「<id>…（憑證已刪除）」方便移除，不再顯示裸 UUID。
 
 ### 新增
 - 新增派送 profile:**`pdm`**(Proxmox Datacenter Manager)與 **`wazuh-dashboard`**(OpenSearch Dashboards)。
-  Univention UCS 評估後刻意留給手動模式(憑證路徑含 FQDN、且由 UCS 內部 CA 管理,內建固定路徑不適合)。
-- 派送代理清單可**依憑證篩選**(篩出可取某張憑證的代理),與既有的名稱/IP 篩選並列。
+  Univention UCS 評估後刻意留給手動模式(憑證路徑含 FQDN、且由 UCS 內部 CA 管理，內建固定路徑不適合)。
+- 派送代理清單可**依憑證篩選**(篩出可取某張憑證的代理)，與既有的名稱/IP 篩選並列。
 
 ### 變更
 - 派送代理的**「已部署／回報」數字**改為 hover 顯示實際派送了哪些憑證／服務與狀態。
@@ -1374,20 +1398,20 @@
 
 ### 變更 — 表格分頁一致化 + 篩選框對齊
 - 把全站共用的 `useTablePagination`(每頁筆數綁使用者偏好、跨裝置同步)套到所有還沒套的 client 端清單表格：
-  憑證 + 派送代理表格、唯讀「憑證派送現況」頁,以及進階資源、實體(佈線/電力/VPN)、虛擬化、VLAN/VRF、
+  憑證 + 派送代理表格、唯讀「憑證派送現況」頁，以及進階資源、實體(佈線/電力/VPN)、虛擬化、VLAN/VRF、
   NAT、裝置、掃描代理、群組、權限指派、Wazuh、異常偵測、防火牆別名對應、客戶子表與裝置連接埠等一輪掃過。
   server 端分頁的表格(IP 位址、稽核、使用者、作業、IP 異動)與小型固定設定/實例面板維持不分頁。
-- 修正憑證/代理/現況頁的**篩選框**比工具列按鈕矮的問題(工具列按鈕被強制 34px,篩選框改用預設尺寸對齊)。
+- 修正憑證/代理/現況頁的**篩選框**比工具列按鈕矮的問題(工具列按鈕被強制 34px，篩選框改用預設尺寸對齊)。
 
 ## [0.4.164] — 2026-06-15
 
 ### 新增 — 憑證的 AI 對話 / MCP 工具
-- 新增兩個唯讀 MCP 工具,讓 AI 對話(與外部 MCP 客戶端)能回答憑證相關問題:
-  - `list_certificates` — 憑證中繼資料:名稱、網域、目前版本指紋、到期日、剩餘天數、版本數、是否自簽、
-    自動抓取來源;`expiring_within_days` 可只列即將到期的。
-  - `list_cert_distribution` — 派送代理與各站台部署現況(憑證/服務、是否最新或飄移、到期日、代理版本,
+- 新增兩個唯讀 MCP 工具，讓 AI 對話(與外部 MCP 客戶端)能回答憑證相關問題：
+  - `list_certificates` — 憑證中繼資料：名稱、網域、目前版本指紋、到期日、剩餘天數、版本數、是否自簽、
+    自動抓取來源；`expiring_within_days` 可只列即將到期的。
+  - `list_cert_distribution` — 派送代理與各站台部署現況(憑證/服務、是否最新或飄移、到期日、代理版本，
     以及同一把 Key 是否被多台主機共用)。
-- 兩者皆**唯讀、絕不回傳私鑰 / PEM**,並比照憑證派送現況頁歸為全域基礎設施資料(僅管理員或具全域讀取權限者),
+- 兩者皆**唯讀、絕不回傳私鑰 / PEM**，並比照憑證派送現況頁歸為全域基礎設施資料(僅管理員或具全域讀取權限者),
   零權限/部門帳號預設看不到。
 
 ## [0.4.163] — 2026-06-15
@@ -1439,7 +1463,7 @@
 ### 安全
 - 修 Dependabot 警示(GHSA-gv7w-rqvm-qjhr，High)：透過 pnpm override 把 **esbuild 升到 0.28.1**（原 0.25.12
   經 vite 帶入，<0.28.1 有「Deno 模組二進位完整性」漏洞）。屬建置期 dev 相依、且本專案走 Node/vite 不用其
-  Deno 安裝路徑，實際不可觸發;升級後前端建置正常通過。
+  Deno 安裝路徑，實際不可觸發；升級後前端建置正常通過。
 
 ## [0.4.159] — 2026-06-15
 
@@ -1484,14 +1508,14 @@
 ## [0.4.155] — 2026-06-15
 
 ### 修正
-- 派送代理表格:版本欄「可更新」標籤改為**可換行**並加寬欄位,不再溢出到「來源 IP」欄。
-- 名稱與最後回報兩欄都設為彈性,多餘寬度由兩欄平分,名稱欄不再獨自過寬。
+- 派送代理表格：版本欄「可更新」標籤改為**可換行**並加寬欄位，不再溢出到「來源 IP」欄。
+- 名稱與最後回報兩欄都設為彈性，多餘寬度由兩欄平分，名稱欄不再獨自過寬。
 
 ## [0.4.154] — 2026-06-15
 
 ### 變更
-- 派送代理設定檔範本重新分成兩區塊:**快速模式（優先）**與**手動模式**。快速模式的註解直接列出**每個 profile
-  會把 cert / key / chain 寫到哪個路徑與檔名**,並附上對應的 nginx / apache 指令,讓你知道要把服務設定指到哪。
+- 派送代理設定檔範本重新分成兩區塊：**快速模式（優先）**與**手動模式**。快速模式的註解直接列出**每個 profile
+  會把 cert / key / chain 寫到哪個路徑與檔名**，並附上對應的 nginx / apache 指令，讓你知道要把服務設定指到哪。
 
 ## [0.4.153] — 2026-06-14
 
@@ -1510,9 +1534,9 @@
 
 ### 變更 — 派送代理設定改一行一個設定
 - 派送代理設定檔從一行擠一堆（`DEPLOY_1="cert=..; profile=..; fullchain_path=.."`）改成**一行一個設定**的
-  `DEPLOY_<N>_*` 群組,好讀好改:
+  `DEPLOY_<N>_*` 群組，好讀好改：
   - `DEPLOY_1_CERT=`（要派送的憑證）、`DEPLOY_1_FULLCHAIN=`（憑證檔路徑）、`DEPLOY_1_KEY=`（私鑰路徑）、
-    `DEPLOY_1_RELOAD=`（重載指令）;另有 `DEPLOY_1_CHAIN/CRT/COMBINED/TEST` 可選。
+    `DEPLOY_1_RELOAD=`（重載指令）；另有 `DEPLOY_1_CHAIN/CRT/COMBINED/TEST` 可選。
   - 或只設 `DEPLOY_1_CERT=` ＋ `DEPLOY_1_PROFILE=nginx`（內建 profile 用固定路徑）。
 - installer 設定檔範本、安裝說明彈窗範例同步更新。已對 prod 實機驗證新格式 dry-run ＋ 真套用。
 
@@ -1551,40 +1575,40 @@
 ## [0.4.146] — 2026-06-14
 
 ### 變更 — 派送代理改純 bash（移除 Python / PyYAML 相依）
-- 派送代理重寫為**純 bash**(`jt_ipam_cert_agent.sh`),只相依 **curl + coreutils**,不再需要 Python / jq / YAML。
+- 派送代理重寫為**純 bash**(`jt_ipam_cert_agent.sh`)，只相依 **curl + coreutils**，不再需要 Python / jq / YAML。
   設定檔改 `KEY=VALUE`(`/etc/jt-ipam-cert-agent/config`,`DEPLOY_N="cert=..; profile=.."`);profiles / 原子寫入 /
   config-test / reload / 回滾 / `--dry-run` / 自我更新 全部保留。
-- 後端配合純 bash:`GET /cert-agents/check?format=text`(逐行,免解 JSON)、新增
-  `GET /cert-agents/bundle/raw?cert=&part=cert|key|chain|fullchain|combined`(直接回原始 PEM,`curl -o` 寫檔,
-  附 `X-Cert-Fingerprint` header)、`POST /report` 兼收 TSV。下載端點改 `agent.sh`,版本/自我更新比對改 `.sh`。
+- 後端配合純 bash:`GET /cert-agents/check?format=text`(逐行，免解 JSON)、新增
+  `GET /cert-agents/bundle/raw?cert=&part=cert|key|chain|fullchain|combined`(直接回原始 PEM,`curl -o` 寫檔，
+  附 `X-Cert-Fingerprint` header)、`POST /report` 兼收 TSV。下載端點改 `agent.sh`，版本/自我更新比對改 `.sh`。
   installer 不再裝 python3-yaml。
-- 安裝說明彈窗重新排版(編號步驟 + 留白),需求改「純 bash,只需 curl + coreutils」。
+- 安裝說明彈窗重新排版(編號步驟 + 留白)，需求改「純 bash，只需 curl + coreutils」。
 
 ## [0.4.145] — 2026-06-14
 
 ### 修正 / 變更
-- 憑證 / 派送代理表格補上 `:scroll-x`(對齊全站作法):名稱欄不再過寬撐版、操作欄不再被推出畫面右側;
+- 憑證 / 派送代理表格補上 `:scroll-x`(對齊全站作法)：名稱欄不再過寬撐版、操作欄不再被推出畫面右側；
   視窗較窄時改為水平捲動而非裁切。
-- 憑證來源類型選擇器:**被選中的類型整顆填綠底白字**(原本只有細邊框,看不出選了哪個);
+- 憑證來源類型選擇器：**被選中的類型整顆填綠底白字**(原本只有細邊框，看不出選了哪個);
   「不自動（手動上傳）」文字精簡為**「手動上傳」**。
 
 ## [0.4.144] — 2026-06-14
 
 ### 變更
-- 憑證 / 派送代理操作欄按鈕改**靠左對齊**（移除置中）,與全站其它列表頁一致。
+- 憑證 / 派送代理操作欄按鈕改**靠左對齊**（移除置中），與全站其它列表頁一致。
 
 ## [0.4.143] — 2026-06-14
 
 ### 修正 — commit 後序列化的一類 500（流程檢查找出）
-- `updated_at` 有 SQL 端 `onupdate=func.now()`,UPDATE flush 後該欄過期;憑證模組數個端點 commit 後直接
+- `updated_at` 有 SQL 端 `onupdate=func.now()`,UPDATE flush 後該欄過期；憑證模組數個端點 commit 後直接
   `model_validate` ORM 物件 → 同步情境 lazy IO `MissingGreenlet` 500。補上 commit 後 `session.refresh`
   (與其它端點一致):`PATCH /certificates/{id}`、`PATCH /cert-agents/{id}`、`POST /cert-agents/{id}/rotate-key`
   (v0.4.142 已先修 `PUT /certificates/{id}/source`)。
 
 ### 變更 — 自動產生金鑰時直接登入主機安裝公鑰
-- 既然 jt-ipam 已有 SFTP 登入密碼,「自動產生金鑰」現在會**直接用密碼登入主機,把公鑰寫進
-  `~/.ssh/authorized_keys`**(冪等、不重複),免使用者手動貼。安裝成功顯示「已安裝」;沒有密碼或安裝失敗
-  則金鑰仍已產生,退回顯示公鑰供手動貼上並附原因(`POST /certificates/{id}/source/ssh-keypair` 改收來源
+- 既然 jt-ipam 已有 SFTP 登入密碼，「自動產生金鑰」現在會**直接用密碼登入主機，把公鑰寫進
+  `~/.ssh/authorized_keys`**(冪等、不重複)，免使用者手動貼。安裝成功顯示「已安裝」；沒有密碼或安裝失敗
+  則金鑰仍已產生，退回顯示公鑰供手動貼上並附原因(`POST /certificates/{id}/source/ssh-keypair` 改收來源
   設定 + 回 installed/message)。
 
 ## [0.4.142] — 2026-06-14
@@ -1594,13 +1618,13 @@
   `model_validate` 在同步情境觸發 lazy IO → 改 commit 後 `session.refresh(cert)` 再序列化。
 
 ### 新增 — 憑證來源測試連線 + 自動產生 SSH 金鑰
-- 來源設定加**「測試連線」**鈕:以表單目前內容(密碼/私鑰留空＝沿用已存)實際試連 URL / SFTP,
-  回成功訊息或可讀失敗原因,不存檔(`POST /certificates/{id}/source/test`)。
-- SFTP 登入私鑰加**「自動產生金鑰」**鈕:jt-ipam 產生 ed25519 金鑰對、私鑰 AES-GCM 加密儲存(不回明文),
+- 來源設定加**「測試連線」**鈕：以表單目前內容(密碼/私鑰留空＝沿用已存)實際試連 URL / SFTP,
+  回成功訊息或可讀失敗原因，不存檔(`POST /certificates/{id}/source/test`)。
+- SFTP 登入私鑰加**「自動產生金鑰」**鈕：jt-ipam 產生 ed25519 金鑰對、私鑰 AES-GCM 加密儲存(不回明文),
   回**公鑰**供貼到 SFTP 主機 `authorized_keys`(`POST /certificates/{id}/source/ssh-keypair`)。
 
 ### 變更
-- 憑證 / 派送代理操作欄按鈕改 **icon-only + hover tooltip**(與全站列表一致)、欄寬收緊並置中,
+- 憑證 / 派送代理操作欄按鈕改 **icon-only + hover tooltip**(與全站列表一致)、欄寬收緊並置中，
   解決過寬左空、右側溢出、icon 偏左問題。
 
 ## [0.4.141] — 2026-06-14
@@ -1613,23 +1637,23 @@
 ## [0.4.140] — 2026-06-14
 
 ### 變更 — 憑證自動抓取來源設定 UX
-- SFTP 來源設定釐清:**「登入密碼」/「登入私鑰（SSH 金鑰，PEM）」**獨立成「SFTP 登入認證」區塊
-  並移到帳號下方,加說明「用來登入 SFTP 主機,密碼或 SSH 私鑰二擇一(私鑰優先);憑證本身的私鑰是
-  下方 key_path 遠端檔案,與此無關」。遠端檔案路徑(cert_path/key_path/chain_path)另成一區。
-  (後端早已支援 SSH 私鑰登入,只是欄位位置/命名易誤解為憑證私鑰。)
-- 來源類型「不自動」改顯示**「不自動（手動上傳）」**,讓使用者知道仍可手動上傳 / 貼上 / 自簽。
+- SFTP 來源設定釐清：**「登入密碼」/「登入私鑰（SSH 金鑰，PEM）」**獨立成「SFTP 登入認證」區塊
+  並移到帳號下方，加說明「用來登入 SFTP 主機，密碼或 SSH 私鑰二擇一(私鑰優先)；憑證本身的私鑰是
+  下方 key_path 遠端檔案，與此無關」。遠端檔案路徑(cert_path/key_path/chain_path)另成一區。
+  (後端早已支援 SSH 私鑰登入，只是欄位位置/命名易誤解為憑證私鑰。)
+- 來源類型「不自動」改顯示**「不自動（手動上傳）」**，讓使用者知道仍可手動上傳 / 貼上 / 自簽。
 
 ### 變更 — 憑證 / 派送代理表格比照全站
-- 兩張表格欄位**可排序**(autoSort)、加**欄位選擇器**(ColumnPicker,偏好存後端跨裝置同步)。
-- 操作欄按鈕改 **icon + 文字**,欄寬不足時自動收成**只剩 icon**(col-actions 容器查詢,hover 仍有提示)。
+- 兩張表格欄位**可排序**(autoSort)、加**欄位選擇器**(ColumnPicker，偏好存後端跨裝置同步)。
+- 操作欄按鈕改 **icon + 文字**，欄寬不足時自動收成**只剩 icon**(col-actions 容器查詢，hover 仍有提示)。
 
 ## [0.4.139] — 2026-06-14
 
 ### 新增 — 派送代理版本顯示與自我更新
-- 管理頁「派送代理」分頁新增**版本號**(落後 server 時標「可更新」並提示)與**來源 IP** 欄位,
+- 管理頁「派送代理」分頁新增**版本號**(落後 server 時標「可更新」並提示)與**來源 IP** 欄位，
   比照掃描代理。
-- 派送代理新增**自我更新**:`/check` 回傳 server 端 agent.py 的 sha256,代理比對自己不同就下載新版、
-  原子覆蓋並以新版重新執行(下載後驗 sha 才覆蓋,失敗只記錄不中斷部署)。config 設
+- 派送代理新增**自我更新**:`/check` 回傳 server 端 agent.py 的 sha256，代理比對自己不同就下載新版、
+  原子覆蓋並以新版重新執行(下載後驗 sha 才覆蓋，失敗只記錄不中斷部署)。config 設
   `auto_update: false` 可停用。
 - 唯讀「憑證派送現況」頁(`GET /cert-agents/status`)一併回傳 `last_source_ip` /
   `server_agent_version`。
@@ -1637,21 +1661,21 @@
 ## [0.4.138] — 2026-06-13
 
 ### 新增 — 憑證自動抓取來源
-- 憑證除了上傳 / 貼上 / 自簽,現在可設**自動抓取來源**:系統定期(或按「立即抓取」)從來源拉續約後
+- 憑證除了上傳 / 貼上 / 自簽，現在可設**自動抓取來源**：系統定期(或按「立即抓取」)從來源拉續約後
   的 bundle,**只有內容真的變了才存新版** —— fingerprint 與目前版本相同就跳過(不處理)。來源若沒
-  提供私鑰,沿用目前版本的 key(多數續約不換 key)。
-- 來源:**URL**(走 SSRF 防護的 safe_http)與 **SFTP**(asyncssh;host 先過 SSRF 黑名單)。帳密
+  提供私鑰，沿用目前版本的 key(多數續約不換 key)。
+- 來源：**URL**(走 SSRF 防護的 safe_http)與 **SFTP**(asyncssh;host 先過 SSRF 黑名單)。帳密
   (SFTP 密碼 / 私鑰)AES-GCM 加密(`encrypted_secret`)、不回明文。新增 migration `0076`。
-- 端點:`PUT /certificates/{id}/source`、`POST /certificates/{id}/fetch-now`;sync timer 依各憑證
-  間隔自動抓取。前端:每張憑證的來源設定(URL/SFTP)+「立即抓取」,並顯示上次抓取錯誤。
-- CIFS / NFS 暫不做(backend 非 root 無法掛載);請改用預掛路徑或 URL/SFTP。
+- 端點：`PUT /certificates/{id}/source`、`POST /certificates/{id}/fetch-now`;sync timer 依各憑證
+  間隔自動抓取。前端：每張憑證的來源設定(URL/SFTP)+「立即抓取」，並顯示上次抓取錯誤。
+- CIFS / NFS 暫不做(backend 非 root 無法掛載)；請改用預掛路徑或 URL/SFTP。
 
 ## [0.4.137] — 2026-06-13
 
 ### 修正
 - **憑證頁 405 /「伺服器發生錯誤」(憑證 API client 路徑漏 /api/v1)** — `certificates.ts` 的
   API 呼叫(以及 `integrations.ts` 的重疊網段檢查)漏掉共用 axios client 需要的 `/api/v1` 前綴
-  (它的 baseURL 是 `/`),導致請求打到 SPA 路徑(`/certificates`、`/cert-agents`)→ nginx 對
+  (它的 baseURL 是 `/`)，導致請求打到 SPA 路徑(`/certificates`、`/cert-agents`)→ nginx 對
   POST 回 405、對 GET 回 index.html。已全部補上正確前綴。憑證管理頁、派送代理、產自簽、進階現況
   頁都正常了。
 - 補上憑證/代理「儲存」按鈕漏掉的 icon。
@@ -1659,7 +1683,7 @@
 ## [0.4.136] — 2026-06-13
 
 ### 憑證派送 — 體驗
-- 憑證版本上傳新增**貼上 PEM 文字**(憑證 / 私鑰 / 中繼)選項,與上傳檔案二選一(對話框上方切換)。
+- 憑證版本上傳新增**貼上 PEM 文字**(憑證 / 私鑰 / 中繼)選項，與上傳檔案二選一(對話框上方切換)。
 - 進階選單的唯讀憑證頁標籤改與管理頁一致(憑證派送)。
 
 ## [0.4.135] — 2026-06-13
@@ -1668,10 +1692,10 @@
 - **跨發行版 agent 安裝器** — cert-agent 安裝器自動偵測套件管理器(apt / dnf / yum / zypper),
   支援 Debian 11/12/13、Ubuntu 22.04/24.04/26.04、RHEL / Rocky / AlmaLinux / CentOS、Fedora、
   openSUSE/SLES(皆 systemd);PyYAML 依各發行版正確套件名安裝。
-- **新增 profile** — 加入 `pbs`(Proxmox Backup Server:`proxy.pem`/`proxy.key`,重載
+- **新增 profile** — 加入 `pbs`(Proxmox Backup Server:`proxy.pem`/`proxy.key`，重載
   `proxmox-backup-proxy`);`apache` profile 改為重載 `apache2` 或 `httpd`(哪個有用哪個),
   Debian/Ubuntu 與 RHEL/SUSE 都能用。
-- **「安裝說明」按鈕**(派送代理分頁,比照掃描代理):一行式安裝指令、設定檔範例、支援的發行版、
+- **「安裝說明」按鈕**(派送代理分頁，比照掃描代理)：一行式安裝指令、設定檔範例、支援的發行版、
   `--dry-run` 提示。
 - **進階下的唯讀憑證現況** — 非管理員的唯讀檢視者(具萬用讀取)現在可在「進階」看各代理的派送現況
   (最後更新、有效日、到期日、剩餘天數、是否最新/飄移)。新增 `GET /cert-agents/status`
@@ -1688,21 +1712,21 @@
   已在 Debian 12 容器端到端驗證。
 
 ### 新增 — 憑證集中保管 + 派送（商業憑證一次上傳、派到所有站台）
-- 集中保管商業憑證,搭配 pull 模型的派送代理。續約後只要上傳一次 bundle(crt/key/chain),
-  各站台代理會自動取走新版、寫到正確路徑、跑 config-test、重載服務,失敗自動回滾。
-- **後端**:migration `0075`(`certificates` / `cert_versions` / `cert_agents`);私鑰以 AES-GCM
-  加密儲存,任何管理 API 都不回傳明文。`/certificates` admin CRUD + `POST /{id}/versions`
-  (驗證 key↔cert 配對、SAN/效期,擋不配對/過期/重複)+ **`POST /{id}/self-signed`**
-  (產生自簽憑證,可自訂 CN/SAN/天數 —— 商業憑證還沒到時先頂著)。`/cert-agents` admin CRUD +
-  key 輪替,以及 agent 協定(`X-Agent-Key`):`check` / `bundle`(解密私鑰,scope 限定、逐次稽核)
+- 集中保管商業憑證，搭配 pull 模型的派送代理。續約後只要上傳一次 bundle(crt/key/chain),
+  各站台代理會自動取走新版、寫到正確路徑、跑 config-test、重載服務，失敗自動回滾。
+- **後端**:migration `0075`(`certificates` / `cert_versions` / `cert_agents`)；私鑰以 AES-GCM
+  加密儲存，任何管理 API 都不回傳明文。`/certificates` admin CRUD + `POST /{id}/versions`
+  (驗證 key↔cert 配對、SAN/效期，擋不配對/過期/重複)+ **`POST /{id}/self-signed`**
+  (產生自簽憑證，可自訂 CN/SAN/天數 —— 商業憑證還沒到時先頂著)。`/cert-agents` admin CRUD +
+  key 輪替，以及 agent 協定(`X-Agent-Key`):`check` / `bundle`(解密私鑰，scope 限定、逐次稽核)
   / `report`。
-- **代理**(`agent/jt_ipam_cert_agent.py` + 安裝器):pull 模型,內建 service profiles
-  (nginx / apache / haproxy / pve / pmg / postfix / dovecot / zimbra / generic),原子寫入 +
-  時間戳備份 + config-test gate + 回滾,冪等,並支援 **`--dry-run`**。設定是每台主機一份小 YAML,
+- **代理**(`agent/jt_ipam_cert_agent.py` + 安裝器):pull 模型，內建 service profiles
+  (nginx / apache / haproxy / pve / pmg / postfix / dovecot / zimbra / generic)，原子寫入 +
+  時間戳備份 + config-test gate + 回滾，冪等，並支援 **`--dry-run`**。設定是每台主機一份小 YAML,
   列出哪些憑證用哪個 profile 派送。
-- **監控**:每日到期告警 +**飄移偵測**(某代理回報的指紋不是目前版本 → 那台沒換成功)走既有
+- **監控**：每日到期告警 +**飄移偵測**(某代理回報的指紋不是目前版本 → 那台沒換成功)走既有
   通知/鈴鐺。
-- **前端**:憑證管理頁(上傳、產自簽、版本/到期狀態、代理 + 一次性 key、scope)。
+- **前端**：憑證管理頁(上傳、產自簽、版本/到期狀態、代理 + 一次性 key、scope)。
 
 ## [0.4.133] — 2026-06-13
 

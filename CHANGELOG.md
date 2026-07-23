@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.107] — 2026-07-22
+
+### Fixed
+- **Two-factor (TOTP) status now shown on the Security page** — after enabling TOTP the page never reflected it as enabled: `/me` did not expose the state and both buttons were always shown. `/me` now returns `totp_enabled`, and the Security tab shows the current status (Enabled / Not enabled) with only the relevant Enable/Disable button, refreshed via `/me` after enrolling or disabling. Adds a browser e2e test for the full enable → reload → disable cycle.
+
+
+## [0.5.106] — 2026-07-20
+
+### Fixed
+- **Dashboard IPv6 / IPv4-capacity KPI tiles rendered raw i18n keys** — the IPv6 subnet tile (and the renamed IPv4-capacity tile) referenced keys missing from the locale files, so they showed the key path instead of text. Added the missing labels in both locales.
+
+
+## [0.5.105] — 2026-07-17
+
+### Added
+- **Device types: Patch Panel, PDU and UPS** (issue #21). LibreNMS sync now captures the native device type and maps `power` → UPS/PDU (with a vendor-keyword split) and `wireless` → AP; patch panels are passive and stay manual-only. Device-type labels are localized across the UI (list, edit dialog, rack legend, dashboard). Migration 0097.
+
+
+## [0.5.104] — 2026-07-16
+
+### Added
+- **System Export / Import (cross-instance migration)** — a new admin page and CLI (`app.cli.system_transfer`) to move a whole jt-ipam to another instance via a passphrase-protected (scrypt + AES-256-GCM), versioned bundle. UUIDs are preserved so foreign keys and per-record secret AAD stay valid; secrets are decrypted on export and re-encrypted under the target instance's key. Supports merge and replace with a dry-run preview, and is backward compatible with older export files.
+
+
 ## [0.5.103] — 2026-07-11
 
 ### Changed
