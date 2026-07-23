@@ -43,6 +43,18 @@ async def test_me_with_token(client, auth_headers, admin_user):  # type: ignore[
     data = resp.json()
     assert data["username"] == admin_user.username
     assert data["is_admin"] is True
+    # 未啟用 TOTP 時 /me 回 totp_enabled=False（前端「安全」頁顯示「未啟用」）
+    assert data["totp_enabled"] is False
     # password_hash / totp 不應外洩
     assert "password_hash" not in data
     assert "totp_secret_enc" not in data
+
+
+async def test_me_totp_enabled_reflects_status(client, db_session, auth_headers, admin_user):  # type: ignore[no-untyped-def]
+    # 啟用 TOTP（totp_secret_enc 有值）後，/me 應回 totp_enabled=True，讓前端顯示「已啟用」
+    admin_user.totp_secret_enc = b"ciphertext"
+    admin_user.totp_nonce = b"nonce"
+    await db_session.commit()
+    resp = await client.get("/api/v1/auth/me", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["totp_enabled"] is True

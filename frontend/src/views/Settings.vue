@@ -23,6 +23,7 @@ import {
   NAlert,
   NCode,
   NPopconfirm,
+  NTag,
   useMessage,
 } from "naive-ui";
 import { NIcon } from "naive-ui";
@@ -85,6 +86,8 @@ const enrollment = ref<{ secret: string; otpauth_uri: string } | null>(null);
 const qrSvg = ref<string>("");
 const code = ref("");
 const totpBusy = ref(false);
+// 目前是否已啟用 TOTP（來自 /me；enroll confirm / disable 後會 fetchMe 更新）
+const totpEnabled = computed(() => me.value?.totp_enabled ?? false);
 
 async function startEnroll() {
   totpBusy.value = true;
@@ -200,14 +203,18 @@ onMounted(() => {
             <span v-html="t('settings.security.totp_intro_html')"></span>
           </n-alert>
 
-          <!-- 未在 enrollment 流程中：給「啟用 / 停用」按鈕 -->
-          <n-space v-if="!enrollment">
-            <n-button type="primary" :loading="totpBusy" @click="startEnroll">
+          <!-- 未在 enrollment 流程中：顯示目前狀態 + 對應的啟用 / 停用按鈕 -->
+          <n-space v-if="!enrollment" align="center" :size="12">
+            <span>{{ t("settings.security.totp_status") }}：</span>
+            <n-tag :type="totpEnabled ? 'success' : 'default'" size="small" round :bordered="false">
+              {{ totpEnabled ? t("settings.security.status_enabled") : t("settings.security.status_disabled") }}
+            </n-tag>
+            <n-button v-if="!totpEnabled" type="primary" :loading="totpBusy" @click="startEnroll">
               {{ t("settings.security.enable_totp") }}
             </n-button>
-            <n-popconfirm @positive-click="disableTotp">
+            <n-popconfirm v-else @positive-click="disableTotp">
               <template #trigger>
-                <n-button :loading="totpBusy">
+                <n-button type="error" :loading="totpBusy">
                   {{ t("settings.security.disable_totp") }}
                 </n-button>
               </template>

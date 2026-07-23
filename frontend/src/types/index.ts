@@ -13,6 +13,7 @@ export interface UserMe {
   auth_provider: string;
   is_active: boolean;
   is_admin: boolean;
+  totp_enabled?: boolean;
   has_visibility?: boolean;
   has_global_read?: boolean;
   can_edit?: boolean;

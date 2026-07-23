@@ -282,6 +282,8 @@ async def me(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserMe:
     out = UserMe.model_validate(user)
+    # TOTP 是否已啟用（totp_secret_enc 有值）→ 前端「安全」頁顯示狀態
+    out.totp_enabled = totp_service.is_enabled(user)
     # RDP 是否可用（後端是否裝了 aardwolf 選用相依）
     from app.api.v1.endpoints.rdp_console import RDP_AVAILABLE
     from app.api.v1.endpoints.vnc_console import VNC_AVAILABLE

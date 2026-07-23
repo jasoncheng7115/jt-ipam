@@ -19,9 +19,9 @@ test.describe("smoke (no backend)", () => {
     await expect(page.getByPlaceholder(/密碼|Password/)).toBeVisible();
     await expect(page.getByRole("button", { name: "登入", exact: true })).toBeVisible();
 
-    // SSO 按鈕不論後端是否啟用都該顯示
-    await expect(page.getByRole("button", { name: /OIDC/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /SAML/ })).toBeVisible();
+    // SSO 按鈕只在該供應商啟用時才顯示（v0.4.182 起）；此處未設定 SSO → 不應出現
+    await expect(page.getByRole("button", { name: /OIDC/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /SAML/ })).toHaveCount(0);
 
     // 不該有未捕捉的 JS 例外（bundle 壞掉 / i18n key crash 等會在這裡爆出來）
     expect(pageErrors, `uncaught JS errors:\n${pageErrors.join("\n")}`).toEqual([]);
