@@ -21,10 +21,13 @@ test.describe("auth flow", () => {
     await expect(page.locator("body")).toContainText(/admin/i);
   });
 
-  test("登入頁有 OIDC / SAML SSO 按鈕（不管後端是否啟用都該顯示）", async ({ page }) => {
+  test("登入頁 SSO 按鈕只在該供應商啟用時顯示（未設定 → 不出現）", async ({ page }) => {
+    // v0.4.182 起：SSO 按鈕依 /auth/realms 的 sso.{oidc,saml} 條件顯示，避免點到未設定的供應商跳原始錯誤。
+    // 此測試實例未設定 SSO，兩顆按鈕都不該出現。
     await page.goto("/login");
-    await expect(page.getByRole("button", { name: /OIDC/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /SAML/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "登入", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /OIDC/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /SAML/ })).toHaveCount(0);
   });
 
   test("錯密碼回錯誤訊息", async ({ page }) => {
