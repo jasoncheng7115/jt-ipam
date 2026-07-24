@@ -1768,7 +1768,7 @@
     "secret_keep": "Leave blank to keep unchanged",
     "verify_tls": "Verify TLS certificate",
     "cluster_mode": "Mode",
-    "cluster_delete_confirm": "Delete this cluster? Only clusters with no VMs and no linked Proxmox connection can be deleted.",
+    "cluster_delete_confirm": "Delete this cluster? Its synced VMs and any linked Proxmox connections are removed too. This cannot be undone — your IP addresses and devices are not affected.",
     "standalone": "Standalone",
     "clustered": "Clustered",
     "cluster_auto_ph": "Leave blank: auto-created from the PVE cluster name on sync",

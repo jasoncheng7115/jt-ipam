@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.110] — 2026-07-24
+
+### 變更
+- **虛擬化 → 叢集：即使叢集底下還有同步的 VM 或連著 Proxmox，也能刪除了**（修訂 0.5.109 會擋下的行為）—— 給「決定不接 Proxmox 了」用。刪叢集會連帶清掉底下同步的 VM、VM 網卡與 Proxmox 連線，並一併清掉該連線的加密 token 與排程同步心跳列。你的 IP 位址與裝置不受影響（VM 只是指向它們）。確認框會清楚說明會移除哪些東西。已有單元測試與瀏覽器（Playwright）測試涵蓋。
+
+
 ## [0.5.109] — 2026-07-24
 
 ### 修正
