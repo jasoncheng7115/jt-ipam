@@ -401,6 +401,9 @@ export const Virt = {
     const { data } = await apiClient.patch<VirtCluster>(`/api/v1/virt/clusters/${id}`, p);
     return data;
   },
+  deleteCluster: async (id: string) => {
+    await apiClient.delete(`/api/v1/virt/clusters/${id}`);
+  },
   createProxmox: async (p: ProxmoxWrite) => {
     const { data } = await apiClient.post<ProxmoxInstance>("/api/v1/virt/proxmox", p);
     return data;

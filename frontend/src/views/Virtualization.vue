@@ -71,6 +71,10 @@ async function delProxmox(id: string) {
   try { await Virt.deleteProxmox(id); msg.success(t("common.ok")); await refresh(); }
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
+async function delCluster(id: string) {
+  try { await Virt.deleteCluster(id); msg.success(t("common.ok")); await refresh(); }
+  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+}
 
 // ── 新增 / 編輯叢集（含所屬單位）──
 const showCluster = ref(false);
@@ -216,8 +220,18 @@ const clusterCols = computed<DataTableColumns<any>>(() => autoSort([
   },
   { title: t("sections.description"), key: "description" },
   {
-    title: t("common.actions"), key: "actions", width: 70,
-    render: (r) => iconAction(EditIcon, t("common.edit"), () => openClusterEdit(r)),
+    title: t("common.actions"), key: "actions", width: 100, className: "col-actions",
+    render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
+      iconAction(EditIcon, t("common.edit"), () => openClusterEdit(r)),
+      h(NPopconfirm, { onPositiveClick: () => delCluster(r.id) }, {
+        trigger: () => h(NTooltip, null, {
+          trigger: () => h(NButton, { size: "small", quaternary: true, type: "error" },
+            { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
+          default: () => t("common.delete"),
+        }),
+        default: () => t("virt.cluster_delete_confirm"),
+      }),
+    ]),
   },
 ]));
 // 每個 NIC 一行（IP / bridge / MAC 三欄同 index 對齊）— 多 IP 一看就知道對應關係

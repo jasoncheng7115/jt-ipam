@@ -215,6 +215,46 @@ async def update_cluster(
     return ClusterRead.model_validate(obj)
 
 
+@router.delete("/clusters/{cluster_id}", status_code=204,
+               dependencies=[Depends(require_admin)])
+async def delete_cluster(
+    cluster_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """刪除叢集（供手動建立的空叢集使用）。
+
+    FK 對 VM／Proxmox 連線是 CASCADE，直接刪會連帶清掉同步資料，因此擋門：
+    - 有 Proxmox 整合連到此叢集 → 409（請改從「整合 → Proxmox」移除連線）
+    - 叢集內還有虛擬機 → 409（避免誤刪同步進來的 VM）
+    只有「無 VM、無 Proxmox 連線」的叢集才可刪。
+    """
+    obj = await session.get(VirtCluster, cluster_id)
+    if obj is None:
+        raise HTTPException(404, detail="Cluster not found")
+    px = int(await session.scalar(
+        select(func.count()).select_from(ProxmoxInstance)
+        .where(ProxmoxInstance.cluster_id == cluster_id)
+    ) or 0)
+    if px:
+        raise HTTPException(409, detail="此叢集有 Proxmox 整合連線，請先於「整合 → Proxmox」移除對應連線再刪除叢集。")
+    vm = int(await session.scalar(
+        select(func.count()).select_from(VirtualMachine)
+        .where(VirtualMachine.cluster_id == cluster_id)
+    ) or 0)
+    if vm:
+        raise HTTPException(409, detail=f"叢集內還有 {vm} 台虛擬機，無法刪除；請先移除或改派這些虛擬機。")
+    await append_audit(
+        session,
+        actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="virt_cluster", object_id=str(obj.id), action="delete",
+        diff={"name": obj.name}, request_id=getattr(request.state, "request_id", None),
+    )
+    await session.delete(obj)
+    await session.commit()
+
+
 # ─────────────────── VMs（唯讀，由 sync 進來）───────────────────
 
 

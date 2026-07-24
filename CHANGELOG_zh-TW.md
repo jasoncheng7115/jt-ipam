@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.109] — 2026-07-24
+
+### 修正
+- **虛擬化 → 叢集：手動新增的叢集無法刪除** —— 原本沒有刪除端點也沒有按鈕。新增 `DELETE /virt/clusters/{id}`（管理員）與 UI 刪除鈕。為避免誤刪同步資料（VM／Proxmox 外鍵是 CASCADE），若叢集內還有虛擬機、或有 Proxmox 連線，會擋下並顯示清楚訊息；只有空叢集可刪除。
+
+
 ## [0.5.108] — 2026-07-22
 
 ### 修正
