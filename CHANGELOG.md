@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.110] — 2026-07-24
+
+### Changed
+- **Virtualization → Clusters: a cluster can now be deleted even when it still has synced VMs or a linked Proxmox connection** (revising the 0.5.109 behavior that blocked this) — for when you stop using Proxmox. Deleting a cluster cascades away its synced VMs, VM interfaces and Proxmox connections, and also cleans up the connection's encrypted token and scheduled-sync heartbeat. Your IP addresses and devices are not affected (VMs only reference them). The confirmation dialog spells out what will be removed. Covered by unit + browser (Playwright) tests.
+
+
 ## [0.5.109] — 2026-07-24
 
 ### Fixed

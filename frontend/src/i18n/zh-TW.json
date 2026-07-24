@@ -1773,7 +1773,7 @@
     "secret_keep": "留空＝不變更",
     "verify_tls": "驗證 TLS 憑證",
     "cluster_mode": "型態",
-    "cluster_delete_confirm": "確定刪除此叢集？只有「沒有虛擬機、也沒有連 Proxmox」的叢集才能刪除。",
+    "cluster_delete_confirm": "確定刪除此叢集？底下同步的虛擬機與所屬的 PVE 連線都會一併移除，無法復原（不影響你的 IP 位址與裝置）。",
     "standalone": "獨立節點",
     "clustered": "叢集",
     "cluster_auto_ph": "留空：同步時自動依 PVE 叢集名稱建立",
