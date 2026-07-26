@@ -1044,6 +1044,8 @@
     "dhcp_server": "DHCP server",
     "dhcp_range": "Pool range",
     "dhcp_has_lease": "This IP currently has a DHCP lease (synced from OPNsense).",
+    "dhcp_in_range_tag": "In DHCP range",
+    "dhcp_no_lease_hint": "No DHCP lease found for it — likely a statically configured address inside the pool. Consider excluding it from the pool or adding a reservation to avoid conflicts.",
     "source_phpipam": "phpIPAM import",
     "source_scanner": "scanner",
     "source_librenms": "LibreNMS",

@@ -1044,6 +1044,8 @@
     "dhcp_server": "DHCP 主機",
     "dhcp_range": "發放範圍",
     "dhcp_has_lease": "此 IP 目前有 DHCP 租約（由 OPNsense 同步）。",
+    "dhcp_in_range_tag": "DHCP 範圍",
+    "dhcp_no_lease_hint": "目前查不到它的 DHCP 租約，推測是在發放範圍內設了固定 IP。建議把它排除在發放範圍外或設保留，避免日後被配發造成衝突。",
     "source_phpipam": "phpIPAM 匯入",
     "source_scanner": "掃描代理",
     "source_librenms": "LibreNMS",

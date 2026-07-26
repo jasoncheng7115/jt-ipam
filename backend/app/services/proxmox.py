@@ -212,20 +212,37 @@ def _agent_ipv4_by_mac(agent_data: dict[str, Any]) -> dict[str, str]:
 
 async def _link_ip_to_ipam(
     session: AsyncSession, ip_text: str | None, mac: str | None, hostname: str | None,
+    *, scope_ids: set[Any] | None = None,
 ) -> Any:
     """把 Proxmox 撈到的 VM/CT IP+MAC+主機名稱對應進 IPAM 的 ip_addresses。
 
     - 找出包含此 IP 的子網路（沒有就跳過，不亂建）
     - 既有 IP：補 MAC（原本空才補，避免蓋掉 scanner/ARP）；記 proxmox 主機名稱觀測
     - 沒有的 IP：在該子網路新建一筆（discovery_source=proxmox）
+    - **PVE 不知道 IP 時**（qemu 沒裝 guest agent、非 LXC、也沒有 cloud-init ipconfig）
+      改用 VM 網卡 MAC 比對「IPAM 已知的 IP」（scanner/ARP 早就學到），只比對既有、絕不新建
     回傳對應到的 IPAddress（給呼叫端回填 VM.primary_ip_id），無對應子網路則 None。
     """
-    if not ip_text:
-        return None
     from sqlalchemy import func, text
 
     from app.models.address import IPAddress
     from app.services.hostname import apply_observation
+
+    if not ip_text:
+        # MAC 後援：沒有 IP 就無從建立，只能比對既有。比到多筆（重疊網段同 MAC）視為不明確 → 不猜。
+        if not mac:
+            return None
+        m_stmt = select(IPAddress).where(IPAddress.mac == mac)
+        if scope_ids:
+            m_stmt = m_stmt.where(IPAddress.subnet_id.in_(scope_ids))
+        rows = list((await session.execute(m_stmt.limit(2))).scalars().all())
+        if len(rows) != 1:
+            return None
+        ipa = rows[0]
+        if hostname:
+            await apply_observation(session, ip=ipa, source="proxmox",
+                                    hostname=hostname, tiebreak_min=True)
+        return ipa
 
     row = (await session.execute(
         text("SELECT id FROM subnets WHERE cidr >>= CAST(:ip AS inet) "
@@ -305,7 +322,7 @@ async def _sync_node_ports(
     # name → 此 bridge/bond 的成員介面名（供建立 peer 穿透對應）
     link_members: dict[str, list[str]] = {}
     for itf in host_ifaces:
-        name = (itf.get("iface") or "").strip()
+        name = (itf.get("iface") or "").strip()[:255]   # device_ports.name 上限 255
         itype = (itf.get("type") or "").lower()
         if not name:
             continue
@@ -617,8 +634,10 @@ async def sync_instance(
                 ip = ip or ipcfg.get(key)
                 await _upsert_iface(session, vm.id, key, mac, bridge, ip)
                 # IP↔MAC↔主機名稱 對應進 IPAM
-                if ip:
-                    linked = await _link_ip_to_ipam(session, ip, mac, vm.name)
+                # 沒有 IP 也要試（PVE 不知道 IP 時走 MAC 後援比對既有 IP），否則沒裝
+                # guest agent 的 VM 永遠對不到、主機名稱與 primary_ip 都補不上。
+                if ip or mac:
+                    linked = await _link_ip_to_ipam(session, ip, mac, vm.name, scope_ids=scope_ids)
                     if linked is not None:
                         summary.ipam_linked += 1
                         # 回填 VM 主 IP（給 PVE 主控台 noVNC/xterm 用：IP→VM 解析）。

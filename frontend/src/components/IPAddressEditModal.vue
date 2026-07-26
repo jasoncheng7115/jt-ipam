@@ -11,14 +11,14 @@ import {
   NModal, NCard, NSpace, NButton, NDescriptions, NDescriptionsItem,
   NForm, NFormItem, NInput, NSelect, NSwitch, NPopconfirm, NTag, NIcon,
   NCollapse, NCollapseItem, NTimeline, NTimelineItem, NText, NEmpty, NSpin,
-  NTooltip, NCheckbox, NCheckboxGroup, NButtonGroup, NDropdown, NDivider,
+  NTooltip, NCheckbox, NCheckboxGroup, NButtonGroup, NDivider,
   useMessage,
 } from "naive-ui";
 import type { IPAddress } from "@/types";
 import { updateAddress, deleteAddress, createAddress, type IPAddressUpdate } from "@/api/addresses";
 import { getAddressHistory, getAddressSwitchPort, type IPChangeLog, type SwitchPortInfo } from "@/api/ip_history";
 import { getHostnameSources, clearHostnameSource, type HostnameSources } from "@/api/hostname";
-import { EditIcon, SaveIcon, CancelIcon, DeleteIcon, PlusIcon, LinkIcon, TerminalIcon, DisplayIcon, VncIcon, NoVncIcon, ChevronDownIcon, OpenNewWindowIcon, renderIcon } from "@/icons";
+import { EditIcon, SaveIcon, CancelIcon, DeleteIcon, PlusIcon, LinkIcon, TerminalIcon, DisplayIcon, VncIcon, NoVncIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useCustomers } from "@/composables/useCustomers";
@@ -211,40 +211,6 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => { cro?.disconnect(); cro = null; });
-
-// SSH 連線分割按鈕的下拉選單（另開視窗）
-const sshMenuOptions = computed(() => [
-  { label: t("ssh.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onSshMenu(key: string) {
-  if (key === "popout") emit("ssh-popout");
-}
-// RDP 連線分割按鈕的下拉選單（另開視窗）
-const rdpMenuOptions = computed(() => [
-  { label: t("rdp.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onRdpMenu(key: string) {
-  if (key === "popout") emit("rdp-popout");
-}
-// VNC 連線分割按鈕的下拉選單（另開視窗）
-const vncMenuOptions = computed(() => [
-  { label: t("vnc.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onVncMenu(key: string) {
-  if (key === "popout") emit("vnc-popout");
-}
-const novncMenuOptions = computed(() => [
-  { label: t("vnc.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onNovncMenu(key: string) {
-  if (key === "popout") emit("novnc-popout");
-}
-const bmcMenuOptions = computed(() => [
-  { label: t("vnc.open_popout"), key: "popout", icon: renderIcon(OpenNewWindowIcon) },
-]);
-function onBmcMenu(key: string) {
-  if (key === "popout") emit("bmc-popout");
-}
 
 const isCreate = computed(() => !props.address && !!props.createContext);
 
@@ -574,14 +540,19 @@ async function remove() {
           <span>{{ props.address?.ip ?? props.createContext?.ip ?? '' }}</span>
           <n-tag v-if="isCreate" type="info" size="small">{{ t("common.create") }}</n-tag>
           <n-tag v-else :type="stateType" size="small">{{ labelState(props.address?.state) }}</n-tag>
+          <!-- 「真的有 DHCP 租約」與「只是落在 DHCP 池範圍內」是兩回事：
+               後者常見於在池範圍內設固定 IP 的機器，標成 DHCP 會誤導，改用中性的「DHCP 範圍」。 -->
           <n-tooltip v-if="dhcpInfo || props.address?.in_dhcp_lease" :delay="0">
             <template #trigger>
-              <n-tag type="warning" size="small" :bordered="false">DHCP</n-tag>
+              <n-tag :type="props.address?.in_dhcp_lease ? 'warning' : 'default'" size="small" :bordered="false">
+                {{ props.address?.in_dhcp_lease ? "DHCP" : t("addresses.dhcp_in_range_tag") }}
+              </n-tag>
             </template>
-            <div style="max-width:260px;line-height:1.5">
+            <div style="max-width:280px;line-height:1.5">
               <div v-if="props.address?.in_dhcp_lease">{{ t("addresses.dhcp_has_lease") }}</div>
               <template v-if="dhcpInfo">
                 <div>{{ t("addresses.dhcp_pool_hint") }}</div>
+                <div v-if="!props.address?.in_dhcp_lease" style="margin-top:4px">{{ t("addresses.dhcp_no_lease_hint") }}</div>
                 <div style="margin-top:4px"><strong>{{ t("addresses.dhcp_server") }}：</strong>{{ dhcpInfo.server }}{{ dhcpInfo.source ? ` (${dhcpInfo.source})` : "" }}</div>
                 <div>{{ t("addresses.dhcp_range") }}：{{ dhcpInfo.start }} – {{ dhcpInfo.end }}</div>
               </template>

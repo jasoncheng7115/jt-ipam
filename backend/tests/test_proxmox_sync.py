@@ -3,8 +3,6 @@ upsert VirtualMachine + 解析 netN 介面；冪等更新。"""
 
 from __future__ import annotations
 
-from sqlalchemy import select
-
 from app.models.virt import (
     ProxmoxInstance,
     VirtCluster,
@@ -12,6 +10,7 @@ from app.models.virt import (
     VMInterface,
 )
 from app.services import proxmox as px
+from sqlalchemy import func, select
 
 _RESP = {
     "/api2/json/version": {"data": {"version": "8.1"}},
@@ -101,3 +100,59 @@ async def test_sync_is_idempotent(db_session, monkeypatch):
     assert len(vms) == 1
     assert vms[0].status == "running"
     assert vms[0].vcpus == 4
+
+
+# ── 客戶回報：VM 沒裝 guest agent → PVE 不知道 IP → 主機名稱一直空白 ──
+# 修法：改用 VM 網卡 MAC 比對 IPAM 已知的 IP（scanner/ARP 學到的），只比既有、不新建。
+async def _seed_ip(session, ip: str, mac: str | None):
+    from app.models.address import IPAddress
+    from app.models.section import Section
+    from app.models.subnet import Subnet
+    sect = Section(name=f"s-{ip}")
+    session.add(sect)
+    await session.flush()
+    sub = Subnet(section_id=sect.id, cidr="10.9.0.0/24")
+    session.add(sub)
+    await session.flush()
+    ipa = IPAddress(subnet_id=sub.id, ip=ip, mac=mac)
+    session.add(ipa)
+    await session.flush()
+    return ipa
+
+
+async def test_no_agent_vm_hostname_via_mac(db_session, monkeypatch):
+    """沒有 IP、只有 MAC → 用 MAC 對到既有 IP，並把 PVE 的 VM 名稱記成主機名稱觀測。"""
+    ipa = await _seed_ip(db_session, "10.9.0.5", "aa:bb:cc:dd:ee:ff")
+    _patch(monkeypatch)
+    inst = await _instance(db_session)
+    await px.sync_instance(db_session, inst)
+    await db_session.refresh(ipa)
+    assert ipa.hostname == "web-vm"
+    # 同時回填 VM 主 IP（沒有它，PVE 主控台的 IP→VM 解析也會失敗）
+    vm = (await db_session.execute(
+        select(VirtualMachine).where(VirtualMachine.legacy_vmid == 100)
+    )).scalar_one()
+    assert vm.primary_ip_id == ipa.id
+
+
+async def test_no_agent_vm_mac_unknown_creates_nothing(db_session, monkeypatch):
+    """MAC 在 IPAM 找不到 → 什麼都不做（絕不憑空建 IP）。"""
+    from app.models.address import IPAddress
+    before = await db_session.scalar(select(func.count()).select_from(IPAddress))
+    _patch(monkeypatch)
+    inst = await _instance(db_session)
+    await px.sync_instance(db_session, inst)
+    after = await db_session.scalar(select(func.count()).select_from(IPAddress))
+    assert after == before
+
+
+async def test_no_agent_vm_ambiguous_mac_skipped(db_session, monkeypatch):
+    """同一 MAC 對到多筆（重疊網段）→ 視為不明確，不猜、不寫主機名稱。"""
+    a = await _seed_ip(db_session, "10.9.0.7", "aa:bb:cc:dd:ee:ff")
+    b = await _seed_ip(db_session, "10.9.0.8", "aa:bb:cc:dd:ee:ff")
+    _patch(monkeypatch)
+    inst = await _instance(db_session)
+    await px.sync_instance(db_session, inst)
+    for ipa in (a, b):
+        await db_session.refresh(ipa)
+        assert ipa.hostname != "web-vm"

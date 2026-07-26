@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.111] — 2026-07-26
+
+### Fixed
+- **Proxmox VMs without the guest agent never got a hostname** — when PVE cannot report a VM's IP (no qemu-guest-agent, not an LXC, no cloud-init `ipconfig`), the sync skipped the whole IPAM linking step, so the PVE VM name was never recorded as a hostname observation and `primary_ip_id` stayed empty (which also broke IP→VM resolution for the PVE console). The sync now falls back to matching the VM's NIC MAC against IPs jt-ipam already knows (learned from the scan agent / ARP). It only matches existing addresses — it never creates one — and an ambiguous MAC (the same MAC on several IPs, e.g. overlapping subnets) is skipped rather than guessed.
+- **A statically-configured IP inside a DHCP pool was tagged "DHCP"** — the tag was shown both for a real lease and for merely falling inside a pool range. Those are now distinct: a real lease still shows an orange **DHCP** tag, while an address that is only inside the range shows a neutral **In DHCP range** tag, with a tooltip suggesting an exclusion or reservation to avoid future conflicts.
+
+
 ## [0.5.110] — 2026-07-24
 
 ### Changed

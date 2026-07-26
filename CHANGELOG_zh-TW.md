@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.111] — 2026-07-26
+
+### 修正
+- **沒裝 guest agent 的 Proxmox VM 一直抓不到主機名稱** —— PVE 無法回報 VM 的 IP 時（沒裝 qemu-guest-agent、又不是 LXC、也沒有 cloud-init `ipconfig`），同步會整段跳過 IPAM 對應，因此 PVE 的 VM 名稱從未被記成主機名稱觀測，`primary_ip_id` 也一直是空的（連帶讓 PVE 主控台的 IP→VM 解析失效）。現在改為退而用 VM 網卡的 MAC，去比對 jt-ipam 已知的 IP（掃描代理／ARP 學到的）。只比對既有位址、絕不新建；同一個 MAC 對到多筆（例如重疊網段）視為不明確，寧可略過也不亂猜。
+- **在 DHCP 發放範圍內設固定 IP 卻被標成「DHCP」** —— 原本「真的有租約」與「只是落在發放範圍內」共用同一個標籤。現在區分開來：真的有租約仍是橘色 **DHCP**；只是落在範圍內則顯示中性的 **DHCP 範圍**，並在提示中建議設排除或保留，避免日後被配發造成衝突。
+
+
 ## [0.5.110] — 2026-07-24
 
 ### 變更
