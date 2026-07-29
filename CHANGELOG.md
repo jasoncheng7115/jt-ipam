@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.112] — 2026-07-29
+
+### Security
+- **Frontend dependency advisories cleared (13 of 15 Dependabot alerts)** — `axios` 1.16.0 → **1.18.1** (fixes nine advisories: proxy inheritance after interceptor config cloning, several prototype-pollution gadgets, `maxBodyLength` bypasses, `formDataToJSON` recursion DoS, `NO_PROXY` bypass); `postcss` → **8.5.24** (source-map path traversal); `js-yaml` → **5.2.2** (merge-key quadratic CPU); `brace-expansion` pinned to a patched release per major line (1.1.17 / 2.1.3 / 5.0.8). `axios` is the only one of these that ships in the browser bundle.
+- Two `brace-expansion` alerts remain and are **accepted**: the advisory lists 5.0.8 as the sole fixed version, so the 1.x / 2.x lines can never satisfy it, and forcing 5.x breaks `minimatch@3` (`expand is not a function`, which takes ESLint down). Both paths are dev-only (`eslint`, `@vue/test-utils`) and the package is not present in the production bundle.
+
+
 ## [0.5.111] — 2026-07-26
 
 ### Fixed

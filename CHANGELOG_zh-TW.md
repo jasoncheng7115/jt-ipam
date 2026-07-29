@@ -4,6 +4,13 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.112] — 2026-07-29
+
+### 資安
+- **清掉前端相依套件警示（15 個 Dependabot 警示修掉 13 個）** —— `axios` 1.16.0 → **1.18.1**（一次修掉九項：攔截器設定複製後沿用繼承的 proxy、多個原型污染破口、`maxBodyLength` 繞過、`formDataToJSON` 遞迴 DoS、`NO_PROXY` 繞過）；`postcss` → **8.5.24**（source map 路徑穿越）；`js-yaml` → **5.2.2**（merge key 二次方 CPU）；`brace-expansion` 依主版本各自鎖到有修補的版本（1.1.17／2.1.3／5.0.8）。這幾個之中只有 `axios` 會進瀏覽器 bundle。
+- 另有 2 個 `brace-expansion` 警示**列為已接受風險**：該 advisory 認定唯一修補版是 5.0.8，1.x／2.x 這兩條線永遠不可能滿足；而強制升到 5.x 會打壞 `minimatch@3`（`expand is not a function`，連帶 ESLint 直接掛掉）。這兩條路徑都只在開發相依（`eslint`、`@vue/test-utils`），正式 bundle 內並不存在此套件。
+
+
 ## [0.5.111] — 2026-07-26
 
 ### 修正
