@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 HOSTNAME_KEY = "hostname_precedence"
 # 預設：人工最優先，其次 DNS、LibreNMS、OPNsense、掃描、Proxmox
-DEFAULT_ORDER: list[str] = ["manual", "dns", "librenms", "opnsense", "pfsense", "scanner", "netbios", "mdns", "proxmox", "wazuh", "adguard"]
+DEFAULT_ORDER: list[str] = ["manual", "dns", "librenms", "opnsense", "pfsense", "windows_dhcp", "scanner", "netbios", "mdns", "proxmox", "wazuh", "adguard"]
 _TTL_SEC = 60.0
 _cache: dict[str, tuple[float, list[str]]] = {}
 

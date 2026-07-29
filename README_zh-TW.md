@@ -1,4 +1,4 @@
-# jt-ipam v0.5.112
+# jt-ipam v0.5.113
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -24,6 +24,7 @@ phpIPAM 老使用者幾乎零學習成本；以現代技術全新打造（非基
 - **DNS**：PowerDNS、BIND 9、OPNsense Unbound、Univention UCS、Microsoft Windows DNS（讀取正反解狀態，可選擇性推送記錄）
 - **LibreNMS**：裝置同步、ARP / FDB 抓取、上線狀態互補、自動加入監控
 - **基礎設施**：Proxmox VE、Wazuh、OPNsense / pfSense（別名 / 規則 / NAT 同步）
+- **DHCP**：各家各自設定 —— OPNsense（Kea/ISC）與 pfSense 透過各自的 REST API 同步租約與發放範圍；**Windows DHCP Server（Beta）** 走 WinRM + PowerShell 唯讀（只跑 `Get-*`，需 WinRM 可連線，預設 5986/HTTPS）。落在發放範圍內的位址會在 IP 清單與詳情標示出來。
 - **Graylog**：提供 IP→主機名稱/FQDN 的 DSV 對照表端點，供 Graylog「DSV File from HTTP」資料配接器抓取
 - **本地 AI**：LLM Server 自然語言查詢 + 語意搜尋（資料不外送），並提供 MCP server（stdio / Streamable HTTP）；實測搭配 `gemma4:26b` 效果良好
 

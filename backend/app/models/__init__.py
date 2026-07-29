@@ -70,6 +70,7 @@ from app.models.virt import (
 from app.models.vlan import VLAN, DeviceVLAN, VLANDomain
 from app.models.vrf import VRF
 from app.models.wazuh import WazuhAgent, WazuhInstance
+from app.models.windows_dhcp import WindowsDhcpServer
 
 __all__ = [
     "ASN",

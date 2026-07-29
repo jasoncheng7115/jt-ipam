@@ -386,11 +386,14 @@ async def sync_dhcp_ranges(
                 if a and b:
                     parsed.append((str(cidr), a, b, family))
 
-    # 鏡像同步：清掉此防火牆既有範圍後重建
-    await session.execute(delete(DHCPPoolRange).where(DHCPPoolRange.firewall_id == fw.id))
+    # 鏡像同步：只清掉「此防火牆自己」既有範圍後重建（不碰其他來源的列）
+    await session.execute(delete(DHCPPoolRange).where(
+        DHCPPoolRange.source_type == "opnsense", DHCPPoolRange.source_id == fw.id,
+    ))
     for cidr, a, b, fam in parsed:
         session.add(DHCPPoolRange(
-            firewall_id=fw.id, subnet_cidr=cidr, start_ip=a, end_ip=b,
+            source_type="opnsense", source_id=fw.id, source_name=fw.name,
+            subnet_cidr=cidr, start_ip=a, end_ip=b,
             family=fam, source="kea", synced_at=now,
         ))
     return {"ranges": len(parsed)}

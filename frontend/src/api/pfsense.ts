@@ -12,6 +12,7 @@ export interface PfSense {
   has_key: boolean;
   sync_interval_seconds: number;
   sync_dhcp: boolean;
+  sync_dhcp_ranges: boolean;
   sync_arp: boolean;
   sync_aliases: boolean;
   sync_rules: boolean;
@@ -32,6 +33,7 @@ export interface PfSenseCreate {
   enabled?: boolean;
   sync_interval_seconds?: number;
   sync_dhcp?: boolean;
+  sync_dhcp_ranges?: boolean;
   sync_arp?: boolean;
   sync_aliases?: boolean;
   sync_rules?: boolean;

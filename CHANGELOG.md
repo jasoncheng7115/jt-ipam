@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.113] — 2026-07-29
+
+### Added
+- **pfSense now syncs DHCP address ranges, not just leases** — a separate per-firewall toggle (pfSense keeps its own DHCP settings). Reads the per-interface DHCP config plus any extra address pools over the pfSense REST API. Until now only OPNsense produced ranges, so pfSense-only sites never saw the "in DHCP range" hint on an address.
+- **Windows DHCP Server integration (Beta)** — a standalone integration with its own settings page, syncing scopes (address ranges) and leases read-only over WinRM + PowerShell (`Get-DhcpServerv4Scope` / `Get-DhcpServerv4Lease`; only `Get-*` cmdlets run, nothing on the DHCP server is modified). Leases mark existing addresses (`in_dhcp_lease`, MAC and client-registered hostname) and never create addresses, matching the OPNsense/pfSense behaviour. `windows_dhcp` is registered as a hostname and MAC source so it takes part in the existing precedence settings. Runs on the regular sync timer; no new service or system package is needed (`pywinrm` was already a dependency).
+
+### Changed
+- DHCP address ranges from all three sources now live in one derived table keyed by source, instead of a table hard-wired to OPNsense. **Each integration keeps its own settings and sync and only ever clears its own rows** — this is shared storage, not a unified "DHCP server" abstraction. New source-neutral endpoint `GET /api/v1/dhcp-ranges` (global-read); the old OPNsense-specific path still works and returns OPNsense rows.
+
+### Notes
+- The pfSense endpoints were confirmed against a live device (the list endpoint is the plural `/api/v2/services/dhcp_servers`; the singular form requires an id). Field names follow the official package documentation and are parsed tolerantly, so a differing pfSense version degrades to "no ranges" instead of breaking the rest of the sync.
+- Windows DHCP needs the backend to reach WinRM (5986/HTTPS by default). Servers on private networks additionally require `OUTBOUND_ALLOW_PRIVATE`, same as the existing Windows DNS integration.
+
+
 ## [0.5.112] — 2026-07-29
 
 ### Security

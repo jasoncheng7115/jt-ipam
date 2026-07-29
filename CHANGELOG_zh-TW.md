@@ -4,6 +4,20 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.113] — 2026-07-29
+
+### 新增
+- **pfSense 現在也能同步 DHCP 發放範圍**（原本只有租約）—— 獨立的逐防火牆開關（pfSense 的 DHCP 設定仍留在 pfSense 自己身上）。透過 pfSense REST API 讀取各介面的 DHCP 設定與額外位址池。在此之前只有 OPNsense 會產生發放範圍，因此純 pfSense 環境的使用者從來看不到位址上的「在 DHCP 範圍內」提示。
+- **Windows DHCP Server 整合（Beta）** —— 一個獨立的整合，有自己的設定頁，透過 WinRM + PowerShell 唯讀同步 scope（發放範圍）與租約（`Get-DhcpServerv4Scope` / `Get-DhcpServerv4Lease`；只執行 `Get-*` 指令，不會更動 DHCP 伺服器上的任何設定）。租約只會標記既有位址（`in_dhcp_lease`、MAC 與用戶端註冊的主機名稱），**絕不自動新建位址**，與 OPNsense／pfSense 的行為一致。`windows_dhcp` 已登錄為主機名稱與 MAC 的來源，可納入既有的來源優先序設定。走既有的同步排程；**不需要新的服務或系統套件**（`pywinrm` 早已是相依）。
+
+### 變更
+- 三個來源的 DHCP 發放範圍改存在同一張以「來源」標記的衍生表，取代原本外鍵寫死 OPNsense 的作法。**各整合仍各自保有自己的設定與同步，且只會清除自己的資料列** —— 這只是共用的資料存放處，不是統一的「DHCP 伺服器」抽象層。新增來源中立端點 `GET /api/v1/dhcp-ranges`（需全域讀取權）；原本 OPNsense 專用的路徑仍可用，只回 OPNsense 的資料。
+
+### 附註
+- pfSense 的端點已對實機確認（列表端點是**複數**的 `/api/v2/services/dhcp_servers`；單數形需要 id）。欄位名依官方套件文件並採容錯解析，因此 pfSense 版本差異時會退化為「抓不到範圍」，不會拖垮其他同步。
+- Windows DHCP 需要後端連得到 WinRM（預設 5986/HTTPS）。若伺服器位於私有網段，另需啟用 `OUTBOUND_ALLOW_PRIVATE`，與既有的 Windows DNS 整合相同。
+
+
 ## [0.5.112] — 2026-07-29
 
 ### 資安

@@ -93,6 +93,7 @@ CATEGORY: dict[str, str] = {
     "scan_agents": "integrations",
     "cert_agents": "integrations",
     "webhook_subscriptions": "integrations",
+    "windows_dhcp_servers": "integrations",
     "opnsense_alias_mappings": "integrations",
     "ssh_credentials": "integrations",
     # synced（可重新拉取的鏡像）

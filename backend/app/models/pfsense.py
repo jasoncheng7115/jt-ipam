@@ -47,6 +47,8 @@ class PfSenseFirewall(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     # 各同步開關（DHCP 預設關：若該台沒開 DHCP、或避免與區網內其他 DHCP 衝突）
     sync_dhcp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # DHCP 發放範圍（與租約分開：可能只想知道範圍、不想動租約標記）
+    sync_dhcp_ranges: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sync_arp: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sync_aliases: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sync_rules: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

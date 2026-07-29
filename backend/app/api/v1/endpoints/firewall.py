@@ -162,6 +162,13 @@ async def delete_firewall(
     ).scalar_one_or_none()
     if fw is None:
         raise HTTPException(404, detail="firewall not found")
+    # dhcp_pool_ranges 已無外鍵 cascade → 自行清掉這台寫的列（不碰其他來源）
+    from sqlalchemy import delete as _delete
+
+    from app.models.dhcp import DHCPPoolRange
+    await session.execute(_delete(DHCPPoolRange).where(
+        DHCPPoolRange.source_type == "opnsense", DHCPPoolRange.source_id == fw_id,
+    ))
     await session.delete(fw)
     await append_audit(
         session,
@@ -196,17 +203,15 @@ async def test_firewall(
 async def list_dhcp_ranges(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[dict[str, Any]]:
-    """所有從 DHCP server 同步回來的發放範圍（給 IP 清單標示 DHCP 用）。"""
+    """此 OPNsense 來源同步回來的發放範圍（相容用；跨來源請改用 GET /api/v1/dhcp-ranges）。"""
     from app.models.dhcp import DHCPPoolRange
-    from app.models.firewall import OPNsenseFirewall
-    rows = (await session.execute(select(DHCPPoolRange))).scalars().all()
-    fw_names = dict(
-        (await session.execute(select(OPNsenseFirewall.id, OPNsenseFirewall.name))).all()
-    )
+    rows = (await session.execute(
+        select(DHCPPoolRange).where(DHCPPoolRange.source_type == "opnsense")
+    )).scalars().all()
     return [{
-        "id": str(r.id), "firewall_id": str(r.firewall_id), "subnet_cidr": r.subnet_cidr,
+        "id": str(r.id), "firewall_id": str(r.source_id), "subnet_cidr": r.subnet_cidr,
         "start_ip": r.start_ip, "end_ip": r.end_ip, "family": r.family, "source": r.source,
-        "firewall_name": fw_names.get(r.firewall_id),
+        "firewall_name": r.source_name,
     } for r in rows]
 
 

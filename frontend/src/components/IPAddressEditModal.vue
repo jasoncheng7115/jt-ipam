@@ -69,7 +69,7 @@ async function loadDhcpRanges() {
     const out: typeof dhcpRanges.value = [];
     for (const r of rows) {
       const a = _ip2int(r.start_ip), b = _ip2int(r.end_ip);
-      if (a != null && b != null) out.push({ a: Math.min(a, b), b: Math.max(a, b), server: r.firewall_name || "—", source: (r.source || "").toUpperCase(), start: r.start_ip, end: r.end_ip });
+      if (a != null && b != null) out.push({ a: Math.min(a, b), b: Math.max(a, b), server: r.source_name || "—", source: (r.source || "").toUpperCase(), start: r.start_ip, end: r.end_ip });
     }
     dhcpRanges.value = out;
   } catch { /* silent */ }

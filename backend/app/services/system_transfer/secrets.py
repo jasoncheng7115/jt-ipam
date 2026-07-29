@@ -56,6 +56,10 @@ COLUMN_SECRETS: dict[str, list[tuple[str, str, str, Callable[[dict[str, Any]], b
     "webhook_subscriptions": [
         ("secret", "secret_enc", "secret_nonce", _aad_id("webhook:{id}:secret")),
     ],
+    "windows_dhcp_servers": [
+        ("password", "password_enc", "password_nonce",
+         _aad_id("windows_dhcp_server:{id}:password")),
+    ],
     "cert_versions": [
         (
             "key",

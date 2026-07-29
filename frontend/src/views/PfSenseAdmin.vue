@@ -44,7 +44,7 @@ const show = ref(false);
 const editing = ref<PfSense | null>(null);
 const form = ref({
   name: "", api_url: "", api_key: "", verify_tls: true, enabled: true,
-  sync_interval_seconds: 300, sync_dhcp: false, sync_arp: true, sync_aliases: false, sync_rules: false, expose_dsv: false,
+  sync_interval_seconds: 300, sync_dhcp: false, sync_dhcp_ranges: false, sync_arp: true, sync_aliases: false, sync_rules: false, expose_dsv: false,
   scope_subnet_ids: [] as string[], description: "",
 });
 
@@ -61,7 +61,7 @@ function openCreate() {
   editing.value = null;
   form.value = {
     name: "", api_url: "", api_key: "", verify_tls: true, enabled: true,
-    sync_interval_seconds: 300, sync_dhcp: false, sync_arp: true, sync_aliases: false, sync_rules: false, expose_dsv: false,
+    sync_interval_seconds: 300, sync_dhcp: false, sync_dhcp_ranges: false, sync_arp: true, sync_aliases: false, sync_rules: false, expose_dsv: false,
     scope_subnet_ids: [], description: "",
   };
   show.value = true;
@@ -71,6 +71,7 @@ function openEdit(r: PfSense) {
   form.value = {
     name: r.name, api_url: r.api_url, api_key: "", verify_tls: r.verify_tls, enabled: r.enabled,
     sync_interval_seconds: r.sync_interval_seconds, sync_dhcp: r.sync_dhcp,
+    sync_dhcp_ranges: r.sync_dhcp_ranges ?? false,
     sync_arp: r.sync_arp, sync_aliases: r.sync_aliases, sync_rules: r.sync_rules, expose_dsv: r.expose_dsv,
     scope_subnet_ids: r.scope_subnet_ids ?? [], description: r.description ?? "",
   };
@@ -95,7 +96,8 @@ async function submit() {
       name: form.value.name.trim(), api_url: form.value.api_url.trim(),
       verify_tls: form.value.verify_tls, enabled: form.value.enabled,
       sync_interval_seconds: form.value.sync_interval_seconds,
-      sync_dhcp: form.value.sync_dhcp, sync_arp: form.value.sync_arp,
+      sync_dhcp: form.value.sync_dhcp, sync_dhcp_ranges: form.value.sync_dhcp_ranges,
+      sync_arp: form.value.sync_arp,
       sync_aliases: form.value.sync_aliases, sync_rules: form.value.sync_rules, expose_dsv: form.value.expose_dsv,
       scope_subnet_ids: form.value.scope_subnet_ids,
       description: form.value.description.trim() || null,
@@ -234,7 +236,8 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         </n-form-item>
         <n-form-item :label="t('pfsense_admin.syncs')">
           <n-space :size="20" align="center">
-            <span><n-switch v-model:value="form.sync_dhcp" size="small" /> DHCP</span>
+            <span><n-switch v-model:value="form.sync_dhcp" size="small" /> {{ t("pfsense_admin.dhcp_leases") }}</span>
+            <span><n-switch v-model:value="form.sync_dhcp_ranges" size="small" /> {{ t("pfsense_admin.dhcp_ranges") }}</span>
             <span><n-switch v-model:value="form.sync_arp" size="small" /> ARP</span>
             <span><n-switch v-model:value="form.sync_aliases" size="small" /> {{ t("pfsense_admin.alias") }}</span>
             <span><n-switch v-model:value="form.sync_rules" size="small" /> {{ t("pfsense_admin.rules") }}</span>

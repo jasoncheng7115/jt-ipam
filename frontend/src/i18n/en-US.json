@@ -281,6 +281,7 @@
     "system_logs": "System logs",
     "graylog_dsv": "Graylog integration",
     "pfsense": "pfSense",
+    "windows_dhcp": "Windows DHCP",
     "pfsense_fw": "Firewall (pfSense)"
   },
   "topbar": {
@@ -1026,7 +1027,8 @@
       "proxmox": "Proxmox VE",
       "wazuh": "Wazuh",
       "adguard": "AdGuard",
-      "snmp": "LibreNMS (sysName)"
+      "snmp": "LibreNMS (sysName)",
+      "windows_dhcp": "Windows DHCP"
     },
     "model_title": "Device model source order",
     "model_subtitle": "When multiple sources (LibreNMS hardware / Proxmox VE / OPNsense) provide a device model, higher = preferred; manual is highest and can't be disabled. Drag to reorder."
@@ -1091,7 +1093,8 @@
     "role_dhcp_range": "DHCP",
     "role_dhcp_range_hint": "This IP is within a DHCP range / currently has a lease",
     "is_dhcp_server": "Mark as DHCP server",
-    "is_dhcp_server_hint": "Flag this IP as a DHCP server in the IP list. IPs that match an integrated OPNsense / pfSense firewall are flagged automatically."
+    "is_dhcp_server_hint": "Flag this IP as a DHCP server in the IP list. IPs that match an integrated OPNsense / pfSense firewall are flagged automatically.",
+    "source_windows_dhcp": "Windows DHCP"
   },
   "subnets": {
     "title": "Subnets",
@@ -2519,6 +2522,8 @@
     "title": "pfSense firewall",
     "create": "Add pfSense",
     "alias": "Aliases",
+    "dhcp_leases": "DHCP leases",
+    "dhcp_ranges": "DHCP ranges",
     "aliases": "Aliases",
     "syncs": "Syncs",
     "sync_interval": "Sync interval (s)",
@@ -2722,5 +2727,19 @@
     "import_failed": "Import failed.",
     "col_table": "Table",
     "col_errored": "errors"
+  },
+  "windows_dhcp": {
+    "title": "Windows DHCP Server",
+    "intro": "Read-only sync from a Windows DHCP Server over WinRM + PowerShell. jt-ipam only runs Get-* cmdlets and never changes anything on the DHCP server. Requires WinRM to be reachable (5986/HTTPS by default) and an account with DHCP read permission.",
+    "host": "Host",
+    "username": "Username",
+    "password": "Password",
+    "password_keep": "Password (leave blank to keep current)",
+    "winrm": "WinRM port / TLS",
+    "winrm_hint": "Default 5986 over HTTPS (5985 for HTTP). If the server sits on a private network, the backend needs OUTBOUND_ALLOW_PRIVATE enabled.",
+    "pull_what": "What to pull",
+    "scopes": "Scopes (address ranges)",
+    "leases": "Leases",
+    "test_ok": "Connection OK — {n} scope(s) found"
   }
 }

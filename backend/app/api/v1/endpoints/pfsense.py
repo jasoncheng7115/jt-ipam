@@ -33,6 +33,7 @@ class PfSenseRead(StrictModel):
     has_key: bool = False
     sync_interval_seconds: int
     sync_dhcp: bool
+    sync_dhcp_ranges: bool = False
     sync_arp: bool
     sync_aliases: bool
     sync_rules: bool
@@ -55,6 +56,7 @@ class PfSenseCreate(StrictModel):
     enabled: bool = True
     sync_interval_seconds: int = 300
     sync_dhcp: bool = False
+    sync_dhcp_ranges: bool = False
     sync_arp: bool = True
     sync_aliases: bool = False
     sync_rules: bool = False
@@ -71,6 +73,7 @@ class PfSenseUpdate(StrictModel):
     enabled: bool | None = None
     sync_interval_seconds: int | None = None
     sync_dhcp: bool | None = None
+    sync_dhcp_ranges: bool | None = None
     sync_arp: bool | None = None
     sync_aliases: bool | None = None
     sync_rules: bool | None = None
@@ -123,7 +126,8 @@ async def create_firewall(
         api_key_enc=enc, api_key_nonce=nonce,
         verify_tls=payload.verify_tls, enabled=payload.enabled,
         sync_interval_seconds=payload.sync_interval_seconds,
-        sync_dhcp=payload.sync_dhcp, sync_arp=payload.sync_arp, sync_aliases=payload.sync_aliases,
+        sync_dhcp=payload.sync_dhcp, sync_dhcp_ranges=payload.sync_dhcp_ranges,
+        sync_arp=payload.sync_arp, sync_aliases=payload.sync_aliases,
         scope_subnet_ids=payload.scope_subnet_ids, description=payload.description,
     )
     session.add(fw)
@@ -183,6 +187,13 @@ async def delete_firewall(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
     fw = await _get_or_404(session, fw_id)
+    # dhcp_pool_ranges 已無外鍵 cascade → 自行清掉這台寫的列（不碰其他來源）
+    from sqlalchemy import delete as _delete
+
+    from app.models.dhcp import DHCPPoolRange
+    await session.execute(_delete(DHCPPoolRange).where(
+        DHCPPoolRange.source_type == "pfsense", DHCPPoolRange.source_id == fw_id,
+    ))
     await session.delete(fw)
     await append_audit(
         session, actor_user_id=str(user.id),

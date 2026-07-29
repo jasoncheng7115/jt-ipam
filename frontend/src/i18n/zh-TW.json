@@ -281,6 +281,7 @@
     "system_logs": "系統記錄",
     "graylog_dsv": "整合 Graylog",
     "pfsense": "整合 pfSense",
+    "windows_dhcp": "Windows DHCP",
     "pfsense_fw": "防火牆 (pfSense)"
   },
   "topbar": {
@@ -1026,7 +1027,8 @@
       "proxmox": "Proxmox VE",
       "wazuh": "Wazuh",
       "adguard": "AdGuard",
-      "snmp": "LibreNMS (sysName)"
+      "snmp": "LibreNMS (sysName)",
+      "windows_dhcp": "Windows DHCP"
     },
     "model_title": "裝置型號來源順序",
     "model_subtitle": "多個來源（LibreNMS hardware / Proxmox VE / OPNsense）提供同一台裝置型號時，排越前面優先採用；手動最高且不可停用。拖拉調整。"
@@ -1091,7 +1093,8 @@
     "role_dhcp_range": "DHCP",
     "role_dhcp_range_hint": "此 IP 落在 DHCP 發放範圍／目前有租約",
     "is_dhcp_server": "標記為 DHCP 伺服器",
-    "is_dhcp_server_hint": "在 IP 清單以「DHCP 伺服器」標記此 IP。對應到已整合 OPNsense／pfSense 防火牆的 IP 會自動標記。"
+    "is_dhcp_server_hint": "在 IP 清單以「DHCP 伺服器」標記此 IP。對應到已整合 OPNsense／pfSense 防火牆的 IP 會自動標記。",
+    "source_windows_dhcp": "Windows DHCP"
   },
   "subnets": {
     "title": "子網路",
@@ -2517,6 +2520,8 @@
     "title": "pfSense 防火牆",
     "create": "新增 pfSense",
     "alias": "別名",
+    "dhcp_leases": "DHCP 租約",
+    "dhcp_ranges": "DHCP 發放範圍",
     "aliases": "別名數",
     "syncs": "同步項目",
     "sync_interval": "同步間隔（秒）",
@@ -2720,5 +2725,19 @@
     "import_failed": "匯入失敗。",
     "col_table": "資料表",
     "col_errored": "錯誤"
+  },
+  "windows_dhcp": {
+    "title": "Windows DHCP 伺服器",
+    "intro": "透過 WinRM + PowerShell 唯讀同步 Windows DHCP 伺服器。jt-ipam 只執行 Get-* 指令，不會更動 DHCP 伺服器上的任何設定。需要 WinRM 可連線（預設 5986/HTTPS），以及一個具 DHCP 讀取權限的帳號。",
+    "host": "主機",
+    "username": "帳號",
+    "password": "密碼",
+    "password_keep": "密碼（留空表示不更改）",
+    "winrm": "WinRM 連接埠／TLS",
+    "winrm_hint": "預設 5986（HTTPS）；HTTP 為 5985。若伺服器位於私有網段，後端需啟用 OUTBOUND_ALLOW_PRIVATE。",
+    "pull_what": "要拉取的資料",
+    "scopes": "發放範圍（scope）",
+    "leases": "租約",
+    "test_ok": "連線成功 —— 找到 {n} 個發放範圍"
   }
 }

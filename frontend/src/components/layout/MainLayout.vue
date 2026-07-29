@@ -35,7 +35,7 @@ import {
   // Phase 3 / Admin
   Phase3Icon, VirtualizationIcon, PhysicalIcon, PowerIcon, VpnIcon,
   AdminIcon, AuditIcon, UsersIcon, GroupsIcon, CustomFieldsIcon, CustomersIcon, AnomalyIcon, ChatHistoryIcon,
-  DnsIcon, LibreNMSIcon, FirewallIcon, WazuhIcon, ScanAgentsIcon, WebhooksIcon, LockIcon,
+  DnsIcon, LibreNMSIcon, FirewallIcon, DhcpServerIcon, WazuhIcon, ScanAgentsIcon, WebhooksIcon, LockIcon,
   MigrationIcon, ImportIcon, PluginsIcon, ExportIcon, TerminalIcon,
   // topbar / user menu
   LogoutIcon, AccountIcon, LanguageIcon, ThemeDarkIcon, ThemeLightIcon,
@@ -236,6 +236,7 @@ const menuOptions = computed<MenuOption[]>(() => {
           { label: () => t("nav.librenms"),      key: "librenms",       icon: renderIcon(LibreNMSIcon) },
           { label: () => t("nav.firewall_admin"), key: "firewall_admin", icon: renderIcon(FirewallIcon) },
           { label: () => t("nav.pfsense"),        key: "pfsense",        icon: renderIcon(FirewallIcon) },
+          { label: () => t("nav.windows_dhcp"),  key: "windows_dhcp",   icon: renderIcon(DhcpServerIcon) },
           { label: () => t("nav.virt_admin"),    key: "virt_admin",     icon: renderIcon(VirtualizationIcon) },
           { label: () => t("nav.wazuh"),         key: "wazuh",          icon: renderIcon(WazuhIcon) },
           { label: () => t("nav.graylog_dsv"),   key: "graylog_dsv",    icon: renderIcon(ExportIcon) },

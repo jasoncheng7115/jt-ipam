@@ -1,4 +1,4 @@
-# jt-ipam v0.5.112
+# jt-ipam v0.5.113
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -24,6 +24,7 @@ Familiar to phpIPAM users so they are productive from day one, but built from sc
 - **DNS** — PowerDNS, BIND 9, OPNsense Unbound, Univention UCS, Microsoft Windows DNS (reads forward/reverse status, optional record push)
 - **LibreNMS** — device sync, ARP / FDB harvesting, online-status reconciliation, auto-onboarding to monitoring
 - **Infrastructure** — Proxmox VE, Wazuh, OPNsense / pfSense (alias / rule / NAT sync)
+- **DHCP** — each server is configured on its own: OPNsense (Kea/ISC) and pfSense sync leases and address ranges over their REST APIs; **Windows DHCP Server (Beta)** is read-only over WinRM + PowerShell (`Get-*` only, needs WinRM reachable — 5986/HTTPS by default). Addresses inside a pool are flagged in the IP list and detail view.
 - **Graylog** — exposes an IP→hostname/FQDN DSV lookup endpoint for Graylog's "DSV File from HTTP" data adapter
 - **Local AI** — natural-language queries and semantic search over LLM Server (data never leaves the host), plus an MCP server (stdio and Streamable HTTP transports) so external LLM clients can drive the IPAM; `gemma4:26b` works well in our testing
 

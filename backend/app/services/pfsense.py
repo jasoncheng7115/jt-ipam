@@ -27,6 +27,10 @@ from app.services.hostname import apply_observation
 # pfSense-pkg-RESTAPI v2 端點（如不同版本路徑有異，於此集中調整）
 EP_VERSION = "/api/v2/system/version"
 EP_DHCP_LEASES = "/api/v2/status/dhcp_server/leases"
+# 發放範圍：每個介面一筆 DHCP server 設定（含主範圍 range_from/range_to 與巢狀額外池）
+# 複數形才是列表端點（單數需要 id，會回 MODEL_REQUIRES_ID）——已對實機確認。
+EP_DHCP_SERVERS = "/api/v2/services/dhcp_servers"
+EP_DHCP_ADDRESS_POOLS = "/api/v2/services/dhcp_server/address_pools"
 EP_ARP_TABLE = "/api/v2/diagnostics/arp_table"
 EP_ALIASES = "/api/v2/firewall/aliases"
 EP_RULES = "/api/v2/firewall/rules"
@@ -180,6 +184,81 @@ async def sync_dhcp_leases(session: AsyncSession, fw: PfSenseFirewall) -> int:
     return seen
 
 
+def _range_pairs(d: dict) -> list[tuple[str, str]]:
+    """從一筆 pfSense DHCP 設定取出所有 (起, 迄)。
+
+    主範圍是 range_from / range_to；額外池放在巢狀 `pool`（同樣的欄位名）。
+    不同版本欄位名可能微調，故多給幾個別名；抓不到就回空（不猜、不硬湊）。
+    """
+    out: list[tuple[str, str]] = []
+
+    def _pick(src: dict) -> tuple[str, str] | None:
+        for a_key, b_key in (("range_from", "range_to"), ("from", "to"), ("start", "end")):
+            a, b = src.get(a_key), src.get(b_key)
+            if isinstance(a, str) and isinstance(b, str) and a.strip() and b.strip():
+                return a.strip(), b.strip()
+        return None
+
+    main = _pick(d)
+    if main:
+        out.append(main)
+    for extra in (d.get("pool") or []):
+        if isinstance(extra, dict):
+            got = _pick(extra)
+            if got:
+                out.append(got)
+    return out
+
+
+async def sync_dhcp_ranges(session: AsyncSession, fw: PfSenseFirewall) -> int:
+    """把 pfSense 的 DHCP 發放範圍鏡像進 dhcp_pool_ranges（pfSense 自己的同步，與其他來源互不干涉）。
+
+    來源：每個介面一筆的 dhcp_servers（含巢狀額外池），再補獨立的 address_pools 端點。
+    只有啟用中的介面才算（enable=false 的範圍不會被發放）。
+    """
+    from app.models.dhcp import DHCPPoolRange
+
+    now = datetime.now(UTC)
+    parsed: list[tuple[str | None, str, str]] = []   # (介面/來源標示, 起, 迄)
+
+    rows = await _api_get(fw, EP_DHCP_SERVERS, timeout=10.0)
+    for d in rows if isinstance(rows, list) else []:
+        if not isinstance(d, dict):
+            continue
+        if d.get("enable") is False:      # 明確關閉才跳過；欄位不存在視為啟用
+            continue
+        iface = d.get("interface") or d.get("id")
+        for a, b in _range_pairs(d):
+            parsed.append((str(iface) if iface else None, a, b))
+
+    # 額外位址池（獨立端點；抓不到就算了，不影響主範圍）
+    try:
+        pools = await _api_get(fw, EP_DHCP_ADDRESS_POOLS, timeout=10.0)
+    except PfSenseError:
+        pools = []
+    for d in pools if isinstance(pools, list) else []:
+        if not isinstance(d, dict):
+            continue
+        iface = d.get("parent_id") or d.get("interface")
+        for a, b in _range_pairs(d):
+            pair = (str(iface) if iface else None, a, b)
+            if pair not in parsed:
+                parsed.append(pair)
+
+    # 鏡像同步：只清掉「這台 pfSense 自己」的列
+    await session.execute(delete(DHCPPoolRange).where(
+        DHCPPoolRange.source_type == "pfsense", DHCPPoolRange.source_id == fw.id,
+    ))
+    for iface, a, b in parsed:
+        session.add(DHCPPoolRange(
+            source_type="pfsense", source_id=fw.id, source_name=fw.name,
+            subnet_cidr=iface,          # pfSense 以介面為單位，沒有 CIDR → 存介面名
+            start_ip=a, end_ip=b,
+            family=6 if ":" in a else 4, source="pfsense", synced_at=now,
+        ))
+    return len(parsed)
+
+
 async def sync_arp_table(session: AsyncSession, fw: PfSenseFirewall) -> int:
     rows = await _api_get(fw, EP_ARP_TABLE)
     if not isinstance(rows, list):
@@ -324,6 +403,8 @@ async def sync_instance(session: AsyncSession, fw: PfSenseFirewall) -> dict[str,
     counts: dict[str, int] = {}
     if fw.sync_dhcp:
         counts["dhcp"] = await sync_dhcp_leases(session, fw)
+    if fw.sync_dhcp_ranges:
+        counts["dhcp_ranges"] = await sync_dhcp_ranges(session, fw)
     if fw.sync_arp:
         counts["arp"] = await sync_arp_table(session, fw)
     if fw.sync_aliases:
