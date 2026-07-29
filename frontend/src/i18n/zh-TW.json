@@ -281,7 +281,7 @@
     "system_logs": "系統記錄",
     "graylog_dsv": "整合 Graylog",
     "pfsense": "整合 pfSense",
-    "windows_dhcp": "Windows DHCP",
+    "windows_dhcp": "整合 Windows DHCP",
     "pfsense_fw": "防火牆 (pfSense)"
   },
   "topbar": {

@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [0.5.114] — 2026-07-29
+
+### 修正
+- 繁中選單：Windows DHCP 補上「整合 」前綴（「整合 Windows DHCP」），與同區塊其他整合項目一致。
+
+
 ## [0.5.113] — 2026-07-29
 
 ### 新增

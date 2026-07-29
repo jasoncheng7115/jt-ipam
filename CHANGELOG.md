@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [0.5.114] — 2026-07-29
+
+### Fixed
+- zh-TW menu: the Windows DHCP entry now carries the same "整合 " (integration) prefix as every other integration in that group.
+
+
 ## [0.5.113] — 2026-07-29
 
 ### Added
