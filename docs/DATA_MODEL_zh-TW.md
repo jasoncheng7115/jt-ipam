@@ -209,9 +209,10 @@ NetBox 風但精簡（一張多型 termination 表，不拆多表）。
 - **VMInterface**：`mac`、`primary_ip`、`bridge`、`vlan_id`。
 
 ### 6.5 DNS：`dns.py`
-- **DNSServer**：provider 抽象 `type`（powerdns/bind9/unbound_opnsense/windows_dns/univention_ucs/technitium）；密鑰在 `encrypted_secrets`，非機密設定在 `extra_config`（`windows_dns` 用 `username`、`use_ssl`（預設 HTTP 5985 並強制 NTLM 加密，或 HTTPS 5986；存檔時一律寫明，migration 0197 把之前建立的伺服器明確記成 HTTPS）、選用的 `winrm_port`、`verify_tls`）。
+- **DNSServer**：provider 抽象 `type`（powerdns/bind9/unbound_opnsense/windows_dns/univention_ucs/technitium）；密鑰在 `encrypted_secrets`，非機密設定在 `extra_config`（`windows_dns` 用 `username`、`use_ssl`（預設 HTTP 5985 並強制 NTLM 加密，或 HTTPS 5986；存檔時一律寫明，migration 0197 把之前建立的伺服器明確記成 HTTPS）、選用的 `winrm_port`、`verify_tls`）；`compare_group_id`（選用，`ON DELETE SET NULL`）表示屬於哪個比對群組。
 - **DNSZone**：`type`（forward/reverse）、`managed`、`associated_subnet_ids`（`uuid[]`）。
-- **DNSRecord**：`type`（A/AAAA/PTR/CNAME/MX/TXT/SRV/NS/SOA）、`source`（manual/from_ipam/from_dns_pulled）、`consistency_state`（consistent/dns_only/ipam_only/mismatch）供不一致報表、選填 `ipam_address_id` 反向連結。
+- **DNSRecord**：`type`（A/AAAA/PTR/CNAME/MX/TXT/SRV/NS/SOA）、`source`（manual/from_ipam/from_dns_pulled）、`consistency_state`（consistent/dns_only/ipam_only/mismatch）供不一致報表、選填 `ipam_address_id` 反向連結。`name_norm`/`value_norm`（migration 0203）是正規化後的完整名稱與值（小寫、去結尾點、相對名稱補上 zone、IPv6 標準寫法），每次同步都會填，讓不同產品的紀錄可以比對與合併。
+- **DNSCompareGroup** / **DNSCompareGroupDiff**（`dns_compare_group.py`，migration 0203）：內容應該一致的伺服器（jt-ipam 不會在它們之間同步紀錄，只比對拉回來的資料；`dns_compare_groups`：唯一的 `name`、`description`、`notify_enabled`、`grace_minutes`（0 到 1440），上次比對的 `last_checked_at`/`last_status`（ok/pending/mismatch/incomplete/single/incompatible）/`last_message`，讓同一批差異只通知一次的 `alerted_at`，以及 `excluded_zones`（migration 0204：不比對的 zone，正規化後的名稱；給只複寫部分 zone、或某台另外放自己 zone 的情況））。每台成員拉取完就比對整組，只用已經拉回來的紀錄；Unbound（OPNsense）只能和 Unbound 同組，AD 的服務定位資料（`_msdcs`、`TrustAnchors`、`DomainDnsZones`、`ForestDnsZones`）不比對。`dns_compare_group_diffs` 是目前的差異：`kind`（zone/record）、`zone`、`name`、`type`、`value`、`present_on`/`missing_on`（伺服器 id 的 jsonb 清單）、`key_hash`（同組唯一）、`first_seen_at`（有這筆的伺服器拉取的時間，也就是資料的時間）、`confirmed_at`（0204：每一台沒有的伺服器都在 `first_seen_at` 加寬限時間之後重新拉取過、仍然沒有才寫入；成員是依序拉取的，用比對當下的時鐘判斷會拿別台的舊資料下結論）、`last_seen_at`。兩邊恢復一致時整列刪除。
 
 ### 6.6 AdGuard Home：`adguard.py`
 - **AdGuardInstance**：HTTP basic-auth（加密密碼）、`sync_clients` / `sync_rewrites` 開關。pull-only 補充 IPAM 資料。

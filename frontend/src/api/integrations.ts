@@ -27,6 +27,8 @@ export interface DNSServer {
   enabled: boolean;
   sync_interval_seconds: number;
   scope_subnet_ids?: string[] | null;
+  /** 比對群組（互相同步的 DNS 伺服器） */
+  compare_group_id?: string | null;
   last_sync_at?: string | null;
   last_error?: string | null;
   created_at: string;
@@ -49,6 +51,8 @@ export interface DNSServerCreate {
   enabled?: boolean;
   sync_interval_seconds?: number;
   scope_subnet_ids?: string[] | null;
+  /** 有帶才更新：null＝移出群組 */
+  compare_group_id?: string | null;
   api_key?: string | null;
   api_secret?: string | null;
   tsig_key?: string | null;
@@ -69,7 +73,7 @@ export async function deleteDNSServer(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/dns/servers/${id}`);
 }
 
-export async function syncDNSServer(id: string): Promise<unknown> {
+export async function syncDNSServer(id: string): Promise<{ task_id: string }> {
   const { data } = await apiClient.post(`/api/v1/dns/servers/${id}/sync`, null);
   return data;
 }
@@ -77,6 +81,81 @@ export async function syncDNSServer(id: string): Promise<unknown> {
 export async function testDNSServer(id: string): Promise<{ ok: boolean; server?: Record<string, unknown> }> {
   const { data } = await apiClient.post(`/api/v1/dns/servers/${id}/test`);
   return data;
+}
+
+// ── DNS 比對群組：互相同步的伺服器；同步後比對各台、合併顯示（2026-10-10）──
+export type DNSCompareStatus = "ok" | "mismatch" | "pending" | "incomplete" | "single" | "incompatible";
+
+export interface DNSCompareGroupMember {
+  id: string; name: string; type: string; enabled: boolean;
+  last_sync_at: string | null; last_error: string | null;
+}
+
+export interface DNSCompareGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  notify_enabled: boolean;
+  grace_minutes: number;
+  last_checked_at: string | null;
+  last_status: DNSCompareStatus | null;
+  last_message: string | null;
+  alerted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  members: DNSCompareGroupMember[];
+  diff_count: number;
+  /** 不比對的 zone（主從只複寫部分 zone、或某台另外放自己的 zone） */
+  excluded_zones: string[];
+  /** 成員拉回來的 zone：給「不比對的 zone」選單用 */
+  zones: string[];
+}
+
+export interface DNSCompareGroupInput {
+  name: string;
+  description?: string | null;
+  notify_enabled?: boolean;
+  grace_minutes?: number;
+  server_ids?: string[];
+  excluded_zones?: string[];
+}
+
+export interface DNSCompareGroupDiff {
+  id: string;
+  kind: "zone" | "record";
+  zone: string;
+  name: string;
+  type: string;
+  value: string;
+  present_on: { id: string; name: string }[];
+  missing_on: { id: string; name: string }[];
+  first_seen_at: string;
+  last_seen_at: string;
+  confirmed: boolean;
+}
+
+export async function listDNSCompareGroups(): Promise<DNSCompareGroup[]> {
+  return (await apiClient.get<DNSCompareGroup[]>("/api/v1/dns/compare-groups")).data;
+}
+
+export async function createDNSCompareGroup(payload: DNSCompareGroupInput): Promise<DNSCompareGroup> {
+  return (await apiClient.post<DNSCompareGroup>("/api/v1/dns/compare-groups", payload)).data;
+}
+
+export async function updateDNSCompareGroup(id: string, payload: Partial<DNSCompareGroupInput>): Promise<DNSCompareGroup> {
+  return (await apiClient.patch<DNSCompareGroup>(`/api/v1/dns/compare-groups/${id}`, payload)).data;
+}
+
+export async function deleteDNSCompareGroup(id: string): Promise<void> {
+  await apiClient.delete(`/api/v1/dns/compare-groups/${id}`);
+}
+
+export async function checkDNSCompareGroup(id: string): Promise<{ status: DNSCompareStatus; message?: string | null }> {
+  return (await apiClient.post(`/api/v1/dns/compare-groups/${id}/check`)).data;
+}
+
+export async function listDNSCompareGroupDiffs(id: string): Promise<DNSCompareGroupDiff[]> {
+  return (await apiClient.get<DNSCompareGroupDiff[]>(`/api/v1/dns/compare-groups/${id}/diffs`)).data;
 }
 
 // ─────────────────── LibreNMS ───────────────────
@@ -150,7 +229,7 @@ export async function testLibreNMS(id: string): Promise<unknown> {
   return data;
 }
 
-export async function syncLibreNMS(id: string): Promise<unknown> {
+export async function syncLibreNMS(id: string): Promise<{ task_id: string }> {
   const { data } = await apiClient.post(`/api/v1/librenms/instances/${id}/sync`,
     undefined, { timeout: LONG_OP_TIMEOUT_MS });
   return data;
@@ -331,7 +410,7 @@ export async function testFirewall(id: string): Promise<unknown> {
   return data;
 }
 
-export async function syncFirewall(id: string): Promise<unknown> {
+export async function syncFirewall(id: string): Promise<{ task_id: string }> {
   const { data } = await apiClient.post(`/api/v1/firewalls/opnsense/${id}/sync`,
     undefined, { timeout: LONG_OP_TIMEOUT_MS });
   return data;
@@ -578,7 +657,7 @@ export async function testAdGuard(id: string): Promise<unknown> {
     { timeout: LONG_OP_TIMEOUT_MS });
   return data;
 }
-export async function syncAdGuard(id: string): Promise<unknown> {
+export async function syncAdGuard(id: string): Promise<{ task_id: string }> {
   const { data } = await apiClient.post(`/api/v1/adguard/instances/${id}/sync`, null,
     { timeout: LONG_OP_TIMEOUT_MS });
   return data;
@@ -599,14 +678,18 @@ export interface DnsRecord {
   server_id: string | null;       // 來源整合 DNS 伺服器
   server_name: string | null;
   last_seen_at: string | null;
+  /** merge=true：同一個比對群組裡相同的紀錄合成這一筆，哪幾台都有 */
+  servers?: string[] | null;
+  compare_group_name?: string | null;
 }
 
 export async function listDnsRecords(params: {
   q?: string; ip?: string; missing_ip?: boolean; consistency?: string;
-  server_id?: string; rtype?: string; page?: number; page_size?: number;
+  server_id?: string; rtype?: string; page?: number; page_size?: number; merge?: boolean;
 } = {}): Promise<{ items: DnsRecord[]; total: number; page: number; page_size: number }> {
   const { data } = await apiClient.get("/api/v1/dns/records", {
     params: {
+      merge: params.merge || undefined,
       q: params.q || undefined,
       ip: params.ip || undefined,
       missing_ip: params.missing_ip || undefined,
@@ -621,10 +704,11 @@ export async function listDnsRecords(params: {
 }
 
 export async function listDnsRecordTypeCounts(params: {
-  q?: string; ip?: string; missing_ip?: boolean; server_id?: string;
+  q?: string; ip?: string; missing_ip?: boolean; server_id?: string; merge?: boolean;
 } = {}): Promise<{ type: string; count: number }[]> {
   const { data } = await apiClient.get("/api/v1/dns/records/type-counts", {
     params: {
+      merge: params.merge || undefined,
       q: params.q || undefined,
       ip: params.ip || undefined,
       missing_ip: params.missing_ip || undefined,

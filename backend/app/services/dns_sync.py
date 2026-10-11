@@ -11,6 +11,7 @@ jt-ipam 設計：
 from __future__ import annotations
 
 import ipaddress
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -23,8 +24,10 @@ from app.models.dns import DNSRecord, DNSServer, DNSZone
 from app.models.subnet import Subnet
 from app.services.dns import DNSAdapterError, get_adapter
 from app.services.dns.base import DNSRecordOp
+from app.services.dns_compare import normalize_name, normalize_value
 
 #: 某個 zone 讀到 0 筆（A/AAAA/PTR）、本地卻有這麼多筆以上：當成讀取有問題，不刪
+_log = logging.getLogger("jt_ipam.dns_sync")
 STALE_EMPTY_GUARD = 5
 
 
@@ -260,6 +263,9 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
                 if zone.type == "forward" and op.type in ("A", "AAAA") and op.value and op.name:
                     dns_ip_names.setdefault(op.value, set()).add(op.name)
 
+                # 正規化後的名稱與值：比對群組的比對與合併顯示用（各廠牌大小寫、結尾點、IPv6 寫法不同）
+                name_norm = normalize_name(op.name, zinfo.name)
+                value_norm = normalize_value(op.type, op.value)
                 rec = local_keys.get(key)
                 if rec is None:
                     # 全新從 DNS 拉回的紀錄
@@ -269,12 +275,15 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
                         source="from_dns_pulled",
                         consistency_state="dns_only",
                         last_seen_at=run_at,
+                        name_norm=name_norm, value_norm=value_norm,
                     )
                     session.add(rec)
                     summary["dns_only"] += 1
                 else:
                     rec.ttl = op.ttl
                     rec.last_seen_at = run_at
+                    if rec.name_norm != name_norm or rec.value_norm != value_norm:
+                        rec.name_norm, rec.value_norm = name_norm, value_norm
                     if rec.source == "from_ipam":
                         rec.consistency_state = "consistent"
                     elif rec.consistency_state == "ipam_only":
@@ -353,6 +362,17 @@ async def pull_server(session: AsyncSession, server: DNSServer) -> dict[str, int
     finally:
         await adapter.close()
 
+    # 比對群組：這台同步完就比對它所在的組（用已同步的紀錄，不另外連 DNS）。比對出錯不影響同步本身
+    if server.compare_group_id is not None:
+        from app.services.dns_compare import check_group_of_server
+        try:
+            result = await check_group_of_server(session, server)
+            await session.commit()
+            if result:
+                summary["compare_group"] = result.get("status")
+        except Exception as exc:
+            await session.rollback()
+            _log.warning("dns comparison group check failed after %s: %s", server.name, exc)
     return summary
 
 

@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [Unreleased]
+
+### Added
+- DNS comparison groups: put DNS servers whose content should match (primary/secondary, AD-integrated and so on, any number) in one group on the DNS page, or pick the group in the server form. jt-ipam does not sync records between the servers; after every member's pull it compares the records already pulled: a zone with records present on only some members counts as one difference, otherwise A, AAAA and PTR records are compared by normalized name, type and value (case, trailing dot, relative names and IPv6 spelling no longer matter; TTL is not compared). Different products can be mixed (for example Windows DNS and UCS); AD service locator data (`_msdcs`, `TrustAnchors`, `DomainDnsZones`, `ForestDnsZones`), which Windows and Samba register differently, is not compared. Unbound (OPNsense) holds host overrides rather than full zones, so it can only be grouped with other Unbound servers; saving a mixed group is refused with the reason. When only some zones are replicated, or one server also holds zones of its own, list them under "Zones not compared" in the group settings or click "Stop comparing this zone" in the difference list; changing members or excluded zones compares the group again right away. A difference is confirmed only when each server missing it has been pulled again at least the grace period (default 30 minutes, for replication delay) after it appeared and still lacks it (members are pulled one after another, so this uses the data time and never judges a server by data it has not refreshed yet); it is listed with which servers have it and which do not, and notifies administrators through the existing notification settings (events "DNS comparison group mismatch" and "DNS comparison group consistent again"; one batch notifies once, new differences notify again). While a member's last pull failed or it was never pulled, the group shows "Incomplete data" and does not judge. "Check now" compares immediately; the group table and the difference list can be filtered, sorted, exported and have selectable columns; groups and their changes are audited, and only administrators can manage them.
+- Identical records within a comparison group now show once: the DNS records page (with a "Merge identical records in comparison groups" switch, on by default) shows the servers that hold each record and the group; anomaly detection "DNS points to unregistered address" and IP change assessment also show one row or finding per record with every server listed (evidence still lists each server's record). Servers not in the same group are never merged.
+- Anomaly detection, "DNS comparison mismatch": confirmed differences from all groups, with the zone, name, type, value, the servers that have it and the ones missing it. The AI tool `list_anomalies` returns it too.
+- Verified against real servers: PowerDNS as primary with BIND9 and Technitium as secondaries (zone transfer) in one group: consistent, then after replication broke only the server actually missing the record was reported, then a resolved notice once it recovered.
+- Upgrade: migrations 0203 and 0204 add the tables and columns; existing records get their normalized columns on the next pull, and until then groups show "Incomplete data". Nothing to configure on the host.
+
+### Changed
+- Background jobs now report back where you started them: Pull / Sync now on every integration, subnet CSV import and device import open a "Background jobs" panel at the bottom right with a spinner, elapsed time and progress, then the result summary or the full error (with a copy button), and refresh the page's list when done. You no longer need to open the jobs page and then the logs to find out what happened. The panel follows you across pages, resumes after a reload, keeps failures until you close them and collapses successes after 20 seconds.
+- Wide tables keep the "Actions" column pinned to the right at desktop width, so the buttons stay in reach while you scroll sideways with a mouse (applied to every table at once; phones are unchanged).
+
+### Fixed
+- Jobs page: the result of a phpIPAM migration with changes failed to display (a variable name clash broke the summary).
+- Univention UCS: PTR records in reverse zones were never read (only A and AAAA from forward zones), so reverse records from UCS were missing everywhere. Reverse zone names now come from the zone's DN, which also makes IPv6 reverse zones correct.
+
 ## [1.0.6] - 2026-10-10
 
 ### Security

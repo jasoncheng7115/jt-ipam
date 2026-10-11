@@ -1508,7 +1508,6 @@
     "status_cancelled": "已取消",
     "empty_active": "目前沒有進行中的作業",
     "empty_history": "尚無歷史作業",
-    "queued_toast": "{kind} 已加入作業佇列 (目標：{target})，可至「作業」頁面檢視進度",
     "summary": {
       "error": "錯誤：{msg}",
       "named_error": "{name}：錯誤 {msg}",
@@ -1580,6 +1579,20 @@
       "wazuh_sync": "Wazuh 同步",
       "windows_dhcp_sync": "Windows DHCP 同步",
       "zabbix_sync": "Zabbix 同步"
+    },
+    "tracker": {
+      "title": "背景作業",
+      "clear_done": "清除已完成",
+      "collapse": "收合",
+      "expand": "展開",
+      "view_tasks": "到作業頁",
+      "dismiss": "關閉",
+      "copy": "複製錯誤訊息",
+      "copied": "已複製",
+      "loading": "讀取中…",
+      "lost": "找不到這個作業（可能已被清除，或你沒有權限查看）",
+      "seconds": "{n} 秒",
+      "minutes": "{m} 分 {s} 秒"
     }
   },
   "groups": {
@@ -1950,7 +1963,64 @@
     "verify_tls_winrm_hint": "WinRM HTTPS 用自簽憑證時關閉；關閉後仍走 HTTPS 加密，只是不驗證憑證（建議改用內部 CA 簽發的憑證）。",
     "winrm_transport": "WinRM 連線",
     "winrm_transport_hint": "預設 HTTP 5985，因為 Windows Server 防火牆預設封鎖 HTTPS 5986（要用 HTTPS 得另外建立憑證監聽與防火牆規則）。走 HTTP 時一律以 NTLM 加密內容與帳密，不會明文傳送。連接埠留空用預設值。",
-    "winrm_http_label": "HTTP（5985，預設）"
+    "winrm_http_label": "HTTP（5985，預設）",
+    "compare_group": "比對群組",
+    "compare_group_none": "不屬於任何比對群組",
+    "compare_group_hint": "內容應該一致的 DNS 伺服器（例如主從、AD 整合）放在同一個比對群組：相同的紀錄合併顯示，每次拉取後比對各台的資料是否一致。jt-ipam 不會在伺服器之間同步紀錄。",
+    "cg_title": "比對群組",
+    "cg_intro": "把內容應該一致的 DNS 伺服器（主從、AD 整合、多主等，伺服器之間自己會複寫）放在同一組。jt-ipam 不會在它們之間同步或修改紀錄，只比對各台拉取回來的資料：DNS 紀錄頁、異常偵測與 IP 變更評估把相同的紀錄合併成一筆並寫出哪幾台都有；每台拉取完就比對組內各台，不一致的列出來，確認後用通知功能發告警。比對 A、AAAA、PTR 紀錄；AD 的服務定位資料（_msdcs、TrustAnchors、DomainDnsZones、ForestDnsZones）不比對；只複寫部分 zone 時，其餘的可以設成不比對。",
+    "cg_create": "新增比對群組",
+    "cg_edit": "編輯比對群組",
+    "cg_empty": "還沒有比對群組",
+    "cg_members": "成員",
+    "cg_members_ph": "選擇內容應該一致的 DNS 伺服器",
+    "cg_members_hint": "至少兩台才會比對；原本在別組的伺服器會移到這一組；停用的伺服器不參與比對。不同軟體可以混搭（例如 Windows DNS 與 UCS），但 Unbound（OPNsense）只存主機覆寫、不是完整的 zone，只能和 Unbound 同組。",
+    "cg_grace": "寬限時間",
+    "cg_grace_hint": "伺服器之間的複寫本來就有延遲：差異出現超過這麼久之後，「沒有的那台」重新拉取時仍然沒有，才算確認、才發告警。",
+    "cg_excluded": "不比對的 zone",
+    "cg_excluded_ph": "選擇或輸入 zone（留空＝全部都比）",
+    "cg_excluded_hint": "主從之間只複寫部分 zone、或某台另外放了自己的 zone 時，把那些 zone 列在這裡：只在一台不算差異，裡面的紀錄也不比。存檔後馬上重新比對。",
+    "cg_exclude_zone": "不比對這個 zone",
+    "cg_exclude_zone_confirm": "之後不再比對 zone「{zone}」？可以在群組設定的「不比對的 zone」改回來。",
+    "cg_zone_excluded": "已不再比對 zone「{zone}」",
+    "cg_excluded_note": "不比對的 zone：{zones}",
+    "cg_minutes": "分鐘",
+    "cg_notify": "發告警",
+    "cg_notify_hint": "確認不一致時通知管理員，恢復一致時再通知一次（依通知發送設定的「DNS 比對群組不一致」）。",
+    "cg_description": "說明",
+    "cg_name_required": "請輸入群組名稱",
+    "cg_status_ok": "一致",
+    "cg_status_mismatch": "不一致",
+    "cg_status_pending": "待確認",
+    "cg_status_incomplete": "資料不完整",
+    "cg_status_single": "成員不足",
+    "cg_status_never": "尚未比對",
+    "cg_status_incompatible": "無法比對",
+    "cg_status_hint_ok": "組內各台的紀錄相同。",
+    "cg_status_hint_mismatch": "有已確認的差異：沒有的那台在寬限時間之後重新拉取，仍然沒有。",
+    "cg_status_hint_pending": "有差異但還沒確認：可能還在寬限時間內，或沒有的那台還沒重新拉取。",
+    "cg_status_hint_incomplete": "有成員最近一次拉取失敗或還沒拉取過，先不判定。",
+    "cg_status_hint_single": "啟用中的成員不到兩台，沒有東西可以比對。",
+    "cg_status_hint_never": "成員拉取完會自動比對，也可以按「立即檢查」。",
+    "cg_status_hint_incompatible": "Unbound（OPNsense）只能和 Unbound 同組；請把其他類型的伺服器移到別組。",
+    "cg_diff_count": "差異",
+    "cg_last_checked": "最後比對",
+    "cg_diffs": "差異清單",
+    "cg_diffs_title": "比對群組「{name}」的差異",
+    "cg_check": "立即檢查",
+    "cg_checked": "比對完成：{status}",
+    "cg_check_hint": "比對用的是 jt-ipam 已經拉取回來的紀錄；要拿最新資料，先按各台的「拉取」。差異出現 {n} 分鐘之後，沒有的那台重新拉取時仍然沒有，才算確認。",
+    "cg_delete_confirm": "刪除這個比對群組？成員伺服器會回到沒分組，紀錄不再合併顯示（伺服器上的紀錄不受影響）。",
+    "cg_diff_what": "差異",
+    "cg_kind_zone": "整個 zone 只在部分伺服器上",
+    "cg_present_on": "有的伺服器",
+    "cg_missing_on": "沒有的伺服器",
+    "cg_first_seen": "第一次看到",
+    "cg_value": "值",
+    "cg_last_seen": "最後一次看到",
+    "cg_confirmed": "已確認",
+    "cg_pending": "待確認",
+    "cg_no_diffs": "沒有差異"
   },
   "scope_overlap": {
     "warning": "偵測到有重疊網段（同一個 IP 存在於多個子網路）。此整合未設定「限定子網路範圍」，同步時可能把上線狀態／DHCP／MAC 標到錯誤單位的同 IP。建議在下方指定關聯子網路範圍。"
@@ -2298,7 +2368,11 @@
       "arp_examples": "ARP 例子",
       "fdb_examples": "交換器 MAC 表例子",
       "suspect_count": "疑似讀壞／過期",
-      "host": "主機"
+      "host": "主機",
+      "group": "比對群組",
+      "present_on": "有的伺服器",
+      "missing_on": "沒有的伺服器",
+      "compare_group": "比對群組"
     },
     "rot": {
       "dangling_nat": "埠轉發的目標位址不在 IPAM —— 目標可能已回收，或從未登記",
@@ -2346,7 +2420,9 @@
     "bleed_arp_line": "{ip}（{subnet}）的 ARP 回應用了 {mac}，這個 MAC 屬於 {owner}（{owner_subnet}）",
     "bleed_fdb_line": "{switch}，VLAN {vlan}：{detail}",
     "evidence_arp_answer": "ARP 回應用了另一個子網段的 MAC",
-    "evidence_switch_fdb": "同一個 VLAN 學到兩個子網段的 MAC"
+    "evidence_switch_fdb": "同一個 VLAN 學到兩個子網段的 MAC",
+    "dns_compare_mismatch": "DNS 比對不一致",
+    "explain_dns_compare_mismatch": "標成同一個比對群組的 DNS 伺服器，紀錄卻不一樣：整個 zone 或某筆紀錄只在部分伺服器上，而且沒有的那台在群組設定的寬限時間之後重新拉取，仍然沒有（剛改完、還在複寫中、或還沒輪到拉取的不列）。常見原因是伺服器之間的複寫（區域傳送、AD 複寫）中斷，或 jt-ipam 用的帳號讀不到某些 zone。比對用的是 jt-ipam 已經拉取回來的紀錄。"
   },
   "webhooks": {
     "events_label": "事件 (* = 全部)",
@@ -3552,7 +3628,11 @@
     "console_revoked_account_inactive": "帳號已被停用，主控台連線已結束。",
     "console_revoked_session_revoked": "這次登入已被登出（自己登出、被強制登出或重設雙因素驗證），主控台連線已結束。請重新登入。",
     "console_revoked_target_removed": "這個 IP 已被刪除或不再能開主控台，連線已結束。",
-    "console_revoked_permission_revoked": "你對這個 IP 開主控台的權限已被收回，連線已結束。"
+    "console_revoked_permission_revoked": "你對這個 IP 開主控台的權限已被收回，連線已結束。",
+    "dns_compare_group_not_found": "找不到這個 DNS 比對群組（可能已被刪除）。",
+    "dns_server_not_found": "找不到指定的 DNS 伺服器（可能已被刪除）。",
+    "dns_compare_group_name_taken": "已經有同名的 DNS 比對群組，請換一個名稱。",
+    "dns_compare_group_mixed_kinds": "Unbound（OPNsense）只存主機覆寫、不是完整的 zone，只能和其他 Unbound 放在同一個比對群組。"
   },
   "adguard_admin": {
     "scope_subnets": "限定子網路範圍",
@@ -3885,7 +3965,9 @@
     "c_consistent": "一致",
     "c_dns_only": "僅 DNS 有",
     "c_ipam_only": "僅 IPAM 有",
-    "c_mismatch": "不一致"
+    "c_mismatch": "不一致",
+    "merge_groups": "合併比對群組裡相同的紀錄",
+    "group_badge": "群組 {name}"
   },
   "req_policy": {
     "intro": "設定誰可以核准 / 駁回 IP 申請。送出申請時，所有審核人會收到通知（若已設定 Email 通知也會收到信）。",
@@ -3972,7 +4054,9 @@
       "anomaly_arp_flux": "異常偵測：同一台主機多張網卡回應同一個 IP",
       "anomaly_l2_subnet_bleed": "異常偵測：兩個子網段混在同一個二層",
       "credential_expiring": "API 權杖／MCP 金鑰／公開端點權杖即將到期",
-      "security_session_reuse": "疑似登入權杖被盜用（工作階段已撤銷）"
+      "security_session_reuse": "疑似登入權杖被盜用（工作階段已撤銷）",
+      "dns_compare_mismatch": "DNS 比對群組不一致",
+      "dns_compare_resolved": "DNS 比對群組恢復一致"
     },
     "enable": "啟用",
     "secret_keep": "（已設定，留空＝不變更）",
@@ -4421,7 +4505,12 @@
     "session_reuse": "疑似登入權杖被盜用：{user}",
     "session_reuse_body": "{user} 已經換掉的更新權杖從 {ip} 又被使用，那個登入已撤銷。若不是本人在多個裝置同時操作，請重設密碼並檢查稽核記錄。",
     "session_reuse_self": "你的一個登入已被撤銷",
-    "session_reuse_self_body": "已經換掉的登入權杖從 {ip} 又被使用，可能被盜用；請變更密碼。"
+    "session_reuse_self_body": "已經換掉的登入權杖從 {ip} 又被使用，可能被盜用；請變更密碼。",
+    "dns_compare_mismatch": "DNS 比對群組「{group}」有 {count} 筆不一致",
+    "dns_compare_mismatch_body": "{what}：{missing} 沒有",
+    "dns_compare_mismatch_body_more": "{what}：{missing} 沒有（另外還有 {more} 筆，見差異清單）",
+    "dns_compare_resolved": "DNS 比對群組「{group}」已恢復一致",
+    "dns_compare_resolved_body": "組內各台的紀錄已經相同。"
   },
   "system_transfer": {
     "title": "系統匯出／匯入",
@@ -5731,7 +5820,6 @@
     "version": "版本",
     "test": "測試連線",
     "sync_now": "立即同步",
-    "sync_started": "同步已排入背景執行",
     "confirm_delete": "確定刪除「{name}」？",
     "name_ph": "例：台北總部 OCS",
     "name_url_required": "名稱與網址為必填",
@@ -5905,7 +5993,6 @@
     "errors_not_imported": "有錯誤的列不會匯入（整列都不寫，不會只寫一半）。",
     "run": "匯入",
     "run_n": "匯入 {n} 筆",
-    "queued": "已開始匯入，進度可在「作業」頁查看。",
     "fatal_empty_file": "檔案是空的。",
     "fatal_no_name_column": "找不到「名稱」欄（name）。第一列要是檔頭。",
     "fatal_too_many_rows": "一次最多匯入 {max} 列，請分批。",

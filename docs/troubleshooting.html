@@ -903,6 +903,19 @@ sudo sysctl --system</code></pre>
         </p>
       </article>
 
+      <article class="qa" id="qa-dns-compare-group">
+        <h3>
+          <span class="zh">DNS 比對群組一直顯示「資料不完整」「無法比對」，或列出一整個 zone 只在其中一台</span>
+          <span class="en">A DNS comparison group keeps showing "Incomplete data" or "Cannot compare", or lists a whole zone as present on only one server</span>
+          <span class="ja">DNS 比較グループが「データ不足」「比較できません」のまま、またはゾーン全体が 1 台にしかないと表示される</span>
+        </h3>
+        <p>
+          <span class="zh">jt-ipam 不會在伺服器之間同步紀錄，比對只用它已經拉回來的紀錄，所以每台成員都要拉取成功過。「資料不完整」的說明會寫出是哪一台：那台最近一次拉取失敗（到 DNS 頁看它的錯誤訊息）或從沒拉取過，修好後按它的「拉取」，群組會跟著重新比對。剛升級到這一版時，既有的紀錄要等下一輪拉取才有比對用的正規化欄位，在那之前也會顯示「資料不完整」，對每台成員按一次「拉取」即可。一整個 zone 只在部分成員上，最常見的原因是那幾台的帳號讀不到那個 zone：Technitium 逐個 zone 給權限，沒有權限的 zone 根本不會列出來（測試連線會列出讀不到的 zone）；BIND 9 要讀哪些 zone 是在伺服器設定的「Zone 清單（BIND9）」逐一列出，同一組的每台要列一樣的 zone。成員之間本來就只複寫部分 zone、或某台另外放了自己的 zone 時，在差異清單那一列按「不比對這個 zone」，或在群組設定的「不比對的 zone」列出來即可，存檔後馬上重新比對。「無法比對」表示 Unbound（OPNsense）和其他類型的伺服器在同一組：Unbound 只存主機覆寫、不是完整的 zone，只能和 Unbound 同組（其他軟體可以互相混搭，例如 Windows DNS 與 UCS）。差異一直停在「待確認」，表示沒有那筆的伺服器在寬限時間之後還沒重新拉取過：確認要等它下一次拉取（看它的拉取間隔），或直接按它的「拉取」。</span>
+          <span class="en">jt-ipam does not sync records between the servers; the comparison uses only the records it has already pulled, so every member must have been pulled successfully. The "Incomplete data" hint names the server: its last pull failed (see its error on the DNS page) or it has never been pulled; fix it and click its Pull, and the group is compared again. Right after upgrading to this version, existing records get the normalized columns used for comparison only on the next pull, so groups show "Incomplete data" until then; click Pull once on each member. A whole zone present on only some members usually means the other members' accounts cannot read it: Technitium grants access per zone and does not list zones without permission at all (the connection test lists unreadable zones); for BIND 9 the zones to read are listed one by one under "Zones (BIND9)" in the server settings, so every member of a group needs the same list. When the servers replicate only some zones, or one of them also holds zones of its own, click "Stop comparing this zone" on that row of the difference list, or list them under "Zones not compared" in the group settings; the group is compared again when you save. A difference that stays "Pending" means the server missing it has not been pulled since the grace period ended: it is confirmed at that server's next pull (see its pull interval), or click its Pull. "Cannot compare" means Unbound (OPNsense) shares a group with another type: Unbound holds host overrides rather than full zones, so it can only be grouped with Unbound (other products can be mixed, for example Windows DNS and UCS).</span>
+          <span class="ja">jt-ipam はサーバー間でレコードを同期せず、比較には取得済みのレコードだけを使うため、すべてのメンバーが一度は取得に成功している必要があります。「データ不足」の説明に該当サーバーが表示されます。直近の取得に失敗した（DNS ページでエラーを確認）か、まだ取得していないサーバーです。直して「取得」を押せばグループも再比較されます。このバージョンへアップグレードした直後は、既存レコードの比較用の正規化列が次の取得まで埋まらないため「データ不足」と表示されます。各メンバーで一度「取得」を押してください。ゾーン全体が一部のメンバーにしかない場合、多くはほかのメンバーのアカウントがそのゾーンを読めないことが原因です。Technitium はゾーンごとに権限を与え、権限のないゾーンは一覧にすら出ません（接続テストで読めないゾーンを表示します）。BIND 9 は読み取るゾーンをサーバー設定の「ゾーン（BIND9）」に 1 つずつ列挙するため、同じグループのサーバーには同じゾーンを列挙してください。一部のゾーンだけを複製している場合や、あるサーバーに独自のゾーンがある場合は、違いの一覧のその行で「このゾーンを比較しない」を押すか、グループ設定の「比較しないゾーン」に入れてください。保存するとすぐに再比較します。違いが「確認待ち」のままの場合、ないサーバーが猶予時間後にまだ取得し直されていません。そのサーバーの次の取得で確定します（取得間隔を確認）。すぐ確認したいときはそのサーバーの「取得」を押してください。「比較できません」は Unbound（OPNsense）とほかの種類のサーバーが同じグループにあることを示します。Unbound はホストオーバーライドのみで完全なゾーンではないため、Unbound 同士でしかグループにできません（ほかの製品は混在できます。例：Windows DNS と UCS）。</span>
+        </p>
+      </article>
+
       <article class="qa" id="qa-relogin">
         <h3>
           <span class="zh">升級之後所有人都被登出、要重新登入</span>

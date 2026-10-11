@@ -17,7 +17,7 @@ import {
 import { DownloadIcon, UploadIcon } from "@/icons";
 
 const props = defineProps<{ show: boolean }>();
-const emit = defineEmits<{ (e: "update:show", v: boolean): void; (e: "queued"): void }>();
+const emit = defineEmits<{ (e: "update:show", v: boolean): void; (e: "queued", taskId: string): void }>();
 const { t, te } = useI18n();
 const msg = useMessage();
 
@@ -62,9 +62,8 @@ async function run() {
   if (!file.value || !canRun.value) return;
   busy.value = true;
   try {
-    await runDeviceImport(file.value, onExisting.value);
-    msg.success(t("device_import.queued"));
-    emit("queued");
+    const r = await runDeviceImport(file.value, onExisting.value);
+    emit("queued", r.task_id);
     emit("update:show", false);
   } catch (e) {
     msg.error(apiErrMsg(e), { duration: 8000, closable: true });

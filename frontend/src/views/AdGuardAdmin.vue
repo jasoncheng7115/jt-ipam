@@ -2,6 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip,
@@ -142,11 +143,9 @@ async function test(id: string) {
 }
 
 async function sync(id: string) {
-  const row = rows.value.find((r) => r.id === id);
-  const targetName = row?.name ?? id.slice(0, 8);
   try {
-    await syncAdGuard(id);
-    msg.success(t("tasks.queued_toast", { kind: "AdGuard sync", target: targetName }));
+    const r = await syncAdGuard(id);
+    trackTask(r.task_id, { onDone: () => void refresh() });
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 

@@ -52,7 +52,10 @@ test("匯入：選檔 → 預覽 → 匯入 → 清單出現；錯誤列講清�
     await expect(page.getByText("這些欄位不認得")).toHaveCount(0);   // 「虛實」認得、略過
 
     await page.getByTestId("device-import-run").click();
-    await expect(page.locator(".n-message").filter({ hasText: "已開始匯入" })).toBeVisible();
+    // 背景作業面板直接顯示進度與結果（客戶 2026-10-10：不用再去作業頁看）
+    const item = page.getByTestId("task-tracker-item").first();
+    await expect(item).toBeVisible();
+    await expect(item).toHaveAttribute("data-state", "succeeded", { timeout: 30_000 });
     // 背景作業：輪詢 API 直到兩台都出現
     await expect.poll(async () => {
       const r = await request.get(`/api/v1/devices?q=e2e-imp-&page_size=50`, { headers: h });

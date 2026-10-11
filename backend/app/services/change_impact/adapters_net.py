@@ -38,16 +38,23 @@ def _addresses(ctx: Ctx) -> list[TargetAddr]:
 # ─────────────────── DNS ───────────────────
 
 async def dns(ctx: Ctx) -> None:
+    from app.services.dns_compare import merge_key
+
     srcs = ctx.sources_of("dns")
     if not srcs or not ctx.allowed("dns"):
         return
     ctx.gap("dns", "dns_cname_not_collected", affected="dns")
     ctx.gap("dns", "dns_view_not_modeled", affected="dns")
     types = dict((await ctx.session.execute(text("SELECT id, type FROM dns_servers"))).all())
+    # 比對群組：同一組裡相同的紀錄合成一個發現（每筆紀錄仍是一份證據，追得到是哪一台）
+    groups = {sid: (gid, gname) for sid, gid, gname in (await ctx.session.execute(text("""
+        SELECT s.id, s.compare_group_id, g.name FROM dns_servers s LEFT JOIN dns_compare_groups g ON g.id = s.compare_group_id
+    """))).all()}
     by_id = {s.id: s for s in srcs}
     for root in _addresses(ctx):
         rows = (await ctx.session.execute(text(f"""
-            SELECT r.id, r.name, r.type, r.value, r.ttl, r.source, r.last_seen_at, z.name AS zone, z.server_id
+            SELECT r.id, r.name, r.type, r.value, r.ttl, r.source, r.last_seen_at, z.name AS zone, z.server_id,
+                   r.name_norm, r.value_norm
               FROM dns_records r JOIN dns_zones z ON z.id = r.zone_id
              WHERE r.type IN ('A', 'AAAA') AND {_CAST_INET.format(c="r.value")} = CAST(:ip AS inet)
         """), {"ip": root.ip_text})).all()  # noqa: S608 -- 片段是本檔常數
@@ -62,11 +69,12 @@ async def dns(ctx: Ctx) -> None:
             rel = rp[: -len(zn) - 1] if rp != zn else "@"
             ptr_rows += (await ctx.session.execute(text("""
                 SELECT r.id, r.name, r.type, r.value, r.ttl, r.source, r.last_seen_at, CAST(:zn AS text) AS zone,
-                       CAST(:sid AS uuid) AS server_id
+                       CAST(:sid AS uuid) AS server_id, r.name_norm, r.value_norm
                   FROM dns_records r WHERE r.zone_id = :zid AND r.type = 'PTR'
                    AND rtrim(lower(r.name), '.') IN (:rel, :full)
             """), {"zid": z.id, "zn": z.name, "sid": z.server_id, "rel": rel, "full": rp})).all()
-        for r in [*rows, *ptr_rows]:
+        merged: dict[tuple[str, str, str, str], list[tuple[Any, Any, str, bool, str, str]]] = {}
+        for r in sorted([*rows, *ptr_rows], key=lambda x: (str(by_id[x.server_id].name) if x.server_id in by_id else "")):
             src = by_id.get(r.server_id)
             if src is None or ctx.in_scope(src, root) is False:
                 continue
@@ -81,11 +89,25 @@ async def dns(ctx: Ctx) -> None:
                                             "ttl_known": ttl_known, "zone": r.zone, "server": src.name,
                                             "origin": r.source},
                                    observed_at=r.last_seen_at, freshness=src.freshness))
+            gid = groups.get(r.server_id, (None, None))[0]
+            mk = merge_key(gid, r.server_id, r.name_norm, fqdn, r.type, r.value_norm, r.value)
+            merged.setdefault(mk, []).append((r, src, key, ttl_known, fqdn, label))
+        for mk, items in merged.items():
+            r, src, _key, _tk, fqdn, label = items[0]
             rule = "dns.ptr_record" if r.type == "PTR" else "dns.address_record"
-            ctx.find(Finding(rule, "dns_record", label[:300], [key], subject_id=r.id, match_kind="exact",
-                             params={"address": root.ip_text, "name": fqdn, "ttl": r.ttl if ttl_known else None,
-                                     "server": src.name},
-                             strength=ctx.strength_for(src, root)))
+            known_ttls = [it[0].ttl for it in items if it[3]]
+            ttl = max(known_ttls) if known_ttls else None
+            servers = ", ".join(sorted(str(it[1].name) for it in items))
+            params: dict[str, Any] = {"address": root.ip_text, "name": fqdn, "ttl": ttl, "server": servers}
+            if len(items) == 1:
+                ctx.find(Finding(rule, "dns_record", label[:300], [_key], subject_id=r.id, match_kind="exact",
+                                 params=params, strength=ctx.strength_for(src, root)))
+                continue
+            gid, gname = groups.get(r.server_id, (None, None))
+            params["compare_group"] = gname
+            ctx.find(Finding(rule, "dns_record", label[:300], [it[2] for it in items],
+                             subject_key=f"dnsgrp:{gid}:{mk[1]}:{mk[2]}:{mk[3]}", match_kind="exact",
+                             params=params, strength=ctx.strength_for(src, root)))
     await _adguard(ctx, [s for s in srcs if s.kind == "adguard"])
 
 

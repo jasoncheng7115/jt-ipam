@@ -4,6 +4,7 @@ const _authBtn = useAuthStore();
 import { computed, h, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import {
   NCard,
   NSpace,
@@ -376,8 +377,9 @@ async function uploadCsv(opts: UploadCustomRequestOptions) {
     });
     importResult.value = resp.data;
     if (!dryRun.value) {
-      // 實際匯入改走背景作業 → 回 task_id，到「作業」頁看進度
-      msg.success(t("csv_import.queued"));
+      // 實際匯入在背景跑：右下角的「背景作業」面板顯示進度與結果，跑完重新整理這個子網路
+      if (resp.data?.task_id) trackTask(resp.data.task_id, { onDone: () => { if (subnet.value) void load(subnet.value.id); } });
+      else msg.success(t("csv_import.queued"));
     } else {
       msg.info(t("csv_import.dry_run_preview", { n: resp.data.preview?.length ?? 0 }));
     }

@@ -52,6 +52,7 @@ from app.models.dhcp import DHCPPoolRange
 from app.models.dhcp_sighting import DHCPSighting
 from app.models.dhcp_standalone import IscDhcpServer, KeaDhcpServer
 from app.models.dns import DNSRecord, DNSServer, DNSZone
+from app.models.dns_compare_group import DNSCompareGroup, DNSCompareGroupDiff
 from app.models.encrypted_secret import EncryptedSecret
 from app.models.event_rule import EventRule
 from app.models.firewall import (
@@ -155,6 +156,8 @@ __all__ = [
     "ContactRole",
     "CustomFieldDefinition",
     "DHCPPoolRange",
+    "DNSCompareGroup",
+    "DNSCompareGroupDiff",
     "DNSRecord",
     "DNSServer",
     "DNSZone",

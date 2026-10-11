@@ -231,6 +231,10 @@ to see what a customer sees.**
   router): no page-level horizontal scroll, nothing clipped or off screen (unless a horizontally scrollable
   container holds it), no text squeezed to one character per line. With `E2E_SHOT_DIR` it screenshots every
   screen of every page. **Look at them**; the measurements cannot see "ugly but inside the screen"
+- [ ] **Every screen at desktop width** (`frontend/e2e/desktop-sticky-actions.spec.ts`, 1280px, routes parsed from the
+  router; customer 2026-10-10: "with a mouse you keep scrolling left and right"): every table that scrolls sideways keeps its last
+  "Actions" column pinned to the right. A failure names the page and the table; usually the actions column key is not `actions`
+  (and has no `col-actions`) or it has no numeric width. Fix it the site-wide way rather than adding `fixed` page by page
 - [ ] **Column resizing and tab scroll buttons** (site-wide; `e2e/anomaly-identify-cols-tabs.spec.ts`): dragging
   a header edge resizes that column by the distance dragged (hand-written tables too, including headers with
   opacity); **the layout before dragging is exactly as before** (a default minimum width once let tables
@@ -701,6 +705,18 @@ parameter limit): medium-sized test data cannot catch "one query fits" assumptio
   columns of the OCS agent list, audit log and task history do not wrap and spare width is shared in proportion; widening
   one column changes only that column (columns resized earlier stay put) with space left empty on the right; going wider
   than the screen scrolls horizontally; the mobile sweep shows no horizontal overflow
+- [ ] **Actions column pinned to the right** (customer 2026-10-10: with a mouse you keep scrolling left and right;
+  `src/utils/__tests__/resizableColumns.test.ts`, `e2e/desktop-sticky-actions.spec.ts` visits every page): at desktop width (768px and
+  up) tables that scroll sideways keep the last "Actions" column pinned to the right, so it can be clicked while scrolled fully left;
+  not pinned at phone width; tables that do not scroll sideways are unaffected; column resizing, the column picker and sorting still work
+- [ ] **Live background job status** (customer 2026-10-10: "after setting it up you have to check whether the job finished, then read
+  the log to know the status"; `src/composables/__tests__/useTaskTracker.test.ts`, `src/utils/__tests__/taskSummary.test.ts`,
+  `e2e/task-tracker.spec.ts`): Pull / Sync now on every integration, subnet CSV import and device import add an entry to the
+  "Background jobs" panel at the bottom right right away (above the AI chat button when shown): a spinner, elapsed time and progress
+  while running; when done the result summary appears and the page's list refreshes; failures show the full error, can be copied and
+  stay until closed; successes collapse after 20 seconds; the panel survives page changes and reloads and is cleared on sign-out;
+  "Open jobs page" goes to the jobs page; the jobs page result column matches the panel summary (the phpIPAM migration summary used to
+  break the whole cell because of a variable name clash)
 - [ ] **Tasks page** (`e2e/tasks-filters.spec.ts`, `tests/test_tasks_page_sources.py`): history can be searched by type, target
   and error and filtered by type, status and trigger, and the total follows; after a RustDesk agent report there is a
   `rustdesk.sync` row (one per server, updated on the next report), ISC DHCP gives `isc_dhcp.sync`; "update now" for
@@ -1067,6 +1083,71 @@ admin-only).
 - [ ] Liveness settings list "ARP table (Check Point)" and "DHCP lease (Check Point)" only when a Gaia connection exists
 - [ ] Deleting the Gaia connection (or the whole management server) takes back its pools, lease flags and host names;
   system export/import keeps the connection with its password encrypted
+
+## 7b3e. DNS comparison groups: **whenever DNS pulls, any DNS adapter, the DNS records page, the DNS anomaly categories, the DNS rules of IP change assessment or the notification events change**
+
+jt-ipam does not sync records between the servers; it only compares the data pulled from each (hence "comparison group", not "sync group").
+
+Automated: `backend/tests/test_dns_compare_groups.py` (normalization of case, trailing dots, relative names and IPv6 spelling; Windows DNS and
+UCS compared together; AD service locator data (`_msdcs`, `TrustAnchors`, `DomainDnsZones`, `ForestDnsZones`) is not compared; a zone with no
+comparable records on only one server is not a difference; Unbound mixed with zone servers shows "Cannot compare" with no differences or
+alerts; excluded zones are neither listed nor compared and the list is normalized; **with members pulled one after another, a
+difference is confirmed only when each server missing it is pulled again at least the grace period after it appeared and still lacks it**
+(when the first server is pulled the others still hold old data, so no verdict yet); the notice names only the server really missing it,
+its body is phrased by the frontend in the user's language (no prebuilt English in the parameters) and says how many more there are; one server or disabled members are not compared; a member whose pull failed or never ran, or records without normalized columns,
+give "Incomplete data" and no verdict; nothing is confirmed within the grace period or before the server missing it is pulled again; one batch notifies once, new differences notify again,
+and becoming consistent sends a resolved notice; a zone with records missing on a member is one difference; notifications off sends nothing;
+both events are in the notification matrix; a pull fills the normalized columns and checks the group),
+`backend/tests/test_dns_compare_group_api.py` (group CRUD is admin only and audited, duplicate names give 409, mixing Unbound returns 422
+`dns_compare_group_mixed_kinds` on create, member edit, a server joining a group and a server changing type, two Unbound servers may share a
+group, excluded zones are normalized and audited, reads include the members' zones, an over-long list gives 422, creating (two or more
+members) and changing members or excluded zones compares right away, check now and the diff list carry server names, the server form joins and leaves a group (an absent field leaves it alone, only null
+clears it), `merge=true` on the records list merges within a group only), `backend/tests/test_dns_compare_group_merge.py` (the anomaly
+category lists confirmed differences only; "DNS points to unregistered address" and IP change assessment merge within a group with evidence
+still per server; every anomaly category is reachable from the AI tool), `backend/tests/test_dns_ucs_adapter.py` (UCS reverse zones read
+PTR records, reverse zone names come from the DN, IPv6 reverse zones are not treated as IPv4), `frontend/e2e/dns-compare-groups.spec.ts`.
+
+- [ ] The "Comparison groups" card on the DNS page: create a group with two or more servers (the picker shows each server's product); the
+  server table's "Comparison group" column follows; the server form can also pick or clear the group; the text says jt-ipam does not sync
+  records between the servers
+- [ ] Group table and difference list: the filter box, sorting on every data column, column picker (with order, kept after reload) and
+  export (CSV/Excel/PDF and so on) all work
+- [ ] With both pulled the status is "Consistent"; delete an A record on one DNS server, pull both, and it shows "Pending" (within the grace
+  period), then "Mismatch" after the grace period; the difference list shows the zone, name, type, value, which server has it and which
+  does not
+- [ ] Windows DNS and UCS (or other different products) in one group: "Consistent" when the content matches; the `_msdcs` and
+  `TrustAnchors` zones and DomainDnsZones/ForestDnsZones are not listed; UCS reverse zones have PTR records (visible on the DNS records page)
+- [ ] Unbound (OPNsense) grouped with another type: saving is refused with a message that Unbound can only be grouped with Unbound; two
+  Unbound servers can share a group
+- [ ] **Zones not compared**: one server holds an extra zone that is not replicated → its row ("Whole zone on only some servers") has "Stop
+  comparing this zone"; after confirming, the row disappears, the list header names the excluded zones and the group table's "Zones not
+  compared" column shows it; single record differences have no such button; editing the group offers the members' zones, and removing one
+  compares again on save and brings the difference back
+- [ ] **No false alarms from pull order**: with a grace period of 0, add a record on the primary and keep one secondary from receiving it,
+  then click Pull on each server in turn: after the primary it is "Pending" with no notice; after the secondary that received it, that
+  server leaves the "missing" list; only after the secondary that did not receive it is it "Mismatch", and the notice names only that
+  server, with the body in the user's language
+- [ ] Notifications: the notification settings page has "DNS comparison group mismatch" and "DNS comparison group consistent again"; one
+  notice arrives for a batch (not repeated), and a resolved notice after the record is restored and pulled; the notice opens that group's
+  difference list; a group with notifications off sends nothing
+- [ ] Make one member's pull fail (wrong password): the group shows "Incomplete data" naming the server, and no mismatch notice is sent
+- [ ] DNS records page: identical records in a group are merged by default with the group and every server in the source column;
+  unticking "Merge identical records in comparison groups" lists them per server; the type filter counts follow; servers in different
+  groups or in none are not merged
+- [ ] Anomaly detection: the "DNS comparison mismatch" tab lists confirmed differences; "DNS points to unregistered address" shows one row
+  per group with every member in the server column and a comparison group column; renumbering an address that two DNS servers point to
+  gives one DNS finding in IP change assessment, listing both servers
+- [ ] Deleting a group leaves its members ungrouped and removes its differences, without touching records on the servers; deleting a
+  member server re-checks the rest
+- [ ] **Real-server check** (done once on 2026-10-11; redo whenever the comparison rules or a DNS adapter change): on a dedicated Docker
+  network on the development machine run three replicating DNS servers: PowerDNS (`powerdns/pdns-auth-49`, `--allow-axfr-ips=127.0.0.1/32`, with the per-zone
+  `ALLOW-AXFR-FROM` metadata deciding who may transfer; **the global allowlist overrides it**) as primary, BIND9
+  (`internetsystemsconsortium/bind9:9.20`, secondary zones, `allow-transfer { any; }` so jt-ipam can read by AXFR) and Technitium (Secondary
+  zones; give jt-ipam's read-only group view permission on them) as secondaries; **bump the SOA serial** when adding records or the
+  secondaries will not transfer. One group in jt-ipam → consistent; remove one server from `ALLOW-AXFR-FROM` and add a record → only that
+  server is reported; put it back, wait for the transfer, pull → consistent again with a resolved notice
+- [ ] Upgrade from 1.0.6 (migrations 0203 and 0204): existing groups show "Incomplete data" until the next pull fills the normalized columns;
+  system export/import keeps groups and members
 
 ## 7b4. RustDesk Server (open source): **whenever this integration, the RustDesk agent or the IP detail change**
 

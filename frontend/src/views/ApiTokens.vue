@@ -227,7 +227,7 @@ const columns = computed<DataTableColumns<ApiToken>>(() => [
   },
   { title: t("api_tokens.last_used_ip"), key: "last_used_ip", width: 140, render: (r) => r.last_used_ip || "—" },
   {
-    title: t("common.actions"), key: "act", width: 90, align: "center",
+    title: t("common.actions"), key: "actions", width: 90, align: "center",
     render: (r) =>
       r.revoked_at
         ? "—"

@@ -2762,6 +2762,7 @@ async def list_anomalies(
         "rogue_dhcp": _an.detect_rogue_dhcp,
         "external_exposure": _an.detect_external_exposure,
         "dangling_dns": _an.detect_dangling_dns,
+        "dns_compare_mismatch": _an.detect_dns_compare_mismatch,   # 2026-10-10：DNS 比對群組各台不一樣
         "duplicate_ip_records": _an.detect_duplicate_ip_records,
         "suspicious_changes": _an.detect_suspicious_changes,
         "fw_rule_rot": _an.detect_fw_rule_rot,      # 原本漏掉 → AI 問不到規則劣化
@@ -3387,7 +3388,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "properties": {
                 "kind": {"type": "string", "description":
                          "ip_conflicts | arp_flux | l2_subnet_bleed | mac_drifts | ghost_ips | unauthorized_ips | "
-                         "rogue_dhcp | external_exposure | dangling_dns | duplicate_ip_records | suspicious_changes | "
+                         "rogue_dhcp | external_exposure | dangling_dns | dns_compare_mismatch | duplicate_ip_records | suspicious_changes | "
                          "fw_rule_rot | arp_only_liveness | stale_device_links | mac_flapping | "
                          "identity_changes (device type or OS family changed)"},
                 "limit": {"type": "integer", "description": "max items per kind (default 20)"},

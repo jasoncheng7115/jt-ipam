@@ -7,6 +7,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip, NAlert, NModal, NForm,
@@ -149,8 +150,8 @@ async function test(r: ZabbixInstance) {
 
 async function sync(r: ZabbixInstance) {
   try {
-    await syncZabbix(r.id);
-    msg.success(t("tasks.queued_toast", { kind: "Zabbix sync", target: r.name }));
+    const job = await syncZabbix(r.id);
+    trackTask(job.task_id, { onDone: () => void refresh() });
   } catch (e) { msg.error(apiErrMsg(e)); }
 }
 

@@ -56,6 +56,8 @@ class AnomalyReport:
     arp_flux: list[dict[str, Any]] = field(default_factory=list)
     #: 兩個子網段混在同一個二層（2026-10-09）
     l2_subnet_bleed: list[dict[str, Any]] = field(default_factory=list)
+    #: DNS 比對群組各台的紀錄不一樣（已確認：持續超過寬限時間；2026-10-10）
+    dns_compare_mismatch: list[dict[str, Any]] = field(default_factory=list)
     #: 未授權 IP 的總數（清單最多列 MAX_UNAUTHORIZED 筆）
     unauthorized_total: int = 0
 
@@ -80,6 +82,7 @@ class AnomalyReport:
             "rogue_dhcp": self.rogue_dhcp,
             "external_exposure": self.external_exposure,
             "dangling_dns": self.dangling_dns,
+            "dns_compare_mismatch": self.dns_compare_mismatch,
             "duplicate_ip_records": self.duplicate_ip_records,
             "suspicious_changes": self.suspicious_changes,
             "fw_rule_rot": self.fw_rule_rot,
@@ -92,6 +95,7 @@ class AnomalyReport:
                 + len(self.suspicious_changes) + len(self.stale_device_links)
                 + len(self.mac_flapping) + len(self.identity_changes)
                 + len(self.arp_flux) + len(self.l2_subnet_bleed)
+                + len(self.dns_compare_mismatch)
             ),
         }
 
@@ -1717,12 +1721,17 @@ async def detect_dangling_dns(session: AsyncSession) -> list[dict[str, Any]]:
     這裡是位址根本沒登記。）
     """
     from app.models.dns import DNSRecord, DNSServer, DNSZone
+    from app.models.dns_compare_group import DNSCompareGroup
+    from app.services.dns_compare import merge_key
 
     rows = (await session.execute(
         select(DNSRecord.name, DNSRecord.value, DNSRecord.type,
-               DNSZone.name.label("zone"), DNSServer.name.label("server"))
+               DNSZone.name.label("zone"), DNSServer.name.label("server"),
+               DNSServer.id, DNSServer.compare_group_id, DNSCompareGroup.name.label("group"),
+               DNSRecord.name_norm, DNSRecord.value_norm)
         .join(DNSZone, DNSRecord.zone_id == DNSZone.id)
         .join(DNSServer, DNSZone.server_id == DNSServer.id)
+        .outerjoin(DNSCompareGroup, DNSCompareGroup.id == DNSServer.compare_group_id)
         .where(func.upper(DNSRecord.type).in_(("A", "AAAA")))
     )).all()
     if not rows:
@@ -1732,13 +1741,47 @@ async def detect_dangling_dns(session: AsyncSession) -> list[dict[str, Any]]:
             select(func.host(IPAddress.ip))
         )).all()
     }
-    out: list[dict[str, Any]] = []
-    for name, value, rtype, zone, server in rows:
+    # 同一個比對群組裡相同的紀錄合成一筆，列出哪幾台都有（2026-10-10；不同組照舊分開）
+    merged: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for name, value, rtype, zone, server, sid, gid, gname, nn, vn in rows:
         v = str(value or "").strip()
         if not v or v in known:
             continue
-        out.append({"name": name, "value": v, "type": rtype,
-                    "zone": zone, "server": server})
+        k = merge_key(gid, sid, nn, name, rtype, vn, v)
+        item = merged.get(k)
+        if item is None:
+            merged[k] = {"name": name, "value": v, "type": rtype, "zone": zone, "server": server,
+                         "compare_group": gname, "_servers": {server}}
+        else:
+            item["_servers"].add(server)
+    out: list[dict[str, Any]] = []
+    for item in merged.values():
+        item["server"] = ", ".join(sorted(item.pop("_servers")))
+        out.append(item)
+    return out
+
+
+async def detect_dns_compare_mismatch(session: AsyncSession) -> list[dict[str, Any]]:
+    """DNS 比對群組各台不一樣、而且持續超過寬限時間的差異（services/dns_compare 每次同步後算好的）。
+
+    還在寬限期內的不列：伺服器之間同步本來就有延遲，剛改完的紀錄會短暫只在一台。"""
+
+    from app.models.dns import DNSServer
+    from app.models.dns_compare_group import DNSCompareGroup, DNSCompareGroupDiff
+
+    names = {str(i): n for i, n in (await session.execute(select(DNSServer.id, DNSServer.name))).all()}
+    out: list[dict[str, Any]] = []
+    # 只列已確認的（沒有的那台在寬限時間之後重新拉取過仍然沒有；services/dns_compare.check_group 判定）
+    for d, gname in (await session.execute(
+            select(DNSCompareGroupDiff, DNSCompareGroup.name)
+            .join(DNSCompareGroup, DNSCompareGroup.id == DNSCompareGroupDiff.group_id)
+            .where(DNSCompareGroupDiff.confirmed_at.is_not(None))
+            .order_by(DNSCompareGroup.name, DNSCompareGroupDiff.zone, DNSCompareGroupDiff.name))).all():
+        out.append({"group": gname, "kind": d.kind, "zone": d.zone, "name": d.name or None,
+                    "type": d.type or None, "value": d.value or None,
+                    "present_on": ", ".join(names.get(x, x) for x in d.present_on),
+                    "missing_on": ", ".join(names.get(x, x) for x in d.missing_on),
+                    "first_seen_at": d.first_seen_at.isoformat()})
     return out
 
 
@@ -1932,6 +1975,7 @@ async def run_detection(
         external_exposure=[*await detect_external_exposure(session),
                            *await detect_new_exposure(session)],
         dangling_dns=await detect_dangling_dns(session),
+        dns_compare_mismatch=await detect_dns_compare_mismatch(session),
         duplicate_ip_records=await detect_duplicate_ip_records(session),
         suspicious_changes=await detect_suspicious_changes(session),
         fw_rule_rot=await detect_fw_rule_rot(session),

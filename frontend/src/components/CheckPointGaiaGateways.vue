@@ -8,6 +8,7 @@
  */
 import { computed, h, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import {
   NAlert, NButton, NCheckbox, NDataTable, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NPopconfirm,
   NSelect, NSpace, NSwitch, NTag, NTooltip, useMessage, type DataTableColumns,
@@ -203,8 +204,8 @@ async function test(tg: GaiaTarget) {
 
 async function sync(tg: GaiaTarget) {
   try {
-    await syncGaiaTarget(tg.id);
-    msg.success(t("tasks.queued_toast", { kind: t("checkpoint.gaia_sync_kind"), target: tg.name }));
+    const r = await syncGaiaTarget(tg.id);
+    trackTask(r.task_id, { onDone: () => void loadTargets() });
   } catch (e) { msg.error(apiErrMsg(e)); }
 }
 

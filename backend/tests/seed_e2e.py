@@ -306,6 +306,54 @@ async def seed() -> None:
                                 ipam_address_id=pub.id if rtype == "A" else None,
                                 last_seen_at=datetime.now(UTC)))
 
+        # ── DNS 比對群組（2026-10-10）：兩台大部分相同、一筆只在 ns1 上 ─────────
+        # 成員要「啟用」才會參與比對；e2e 沒有跑同步排程，所以不會真的去連 192.0.2.x
+        from app.models.dns_compare_group import DNSCompareGroup
+        from app.services.dns_compare import normalize_name, normalize_value
+        grp = await one(DNSCompareGroup, name="e2e-dns-group", grace_minutes=0, notify_enabled=False, excluded_zones=[])
+        # 兩台同一時間拉取：差異要「沒有的那台在差異出現後拉取過」才確認，時間錯開幾毫秒就會變成待確認
+        pulled_at = datetime.now(UTC)
+        await s.flush()
+        for srv_name, addr, recs in (
+            ("e2e-ns1", "192.0.2.61", (("www.corp.example", "A", "192.0.2.80"), ("mail.corp.example", "A", "192.0.2.81"),
+                                       ("legacy.corp.example", "A", "192.0.2.82"))),
+            ("e2e-ns2", "192.0.2.62", (("WWW.corp.example", "A", "192.0.2.80"), ("mail.corp.example", "A", "192.0.2.81"))),
+        ):
+            gs = await one(DNSServer, name=srv_name, type="bind9", server_address=addr, enabled=True,
+                           compare_group_id=grp.id, last_sync_at=pulled_at, last_error=None)
+            await s.flush()
+            gz = (await s.execute(select(DNSZone).where(DNSZone.server_id == gs.id,
+                                                        DNSZone.name == "corp.example"))).scalars().first()
+            if not gz:
+                gz = DNSZone(server_id=gs.id, name="corp.example", type="forward", managed=False,
+                             associated_subnet_ids=[])
+                s.add(gz)
+                await s.flush()
+            for nm, rtype, val in recs:
+                rec = (await s.execute(select(DNSRecord).where(DNSRecord.zone_id == gz.id,
+                                                               DNSRecord.name == nm))).scalars().first()
+                if not rec:
+                    s.add(DNSRecord(zone_id=gz.id, name=nm, type=rtype, value=val, ttl=300,
+                                    source="from_dns_pulled", consistency_state="dns_only",
+                                    last_seen_at=datetime.now(UTC),
+                                    name_norm=normalize_name(nm, "corp.example"),
+                                    value_norm=normalize_value(rtype, val)))
+                else:
+                    # 資料庫退回再升級過 0203 時正規化欄位是空的（＝升級後第一輪拉取前），e2e 要固定結果就補上
+                    rec.name_norm = normalize_name(nm, "corp.example")
+                    rec.value_norm = normalize_value(rtype, val)
+        ns2 = (await s.execute(select(DNSServer).where(DNSServer.name == "e2e-ns2"))).scalars().first()
+        xz = (await s.execute(select(DNSZone).where(DNSZone.server_id == ns2.id,
+                                                    DNSZone.name == "extra.example"))).scalars().first()
+        if not xz:
+            xz = DNSZone(server_id=ns2.id, name="extra.example", type="forward", managed=False, associated_subnet_ids=[])
+            s.add(xz)
+            await s.flush()
+        if not (await s.execute(select(DNSRecord).where(DNSRecord.zone_id == xz.id))).scalars().first():
+            s.add(DNSRecord(zone_id=xz.id, name="only.extra.example", type="A", value="192.0.2.83", ttl=300,
+                            source="from_dns_pulled", consistency_state="dns_only", last_seen_at=datetime.now(UTC),
+                            name_norm="only.extra.example", value_norm="192.0.2.83"))
+
         # ── AI 巡檢發現（UI 測的是渲染，不是模型；沒有 Ollama 也要跑得動）──
         await s.execute(delete(AIFinding).where(AIFinding.model == "gemma4:26b"))
         run_id = uuid.uuid4()

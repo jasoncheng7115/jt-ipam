@@ -1508,7 +1508,6 @@
     "status_cancelled": "Cancelled",
     "empty_active": "No active tasks",
     "empty_history": "No historical tasks yet",
-    "queued_toast": "{kind} queued (target: {target}). Check the Tasks page for progress.",
     "summary": {
       "error": "Error: {msg}",
       "named_error": "{name}: error {msg}",
@@ -1580,6 +1579,20 @@
       "wazuh_sync": "Wazuh sync",
       "windows_dhcp_sync": "Windows DHCP sync",
       "zabbix_sync": "Zabbix sync"
+    },
+    "tracker": {
+      "title": "Background jobs",
+      "clear_done": "Clear finished",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "view_tasks": "Open jobs page",
+      "dismiss": "Close",
+      "copy": "Copy error",
+      "copied": "Copied",
+      "loading": "Loading…",
+      "lost": "This job was not found (it may have been cleaned up, or you cannot view it)",
+      "seconds": "{n}s",
+      "minutes": "{m}m {s}s"
     }
   },
   "groups": {
@@ -1950,7 +1963,64 @@
     "verify_tls_winrm_hint": "Turn off when WinRM HTTPS uses a self-signed certificate; traffic stays HTTPS-encrypted, only the certificate is not checked (a certificate from an internal CA is better).",
     "winrm_transport": "WinRM transport",
     "winrm_transport_hint": "HTTP 5985 by default, because the Windows Server firewall blocks HTTPS 5986 by default (HTTPS needs a certificate listener and a firewall rule). Over HTTP the content and credentials are always NTLM-encrypted, never sent in clear. Leave the port empty for the default.",
-    "winrm_http_label": "HTTP (5985, default)"
+    "winrm_http_label": "HTTP (5985, default)",
+    "compare_group": "Comparison group",
+    "compare_group_none": "Not in a comparison group",
+    "compare_group_hint": "Put DNS servers whose content should match (for example primary/secondary or AD-integrated) in one comparison group: identical records are shown once, and the servers' data is compared after each pull. jt-ipam does not sync records between the servers.",
+    "cg_title": "Comparison groups",
+    "cg_intro": "Put DNS servers whose content should match (primary/secondary, AD-integrated, multi-primary and so on, replicating among themselves) in one group. jt-ipam does not sync or change records between them; it only compares the data pulled from each one. The DNS records page, anomaly detection and IP change assessment show identical records once with the servers that hold them; after each pull the group is compared, differences are listed, and confirmed ones are alerted through notifications. A, AAAA and PTR records are compared; AD service locator data (_msdcs, TrustAnchors, DomainDnsZones, ForestDnsZones) is not; when only some zones are replicated, the others can be left out.",
+    "cg_create": "New comparison group",
+    "cg_edit": "Edit comparison group",
+    "cg_empty": "No comparison groups yet",
+    "cg_members": "Members",
+    "cg_members_ph": "Choose DNS servers whose content should match",
+    "cg_members_hint": "At least two are needed for a comparison; a server already in another group moves here; disabled servers are left out. Different products can be mixed (for example Windows DNS and UCS), but Unbound (OPNsense) holds host overrides rather than full zones, so it can only be grouped with other Unbound servers.",
+    "cg_grace": "Grace period",
+    "cg_grace_hint": "Replication between the servers takes time: a difference is confirmed, and alerted, only when the server missing it is pulled again at least this long after the difference appeared and still lacks it.",
+    "cg_excluded": "Zones not compared",
+    "cg_excluded_ph": "Pick or type zones (empty = compare all)",
+    "cg_excluded_hint": "When the servers replicate only some zones, or one of them also holds zones of its own, list those zones here: a zone on only one server is not a difference and its records are not compared. The group is compared again when you save.",
+    "cg_exclude_zone": "Stop comparing this zone",
+    "cg_exclude_zone_confirm": "Stop comparing zone \"{zone}\"? You can undo it under \"Zones not compared\" in the group settings.",
+    "cg_zone_excluded": "Zone \"{zone}\" is no longer compared",
+    "cg_excluded_note": "Zones not compared: {zones}",
+    "cg_minutes": "minutes",
+    "cg_notify": "Alert",
+    "cg_notify_hint": "Notify administrators when a mismatch is confirmed and again when it is resolved (per \"DNS comparison group mismatch\" in notification settings).",
+    "cg_description": "Description",
+    "cg_name_required": "Enter a group name",
+    "cg_status_ok": "Consistent",
+    "cg_status_mismatch": "Mismatch",
+    "cg_status_pending": "Pending",
+    "cg_status_incomplete": "Incomplete data",
+    "cg_status_single": "Too few members",
+    "cg_status_never": "Not checked yet",
+    "cg_status_incompatible": "Cannot compare",
+    "cg_status_hint_ok": "Every server in the group has the same records.",
+    "cg_status_hint_mismatch": "Some differences are confirmed: the server missing them was pulled again after the grace period and still lacks them.",
+    "cg_status_hint_pending": "There are differences, not confirmed yet: still within the grace period, or the server missing them has not been pulled again.",
+    "cg_status_hint_incomplete": "A member's last pull failed or it has never been pulled, so no verdict yet.",
+    "cg_status_hint_single": "Fewer than two enabled members, so there is nothing to compare.",
+    "cg_status_hint_never": "Members are compared after each pull; you can also click Check now.",
+    "cg_status_hint_incompatible": "Unbound (OPNsense) can only be grouped with other Unbound servers; move the other servers to another group.",
+    "cg_diff_count": "Differences",
+    "cg_last_checked": "Last checked",
+    "cg_diffs": "Differences",
+    "cg_diffs_title": "Differences in comparison group \"{name}\"",
+    "cg_check": "Check now",
+    "cg_checked": "Comparison done: {status}",
+    "cg_check_hint": "The comparison uses the records jt-ipam has already pulled; for the latest data, click Pull on each server first. A difference is confirmed when the server missing it is pulled again {n} minutes or more after it appeared and still lacks it.",
+    "cg_delete_confirm": "Delete this comparison group? Its servers return to no group and records are no longer merged (records on the servers are not affected).",
+    "cg_diff_what": "Difference",
+    "cg_kind_zone": "Whole zone on only some servers",
+    "cg_present_on": "Present on",
+    "cg_missing_on": "Missing on",
+    "cg_first_seen": "First seen",
+    "cg_value": "Value",
+    "cg_last_seen": "Last seen",
+    "cg_confirmed": "Confirmed",
+    "cg_pending": "Pending",
+    "cg_no_diffs": "No differences"
   },
   "scope_overlap": {
     "warning": "Overlapping subnets detected (the same IP exists in more than one subnet). This integration has no subnet scope set, so a sync may stamp liveness / DHCP / MAC onto the wrong tenant's copy of an IP. Consider setting the subnet scope below."
@@ -2298,7 +2368,11 @@
       "arp_examples": "ARP examples",
       "fdb_examples": "Switch MAC table examples",
       "suspect_count": "Misread / stale",
-      "host": "Host"
+      "host": "Host",
+      "group": "Comparison group",
+      "present_on": "Present on",
+      "missing_on": "Missing on",
+      "compare_group": "Comparison group"
     },
     "rot": {
       "dangling_nat": "The port forward's destination is not in IPAM — it may have been reclaimed, or never recorded",
@@ -2346,7 +2420,9 @@
     "bleed_arp_line": "{ip} ({subnet}) was answered by {mac}, which belongs to {owner} ({owner_subnet})",
     "bleed_fdb_line": "{switch}, VLAN {vlan}: {detail}",
     "evidence_arp_answer": "ARP answered with another subnet's MAC",
-    "evidence_switch_fdb": "One VLAN learned MACs from both subnets"
+    "evidence_switch_fdb": "One VLAN learned MACs from both subnets",
+    "dns_compare_mismatch": "DNS comparison mismatch",
+    "explain_dns_compare_mismatch": "DNS servers in one comparison group whose records differ: a whole zone or a record exists on only some of them, and the server missing it was pulled again after the group's grace period and still lacks it (changes still replicating, or servers not pulled since, are not listed). The usual cause is broken replication between the servers (zone transfer, AD replication) or an account used by jt-ipam that cannot read some zones. The comparison uses the records jt-ipam has already pulled."
   },
   "webhooks": {
     "events_label": "events (* = all)",
@@ -3552,7 +3628,11 @@
     "console_revoked_account_inactive": "Your account was deactivated, so the console connection has ended.",
     "console_revoked_session_revoked": "This sign-in has ended (you signed out, were signed out, or two-factor authentication was reset), so the console connection has ended. Please sign in again.",
     "console_revoked_target_removed": "This IP was deleted or no longer allows consoles, so the connection has ended.",
-    "console_revoked_permission_revoked": "Your permission to open a console to this IP was revoked, so the connection has ended."
+    "console_revoked_permission_revoked": "Your permission to open a console to this IP was revoked, so the connection has ended.",
+    "dns_compare_group_not_found": "This DNS comparison group was not found (it may have been deleted).",
+    "dns_server_not_found": "The selected DNS server was not found (it may have been deleted).",
+    "dns_compare_group_name_taken": "A DNS comparison group with this name already exists. Choose another name.",
+    "dns_compare_group_mixed_kinds": "Unbound (OPNsense) holds host overrides rather than full zones, so it can only share a comparison group with other Unbound servers."
   },
   "adguard_admin": {
     "scope_subnets": "Limit to subnets",
@@ -3885,7 +3965,9 @@
     "c_consistent": "consistent",
     "c_dns_only": "DNS only",
     "c_ipam_only": "IPAM only",
-    "c_mismatch": "mismatch"
+    "c_mismatch": "mismatch",
+    "merge_groups": "Merge identical records in comparison groups",
+    "group_badge": "Group {name}"
   },
   "req_policy": {
     "intro": "Configure who can approve / reject IP requests. When a request is submitted, all approvers get an in-app notification (and an email if the Email channel is configured).",
@@ -3972,7 +4054,9 @@
       "anomaly_arp_flux": "Anomaly detection: one host answering an IP on several NICs",
       "anomaly_l2_subnet_bleed": "Anomaly detection: two subnets sharing one layer 2",
       "credential_expiring": "API token / MCP key / public endpoint token expiring",
-      "security_session_reuse": "Sign-in token possibly stolen (session revoked)"
+      "security_session_reuse": "Sign-in token possibly stolen (session revoked)",
+      "dns_compare_mismatch": "DNS comparison group mismatch",
+      "dns_compare_resolved": "DNS comparison group consistent again"
     },
     "enable": "Enable",
     "secret_keep": "(set — leave blank to keep)",
@@ -4421,7 +4505,12 @@
     "session_reuse": "Sign-in token possibly stolen: {user}",
     "session_reuse_body": "A refresh token {user} had already replaced was used again from {ip}; that sign-in has been revoked. Unless it was the same person on several devices at once, reset the password and check the audit log.",
     "session_reuse_self": "One of your sign-ins was revoked",
-    "session_reuse_self_body": "A sign-in token that had already been replaced was used again from {ip} and may have been stolen. Please change your password."
+    "session_reuse_self_body": "A sign-in token that had already been replaced was used again from {ip} and may have been stolen. Please change your password.",
+    "dns_compare_mismatch": "DNS comparison group \"{group}\" has {count} differences",
+    "dns_compare_mismatch_body": "{what}: missing on {missing}",
+    "dns_compare_mismatch_body_more": "{what}: missing on {missing} (and {more} more; see the difference list)",
+    "dns_compare_resolved": "DNS comparison group \"{group}\" is consistent again",
+    "dns_compare_resolved_body": "Every server in the group has the same records."
   },
   "system_transfer": {
     "title": "System Export / Import",
@@ -5731,7 +5820,6 @@
     "version": "Version",
     "test": "Test connection",
     "sync_now": "Sync now",
-    "sync_started": "Sync queued in the background",
     "confirm_delete": "Delete “{name}”?",
     "name_ph": "e.g. HQ OCS",
     "name_url_required": "Name and URL are required",
@@ -5905,7 +5993,6 @@
     "errors_not_imported": "Rows with errors are not imported (a row is written completely or not at all).",
     "run": "Import",
     "run_n": "Import {n}",
-    "queued": "Import started; see the Tasks page for progress.",
     "fatal_empty_file": "The file is empty.",
     "fatal_no_name_column": "No name column found. The first row must be the header.",
     "fatal_too_many_rows": "At most {max} rows per import; split the file.",

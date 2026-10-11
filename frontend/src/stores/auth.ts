@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import type { UserMe, TokenResponse } from "@/types";
 import { apiClient, tryRefreshToken } from "@/api/client";
 import { AUTH_COOKIE_HEADERS, clearAccessToken, getAccessToken, setAccessToken } from "@/api/token";
+import { clearTracked } from "@/composables/useTaskTracker";
 
 /**
  * 登入狀態。
@@ -116,6 +117,7 @@ export const useAuthStore = defineStore("auth", () => {
       // ignore
     }
     clearTokens();
+    clearTracked();
   }
 
   return {

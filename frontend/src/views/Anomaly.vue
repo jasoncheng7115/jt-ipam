@@ -159,7 +159,7 @@ async function doIgnore(ipId: string, category: string) {
 
 const CATEGORY_KEYS = [
   "ip_conflicts", "arp_flux", "l2_subnet_bleed", "mac_drifts", "ghost_ips", "unauthorized_ips", "rogue_dhcp",
-  "external_exposure", "dangling_dns", "duplicate_ip_records", "suspicious_changes",
+  "external_exposure", "dangling_dns", "dns_compare_mismatch", "duplicate_ip_records", "suspicious_changes",
   "fw_rule_rot",
   "arp_only_liveness",
   "stale_device_links",
@@ -174,7 +174,8 @@ const activeTab = ref(
   CATEGORY_KEYS.includes(String(route.query.tab)) ? String(route.query.tab) : "ip_conflicts");
 
 type CatKey = "ip_conflicts" | "arp_flux" | "l2_subnet_bleed" | "mac_drifts" | "ghost_ips" | "unauthorized_ips"
-  | "rogue_dhcp" | "external_exposure" | "dangling_dns" | "duplicate_ip_records" | "suspicious_changes"
+  | "rogue_dhcp" | "external_exposure" | "dangling_dns" | "dns_compare_mismatch" | "duplicate_ip_records"
+  | "suspicious_changes"
   | "fw_rule_rot"
   | "arp_only_liveness"
   | "stale_device_links"
@@ -191,6 +192,8 @@ const CATEGORIES: { key: CatKey; label: () => string }[] = [
   { key: "rogue_dhcp", label: () => t("anomaly.rogue_dhcp") },
   { key: "external_exposure", label: () => t("anomaly.exposure") },
   { key: "dangling_dns", label: () => t("anomaly.dangling_dns") },
+  // 2026-10-10：DNS 比對群組各台不一樣（持續超過寬限時間的才列）
+  { key: "dns_compare_mismatch", label: () => t("anomaly.dns_compare_mismatch") },
   { key: "duplicate_ip_records", label: () => t("anomaly.dup_ip") },
   { key: "suspicious_changes", label: () => t("anomaly.changes") },
   { key: "fw_rule_rot", label: () => t("anomaly.fw_rot") },
@@ -221,6 +224,7 @@ const anyFindings = computed(() => {
   return !!r && (r.ip_conflicts.length + r.mac_drifts.length + r.ghost_ips.length
     + r.unauthorized_ips.length + (r.rogue_dhcp?.length ?? 0)
     + (r.external_exposure?.length ?? 0) + (r.dangling_dns?.length ?? 0)
+    + (r.dns_compare_mismatch?.length ?? 0)
     + (r.duplicate_ip_records?.length ?? 0) + (r.suspicious_changes?.length ?? 0)
     + (r.fw_rule_rot?.length ?? 0)
     + (r.arp_only_liveness?.length ?? 0)
@@ -334,7 +338,10 @@ const CAT_KEYS: Record<CatKey, string[]> = {
                "first_seen_at", "last_seen_at"],
   external_exposure: ["kind", "ip", "live", "hostname", "device_kind", "ports", "subnet", "monitored",
                       "effective_status", "names", "owner", "rules", "ip_address_id"],
-  dangling_dns: ["name", "value", "live", "type", "zone", "server"],
+  // 同一個比對群組裡相同的紀錄合成一筆：server 會列出哪幾台都有，compare_group 是哪一組
+  dangling_dns: ["name", "value", "live", "type", "zone", "server", "compare_group"],
+  // 哪一組、哪個 zone 的哪筆紀錄，哪幾台有、哪幾台沒有、從什麼時候開始
+  dns_compare_mismatch: ["group", "zone", "name", "type", "value", "present_on", "missing_on", "first_seen_at"],
   duplicate_ip_records: ["ip", "live", "records"],
   suspicious_changes: ["kind", "actor", "actor_ip", "object_type", "action",
                        "count", "first_at", "last_at"],

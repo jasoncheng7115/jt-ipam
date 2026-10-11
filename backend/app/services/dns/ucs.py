@@ -5,7 +5,7 @@ UDM REST API（HAL+JSON）文件：https://docs.software-univention.de/developer
   認證：HTTP Basic（建議用具 DNS 寫權的帳號）
   物件：
     GET {base}/dns/forward_zone/                列正解 zone（properties.zone）
-    GET {base}/dns/reverse_zone/                列反解 zone（properties.subnet → in-addr.arpa）
+    GET {base}/dns/reverse_zone/                列反解 zone（名稱取 DN 的 zoneName；properties.subnet 是正向寫法）
     GET {base}/dns/host_record/?superordinate=<zoneDN>   A/AAAA（properties.name + properties.a[]）
     GET {base}/dns/alias/?superordinate=<zoneDN>         CNAME（properties.name + properties.cname）
     GET {base}/dns/ptr_record/?superordinate=<zoneDN>    PTR（properties.address + properties.ptr_record）
@@ -92,20 +92,38 @@ class UniventionUCSAdapter(DNSAdapter):
         try:
             rev = await self._get("/dns/reverse_zone/", {"limit": 10000})
             for o in self._objects(rev):
-                subnet = (o.get("properties") or {}).get("subnet")
-                if subnet:
-                    # UDM subnet 例 "1.168.192" → 反轉成 in-addr.arpa
-                    parts = str(subnet).split(".")
-                    rev_name = ".".join(reversed(parts)) + ".in-addr.arpa"
+                rev_name = self._reverse_zone_name(o)
+                if rev_name:
                     out.append(DNSZoneInfo(name=rev_name, kind="reverse"))
         except DNSAdapterError:
             pass
         return out
 
+    @staticmethod
+    def _reverse_zone_name(o: dict) -> str | None:  # type: ignore[type-arg]
+        """反解 zone 的名稱：DN 的第一段就是 `zoneName=2.0.192.in-addr.arpa`（IPv6 也是），
+        沒有 DN 時才用 properties.subnet（UDM 寫正向的 "192.0.2"，倒過來接 in-addr.arpa；只適用 IPv4）。"""
+        first = str(o.get("dn") or "").split(",", 1)[0]
+        if first.lower().startswith("zonename="):
+            name = first.split("=", 1)[1].strip().rstrip(".")
+            if name:
+                return name
+        subnet = str((o.get("properties") or {}).get("subnet") or "")
+        if subnet and ":" not in subnet:
+            return ".".join(reversed(subnet.split("."))) + ".in-addr.arpa"
+        return None
+
     async def _zone_dn(self, zone_name: str) -> str | None:
+        want = zone_name.rstrip(".").lower()
+        if want.endswith((".in-addr.arpa", ".ip6.arpa")):
+            data = await self._get("/dns/reverse_zone/", {"limit": 10000})
+            for o in self._objects(data):
+                if (self._reverse_zone_name(o) or "").lower() == want:
+                    return o.get("dn")
+            return None
         data = await self._get("/dns/forward_zone/", {"limit": 10000})
         for o in self._objects(data):
-            if str((o.get("properties") or {}).get("zone", "")).rstrip(".") == zone_name.rstrip("."):
+            if str((o.get("properties") or {}).get("zone", "")).rstrip(".").lower() == want:
                 return o.get("dn")
         return None
 
@@ -121,6 +139,17 @@ class UniventionUCSAdapter(DNSAdapter):
             if not label or label in ("@", zone):
                 return zone
             return f"{label}.{zone}"
+
+        if zone.lower().endswith((".in-addr.arpa", ".ip6.arpa")):
+            # PTR：address 是 zone 內的相對名稱（例 "145"），ptr_record 是 FQDN 清單（帶結尾點）
+            ptrs = await self._get("/dns/ptr_record/", {"superordinate": dn, "limit": 10000})
+            for o in self._objects(ptrs):
+                p = o.get("properties") or {}
+                name = _fqdn(str(p.get("address", "")))
+                for target in (p.get("ptr_record") or []):
+                    if str(target).strip():
+                        out.append(DNSRecordOp(name=name, type="PTR", value=str(target).strip().rstrip(".")))
+            return out
 
         # A / AAAA（host_record.a 同時含 v4/v6，用冒號判斷）
         hosts = await self._get("/dns/host_record/", {"superordinate": dn, "limit": 10000})

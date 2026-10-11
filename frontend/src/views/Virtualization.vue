@@ -4,6 +4,7 @@ const _authBtn = useAuthStore();
 import { computed, h, onMounted, reactive, ref, watch, type ComputedRef, type Ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NTabs, NTabPane, NDataTable, NSpace, NIcon, NButton, NTag, NTooltip,
@@ -233,11 +234,9 @@ async function refresh() {
   finally { loading.value = false; }
 }
 async function syncProxmox(id: string) {
-  const row = proxmox.value.find((r) => r.id === id);
-  const target = row?.api_url ?? id.slice(0, 8);
   try {
-    await Virt.syncProxmox(id);
-    msg.success(t("tasks.queued_toast", { kind: "Proxmox VE sync", target }));
+    const r = await Virt.syncProxmox(id);
+    trackTask(r.task_id, { onDone: () => void refresh() });
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 async function testProxmox(id: string) {

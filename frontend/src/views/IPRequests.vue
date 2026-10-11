@@ -101,7 +101,7 @@ const allColumns = computed<DataTableColumns<IPRequest>>(() => autoSort([
   { title: t("requests.col_purpose"),  key: "purpose", minWidth: 200, ellipsis: { tooltip: true } },
   { title: t("requests.col_created"),  key: "created_at", width: 180 },
   {
-    title: t("common.actions"), key: "__act", width: 150,
+    title: t("common.actions"), key: "actions", width: 150,
     render: (r) => r.can_approve
       ? h(NSpace, { size: 6, wrapItem: false }, () => [
           h(NButton, { size: "tiny", type: "primary", onClick: (e: Event) => { e.stopPropagation(); void approve(r); } },
@@ -114,7 +114,7 @@ const allColumns = computed<DataTableColumns<IPRequest>>(() => autoSort([
 ]));
 
 const columns = computed<DataTableColumns<IPRequest>>(() =>
-  rqOrderCols(allColumns.value.filter((c: any) => c.key === "__act" || rqVis.value.includes(c.key))),
+  rqOrderCols(allColumns.value.filter((c: any) => c.key === "actions" || rqVis.value.includes(c.key))),
 );
 
 // ── 核准 / 駁回（審核人專用，可逐列操作）──

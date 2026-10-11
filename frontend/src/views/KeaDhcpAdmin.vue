@@ -7,6 +7,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip, NAlert,
@@ -119,10 +120,9 @@ async function test(id: string) {
 }
 
 async function sync(id: string) {
-  const name = rows.value.find((r) => r.id === id)?.name ?? id.slice(0, 8);
   try {
-    await syncKea(id);
-    msg.success(t("tasks.queued_toast", { kind: t("kea_dhcp.sync_kind"), target: name }));
+    const r = await syncKea(id);
+    trackTask(r.task_id, { onDone: () => void refresh() });
   } catch (e) { msg.error(apiErrMsg(e)); }
 }
 

@@ -110,6 +110,7 @@ _LABEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "proxmox_instance": ("app.models.virt", "ProxmoxInstance", "api_url"),
     "virt_cluster": ("app.models.virt", "VirtCluster", "name"),
     "dns_server": ("app.models.dns", "DNSServer", "name"),
+    "dns_compare_group": ("app.models.dns_compare_group", "DNSCompareGroup", "name"),
     # ── 代理 / 憑證 / 權杖 ──
     "scan_agent": ("app.models.scan_agent", "ScanAgent", "name"),
     "cert_agent": ("app.models.certificate", "CertAgent", "name"),

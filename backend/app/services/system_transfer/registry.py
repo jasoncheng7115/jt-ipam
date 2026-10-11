@@ -61,6 +61,8 @@ CATEGORY: dict[str, str] = {
     "dns_servers": "core",
     "dns_zones": "core",
     "dns_records": "core",
+    "dns_compare_groups": "core",          # 比對群組設定（成員是 dns_servers.compare_group_id）
+    "dns_compare_group_diffs": "synced",   # 比對結果：下一輪同步就重算
     # core — 憑證集中保管
     "certificates": "core",
     "cert_versions": "core",

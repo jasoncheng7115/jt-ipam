@@ -1508,7 +1508,6 @@
     "status_cancelled": "中止",
     "empty_active": "実行中のタスクはありません",
     "empty_history": "履歴のタスクはまだありません",
-    "queued_toast": "{kind} を投入しました（対象：{target}）。進捗はタスクページで確認できます。",
     "summary": {
       "error": "エラー：{msg}",
       "named_error": "{name}：エラー {msg}",
@@ -1580,6 +1579,20 @@
       "wazuh_sync": "Wazuh 同期",
       "windows_dhcp_sync": "Windows DHCP 同期",
       "zabbix_sync": "Zabbix 同期"
+    },
+    "tracker": {
+      "title": "バックグラウンドジョブ",
+      "clear_done": "完了分を消去",
+      "collapse": "折りたたむ",
+      "expand": "展開",
+      "view_tasks": "ジョブページへ",
+      "dismiss": "閉じる",
+      "copy": "エラーをコピー",
+      "copied": "コピーしました",
+      "loading": "読み込み中…",
+      "lost": "このジョブが見つかりません（削除されたか、閲覧権限がありません）",
+      "seconds": "{n} 秒",
+      "minutes": "{m} 分 {s} 秒"
     }
   },
   "groups": {
@@ -1950,7 +1963,64 @@
     "verify_tls_winrm_hint": "WinRM HTTPS が自己署名証明書の場合はオフにします。オフでも HTTPS で暗号化されますが、証明書は検証しません（社内 CA の証明書を推奨）。",
     "winrm_transport": "WinRM 接続",
     "winrm_transport_hint": "既定は HTTP 5985 です。Windows Server のファイアウォールは既定で HTTPS 5986 をブロックしているためです（HTTPS には証明書付きリスナーとファイアウォール規則が別途必要）。HTTP の場合も内容と資格情報は常に NTLM で暗号化され、平文では送信しません。ポートを空欄にすると既定値を使います。",
-    "winrm_http_label": "HTTP（5985、既定）"
+    "winrm_http_label": "HTTP（5985、既定）",
+    "compare_group": "比較グループ",
+    "compare_group_none": "どの比較グループにも属さない",
+    "compare_group_hint": "内容が一致するはずの DNS サーバー（プライマリ / セカンダリ、AD 統合など）を同じ比較グループに入れると、同じレコードはまとめて表示され、取得のたびに各サーバーのデータを比較します。jt-ipam がサーバー間でレコードを同期することはありません。",
+    "cg_title": "比較グループ",
+    "cg_intro": "内容が一致するはずの DNS サーバー（プライマリ / セカンダリ、AD 統合、マルチマスターなど、サーバー同士で複製しているもの）を同じグループに入れます。jt-ipam はサーバー間でレコードを同期・変更せず、各サーバーから取得したデータを比較するだけです。DNS レコードのページ、異常検知、IP 変更評価で同じレコードを 1 件にまとめ、どのサーバーにあるかを示します。取得のたびにグループ内を比較し、違いを一覧にして、確定したものは通知機能でアラートを送ります。比較するのは A・AAAA・PTR レコードで、AD のサービスロケーター情報（_msdcs、TrustAnchors、DomainDnsZones、ForestDnsZones）は比較しません。一部のゾーンだけを複製している場合は、ほかのゾーンを比較対象から外せます。",
+    "cg_create": "比較グループを追加",
+    "cg_edit": "比較グループを編集",
+    "cg_empty": "比較グループはまだありません",
+    "cg_members": "メンバー",
+    "cg_members_ph": "内容が一致するはずの DNS サーバーを選択",
+    "cg_members_hint": "比較には 2 台以上が必要です。別のグループにあるサーバーはこのグループに移ります。無効なサーバーは比較しません。異なる製品を混在できます（例：Windows DNS と UCS）が、Unbound（OPNsense）はホストオーバーライドのみで完全なゾーンではないため、Unbound 同士でしかグループにできません。",
+    "cg_grace": "猶予時間",
+    "cg_grace_hint": "サーバー間の複製には時間がかかります。違いが現れてからこの時間以上たって、「ないサーバー」を取得し直してもまだない場合にだけ確定とし、アラートを送ります。",
+    "cg_excluded": "比較しないゾーン",
+    "cg_excluded_ph": "ゾーンを選択または入力（空＝すべて比較）",
+    "cg_excluded_hint": "サーバー間で一部のゾーンだけを複製している場合や、あるサーバーに独自のゾーンがある場合は、そのゾーンをここに入れます。1 台にしかなくても違いとせず、中のレコードも比較しません。保存するとすぐに再比較します。",
+    "cg_exclude_zone": "このゾーンを比較しない",
+    "cg_exclude_zone_confirm": "ゾーン「{zone}」を今後比較しませんか？グループ設定の「比較しないゾーン」で元に戻せます。",
+    "cg_zone_excluded": "ゾーン「{zone}」を比較しないようにしました",
+    "cg_excluded_note": "比較しないゾーン：{zones}",
+    "cg_minutes": "分",
+    "cg_notify": "アラート",
+    "cg_notify_hint": "不一致が確定したときと、一致に戻ったときに管理者へ通知します（通知設定の「DNS 比較グループの不一致」に従います）。",
+    "cg_description": "説明",
+    "cg_name_required": "グループ名を入力してください",
+    "cg_status_ok": "一致",
+    "cg_status_mismatch": "不一致",
+    "cg_status_pending": "確認待ち",
+    "cg_status_incomplete": "データ不足",
+    "cg_status_single": "メンバー不足",
+    "cg_status_never": "未比較",
+    "cg_status_incompatible": "比較できません",
+    "cg_status_hint_ok": "グループ内のすべてのサーバーのレコードが同じです。",
+    "cg_status_hint_mismatch": "確定した違いがあります：ないサーバーを猶予時間後に取得し直しても、まだありません。",
+    "cg_status_hint_pending": "違いはありますが未確定です：まだ猶予時間内か、ないサーバーをまだ取得し直していません。",
+    "cg_status_hint_incomplete": "最後の取得に失敗した、またはまだ取得していないメンバーがあるため、判定を保留しています。",
+    "cg_status_hint_single": "有効なメンバーが 2 台未満なので、比較するものがありません。",
+    "cg_status_hint_never": "メンバーの取得後に自動で比較します。「今すぐ確認」も使えます。",
+    "cg_status_hint_incompatible": "Unbound（OPNsense）は Unbound 同士でしかグループにできません。ほかのサーバーは別のグループに移してください。",
+    "cg_diff_count": "違い",
+    "cg_last_checked": "最終比較",
+    "cg_diffs": "違いの一覧",
+    "cg_diffs_title": "比較グループ「{name}」の違い",
+    "cg_check": "今すぐ確認",
+    "cg_checked": "比較が完了しました：{status}",
+    "cg_check_hint": "比較には jt-ipam が取得済みのレコードを使います。最新のデータが必要なら、先に各サーバーの「取得」を押してください。違いが現れて {n} 分以上たってから、ないサーバーを取得し直してもまだない場合に確定します。",
+    "cg_delete_confirm": "この比較グループを削除しますか？メンバーのサーバーはグループなしに戻り、レコードはまとめて表示されなくなります（サーバー上のレコードには影響しません）。",
+    "cg_diff_what": "違い",
+    "cg_kind_zone": "ゾーン全体が一部のサーバーにのみある",
+    "cg_present_on": "あるサーバー",
+    "cg_missing_on": "ないサーバー",
+    "cg_first_seen": "初回確認",
+    "cg_value": "値",
+    "cg_last_seen": "最終確認",
+    "cg_confirmed": "確定",
+    "cg_pending": "確認待ち",
+    "cg_no_diffs": "違いはありません"
   },
   "scope_overlap": {
     "warning": "サブネットの重複を検出しました（同じ IP が複数のサブネットに存在します）。この連携にはサブネットの範囲が設定されていないため、同期の際に死活・DHCP・MAC の情報を、別の組織側の IP に書き込んでしまう可能性があります。下でサブネットの範囲を設定することを検討してください。"
@@ -2298,7 +2368,11 @@
       "arp_examples": "ARP の例",
       "fdb_examples": "スイッチ MAC テーブルの例",
       "suspect_count": "破損／期限切れの疑い",
-      "host": "ホスト"
+      "host": "ホスト",
+      "group": "比較グループ",
+      "present_on": "あるサーバー",
+      "missing_on": "ないサーバー",
+      "compare_group": "比較グループ"
     },
     "rot": {
       "dangling_nat": "ポート転送の宛先が IPAM にありません —— 回収済みか、そもそも登録されていない可能性があります",
@@ -2346,7 +2420,9 @@
     "bleed_arp_line": "{ip}（{subnet}）の ARP 応答に {mac} が使われています。この MAC は {owner}（{owner_subnet}）のものです",
     "bleed_fdb_line": "{switch}、VLAN {vlan}：{detail}",
     "evidence_arp_answer": "ARP 応答に別サブネットの MAC",
-    "evidence_switch_fdb": "同じ VLAN が両方のサブネットの MAC を学習"
+    "evidence_switch_fdb": "同じ VLAN が両方のサブネットの MAC を学習",
+    "dns_compare_mismatch": "DNS 比較の不一致",
+    "explain_dns_compare_mismatch": "同じ比較グループの DNS サーバーなのにレコードが違います。ゾーン全体またはあるレコードが一部のサーバーにしかなく、ないサーバーをグループの猶予時間後に取得し直してもまだありません（変更直後で複製中のもの、まだ取得していないものは表示しません）。よくある原因は、サーバー間の複製（ゾーン転送、AD レプリケーション）の停止や、jt-ipam が使うアカウントで一部のゾーンを読めないことです。比較には jt-ipam が取得済みのレコードを使います。"
   },
   "webhooks": {
     "events_label": "イベント（* はすべて）",
@@ -3552,7 +3628,11 @@
     "console_revoked_account_inactive": "アカウントが無効化されたため、コンソール接続を終了しました。",
     "console_revoked_session_revoked": "このログインは終了しました（ログアウト、強制ログアウト、または 二要素認証のリセット）。コンソール接続を終了しました。もう一度ログインしてください。",
     "console_revoked_target_removed": "この IP が削除されたか、コンソールを開けなくなったため、接続を終了しました。",
-    "console_revoked_permission_revoked": "この IP にコンソールを開く権限が取り消されたため、接続を終了しました。"
+    "console_revoked_permission_revoked": "この IP にコンソールを開く権限が取り消されたため、接続を終了しました。",
+    "dns_compare_group_not_found": "この DNS 比較グループが見つかりません（削除された可能性があります）。",
+    "dns_server_not_found": "指定した DNS サーバーが見つかりません（削除された可能性があります）。",
+    "dns_compare_group_name_taken": "同じ名前の DNS 比較グループがすでにあります。別の名前にしてください。",
+    "dns_compare_group_mixed_kinds": "Unbound（OPNsense）はホストオーバーライドのみで完全なゾーンではないため、ほかの Unbound としか同じ比較グループにできません。"
   },
   "adguard_admin": {
     "scope_subnets": "対象サブネットを限定",
@@ -3885,7 +3965,9 @@
     "c_consistent": "一致",
     "c_dns_only": "DNS のみ",
     "c_ipam_only": "IPAM のみ",
-    "c_mismatch": "不一致"
+    "c_mismatch": "不一致",
+    "merge_groups": "比較グループ内の同じレコードをまとめる",
+    "group_badge": "グループ {name}"
   },
   "req_policy": {
     "intro": "IP 申請を承認・却下できる人を設定します。申請が送信されると、すべての承認者にアプリ内の通知が届きます（メールチャネルを設定していればメールも届きます）。",
@@ -3972,7 +4054,9 @@
       "anomaly_arp_flux": "異常検出：同一ホストの複数 NIC が同じ IP に応答",
       "anomaly_l2_subnet_bleed": "異常検出：2 つのサブネットが同じレイヤー 2 に",
       "credential_expiring": "API トークン／MCP キー／公開エンドポイントのトークンの期限が近い",
-      "security_session_reuse": "ログイントークン盗用の疑い（セッションは取り消し済み）"
+      "security_session_reuse": "ログイントークン盗用の疑い（セッションは取り消し済み）",
+      "dns_compare_mismatch": "DNS 比較グループの不一致",
+      "dns_compare_resolved": "DNS 比較グループの一致回復"
     },
     "enable": "有効にする",
     "secret_keep": "（設定済み。変更しない場合は空欄のまま）",
@@ -4421,7 +4505,12 @@
     "session_reuse": "ログイントークン盗用の疑い：{user}",
     "session_reuse_body": "{user} の更新済みのリフレッシュトークンが {ip} から再び使われたため、そのログインを取り消しました。本人が複数のデバイスで同時に操作したのでなければ、パスワードをリセットし監査ログを確認してください。",
     "session_reuse_self": "ログインの 1 つが取り消されました",
-    "session_reuse_self_body": "更新済みのログイントークンが {ip} から再び使われました。盗まれた可能性があるため、パスワードを変更してください。"
+    "session_reuse_self_body": "更新済みのログイントークンが {ip} から再び使われました。盗まれた可能性があるため、パスワードを変更してください。",
+    "dns_compare_mismatch": "DNS 比較グループ「{group}」に {count} 件の不一致",
+    "dns_compare_mismatch_body": "{what}：{missing} にありません",
+    "dns_compare_mismatch_body_more": "{what}：{missing} にありません（ほか {more} 件。違いの一覧を参照）",
+    "dns_compare_resolved": "DNS 比較グループ「{group}」が一致に戻りました",
+    "dns_compare_resolved_body": "グループ内のすべてのサーバーのレコードが同じになりました。"
   },
   "system_transfer": {
     "title": "システムのエクスポート／インポート",
@@ -5731,7 +5820,6 @@
     "version": "バージョン",
     "test": "接続テスト",
     "sync_now": "今すぐ同期",
-    "sync_started": "同期をバックグラウンドで開始しました",
     "confirm_delete": "「{name}」を削除しますか？",
     "name_ph": "例：本社 OCS",
     "name_url_required": "名前と URL は必須です",
@@ -5905,7 +5993,6 @@
     "errors_not_imported": "エラーのある行は取り込みません（行の一部だけが書き込まれることはありません）。",
     "run": "インポート",
     "run_n": "{n} 件をインポート",
-    "queued": "インポートを開始しました。進捗は「タスク」ページで確認できます。",
     "fatal_empty_file": "ファイルが空です。",
     "fatal_no_name_column": "名称の列（name）が見つかりません。1 行目は見出しにしてください。",
     "fatal_too_many_rows": "1 回に取り込めるのは {max} 行までです。分割してください。",

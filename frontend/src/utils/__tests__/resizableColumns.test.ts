@@ -111,3 +111,56 @@ describe("欄寬分配（固定排版＋scroll-x 的表格）", () => {
     expect(noX.findAll("colgroup col").some((c) => (c.attributes("style") || "").includes("width: 120px"))).toBe(false);
   });
 });
+
+// 客戶 2026-10-10：「用滑鼠就變成一直往左滑看資料、往右滑去按操作」—— 寬表格的操作欄在桌面寬度固定在右側
+describe("操作欄固定在右側（stickyActions）", () => {
+  const cols = () => [
+    { key: "name", title: "N", minWidth: 160 },
+    { key: "ip", title: "IP", width: 140 },
+    { key: "actions", title: "A", width: 158, className: "col-actions" },
+  ];
+
+  it("最後一欄是操作欄、有寬度 → 固定在右側", () => {
+    const out = withResizable<Record<string, unknown>>(cols(), { stickyActions: true });
+    expect(out[2].fixed).toBe("right");
+    expect(out[0].fixed).toBeUndefined();
+  });
+
+  it("只認 className 也算（有些頁面的操作欄 key 不叫 actions）", () => {
+    const out = withResizable<Record<string, unknown>>(
+      [{ key: "n", title: "N" }, { key: "ops", title: "O", width: 120, className: "col-actions" }], { stickyActions: true });
+    expect(out[1].fixed).toBe("right");
+  });
+
+  it("沒開（手機寬度、表格不會橫向捲動）就不動", () => {
+    expect(withResizable<Record<string, unknown>>(cols())[2].fixed).toBeUndefined();
+    expect(withResizable<Record<string, unknown>>(cols(), { stickyActions: false })[2].fixed).toBeUndefined();
+  });
+
+  it("沒有寬度、不是最後一欄、已經寫了 fixed 的都不動", () => {
+    const noWidth = withResizable<Record<string, unknown>>(
+      [{ key: "n", title: "N" }, { key: "actions", title: "A" }], { stickyActions: true });
+    expect(noWidth[1].fixed).toBeUndefined();
+    const notLast = withResizable<Record<string, unknown>>(
+      [{ key: "actions", title: "A", width: 100 }, { key: "n", title: "N" }], { stickyActions: true });
+    expect(notLast[0].fixed).toBeUndefined();
+    const explicit = withResizable<Record<string, unknown>>(
+      [{ key: "n", title: "N" }, { key: "actions", title: "A", width: 100, fixed: false }], { stickyActions: true });
+    expect(explicit[1].fixed).toBe(false);
+  });
+
+  it("掛在元件上：有 scroll-x 而且是桌面寬度才固定", async () => {
+    const { setWideViewportForTest } = await import("@/utils/resizableColumns");
+    setWideViewportForTest(true);
+    const w = mount(NDataTable, { props: { columns: cols(), data: [{ name: "a", ip: "192.0.2.1" }], scrollX: 900 } });
+    await nextTick();
+    expect(w.findAll("th.n-data-table-th--fixed-right").length).toBe(1);
+    setWideViewportForTest(false);
+    await nextTick();
+    expect(w.findAll("th.n-data-table-th--fixed-right").length).toBe(0);
+    const noScroll = mount(NDataTable, { props: { columns: cols(), data: [] } });
+    setWideViewportForTest(true);
+    await nextTick();
+    expect(noScroll.findAll("th.n-data-table-th--fixed-right").length).toBe(0);
+  });
+});

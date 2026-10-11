@@ -8,6 +8,7 @@
  */
 import { computed, h, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import {
   NAlert, NButton, NCard, NCheckbox, NCollapse, NCollapseItem, NDataTable, NForm, NFormItem, NIcon, NInput,
   NInputNumber, NModal, NPopconfirm, NRadioButton, NRadioGroup, NSelect, NSpace, NSwitch, NTabPane, NTabs, NTag,
@@ -185,9 +186,8 @@ const cols = computed(() => prefs.orderColumns(allCols.value.filter((c: any) => 
 
 async function sync(r: IsoInsightSource) {
   try {
-    await syncSource(r.id);
-    msg.success(t("tasks.queued_toast", { kind: t("isoinsight.sync_kind"), target: r.name }));
-    setTimeout(() => { void refresh(); }, 1500);
+    const job = await syncSource(r.id);
+    trackTask(job.task_id, { onDone: () => void refresh() });
   } catch (e) { msg.error(apiErrMsg(e), { duration: 8000, closable: true }); }
 }
 async function del(r: IsoInsightSource) {

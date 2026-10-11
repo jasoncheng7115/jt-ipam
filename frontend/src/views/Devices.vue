@@ -6,6 +6,7 @@ const _authBtn = useAuthStore();
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import { apiClient, apiErrMsg } from "@/api/client";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
@@ -81,9 +82,9 @@ const loading = ref(false);
 const show = ref(false);
 // 裝置匯入（issue #46）
 const showImport = ref(false);
-function onImportQueued() {
-  // 匯入在背景跑（作業頁看得到）；幾秒後重抓清單，多數情況已經完成
-  setTimeout(() => { void refresh(); }, 3000);
+function onImportQueued(taskId: string) {
+  // 匯入在背景跑：右下角的「背景作業」面板顯示進度與結果，跑完重抓清單
+  trackTask(taskId, { onDone: () => void refresh() });
 }
 const editing = ref<Device | null>(null);
 

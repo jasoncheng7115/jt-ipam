@@ -303,6 +303,8 @@ export interface AnomalyReport {
   arp_flux?: Record<string, any>[];
   /** 兩個子網段混在同一個二層 */
   l2_subnet_bleed?: Record<string, any>[];
+  /** DNS 比對群組各台的紀錄不一樣（持續超過寬限時間；2026-10-10） */
+  dns_compare_mismatch?: Record<string, any>[];
 }
 
 export async function runAnomalyScan(): Promise<AnomalyReport> {
@@ -497,7 +499,7 @@ export const Virt = {
   clusters: () => getList<VirtCluster>("/api/v1/virt/clusters"),
   vms: () => getList<VirtualMachine>("/api/v1/virt/vms"),
   proxmox: () => getList<ProxmoxInstance>("/api/v1/virt/proxmox"),
-  syncProxmox: async (id: string) => {
+  syncProxmox: async (id: string): Promise<{ task_id: string }> => {
     const { data } = await apiClient.post(`/api/v1/virt/proxmox/${id}/sync`,
       undefined, { timeout: 300_000 });
     return data;

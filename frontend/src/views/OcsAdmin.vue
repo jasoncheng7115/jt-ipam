@@ -9,6 +9,7 @@
  */
 import { computed, h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NAlert, NModal, NForm,
   NFormItem, NInput, NInputNumber, NSwitch, NSelect, NPopconfirm, NTooltip, NTabs, NTabPane,
@@ -194,9 +195,8 @@ async function test(row: OcsServer) {
 async function sync(row: OcsServer) {
   busy.value = row.id;
   try {
-    await syncOcs(row.id);
-    msg.success(t("ocs.sync_started"));
-    setTimeout(load, 1500);
+    const r = await syncOcs(row.id);
+    trackTask(r.task_id, { onDone: () => void load() });
   } catch (e) {
     msg.error(apiErrMsg(e));
   } finally {

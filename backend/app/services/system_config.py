@@ -1619,6 +1619,8 @@ NOTIFY_EVENTS: tuple[tuple[str, bool, bool], ...] = (
     ("firewall.rules_changed", True, False),  # 防火牆規則有異動
     # 「東西壞了卻沒人知道」三類。只在開始與恢復時發（見 services/state_alert）。
     ("integration.sync_failed", True, False),  # 整合同步失敗／恢復
+    ("dns.compare_mismatch", True, False),        # DNS 比對群組各台的紀錄不一樣（超過寬限時間才發；services/dns_compare）
+    ("dns.compare_resolved", True, False),        # DNS 比對群組恢復一致
     ("agent.offline", True, False),            # 掃描／憑證代理失聯／恢復
     ("agent.overloaded", True, False),         # 掃描代理負載過重（連續 3 輪）／恢復
     ("identify.done", True, False),            # 自己發起的 IP 探測完成／失敗（只通知發起人）

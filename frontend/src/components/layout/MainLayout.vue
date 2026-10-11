@@ -30,6 +30,7 @@ import type { Subnet } from "@/types";
 import NotificationBell from "@/components/NotificationBell.vue";
 import GlobalSearch from "@/components/GlobalSearch.vue";
 import ChatWidget from "@/components/ChatWidget.vue";
+import TaskTrackerPanel from "@/components/TaskTrackerPanel.vue";
 import ChangePasswordModal from "@/components/ChangePasswordModal.vue";
 import {
   // 主導覽
@@ -695,6 +696,8 @@ function startDrag(e: MouseEvent) {
       </n-layout-content>
     </n-layout>
     <chat-widget v-if="me?.ai_enabled" />
+    <!-- 背景作業的進度與結果（按下拉取／同步／匯入後出現，不用再去作業頁看）；有 AI 對話按鈕時放在它上方 -->
+    <TaskTrackerPanel :raised="!!me?.ai_enabled" />
     <change-password-modal v-model:show="pwModalShow" />
   </n-layout>
 </template>

@@ -9,6 +9,34 @@ import { computed, ref, type SetupContext } from "vue";
 
 type Col = Record<string, unknown>;
 
+// ── 操作欄固定在右側（客戶 2026-10-10：「用滑鼠就變成一直往左滑看資料、往右滑去按操作」）──
+// 可以橫向捲動的表格，在桌面寬度把最後一欄「操作」固定在右側，捲到哪裡都按得到。
+// 手機寬度不固定：一欄 150px 的操作欄會吃掉三分之一個畫面，手指滑動本來就順。
+// 全站共用一個 matchMedia 監聽，不是每張表各掛一個。
+const WIDE_QUERY = "(min-width: 768px)";
+const wideViewport = ref(typeof window !== "undefined" && typeof window.matchMedia === "function"
+  ? window.matchMedia(WIDE_QUERY).matches : true);
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  const mq = window.matchMedia(WIDE_QUERY);
+  const onChange = () => { wideViewport.value = mq.matches; };
+  if (typeof mq.addEventListener === "function") mq.addEventListener("change", onChange);
+}
+
+/** 測試用：模擬視窗寬度變化 */
+export function setWideViewportForTest(wide: boolean): void { wideViewport.value = wide; }
+
+function isActionsColumn(col: Col): boolean {
+  return col.key === "actions" || (typeof col.className === "string" && col.className.includes("col-actions"));
+}
+
+/** 最後一欄是操作欄、有數字寬度、沒有自己寫 fixed → 固定在右側（元件要有寬度才算得出固定欄的位置） */
+function withStickyActions(cols: Col[]): Col[] {
+  const last = cols[cols.length - 1];
+  if (!last || typeof last !== "object" || Array.isArray(last.children)) return cols;
+  if (!isActionsColumn(last) || last.fixed !== undefined || typeof last.width !== "number") return cols;
+  return [...cols.slice(0, -1), { ...last, fixed: "right" }];
+}
+
 function mapColumn(col: Col): Col {
   if (!col || typeof col !== "object") return col;
   // 勾選欄、展開欄不是資料欄
@@ -23,9 +51,10 @@ function mapColumn(col: Col): Col {
   return { ...col, resizable: true };
 }
 
-export function withResizable<T>(cols: T[] | undefined | null): T[] {
+export function withResizable<T>(cols: T[] | undefined | null, opts: { stickyActions?: boolean } = {}): T[] {
   if (!Array.isArray(cols)) return cols as unknown as T[];
-  return cols.map((c) => mapColumn(c as unknown as Col) as unknown as T);
+  const mapped = cols.map((c) => mapColumn(c as unknown as Col));
+  return (opts.stickyActions ? withStickyActions(mapped) : mapped) as unknown as T[];
 }
 
 // ── 欄寬分配（2026-10-06 使用者：「寬度明明還夠，為何不自動適當分配」「拉一個寬度，其它剛剛拉過的又被改變」）──
@@ -83,7 +112,8 @@ interface SetupComponent {
 }
 
 /**
- * 包住元件的 setup，讓它看到的 `props.columns` 是 `withResizable` 之後的版本。
+ * 包住元件的 setup，讓它看到的 `props.columns` 是 `withResizable` 之後的版本
+ * （可拖拉欄寬；可橫向捲動的表格在桌面寬度把操作欄固定在右側）。
  * 用 computed：父層就地改動欄位（響應式）時跟著重算，跟原本的行為一樣。
  */
 export function installResizableColumns(component: unknown): void {
@@ -96,7 +126,8 @@ export function installResizableColumns(component: unknown): void {
     const proportional = () => props.scrollX !== undefined
       && usesFixedLayout(props, (props.columns as Col[] | undefined) ?? []);
     const mapped = computed(() => {
-      const cols = withResizable(props.columns as Col[] | undefined);
+      const cols = withResizable(props.columns as Col[] | undefined,
+        { stickyActions: props.scrollX !== undefined && wideViewport.value });
       return Array.isArray(cols) && proportional() ? withProportionalWidths(cols, frozen.value) : cols;
     });
     function onUnstableColumnResize(...args: unknown[]): void {

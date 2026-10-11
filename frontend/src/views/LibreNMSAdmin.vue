@@ -2,6 +2,7 @@
 import { computed, h, onMounted, ref } from "vue";
 import { fmtDateTime } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
+import { trackTask } from "@/composables/useTaskTracker";
 import ScopeOverlapWarning from "@/components/ScopeOverlapWarning.vue";
 import {
   NCard, NDataTable, NSpace, NButton, NTag, NIcon, NTooltip,
@@ -153,12 +154,10 @@ async function test(id: string) {
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 async function sync(id: string) {
-  const row = rows.value.find((r) => r.id === id);
-  const targetName = row?.name ?? id.slice(0, 8);
   try {
-    await syncLibreNMS(id);
-    // 後端現在立刻回 task_id，實際 sync 在背景跑。前端跳訊息引導去任務頁。
-    msg.success(t("tasks.queued_toast", { kind: "LibreNMS sync", target: targetName }));
+    const r = await syncLibreNMS(id);
+    // 背景跑：右下角的「背景作業」面板顯示進度與結果，跑完重新整理清單
+    trackTask(r.task_id, { onDone: () => void refresh() });
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 async function linkDevices(id: string) {

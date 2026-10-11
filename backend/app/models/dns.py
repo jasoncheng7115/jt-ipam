@@ -47,6 +47,9 @@ class DNSServer(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    #: 比對群組（互相同步的 DNS 伺服器；models/dns_compare_group.py）
+    compare_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("dns_compare_groups.id", ondelete="SET NULL"), index=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -106,6 +109,10 @@ class DNSRecord(Base, UUIDPrimaryKeyMixin):
         index=True,
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: 正規化後的完整名稱（小寫、去結尾點、相對名稱補上 zone）與值：同步時由 services/dns_compare 填，
+    #: 比對群組的比對與合併顯示都用這兩欄（不同廠牌對名稱的寫法不同）
+    name_norm: Mapped[str | None] = mapped_column(String(255))
+    value_norm: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
