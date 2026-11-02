@@ -155,6 +155,8 @@ _PER_OBJECT_TOOLS = frozenset({
     "list_connection_targets", "investigate_ip",
     # 拓樸：與 REST /topology 相同，部分範圍帳號只看得到自己範圍內的節點與兩端都在範圍內的連線（2026-10-09）
     "get_topology",
+    # 維護排程：與 REST /maintenance 同一套可見性（範圍內有看得到的物件、或自己建的）
+    "list_maintenance",
     # ISOinsight 來源租約：依可見子網路過濾，配對不到子網路的只給管理員（services/isoinsight/queries.py）
     "list_isoinsight_leases",
     # IP 變更評估：計畫依根目標的可見性、結果依 Viewer 逐筆過濾（services/change_impact/access.py）

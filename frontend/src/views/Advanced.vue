@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import JtDatePicker from "@/components/JtDatePicker.vue";
 import { computed, h, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
+import { useEntityLinks } from "@/composables/useEntityLinks";
 import {
   NCard, NTabs, NTabPane, NDataTable, NSpace, NIcon, NButton, NTooltip,
   NModal, NForm, NFormItem, NInput, NInputNumber, NSelect, NPopconfirm,
-  NDatePicker,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { apiClient, apiErrMsg } from "@/api/client";
@@ -12,17 +14,19 @@ import { Advanced } from "@/api/phase3";
 import { listDevices } from "@/api/basic";
 import {
   AdvancedIcon, PlusIcon, DeleteIcon, EditIcon, RefreshIcon, SaveIcon, CancelIcon,
-  CustomersIcon, VlansIcon, PhysicalIcon, UsersIcon, ScanAgentsIcon, ListIcon,
+  CustomersIcon, VlansIcon, PhysicalIcon, UsersIcon, ScanAgentsIcon, ListIcon, VpnIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
+import VpnTunnelTable from "@/components/VpnTunnelTable.vue";
 import { withExportValue } from "@/utils/tableExport";
 import { useTablePagination } from "@/composables/useTablePagination";
 
 const { t } = useI18n();
+const links = useEntityLinks(useRouter());
 const msg = useMessage();
 const pg = useTablePagination();
 // 每個頁籤拆成獨立頁面：由路由帶 mode 進來，設定初始頁籤並隱藏頁籤列
@@ -259,7 +263,9 @@ function circuitStatusText(r: any): string {
   return o === k ? (r.status ?? "—") : o;
 }
 const circuitCols = computed<DataTableColumns<any>>(() => autoSort([
-  { title: t("cols.cid"), key: "cid", minWidth: 160, ellipsis: { tooltip: true } },
+  // 電路編號連到詳細資料頁（聯絡人、WAN 位址、租用設備）
+  { title: t("cols.cid"), key: "cid", minWidth: 160, ellipsis: { tooltip: true },
+    render: (r) => links.circuit(r.id, r.cid) },
   { title: t("circuits.provider"), key: "provider_id", width: 180, ellipsis: { tooltip: true },
     render: (r) => providers.value.find((p) => p.id === r.provider_id)?.name ?? "—" },
   { title: t("circuits.type"), key: "type_id", width: 160, ellipsis: { tooltip: true },
@@ -472,6 +478,14 @@ onMounted(() => { void loadAll(); });
             </n-space>
             <n-data-table :columns="circuitTypeP.visibleCols" :data="circuitTypeP.filtered" :loading="loading" :bordered="false" :scroll-x="472" :pagination="pg" />
           </n-tab-pane>
+          <!-- 站對站 VPN 跟電路當成同一種管（客戶許願清單）：同一份清單，名稱點進去有聯絡人與跑在哪條電路上 -->
+          <n-tab-pane name="vpn">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><VpnIcon /></n-icon>{{ t('circuits.vpn_tab') }}</span>
+            </template>
+            <div class="hint" style="margin: 8px 0 4px">{{ t("circuits.vpn_tab_hint") }}</div>
+            <VpnTunnelTable />
+          </n-tab-pane>
         </n-tabs>
       </n-tab-pane>
 
@@ -654,10 +668,10 @@ onMounted(() => { void loadAll(); });
           </div>
           <div class="circuit-row">
             <n-form-item :label="t('circuits.install_date')" :show-feedback="false">
-              <n-date-picker v-model:formatted-value="form.install_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 100%" />
+              <jt-date-picker v-model:formatted-value="form.install_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 100%" />
             </n-form-item>
             <n-form-item :label="t('circuits.contract_end')" :show-feedback="false">
-              <n-date-picker v-model:formatted-value="form.contract_end_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 100%" />
+              <jt-date-picker v-model:formatted-value="form.contract_end_date" value-format="yyyy-MM-dd" type="date" clearable style="width: 100%" />
             </n-form-item>
           </div>
           <div class="circuit-row">

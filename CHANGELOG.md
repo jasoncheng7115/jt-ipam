@@ -4,6 +4,135 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [1.0.17] - 2026-11-02
+
+### Security
+- vue-i18n 10 → 11.4.17: GHSA-83rm-6c8r-g728 (no fix in 10.x) and GHSA-8rc2-428q-7ww3.
+- follow-redirects 1.16.2 (GHSA-mrwp-f3q8-3g9p, via axios) and vite 6.4.5 (GHSA-8g5g-mxqh-grgj).
+- Development tools only: glob and minimatch 9 / 10 upgraded through overrides; minimatch 3 used by eslint has no fix and is listed in `.github/audit-allowlist.txt` until 2027-02-28 (not in the bundle served to users).
+
+### Fixed
+- Site-to-site VPN list: on a phone the name column was squeezed to one or two characters per line; columns now have minimum widths and the table scrolls sideways.
+- Maintenance windows: index on the creator column (migration 0236), so deleting a user does not scan the whole table.
+
+### Changed
+
+#### War room AI intelligence
+- Opening the topic after a long gap shows a system summary with current numbers at once and swaps in the AI version when it is ready.
+  - Polls every 3 seconds while generating, with "generating" rather than "out of date" in the header.
+- Model replies are tidied (list numbers removed, extra items trimmed) instead of rejected.
+- A major event already covered by the briefing is not inserted again.
+- When the briefing is full, the oldest paragraph slides up and fades out.
+- Pausing the war room also freezes the WARNING rotation and the sources paging; the pause and resume flashes have different colours.
+- ARP flux is no longer a default warning category. Sites that already saved their settings keep what they ticked.
+
+#### Circuit detail: contacts, WAN addresses, leased equipment (customer wishlist; migration 0232)
+
+Click a circuit ID in the circuit list to open its detail page.
+
+**Contacts**
+- Circuits and providers each have contacts; a provider's sales contact shows on every circuit of that provider.
+- Pick an existing contact or create one in the dialog.
+- Four built-in roles: sales, on-site, NOC, billing (not deletable, shown in your language); you can add your own.
+
+**WAN addresses**
+- Linked to IPAM records: the ISP's block (a subnet) or scattered single IPs, each tagged with its use (WAN address, ISP gateway, peer address).
+- Each address shows its host name, device, NAT count, when and by what it was last seen, and a number of signs of use.
+  - Signs are: a device, NAT rules, seen in the last 7 days, online now; the count is evidence, not a verdict, and the page never says "free".
+  - "Check signs of use" pings these addresses once (server side, rate-limited and audited like the network diagnostics).
+- The old "Fixed IP / CIDR" and gateway text fields stay; "Convert old fields" turns them into links (a CIDR links the whole subnet first).
+- A subnet you cannot see shows "No permission to view" without the address.
+- Modelled after other tools: NetBox does not let a circuit hold a prefix (it would not tell which addresses are usable); this accepts both, and both are real IPAM records.
+
+**Leased equipment**
+- The device page has a "Lease" card: which provider it is rented from, which circuit (picking a circuit fills in the provider), whether it must be returned, by when, and a note.
+- The circuit detail lists the leased equipment on that circuit.
+
+**IP change assessment (rules version 6)**
+- Renumbering an IP linked to a circuit is "change required"; an address merely inside a circuit's block is "reference only". The circuit's old text field no longer adds a duplicate.
+- Decommissioning leased equipment lists "return it after decommissioning".
+
+**Other**
+- The AI circuits tool also returns WAN addresses, contacts and leased equipment.
+- API: `GET /circuits/{id}/detail`, `POST / DELETE /circuits/{id}/addresses`, `POST /circuits/{id}/addresses/from-legacy`, `/contact-roles`, `PATCH / DELETE /contact-assignments/{id}`, `GET / PUT / DELETE /devices/{id}/lease`.
+- `POST /contact-assignments` only accepts `object_type` provider, circuit, vpn_tunnel, device, location, customer, section or subnet, and the object must exist (it used to accept any string).
+- The device page's "Power ports" card header has its icon.
+
+#### Site-to-site VPNs managed with circuits (customer wishlist)
+- The circuits section has a "Site-to-site VPN" tab with the same list as Advanced > Site-to-site VPN; a VPN name opens the new VPN detail page.
+- VPN detail: both end devices and endpoints, encryption and authentication, and contacts (for example the peer company's contact, set like circuit contacts).
+- "Runs on circuit": listed when a VPN endpoint is a circuit's linked WAN IP or inside its block; endpoints given as names are not matched.
+- The AI VPN tool also returns contacts and carrying circuits.
+- API: `GET /vpn-tunnels/{id}/detail`; contacts use `object_type` `vpn_tunnel`.
+
+#### Domain management (customer wishlist; migration 0233)
+
+Menu "Advanced > Domains": which domains are registered, at which registrar, when they expire, where the nameservers and DNS are hosted, and which services are bound to them.
+
+**Automatic lookups (RDAP)**
+- Registrar, registration date, expiry, nameservers and registry status come from RDAP (servers per TLD from the IANA list); each domain is looked up about once a day, and admins can look it up again at once.
+- TLDs without RDAP (for example .io, .jp, .cn, .de) show "This TLD has no RDAP" and use the date entered by hand; RDAP wins when it has one.
+- A failed lookup (unreachable, rate limited) only records why and keeps the last result.
+- Without an entered DNS hosting provider, it is inferred from the nameservers (Cloudflare, AWS Route 53, Azure DNS, GoDaddy, HiNet…) and marked "inferred".
+
+**Expiry notifications**
+- Admins are notified once each at 30, 14, 7 and 1 days before expiry and on the day (in-app, email and chat per the notification matrix row "Domain expiring / expired"); a renewal that changes the expiry date starts over.
+- Days left are counted in the site time zone (`APP_TIMEZONE`).
+
+**Screens**
+- List: search, add, add several (paste many domains; each is looked up by RDAP afterwards with progress shown), look up all again, column picker, export.
+- Detail: registration, nameservers, registry status, services, and related DNS zones and certificates (certificates for admins only).
+- Adding and editing share one dialog; for the registrar only the account name and portal URL (http / https only) are kept, **no passwords**.
+
+**Other**
+- AI tool `list_domains`; the tasks page shows "Domain RDAP lookup".
+- API: `/domains` (list, add, add several, detail, update, delete, `POST /domains/{id}/rdap`). Read needs global read; writes and RDAP lookups are admin only.
+
+#### Path from the internet on the IP page (customer wishlist; migration 0234)
+- The IP detail page has a "Path from the internet" card: internet → WAN address:external port (carrying circuit) → firewall (NAT rule) → switch access port → host:internal port (device, or the node a VM runs on).
+  - Every segment comes from data: NAT rules, circuit WAN links, switch MAC tables (the port seeing the fewest MACs, same as the war room WARNING location) and virtualisation; segments that cannot be worked out are left out.
+  - The host page and the external address page show the same path; disabled NAT is not drawn; the card is hidden without a NAT forward.
+- Devices can be inserted between the firewall and the switch (WAF, load balancer, reverse proxy, router…): pick a device or enter a name, reorder, remove; dashed boxes mark hand-added ones. Needs write access to the subnet and is audited.
+- IP change assessment: decommissioning a device drawn on a path asks to update that path.
+- API: `GET /addresses/{id}/exposure-path`, `POST / PATCH / DELETE /addresses/{id}/path-hops`.
+
+#### The IP page's NAT shows the mapping
+- "Related NAT rules" has a "Mapping (external → internal)" column, e.g. `203.0.113.3:443 → 198.51.100.70:8443`, with this IP's side in bold, plus a protocol column.
+  - An external side without an address shows the interface (for example wan); an alias target shows the alias name.
+- Each row of the NAT list API carries `src_ip` and `dst_ip` (address text).
+
+#### Maintenance windows (migration 0235)
+
+While equipment is down for maintenance, jt-ipam no longer keeps alerting about it. The new "Maintenance" menu item lists active, upcoming and past windows.
+
+**What is muted**
+- Scopes: IP, IP range, subnet, section (with its sub-sections), device (its IPs and primary IP), rack, location, unit, integration, scan agent.
+  - An integration or scan agent is also covered when the host it connects to is in scope.
+- "Mute notifications" (default): still detected and logged, marked "In maintenance", but nothing goes to in-app, email or chat. "Mark only" just labels.
+- Something that goes down during the window and recovers before it ends sends nothing. Something still down when the window ends is alerted then.
+- Anomaly detection tags affected rows with a "Maintenance" column; findings already notified before the window are not repeated.
+- When a window starts and ends, admins are notified (notification matrix events `maintenance.started` and `maintenance.ended`); the end notice says how many alerts were muted and how many are still not recovered.
+
+**Practical to use**
+- The IP, device and subnet pages have a "Maintenance" button: 30 minutes to 8 hours or a custom length, starting now. While active it shows "In maintenance until HH:MM" with extend, end and view.
+- The top bar shows "N in maintenance" while any window you can see is active.
+- Schedule once, or weekly (weekdays, a time that may cross midnight, and a required end date). End early or extend only the current occurrence.
+- Before saving, the dialog shows how many IPs, subnets, devices, integrations and scan agents are covered; a large scope must be confirmed.
+- System settings: maximum hours per window (default 168, so a forgotten window does not mute alerts for good) and the large-scope threshold (default 500 IPs).
+- The detail page lists the alerts that were muted, one row per target with a count.
+- The list sorts by any column header, has a column picker and export, and fits a normal-width window; the custom length can be minutes, hours or days; weekdays start on Sunday.
+- The menu item sits above "Tasks".
+
+**Permissions and other**
+- Anyone with write access to every object in scope can create a window; IP ranges, integrations and scan agents are admin only. You see windows covering objects you can see, plus your own.
+- Everything is audited, in readable form: times in the site time zone, scopes by name, and only the changed fields on an update. AI tool `list_maintenance`.
+- API: `/maintenance` (list, summary, active, scope search, preview, create, quick, detail, update, delete, end, extend, suppressed, settings).
+- Not in this release: reading LibreNMS maintenance schedules, availability reports that exclude maintenance, and pushing windows back to LibreNMS (planned, off by default).
+
+#### Date pickers
+- The clear, now and confirm buttons at the bottom of every date picker have icons.
+- Calendars start on Sunday.
+
 ## [1.0.16] - 2026-10-26
 
 ### Added
@@ -123,7 +252,7 @@ The data in scope is turned into short briefings typed out on the TV.
 #### Docs
 - DNS integration is described as read-only. The README, features page and API manual used to say records could optionally be pushed to DNS servers for subnets with auto-DNS on, but that path was never wired up; `auto_dns` is documented as a reserved field with no effect.
 - The screenshots tour on the docs homepage ends with the war room (item 15).
-- Features, integrations and the BMC / SOL guide link to the related articles on blog.jason.tools (DNS comparison groups, IP probe, OCS Inventory, RustDesk, rack shelving, BMC SOL).
+- Features, integrations and the BMC / SOL guide link to the related articles on blog.example.com (DNS comparison groups, IP probe, OCS Inventory, RustDesk, rack shelving, BMC SOL).
 
 #### Other
 - Chinese and Japanese UI text uses a half-width slash with spaces (" / ") instead of the full-width "／".

@@ -88,6 +88,7 @@ function renderObjectLink(objectType: string | null, objectId: string | null, la
     case "cert_agent":
     case "certificate":         return go("certificates");
     case "api_token":           return go("api_tokens");
+    case "maintenance":         return go("maintenance-detail", { id: objectId });
     default:             return short;
   }
 }
@@ -125,7 +126,7 @@ const objTypeOptions = [
   "auth", "api_token", "anomaly",
   "dns_server", "librenms_instance", "opnsense_firewall", "opnsense_alias_mapping",
   "wazuh_instance", "scan_agent", "webhook",
-  "phpipam_migration", "ip_request", "custom_field",
+  "phpipam_migration", "ip_request", "custom_field", "maintenance",
 ].map((v) => ({ label: v, value: v }));
 // 動作篩選：可複選、可從下拉挑、也可以直接打字（tag 模式）——
 // 稽核動作有數十種且會隨功能增加，純下拉選不到新的、純輸入又要背名字。
@@ -147,6 +148,7 @@ function rowProps(row: AuditLog) {
 }
 function fmtVal(v: unknown, field?: string): string {
   if (v == null) return "—";
+  if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v.length ? v.join("、") : "—";
   if (typeof v === "object") return JSON.stringify(v);
   const s = String(v);
   // switch_port 與其他頁一致：交換器 / 連接埠 顯示為 device@port

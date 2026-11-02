@@ -28,7 +28,7 @@ export function severityType(s: string): TagType {
 // 參數本身也是代碼的（來源／目的、跨子網路要確認的項目）：一併翻譯
 // 服務重要性、節點停機模式（M2）、整合種類、系統設定、線路欄位、IP 範圍用途、未指定埠的服務端點也是代碼
 const CODED_PARAMS = new Set(["side", "item", "criticality", "mode", "kind", "setting", "field", "purpose", "endpoint",
-                              "option"]);
+                              "option", "circuit_role", "hop_kind"]);
 // 時間參數一律以本地時區顯示（後端送 ISO 8601）
 const TIME_PARAMS = new Set(["last_sync_at", "last_seen", "until"]);
 
@@ -37,7 +37,7 @@ const VENDOR_NAME: Record<string, string> = {
   opnsense: "OPNsense", pfsense: "pfSense", fortigate: "FortiGate", paloalto: "Palo Alto", checkpoint: "Check Point",
   mikrotik: "MikroTik", librenms: "LibreNMS",
 };
-function sourceText(t: T, te: Te, token: string): string {
+export function sourceText(t: T, te: Te, token: string): string {
   const [kind, vendor] = token.split(":", 2);
   if (vendor !== undefined) {
     const k = `change_impact.param.source_kind.${kind}`;

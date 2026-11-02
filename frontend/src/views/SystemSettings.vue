@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getImpactSettings, putImpactSettings } from "@/api/changeImpact";
+import { Maintenance } from "@/api/maintenance";
 import { useChangeImpact } from "@/composables/useChangeImpact";
 /**
  * 系統設定（僅管理員）— 全域、所有使用者共用的設定，獨立於「個人設定」。
@@ -209,6 +210,14 @@ async function saveImpact(patch: Record<string, unknown>) {
     void impactShared.load(true);          // 選單與入口跟著出現或消失
     msg.success(t("common.ok"));
   } catch { impactCfg.value = prev; msg.error(t("errors.network")); }
+}
+// 維護排程（2026-11-01）：一次維護最長幾小時、範圍超過幾個 IP 要再確認
+const maintCfg = ref({ max_hours: 168, large_threshold: 500 });
+async function saveMaint(patch: Partial<{ max_hours: number; large_threshold: number }>) {
+  const prev = { ...maintCfg.value };
+  maintCfg.value = { ...maintCfg.value, ...patch };
+  try { maintCfg.value = await Maintenance.saveSettings(maintCfg.value); msg.success(t("common.ok")); }
+  catch { maintCfg.value = prev; msg.error(t("errors.network")); }
 }
 function changeRdpClipPaste(v: boolean) { rdpClipPaste.value = v; void saveConsole({ rdp_clipboard_paste: v }); }
 // 主控台中繼：只送這一個欄位（後端「沒帶＝維持原值」），失敗時退回原值
@@ -633,6 +642,7 @@ async function doTestAf() {
 
 onMounted(() => {
   void loadImpact();
+  Maintenance.settings().then((v) => { maintCfg.value = v; }).catch(() => {});
   void loadRackEmbed();
   void loadBackupEnc();
   getUiDisplay().then((d) => { changeLogDimDays.value = d.change_log_dim_days; }).catch(() => {});
@@ -886,6 +896,33 @@ async function doPreviewAutolink() {
             <label>{{ t("change_impact.set_retention") }}</label>
             <n-input-number :value="impactCfg.retention_days" :min="7" :max="3650" style="width: 160px"
                             @update:value="(v: number | null) => v && saveImpact({ retention_days: v })" />
+          </div>
+        </div>
+      </n-card>
+
+      <!-- 維護排程：維護期間範圍內不告警 -->
+      <n-card class="ss-group" size="small" data-testid="ss-maintenance">
+        <template #header><span class="ss-h">{{ t("maint.page_title") }}</span></template>
+        <div class="ss-grid">
+          <div class="ss-r fld">
+            <div class="ss-r__text">
+              <label>{{ t("maint.set_max_hours") }}</label>
+              <div class="hint">{{ t("maint.set_max_hours_hint") }}</div>
+            </div>
+            <div class="ss-r__ctl">
+              <n-input-number :value="maintCfg.max_hours" :min="1" :max="2160" style="width: 140px"
+                              @update:value="(v: number | null) => v && saveMaint({ max_hours: v })" />
+            </div>
+          </div>
+          <div class="ss-r fld">
+            <div class="ss-r__text">
+              <label>{{ t("maint.set_large") }}</label>
+              <div class="hint">{{ t("maint.set_large_hint") }}</div>
+            </div>
+            <div class="ss-r__ctl">
+              <n-input-number :value="maintCfg.large_threshold" :min="10" :max="1000000" style="width: 140px"
+                              @update:value="(v: number | null) => v && saveMaint({ large_threshold: v })" />
+            </div>
           </div>
         </div>
       </n-card>

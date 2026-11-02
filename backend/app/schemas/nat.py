@@ -98,4 +98,7 @@ class NATRead(NATBase):
     source_firewall_id: uuid.UUID | None = None
     source_label: str | None = None         # "OPNsense: fw-01" / "phpIPAM" / "手動"
     source_firewall_name: str | None = None  # "fw-01"：表格要把廠牌與防火牆分成兩欄
+    # 位址文字（清單才填）：IP 頁要寫「外部 IP:埠 → 內部 IP:埠」，只有 id 看不出是哪個位址
+    src_ip: str | None = None
+    dst_ip: str | None = None
     external_id: str | None = None

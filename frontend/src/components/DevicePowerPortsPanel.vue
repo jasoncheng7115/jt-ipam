@@ -10,7 +10,7 @@ import {
   listDevicePowerPorts, createDevicePowerPort, updateDevicePowerPort,
   deleteDevicePowerPort, type DevicePowerPort,
 } from "@/api/phase3";
-import { PlusIcon, EditIcon, DeleteIcon, SaveIcon, CancelIcon } from "@/icons";
+import { PlusIcon, EditIcon, DeleteIcon, SaveIcon, CancelIcon, PowerIcon } from "@/icons";
 import { apiErrMsg } from "@/api/client";
 
 const props = defineProps<{ deviceId: string; deviceName: string; admin: boolean }>();
@@ -106,7 +106,7 @@ onMounted(() => { void refresh(); void loadOutlets(); });
   <n-card size="small">
     <template #header>
       <span style="display:inline-flex;align-items:center;gap:8px">
-        <n-icon :size="18"><PlusIcon v-if="false" /></n-icon>
+        <n-icon :size="18"><PowerIcon /></n-icon>
         {{ t("power_ports.title") }} ({{ ports.length }})
       </span>
     </template>

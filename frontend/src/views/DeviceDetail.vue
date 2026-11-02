@@ -12,6 +12,7 @@ import {
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
 import { DevicesIcon, RefreshIcon, EditIcon, DeleteIcon, TopologyIcon, AddressesIcon, LibreNMSIcon, WazuhIcon, VirtualizationIcon, SubnetsIcon, LinkIcon , DhcpServerIcon, OpenNewWindowIcon, RustDeskIcon, ChangeImpactIcon } from "@/icons";
 import ChangeImpactWizard from "@/components/ChangeImpactWizard.vue";
+import MaintenanceQuickButton from "@/components/MaintenanceQuickButton.vue";
 import type { ScenarioType } from "@/api/changeImpact";
 import { useChangeImpact } from "@/composables/useChangeImpact";
 import CopyButton from "@/components/CopyButton.vue";
@@ -24,6 +25,7 @@ import UptimeBar from "@/components/UptimeBar.vue";
 import RackDiagram from "@/components/RackDiagram.vue";
 import DevicePortsPanel from "@/components/DevicePortsPanel.vue";
 import DevicePowerPortsPanel from "@/components/DevicePowerPortsPanel.vue";
+import DeviceLeaseCard from "@/components/DeviceLeaseCard.vue";
 import SnmpDeviceCard from "@/components/SnmpDeviceCard.vue";
 import { getSnmpTargetForDevice } from "@/api/snmp";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
@@ -478,6 +480,8 @@ onMounted(() => {
         </template>
 <!-- 控制元件移到卡片內文最上方（標題列不放控制元件） -->
         <n-space align="center" justify="end" style="margin-bottom: 10px">
+          <!-- 維護：這台與它名下的 IP 暫時不告警（2026-11-01） -->
+          <MaintenanceQuickButton object-type="device" :object-id="device.id" :label="device.name" />
           <!-- 變更評估：除役（拆之前看還有誰引用它）；網路設備多「維護」、伺服器多「停機」（M2：誰跟著停、服務還剩不剩依賴）。
                功能開啟才顯示，後端會再檢查權限 -->
           <n-dropdown v-if="impact.settings.value.enabled && me?.can_edit !== false" trigger="click"
@@ -566,6 +570,7 @@ onMounted(() => {
       <DevicePortsPanel v-if="device" :device-id="device.id" :device-name="device.name" :admin="isAdmin" />
 
       <DevicePowerPortsPanel v-if="device" :device-id="device.id" :device-name="device.name" :admin="isAdmin" />
+      <DeviceLeaseCard v-if="device" :device-id="device.id" :admin="isAdmin" />
 
       <n-card v-if="device" :title="() => cardHead(AddressesIcon, `${t('addresses.ip_list_title')} (${addresses.length})`)">
 <!-- 控制元件移到卡片內文最上方（標題列不放控制元件） -->

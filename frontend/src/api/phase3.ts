@@ -417,7 +417,7 @@ export interface Provider { id: string; name: string; asn: number | null; accoun
 export interface CircuitType { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface Circuit { id: string; cid: string; provider_id: string; type_id: string; status: string; monthly_fee_cents: number | null; commit_rate_kbps: number | null; up_kbps: number | null; down_kbps: number | null; install_date: string | null; contract_end_date: string | null; ip_address: string | null; gateway: string | null; netmask: string | null; dns_servers: string | null; device_id: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface ContactGroup { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
-export interface ContactRole { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
+export interface ContactRole { id: string; name: string; description: string | null; builtin_key: string | null; }
 export interface Contact { id: string; name: string; email: string | null; phone: string | null; group_id: string | null; description: string | null; created_at: string; updated_at: string; }
 export interface WirelessSSID { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface WirelessLink { id: string; ssid_id: string; description: string | null; created_at: string; updated_at: string; }
@@ -452,7 +452,83 @@ export const Advanced = {
   contacts: () => getList<Contact>("/api/v1/contacts"),
   ssids: () => getList<WirelessSSID>("/api/v1/wireless/ssids"),
   links: () => getList<WirelessLink>("/api/v1/wireless/links"),
+  createContactRole: (name: string) =>
+    apiClient.post<ContactRole>("/api/v1/contact-roles", { name }).then((r) => r.data),
+  deleteContactRole: (id: string) => apiClient.delete(`/api/v1/contact-roles/${id}`),
+  assignContact: (body: { contact_id: string; role_id: string | null; object_type: ContactObjectType;
+                          object_id: string; priority?: number }) =>
+    apiClient.post("/api/v1/contact-assignments", body).then((r) => r.data),
+  patchAssignment: (id: string, body: { role_id?: string | null; priority?: number }) =>
+    apiClient.patch(`/api/v1/contact-assignments/${id}`, body).then((r) => r.data),
+  deleteAssignment: (id: string) => apiClient.delete(`/api/v1/contact-assignments/${id}`),
+  circuitDetail: (id: string) =>
+    apiClient.get<CircuitDetail>(`/api/v1/circuits/${id}/detail`).then((r) => r.data),
+  addCircuitAddress: (id: string, body: { target: string; role: CircuitAddressRole; note?: string | null }) =>
+    apiClient.post(`/api/v1/circuits/${id}/addresses`, body).then((r) => r.data),
+  deleteCircuitAddress: (id: string, linkId: string) =>
+    apiClient.delete(`/api/v1/circuits/${id}/addresses/${linkId}`),
+  convertLegacyAddresses: (id: string) =>
+    apiClient.post<{ created: { id: string; role: string; value: string }[];
+                     skipped: { value: string; role: string; reason: string }[] }>(
+      `/api/v1/circuits/${id}/addresses/from-legacy`).then((r) => r.data),
+  deviceLease: (deviceId: string) =>
+    apiClient.get<DeviceLease | null>(`/api/v1/devices/${deviceId}/lease`).then((r) => r.data),
+  putDeviceLease: (deviceId: string, body: { provider_id: string | null; circuit_id: string | null;
+                                            return_required: boolean; return_due: string | null; note: string | null }) =>
+    apiClient.put<DeviceLease>(`/api/v1/devices/${deviceId}/lease`, body).then((r) => r.data),
+  deleteDeviceLease: (deviceId: string) => apiClient.delete(`/api/v1/devices/${deviceId}/lease`),
+  vpnDetail: (id: string) => apiClient.get<VpnDetail>(`/api/v1/vpn-tunnels/${id}/detail`).then((r) => r.data),
 };
+
+export interface VpnDetail {
+  tunnel: { id: string; name: string; type: string; status: string; a_endpoint: string | null; b_endpoint: string | null;
+            encryption_algo: string | null; auth_algo: string | null; pairing_method: string | null;
+            description: string | null; source_origin: string | null };
+  a_device: { id: string; name: string } | null;
+  b_device: { id: string; name: string } | null;
+  contacts: AssignedContact[];
+  carriers: { side: "a" | "b"; endpoint: string; circuit: { id: string; cid: string; status: string };
+              provider: string | null }[];
+}
+
+// ── 電路詳細資料（聯絡人、WAN 位址、租用設備）──
+export type ContactObjectType = "provider" | "circuit" | "vpn_tunnel" | "device" | "location" | "customer"
+  | "section" | "subnet";
+export type CircuitAddressRole = "wan" | "gateway" | "peer";
+export interface AssignedContact {
+  id: string; priority: number;
+  contact: { id: string; name: string; title: string | null; phone: string | null; email: string | null;
+             address: string | null; description: string | null };
+  role: { id: string; name: string; builtin_key: string | null } | null;
+}
+export interface CircuitWanIp {
+  id: string; ip: string; state: string | null; hostname: string | null; description: string | null;
+  effective_status: string | null; device: { id: string; name: string | null } | null; nat_count: number;
+  last_seen: string | null; last_seen_source: string | null; signals: number;
+}
+export interface CircuitAddressLink {
+  id: string; role: CircuitAddressRole; note: string | null; hidden: boolean;
+  subnet: { id: string; cidr: string; description: string | null } | null;
+  ips: CircuitWanIp[]; usable: number | null; registered: number | null;
+}
+export interface DeviceLease {
+  id: string; device_id: string; provider: { id: string; name: string } | null;
+  circuit: { id: string; cid: string } | null; return_required: boolean; return_due: string | null; note: string | null;
+}
+export interface CircuitDetail {
+  circuit: { id: string; cid: string; status: string; description: string | null; install_date: string | null;
+             contract_end_date: string | null; monthly_fee_cents: number | null; commit_rate_kbps: number | null;
+             up_kbps: number | null; down_kbps: number | null; ip_address: string | null; gateway: string | null;
+             netmask: string | null; dns_servers: string | null };
+  provider: { id: string; name: string; asn: number | null; account_number: string | null; portal_url: string | null;
+              noc_contact: string | null } | null;
+  type: { id: string; name: string } | null;
+  device: { id: string; name: string } | null;
+  contacts: { circuit: AssignedContact[]; provider: AssignedContact[] };
+  addresses: CircuitAddressLink[];
+  leases: { id: string; device: { id: string; name: string }; return_required: boolean; return_due: string | null;
+            note: string | null }[];
+}
 
 // ─────────────────── 裝置電源埠（PSU → 插座） ───────────────────
 export interface DevicePowerPort {

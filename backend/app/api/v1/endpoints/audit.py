@@ -128,6 +128,7 @@ _LABEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "provider": ("app.models.advanced", "Provider", "name"),
     "contact": ("app.models.advanced", "Contact", "name"),
     "circuit": ("app.models.advanced", "Circuit", "cid"),
+    "maintenance": ("app.models.maintenance", "MaintenanceWindow", "title"),
     "asn": ("app.models.advanced", "ASN", "asn"),
     "vlan_domain": ("app.models.vlan", "VLANDomain", "name"),
     "vpn_tunnel": ("app.models.physical", "VPNTunnel", "name"),

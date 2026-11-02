@@ -28,6 +28,7 @@ import { useCustomers } from "@/composables/useCustomers";
 import { useSubnetTree } from "@/composables/useSubnetTree";
 import type { Subnet } from "@/types";
 import NotificationBell from "@/components/NotificationBell.vue";
+import MaintenanceIndicator from "@/components/MaintenanceIndicator.vue";
 import GlobalSearch from "@/components/GlobalSearch.vue";
 import ChatWidget from "@/components/ChatWidget.vue";
 import TaskTrackerPanel from "@/components/TaskTrackerPanel.vue";
@@ -38,7 +39,7 @@ import {
   NatIcon, DevicesIcon, IdentifyIcon, ScreensIcon, OpenNewWindowIcon, MacIcon, RacksIcon, LocationsIcon, RequestsIcon, TopologyIcon,
   ToolsIcon, SettingsIcon, TasksIcon,
   // Phase 3 / Admin
-  Phase3Icon, VirtualizationIcon, PhysicalIcon, PowerIcon, VpnIcon,
+  Phase3Icon, VirtualizationIcon, PhysicalIcon, DomainIcon, MaintenanceIcon, PowerIcon, VpnIcon,
   AdminIcon, AuditIcon, UsersIcon, GroupsIcon, CustomFieldsIcon, CustomersIcon, AnomalyIcon,
   AiAuditIcon, ChatHistoryIcon, ChangeImpactIcon,
   IntegrationsIcon, OkIcon, DnsIcon, LibreNMSIcon, FirewallIcon, WindowsDhcpIcon, KeaDhcpIcon, IscDhcpIcon, IsoInsightIcon, TechnitiumIcon, RustDeskIcon, WazuhIcon,
@@ -290,6 +291,7 @@ const menuOptions = computed<MenuOption[]>(() => {
         { label: () => t("advanced.tenancy"),   key: "adv-tenancy",  icon: renderIcon(CustomersIcon) },
         { label: () => "ASN",                    key: "adv-asn",      icon: renderIcon(VlansIcon) },
         { label: () => t("advanced.circuits"),   key: "adv-circuits", icon: renderIcon(PhysicalIcon) },
+        { label: () => t("advanced.domains"),    key: "adv-domains",  icon: renderIcon(DomainIcon) },
         { label: () => t("advanced.contacts"),   key: "adv-contacts", icon: renderIcon(UsersIcon) },
         { label: () => t("advanced.wireless"),   key: "adv-wireless", icon: renderIcon(ScanAgentsIcon) },
         ...(intgPresence.value.dns
@@ -327,6 +329,7 @@ const menuOptions = computed<MenuOption[]>(() => {
       ],
     },
     { label: () => t("nav.tools"),       key: "tools",      icon: renderIcon(ToolsIcon) },
+    { label: () => t("nav.maintenance"), key: "maintenance", icon: renderIcon(MaintenanceIcon) },
     { label: () => t("nav.tasks"),       key: "tasks",      icon: renderIcon(TasksIcon) },
   ];
   if (me.value?.is_admin) {
@@ -681,6 +684,7 @@ function startDrag(e: MouseEvent) {
               </button>
             </n-dropdown>
             <span class="topbar-divider" />
+            <maintenance-indicator v-if="me" />
             <notification-bell v-if="me" />
             <span class="topbar-divider" />
             <n-dropdown

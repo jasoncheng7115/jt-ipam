@@ -20,7 +20,7 @@ from tests.test_change_impact_engine import _dns, _gap_codes, _ip, _net, _opnsen
 
 
 def test_rules_version_bumped() -> None:
-    assert RULES_VERSION == "5"
+    assert int(RULES_VERSION) >= 5   # 之後的版本（6＝電路 WAN 位址與租用設備）沿用這些規則
 
 
 async def test_cname_chain_to_the_old_address_is_found(db_session, admin_user) -> None:

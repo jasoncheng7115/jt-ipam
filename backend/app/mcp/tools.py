@@ -1239,11 +1239,29 @@ async def list_vpn_tunnels(session: AsyncSession, *, user: User, limit: int = 20
         return None
 
     fw_names = await _firewall_name_map(session)
+    from app.models.advanced import Contact, ContactAssignment, ContactRole
+    from app.services.circuit_links import circuits_carrying
+    contacts: dict[Any, list[dict[str, Any]]] = {}
+    if rows:
+        for asg, who, role in (await session.execute(
+                select(ContactAssignment, Contact, ContactRole)
+                .join(Contact, Contact.id == ContactAssignment.contact_id)
+                .outerjoin(ContactRole, ContactRole.id == ContactAssignment.role_id)
+                .where(ContactAssignment.object_type == "vpn_tunnel",
+                       in_values(ContactAssignment.object_id, [t.id for t in rows]))
+                .order_by(ContactAssignment.priority.desc(), Contact.name))).all():
+            contacts.setdefault(asg.object_id, []).append(
+                {"name": who.name, "role": (role.builtin_key or role.name) if role else None,
+                 "phone": who.phone, "email": who.email})
     out = []
     for t in rows:
         source, fw = _sync_origin(t.source_origin, fw_names)
+        carried = []
+        for side, ep in (("a", t.a_endpoint), ("b", t.b_endpoint)):
+            carried += [{"side": side, "circuit": c.cid} for c in await circuits_carrying(session, ep)]
         out.append({
             "id": str(t.id), "name": t.name, "type": t.type, "status": t.status,
+            "contacts": contacts.get(t.id, []), "carried_by_circuits": carried,
             "source": source, "firewall": fw,
             "a_device": names.get(t.a_device_id),
             "a_device_ip": _dev_ip(t.a_device_id),
@@ -3323,6 +3341,7 @@ async def list_circuits(session: AsyncSession, *, user: User, limit: int = 200) 
         select(Circuit).order_by(Circuit.cid).limit(min(int(limit), 500))
     )).scalars().all())
     today = datetime.now(UTC).date()
+    extra = await _circuit_extras(session, user, rows)
     out = []
     for c in rows:
         prov = await session.get(Provider, c.provider_id) if c.provider_id else None
@@ -3340,8 +3359,85 @@ async def list_circuits(session: AsyncSession, *, user: User, limit: int = 200) 
             "dns_servers": c.dns_servers, "device": dev.name if dev else None,
             "tenant": tenant.name if tenant else None,
             "monthly_fee_cents": c.monthly_fee_cents, "description": c.description,
+            **extra.get(c.id, {"wan_addresses": [], "contacts": [], "leased_devices": []}),
         })
     return {"circuits": out, "count": len(out), "total": total, "truncated": total > len(out)}
+
+
+async def _circuit_extras(session: AsyncSession, user: User, rows: list[Any]) -> dict[Any, dict[str, Any]]:
+    """電路詳細資料的 WAN 位址（照子網路權限）、聯絡人（電路與供應商的）、租用設備（照裝置權限）。"""
+    from app.models.advanced import (
+        CircuitAddress,
+        Contact,
+        ContactAssignment,
+        ContactRole,
+        DeviceLease,
+    )
+    from app.models.subnet import Subnet
+    from app.services.permission import visible_ids
+    if not rows:
+        return {}
+    ids = [c.id for c in rows]
+    out: dict[Any, dict[str, Any]] = {c.id: {"wan_addresses": [], "contacts": [], "leased_devices": []} for c in rows}
+    vis = await visible_ids(session, user=user, object_type="subnet", required="read")
+    for link, cidr, ip, ip_sub in (await session.execute(
+            select(CircuitAddress, Subnet.cidr, IPAddress.ip, IPAddress.subnet_id)
+            .outerjoin(Subnet, Subnet.id == CircuitAddress.subnet_id)
+            .outerjoin(IPAddress, IPAddress.id == CircuitAddress.address_id)
+            .where(in_values(CircuitAddress.circuit_id, ids)))).all():
+        sub_id = link.subnet_id or ip_sub
+        if vis is not None and sub_id not in vis:
+            continue
+        addr = str(cidr) if cidr is not None else (str(ip).split("/")[0] if ip is not None else None)
+        if addr:
+            out[link.circuit_id]["wan_addresses"].append({"role": link.role, "address": addr})
+    prov_of = {c.provider_id: [] for c in rows}
+    for c in rows:
+        prov_of[c.provider_id].append(c.id)
+    for asg, who, role in (await session.execute(
+            select(ContactAssignment, Contact, ContactRole)
+            .join(Contact, Contact.id == ContactAssignment.contact_id)
+            .outerjoin(ContactRole, ContactRole.id == ContactAssignment.role_id)
+            .where(((ContactAssignment.object_type == "circuit") & in_values(ContactAssignment.object_id, ids))
+                   | ((ContactAssignment.object_type == "provider")
+                      & in_values(ContactAssignment.object_id, list(prov_of))))
+            .order_by(ContactAssignment.priority.desc(), Contact.name))).all():
+        item = {"name": who.name, "role": (role.builtin_key or role.name) if role else None,
+                "phone": who.phone, "email": who.email, "of": asg.object_type}
+        targets = [asg.object_id] if asg.object_type == "circuit" else prov_of.get(asg.object_id, [])
+        for cid in targets:
+            if cid in out:
+                out[cid]["contacts"].append(item)
+    dev_vis = await visible_ids(session, user=user, object_type="device", required="read")
+    for lease, name in (await session.execute(
+            select(DeviceLease, Device.name).join(Device, Device.id == DeviceLease.device_id)
+            .where(in_values(DeviceLease.circuit_id, ids)).order_by(Device.name))).all():
+        if dev_vis is not None and lease.device_id not in dev_vis:
+            continue
+        out[lease.circuit_id]["leased_devices"].append(name)
+    return out
+
+
+async def list_domains(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
+    """網域清單（畫面「進階 → 網域」的每個欄位）：註冊商（手填或 RDAP）、註冊商網址與帳號名稱（不存密碼）、
+    DNS 託管（手填或由 NS 推測）、NS、到期日與剩餘天數、自動續約、綁著的服務。"""
+    from app.models.domain import Domain
+    from app.services.domains import summary_for_ai
+    total = (await session.execute(select(func.count()).select_from(Domain))).scalar_one()
+    rows = list((await session.execute(select(Domain).order_by(Domain.name).limit(min(int(limit), 500)))).scalars())
+    out = [summary_for_ai(d) for d in rows]
+    return {"domains": out, "count": len(out), "total": total, "truncated": total > len(out)}
+
+
+async def list_maintenance(session: AsyncSession, *, user: User, status: str = "all",
+                           limit: int = 100) -> dict[str, Any]:
+    """維護排程（畫面「維護排程」）：進行中、即將開始、已結束；只列看得到範圍的（與 REST 同一套可見性）。"""
+    from app.api.v1.endpoints.maintenance import list_windows
+    if status not in ("active", "upcoming", "past", "all"):
+        raise IPAMToolError("status 只能是 active、upcoming、past 或 all")
+    res = await list_windows(user=user, session=session, status=status,  # type: ignore[arg-type]
+                             limit=max(1, min(int(limit), 500)))
+    return {"maintenance": res["items"], "count": len(res["items"])}
 
 
 async def list_providers(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
@@ -4823,9 +4919,10 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_vpn_tunnels": {
         "fn": list_vpn_tunnels,
         "description": (
-            "VPN tunnels (WireGuard / IPsec / OpenVPN) from firewalls or entered by hand: firewall, status, both "
-            "ends, algorithms. site_to_site pairing is reliable only when pairing_method=wireguard_pubkey; "
-            "ipsec_endpoint is best effort. b_endpoint is the remote gateway when the far side is not managed."),
+            "VPN tunnels (WireGuard / IPsec / OpenVPN) from firewalls or entered by hand: both ends, algorithms, "
+            "status. site_to_site pairing is reliable only when pairing_method=wireguard_pubkey; ipsec_endpoint is best "
+            "effort. contacts, and "
+            "carried_by_circuits (circuits whose WAN addresses contain an endpoint)."),
         "parameters": {"type": "object", "properties": {
             "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
@@ -5412,10 +5509,26 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_circuits": {
         "fn": list_circuits,
         "description": (
-            "Circuits / WAN links with every field of the circuit form: provider, type, status, bandwidth, "
-            "monthly fee, install_date (開通日), contract_end_date (合約到期) and contract_days_left, fixed IP, gateway,"
-            " DNS, device, tenant. Use for contract expiry questions."),
+            "Circuits / WAN links: provider, type, status, bandwidth, fee, install_date, contract_end_date with "
+            "contract_days_left, wan_addresses linked in IPAM (role wan / gateway / peer), contacts and leased_devices."
+            " Use for contract expiry and WAN questions."),
         "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_domains": {
+        "fn": list_domains,
+        "description": (
+            "Registered domains: registrar, DNS hosting (entered or inferred from nameservers), expiry with "
+            "days_left, auto_renew, bound services. No passwords are stored. Use for domain expiry and DNS hosting."),
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_maintenance": {
+        "fn": list_maintenance,
+        "description": (
+            "Maintenance windows (維護排程): alerts for objects in scope are muted or only marked. Use for what is "
+            "under maintenance, why no alert was sent, and when maintenance ends."),
+        "parameters": {"type": "object", "properties": {
+            "status": {"type": "string", "enum": ["active", "upcoming", "past", "all"]},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
     "list_providers": {
         "fn": list_providers,
@@ -5536,7 +5649,7 @@ GLOBAL_READ_TOOLS: frozenset[str] = frozenset({
     "list_firewall_aliases", "list_dns_servers", "list_dns_zones", "list_dns_records",
     "check_dns_consistency", "dns_lookup",
     "list_vms", "list_wireless_links", "list_vpn_tunnels",
-    "list_arp", "list_fdb", "list_circuits", "list_providers", "list_asns",
+    "list_arp", "list_fdb", "list_circuits", "list_domains", "list_providers", "list_asns",
     "list_tenants", "list_contacts", "list_ssids", "list_cables", "cable_trace",
     "list_power",
     # get_topology 不在這裡（2026-10-09）：與 REST /topology 相同，只被授權部分物件的帳號也看得到

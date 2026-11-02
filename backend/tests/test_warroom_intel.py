@@ -39,7 +39,8 @@ async def test_intel_settings_defaults_and_validation(client, auth_headers) -> N
     assert (got["speed"], got["effects"], got["scanlines"], got["noise"]) == ("fast", "cinema", "low", "low")
     assert got["warning_enabled"] is True and got["warning_breathe"] is True     # 有 WARNING 就持續呼吸燈（使用者 10-26）
     # 預設觸發的異常類別（使用者 10-26 指定這十類）
-    assert got["warning_categories"] == ["ip_conflicts", "rogue_dhcp", "arp_flux", "unauthorized_ips", "suspicious_changes",
+    assert "arp_flux" not in got["warning_categories"]                   # 設定問題、不緊急：預設不勾（使用者 10-26）
+    assert got["warning_categories"] == ["ip_conflicts", "rogue_dhcp", "unauthorized_ips", "suspicious_changes",
                                          "fw_rule_rot", "mac_flapping", "identity_changes", "dangling_dns",
                                          "duplicate_ip_records"]
     assert "warning_pulse_seconds" not in got
@@ -489,3 +490,61 @@ async def test_warning_shows_where_the_device_is(client, auth_headers, db_sessio
     masked = {i["ip"]: i for i in ev["items"]}
     assert masked["198.51.100.x"]["where"]["kind"] in ("port", "vm")
     assert not any("_raw_ip" in i or i["ip"].endswith((".61", ".62")) for i in ev["items"])
+
+
+async def test_opening_after_a_long_gap_shows_fresh_numbers_before_the_model_answers(client, auth_headers, monkeypatch) -> None:
+    """很久沒人看（上一批過期）時一打開：先發一批系統摘要（最新數字、不等模型），模型寫好再換上（使用者 10-26：
+    「剛進去不應該要很快產新的」）。模型失敗時留著這批新的系統摘要，不退回過期的舊批。"""
+    from app.core.db import SessionLocal
+    from app.services.warroom import intel
+    from app.models.warroom_intel import WarroomIntelBatch, WarroomIntelStream
+    await _intel_on(client, auth_headers)
+
+    def reply(prompt, n):  # type: ignore[no-untyped-def]
+        facts = _facts_in(prompt)
+        return json.dumps({"items": [{"fact_ids": [f["id"]], "text": "這一則依照事實撰寫，內容沒有任何額外的推測。"}
+                                     for f in facts if f["category"] in ("overview", "integrity")]})
+    _llm(monkeypatch, reply)
+    await client.get("/api/v1/warroom/intel", headers=auth_headers)        # 第一批（模型）
+    async with SessionLocal() as s:                                         # 很久以前的事：過期、到期
+        old = datetime.now(UTC) - timedelta(hours=5)
+        await s.execute(intel.update(WarroomIntelBatch).values(generated_at=old, checked_at=old, created_at=old))
+        await s.execute(intel.update(WarroomIntelStream).values(next_due_at=old, last_viewed_at=old))
+        await s.commit()
+    await client.get("/api/v1/warroom/intel", headers=auth_headers)        # 打開
+    async with SessionLocal() as s:
+        rows = (await s.execute(select(WarroomIntelBatch).order_by(WarroomIntelBatch.created_at.desc()))).scalars().all()
+    assert [r.origin for r in rows[:2]] == ["llm", "template"]             # 先系統摘要、再模型
+    assert all(datetime.now(UTC) - r.generated_at < timedelta(minutes=1) for r in rows[:2])
+
+    # 模型失敗：留著剛發的系統摘要（新數字），不是 5 小時前那批
+    def boom(prompt, n):  # type: ignore[no-untyped-def]
+        return RuntimeError("connection refused")
+    _llm(monkeypatch, boom)
+    async with SessionLocal() as s:
+        old = datetime.now(UTC) - timedelta(hours=5)
+        await s.execute(intel.update(WarroomIntelBatch).values(generated_at=old, checked_at=old, created_at=old))
+        await s.execute(intel.update(WarroomIntelStream).values(next_due_at=old, last_error_code=None))
+        await s.commit()
+    await client.get("/api/v1/warroom/intel", headers=auth_headers)
+    b = (await client.get("/api/v1/warroom/intel", headers=auth_headers)).json()["batch"]
+    assert b["origin"] == "template"
+    assert datetime.now(UTC) - datetime.fromisoformat(b["generated_at"]) < timedelta(minutes=1)
+
+
+def test_model_reply_with_list_numbers_and_too_many_items_is_tidied_not_rejected() -> None:
+    """模型常在每則前面加「1.」、或多寫幾則（正式站 10-26：at most 12 items、number not in its facts: 1, 3, 5）：
+    先拿掉編號、取前 N 則（總覽與資料完整性一定留），再驗證。"""
+    facts = [{"id": "F1", "category": "overview", "params": {"registered_ips": 340}, "state": "info"},
+             {"id": "F2", "category": "integrity", "params": {"total": 12}, "state": "info"},
+             *[{"id": f"G{i}", "category": "capacity", "params": {"pct": 90 + i}, "state": "watch"} for i in range(1, 4)]]
+    items = [{"fact_ids": [f"G{i}"], "text": f"{i}. 有一個子網路使用率 {90 + i}%。"} for i in range(1, 4)] + [
+        {"fact_ids": ["F1"], "text": "4. 目前登記 340 個 IP。"}, {"fact_ids": ["F2"], "text": "（5）12 個來源都正常。"}]
+    from app.services.warroom import intel
+    tidy = intel.tidy_items(items, facts, limit=4)
+    assert len(tidy) == 4
+    assert {t["fact_ids"][0] for t in tidy} >= {"F1", "F2"}                # 必須有的兩則沒被截掉
+    import re
+    assert not any(re.match(r"^\s*([(（]\d+[)）]|\d+[.、:：])", t["text"]) for t in tidy)
+    assert any(t["text"] == "12 個來源都正常。" for t in tidy)            # 內容裡的數字不受影響
+    assert intel.validate_items(tidy, facts, 4) == []

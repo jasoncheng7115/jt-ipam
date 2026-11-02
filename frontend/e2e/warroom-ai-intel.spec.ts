@@ -235,6 +235,9 @@ test("第一批還沒產生：指標寫沒有結果（不是無權限），序�
     ai_enabled: true, generating: true, next_due_at: M(0), last_error_code: null, last_attempt_at: M(0),
     batch: null, stale: false, outdated: false } }));
   await page.route(/\/api\/v1\/warroom\/intel\/events/, (route) => route.fulfill({ json: { state: "ok", items: [], checked_at: M(0) } }));
+  // 後端在還沒有批次時回「—」（backend/tests/test_warroom_intel.py 有測）；這裡固定那個回應，不受本機資料庫影響
+  await page.route(/\/api\/v1\/warroom\/pages\/ai_intel/, (route) => route.fulfill({ json: {
+    key: "ai_intel", data_at: M(0), page: 1, pages: 1, metrics: { open_anomalies: "—", watch: "—", stale_sources: "—" } } }));
   await login(page);
   await open(page);
   await expect(page.getByTestId("wr-metric-none")).toHaveCount(3);
@@ -432,4 +435,72 @@ test("在 AI 情報按 P：改照停留秒數重抓資料（不再等播完一�
   await expect(page.getByTestId("wr-intel")).toBeVisible();                        // 仍在 AI 情報
   await page.keyboard.press("p");
   await expect(page.getByTestId("wr-progress")).toHaveAttribute("data-mode", "briefing");
+});
+
+test("暫停與繼續的閃光顏色不同；暫停時 WARNING 不輪替（使用者 10-26）", async ({ page }) => {
+  test.setTimeout(90_000);
+  const ev2 = { ...EVENT, id: "e2", ip: "198.51.100.90", where: undefined };
+  await pinConfig(page, "zh-TW", {}, false);
+  await mockIntel(page, "zh-TW", [EVENT, ev2]);
+  await login(page);
+  await open(page);
+  await page.keyboard.press(" ");
+  await expect(page.getByTestId("wr-flash")).toHaveAttribute("data-kind", "pause");
+  const first = await page.getByTestId("wr-intel-warning").innerText();
+  await page.waitForTimeout(14_000);                      // 平常 12 秒換下一項
+  expect(await page.getByTestId("wr-intel-warning").innerText()).toBe(first);
+  await page.keyboard.press(" ");
+  await expect(page.getByTestId("wr-flash")).toHaveAttribute("data-kind", "resume");
+});
+
+test("很久沒人看：舊批次過期時寫「摘要產生中」，新的一批一出來就換上；本批寫到的 IP 不再插播（使用者 10-26）", async ({ page }) => {
+  test.setTimeout(90_000);
+  await pinConfig(page, "zh-TW");
+  let calls = 0;
+  await page.route(/\/api\/v1\/warroom\/intel(\?|$)/, (route) => {
+    calls += 1;
+    const b = batch("zh-TW");
+    const old = new Date(Date.now() - 5 * 3600_000).toISOString();
+    if (calls <= 2) Object.assign(b, { id: "old", generated_at: old, checked_at: old });
+    else { b.id = "fresh"; (b.items[0] as { params: Record<string, unknown> }).params.registered_ips = 99_999; }
+    return route.fulfill({ json: { ai_enabled: true, generating: calls <= 2, next_due_at: M(-4), last_error_code: null,
+                                   last_attempt_at: M(0), batch: b, stale: calls <= 2, outdated: false } });
+  });
+  // 事件的 IP 已經寫在本批第二則（198.51.100.80 是正文裡的位址）
+  const covered = { ...EVENT, ip: "198.51.100.80", where: undefined };
+  await page.route(/\/api\/v1\/warroom\/intel\/events/, (route) => route.fulfill({ json: {
+    state: "ok", items: [covered], checked_at: M(0) } }));
+  await login(page);
+  await open(page);
+  await expect(page.getByTestId("wr-intel-flag")).toContainText("摘要產生中");
+  await expect(page.getByTestId("wr-intel-flag")).not.toContainText("過期");
+  // 產生中每 3 秒讀一次：不用等 15 秒、也不用等手上那則播完
+  await expect(page.getByTestId("wr-intel-current")).toContainText("99,999", { timeout: 10_000 });
+  await page.waitForTimeout(15_000);
+  await expect(page.locator("[data-testid=wr-intel-main] .ai-p.ev")).toHaveCount(0);
+});
+
+test("段落放不下時整段往上滑出、最上面那則淡出（使用者 10-26：往上時要有效果）", async ({ page }) => {
+  test.setTimeout(120_000);
+  await pinConfig(page, "zh-TW", { speed: "fast" }, false);
+  const long = "這是一段比較長的播報內容，用來把現況播報區塞滿，".repeat(6);
+  await page.route(/\/api\/v1\/warroom\/intel(\?|$)/, (route) => {
+    const b = batch("zh-TW");
+    b.items = Array.from({ length: 8 }, (_, i) => ({ id: `L${i}`, fact_ids: ["F1"], category: "events", state: "info",
+                                                     text: `${i + 1} 號：${long}` })) as typeof b.items;
+    return route.fulfill({ json: { ai_enabled: true, generating: false, next_due_at: M(-4), last_error_code: null,
+                                   last_attempt_at: M(0), batch: b, stale: false, outdated: false } });
+  });
+  await page.route(/\/api\/v1\/warroom\/intel\/events/, (route) => route.fulfill({ json: { state: "ok", items: [], checked_at: M(0) } }));
+  await login(page);
+  await open(page);
+  await page.keyboard.press("p");
+  await page.evaluate(() => {
+    const el = document.querySelector("[data-testid=wr-intel-main] .ai-paras")!;
+    new MutationObserver(() => {
+      if (el.classList.contains("sliding") && el.querySelector(".ai-p.leaving")) (window as unknown as { __slid: boolean }).__slid = true;
+    }).observe(el, { attributes: true, subtree: true, attributeFilter: ["class"] });
+  });
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __slid?: boolean }).__slid === true),
+                    { timeout: 100_000, intervals: [1000] }).toBe(true);
 });

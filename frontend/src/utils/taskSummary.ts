@@ -336,6 +336,9 @@ export function summaryChips(kind: string, summary: any, t: T): SummaryChip[] | 
               c("change_required", num(summary.change_required), num(summary.change_required) ? "warning" : "default"),
               c("blockers", num(summary.blockers), num(summary.blockers) ? "error" : "default"),
               c("gaps", num(summary.gaps))];
+    case "domain.rdap":
+      return [c("checked", num(summary.checked), "info"),
+              c("failed", num(summary.failed), num(summary.failed) ? "error" : "default")];
     case "external_dns.run":
       return [c("names", num(summary.names), "info"),
               c("changed", num(summary.changed), num(summary.changed) ? "warning" : "default"),
@@ -346,4 +349,4 @@ export function summaryChips(kind: string, summary: any, t: T): SummaryChip[] | 
 }
 
 /** 結果不是「新增／更新幾筆」、但以前沒列進 TEXT_SUMMARY_KINDS 的：四個數字全是 0（10-23 作業頁看到） */
-const CHIP_ONLY_KINDS = new Set(["openstack.sync", "impact.run", "impact.ai", "external_dns.run"]);
+const CHIP_ONLY_KINDS = new Set(["openstack.sync", "impact.run", "impact.ai", "external_dns.run", "domain.rdap"]);

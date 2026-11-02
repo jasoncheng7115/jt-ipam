@@ -784,6 +784,16 @@ function catCols(key: CatKey): DataTableColumns<any> {
         ]),
     } as any);
   }
+  // 維護排程範圍內的發現（2026-11-01）：前面多一欄「維護中」，滑過看是哪個維護；只靜音的不會發通知
+  if (shownRows(key).some((r) => r.maintenance)) {
+    cols.unshift({
+      title: t("maint.col"), key: "maintenance", width: 96,
+      render: (r: any) => (r.maintenance
+        ? h(NTag, { size: "small", bordered: false, type: "warning", title: r.maintenance.title },
+            () => (r.maintenance.behavior === "mute" ? t("maint.tag_muted") : t("maint.tag_marked")))
+        : null),
+    } as any);
+  }
   return cols;
 }
 /** 表格總寬：欄位加總，超過畫面時左右捲動（原本寫死 600，欄位一多就擠在一起） */

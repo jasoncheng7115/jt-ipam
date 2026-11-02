@@ -31,6 +31,7 @@ import { getAddressHistory, getAddressSwitchPort, type HistoryFacet, type IPChan
 import { clearHostnameSource, getHostnameSources, type HostnameSources } from "@/api/hostname";
 import { EditIcon, SaveIcon, CancelIcon, DeleteIcon, PlusIcon, LinkIcon, TerminalIcon, DisplayIcon, VncIcon, NoVncIcon, SearchIcon, FilesIcon, IdentifyIcon, RustDeskIcon, ChevronDownIcon, ChangeImpactIcon, CheckIcon } from "@/icons";
 import CopyButton from "@/components/CopyButton.vue";
+import MaintenanceQuickButton from "@/components/MaintenanceQuickButton.vue";
 import InvestigateModal from "@/components/InvestigateModal.vue";
 import ChangeImpactWizard from "@/components/ChangeImpactWizard.vue";
 import { useChangeImpact } from "@/composables/useChangeImpact";
@@ -154,7 +155,9 @@ async function loadRelations() {
 
 // 此 IP 被哪些 NAT 規則引用（src/dst）
 const relatedNat = ref<{ id: string; name: string; type: string; src_interface: string | null;
-  src_port: number | null; dst_port: number | null; source_label: string | null;
+  src_port: number | null; dst_port: number | null; src_port_to?: number | null; dst_port_to?: number | null;
+  src_ip?: string | null; dst_ip?: string | null; protocol?: string; redirect_alias?: string | null;
+  source_label: string | null;
   source_kind: string | null; source_firewall_id: string | null;
   source_firewall_name?: string | null; disabled?: boolean }[]>([]);
 async function loadRelatedNat() {
@@ -222,6 +225,22 @@ function fwLink(kind: "rules" | "aliases", x: any): RouteLocationRaw | null {
   // 沒權限進的頁就不要做成可點（點了只會被導回首頁）
   if (router.resolve(loc).meta.admin && !auth.me?.is_admin) return null;
   return loc;
+}
+// 「外部 IP:埠 → 內部 IP:埠」：外部沒有位址時寫介面（例如 wan），內部是別名時寫別名名稱
+const addrText = computed(() => String(props.address?.ip ?? "").split("/")[0]);
+function natPorts(a: number | null | undefined, b: number | null | undefined): string {
+  if (!a) return "";
+  return b && b !== a ? `:${a}-${b}` : `:${a}`;
+}
+function natSide(ip: string | null | undefined, fallback: string | null | undefined,
+                 port: number | null | undefined, portTo: number | null | undefined): string {
+  return `${ip || fallback || "—"}${natPorts(port, portTo)}`;
+}
+function natExternal(n: (typeof relatedNat.value)[number]): string {
+  return natSide(n.src_ip, n.src_interface, n.src_port, n.src_port_to);
+}
+function natInternal(n: (typeof relatedNat.value)[number]): string {
+  return natSide(n.dst_ip, n.redirect_alias, n.dst_port, n.dst_port_to);
 }
 function natLink(n: { id: string }): RouteLocationRaw | null {
   return props.address?.id ? { name: "nat", query: { ip: props.address.id, focus: n.id } } : null;
@@ -1231,6 +1250,9 @@ async function remove() {
                       data-testid="ip-change-impact-btn" @click="impactWizard = true">
               <template #icon><n-icon><ChangeImpactIcon /></n-icon></template>{{ t("change_impact.entry_renumber") }}
             </n-button>
+            <!-- 維護：臨時要停這台，按一下就靜音它的告警（2026-11-01） -->
+            <MaintenanceQuickButton v-if="props.address" key="hx-maint" object-type="ip" :object-id="props.address.id"
+                                    :label="String(props.address.ip).split('/')[0]" />
             <n-button key="hx-edit" type="primary" size="small" @click="editMode = true">
               <template #icon><n-icon><EditIcon /></n-icon></template>{{ t("common.edit") }}
             </n-button>
@@ -1576,7 +1598,7 @@ async function remove() {
             <table v-col-resize class="fw-table">
               <thead><tr>
                 <th></th><th>{{ t("cols.fw") }}</th><th>{{ t("cols.type") }}</th>
-                <th>{{ t("cols.name") }}</th><th>{{ t("cols.iface") }}</th><th>{{ t("cols.port") }}</th>
+                <th>{{ t("cols.name") }}</th><th>{{ t("addresses.nat_mapping") }}</th><th>{{ t("cols.protocol") }}</th>
               </tr></thead>
               <tbody>
                 <tr v-for="n in relatedNat" :key="n.id" class="fw-row-link"
@@ -1589,8 +1611,12 @@ async function remove() {
                     {{ n.name }}
                     <n-tag v-if="n.disabled" size="tiny" :bordered="false" data-testid="ip-nat-disabled">{{ t("nat.status_disabled") }}</n-tag>
                   </td>
-                  <td class="mono">{{ n.src_interface || "—" }}</td>
-                  <td class="mono">{{ n.dst_port || "—" }}</td>
+                  <td class="mono nowrap" data-testid="ip-nat-mapping">
+                    <span :class="{ 'nat-self': n.src_ip === addrText }">{{ natExternal(n) }}</span>
+                    <span class="dim"> → </span>
+                    <span :class="{ 'nat-self': n.dst_ip === addrText }">{{ natInternal(n) }}</span>
+                  </td>
+                  <td class="mono">{{ n.protocol || "—" }}</td>
                 </tr>
               </tbody>
             </table>
@@ -1964,6 +1990,8 @@ async function remove() {
 .fw-table tbody tr { transition: background .12s; }
 .fw-table tbody tr:hover { background: rgba(24, 160, 88, 0.12); }
 .fw-table .nowrap, .fw-table .mono { white-space: nowrap; }
+.fw-table .nat-self { font-weight: 600; }
+.fw-table .dim { opacity: .6; }
 .fw-table td:last-child { min-width: 12em; }
 .fw-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 /* 淡色用文字顏色而不是 opacity：opacity 會連同儲存格背景一起變淡，滑過時光棒會斷成一塊一塊 */

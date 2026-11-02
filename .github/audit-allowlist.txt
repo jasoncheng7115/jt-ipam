@@ -15,3 +15,4 @@
 # `pnpm.auditConfig.ignoreGhsas`，並在這裡登記（tests/test_audit_allowlist.py 會檢查兩邊一致、沒有過期）。
 
 GHSA-vfj7-8cjw-p6xm  2026-12-31  braces <= 3.0.3（CVE-2026-93687，深層巢狀樣式造成堆疊耗盡）沒有修補版本。只經 @vue/eslint-config-typescript > fast-glob > micromatch 進來（lint 工具，`pnpm why braces --prod` 是空的），樣式來自我們自己的設定，不在給使用者的 bundle 裡。braces 出修補版就升級並刪掉這一行
+GHSA-g3hv-75wg-m249  2027-02-28  minimatch < 11.0.1（globparts 展開造成阻斷服務）。用 overrides 把 9.x、10.x 升到 11；剩下的 3.1.5 只經 eslint > @eslint/config-array 與 js-beautify 進來（lint 與測試工具，`pnpm why minimatch --prod` 是空的），樣式來自我們自己的設定檔，不在給使用者的 bundle 裡。3.x 沒有修補版、換成 11 的 API 不相容；eslint 改用新版 minimatch 後升級並刪掉這一行

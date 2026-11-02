@@ -2389,13 +2389,35 @@ async def _notify_categories(
     channel_rows: list[tuple[frozenset[str], Row]] = []
     email_lines: list[str] = []
 
+    from app.services import maintenance as _maint
+    midx = await _maint.get_index(session)
+
     for key, label, lkey, tab in _NOTIFY_CATEGORIES:
         items = [i for i in (data.get(key) or []) if isinstance(i, dict)]
+        # 維護範圍內的發現：標上維護（畫面顯示「維護中」），只靜音的不發通知。
+        # 沒通知過的被靜音的不寫進「看過」清單 → 維護結束時還在就會發；維護前就通知過的照舊留著，不重發。
+        muted_fps: set[str] = set()
+        if midx.windows:
+            kept = []
+            for i in items:
+                wid = midx.for_item(i)
+                if wid is None:
+                    kept.append(i)
+                    continue
+                i["maintenance"] = midx.window_info(wid)
+                if midx.behavior(wid) != "mute":
+                    kept.append(i)
+                    continue
+                fp = _item_fingerprint(i)
+                muted_fps.add(fp)
+                await _maint.record_suppression(session, midx, wid, event=f"anomaly.{key}", key=f"anomaly.{key}:{fp}",
+                                                label=(_notify_examples([i]) or [label])[0])
+            items = kept
         fps = [_item_fingerprint(i) for i in items]
         if only_new:
             before = set(seen.get(key) or [])
             fresh = [f for f in fps if f not in before]
-            new_seen[key] = fps        # 消失的要跟著移除，否則它再出現時不會通知
+            new_seen[key] = fps + sorted(muted_fps & before)   # 消失的要跟著移除，否則它再出現時不會通知
             count, total = len(fresh), len(fps)
             fresh_items = [i for i, f in zip(items, fps, strict=True) if f not in before]
         else:

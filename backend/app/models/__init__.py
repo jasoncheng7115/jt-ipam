@@ -55,6 +55,7 @@ from app.models.dhcp_sighting import DHCPSighting
 from app.models.dhcp_standalone import IscDhcpServer, KeaDhcpServer
 from app.models.dns import DNSRecord, DNSServer, DNSZone
 from app.models.dns_compare_group import DNSCompareGroup, DNSCompareGroupDiff
+from app.models.domain import Domain
 from app.models.encrypted_secret import EncryptedSecret
 from app.models.event_rule import EventRule
 from app.models.external_dns import ExternalDnsChange, ExternalDnsResult, IntegrationOwnAddress
@@ -76,12 +77,14 @@ from app.models.ip_change_log import IPChangeLog
 from app.models.ip_cooldown import IPCooldown
 from app.models.ip_hostname import IPHostnameObservation
 from app.models.ip_liveness import IPLivenessDay
+from app.models.ip_path import IPPathHop
 from app.models.ip_range import IPRange
 from app.models.ip_request import IPRequest, IPRequestEvent, IPRequestStageApproval
 from app.models.isoinsight import IsoInsightLease, IsoInsightSource, IsoInsightSyncRun
 from app.models.jump_host import JumpHost
 from app.models.librenms import ARPEntry, FDBEntry, LibreNMSDevice, LibreNMSInstance
 from app.models.location import Location, Rack
+from app.models.maintenance import MaintenanceScope, MaintenanceSuppression, MaintenanceWindow
 from app.models.migration_mapping import PhpIPAMMigrationMapping
 from app.models.mikrotik import MikroTikAddressList, MikroTikNeighbor, MikroTikRouter, MikroTikRule
 from app.models.nat import NATTranslation
@@ -175,6 +178,7 @@ __all__ = [
     "DevicePort",
     "DevicePowerPort",
     "DeviceVLAN",
+    "Domain",
     "EncryptedSecret",
     "EventRule",
     "ExternalDnsChange",
@@ -187,6 +191,7 @@ __all__ = [
     "IPCooldown",
     "IPHostnameObservation",
     "IPLivenessDay",
+    "IPPathHop",
     "IPRange",
     "IPRequest",
     "IPRequestEvent",
@@ -207,6 +212,9 @@ __all__ = [
     "LibreNMSDevice",
     "LibreNMSInstance",
     "Location",
+    "MaintenanceScope",
+    "MaintenanceSuppression",
+    "MaintenanceWindow",
     "MikroTikAddressList",
     "MikroTikNeighbor",
     "MikroTikRouter",

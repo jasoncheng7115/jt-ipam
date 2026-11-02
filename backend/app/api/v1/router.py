@@ -20,6 +20,7 @@ from app.api.v1.endpoints import (
     certificates,
     checkpoint,
     checkpoint_gaia,
+    circuit_detail,
     client_diag,
     custom_fields,
     customers,
@@ -29,6 +30,7 @@ from app.api.v1.endpoints import (
     dhcp,
     dhcp_standalone,
     dns,
+    domains,
     esxi,
     event_rules,
     export_events,
@@ -39,6 +41,7 @@ from app.api.v1.endpoints import (
     investigate,
     ip_changes,
     ip_identify,
+    ip_path,
     ip_ranges,
     ip_requests,
     isoinsight,
@@ -46,6 +49,7 @@ from app.api.v1.endpoints import (
     librenms,
     locations,
     macs,
+    maintenance,
     migration,
     mikrotik,
     nat,
@@ -180,6 +184,11 @@ api_v1_router.include_router(external_dns_ep.admin_router)
 api_v1_router.include_router(anomaly.router)
 api_v1_router.include_router(ai.router)
 api_v1_router.include_router(advanced.router)
+api_v1_router.include_router(circuit_detail.router)
+api_v1_router.include_router(circuit_detail.device_router)
+api_v1_router.include_router(domains.router)
+api_v1_router.include_router(ip_path.router)
+api_v1_router.include_router(maintenance.router)
 api_v1_router.include_router(virt.router)
 api_v1_router.include_router(physical.router)
 api_v1_router.include_router(topology.router)

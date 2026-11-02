@@ -201,7 +201,9 @@ async function advance() {
 /** AI 情報那邊回報：done＝每一則都播過一輪了 → 換下一個主題；empty＝還沒有東西可播 → 改照停留秒數 */
 const INTEL_MAX_SECONDS = 600;
 const intelWaiting = ref(false);
-provide("wrIntelSignal", (kind: "done" | "empty") => {
+provide("wrIntelSignal", (kind: "done" | "empty" | "refresh") => {
+  // 換上新的一批：重抓標題列的指標與資料時間（同一頁重抓，不播換頁動畫）
+  if (kind === "refresh") { if (step.value.key === "ai_intel" && !fatal.value) void load(step.value); return; }
   if (!intelWaiting.value || paused.value || step.value.key !== "ai_intel") return;
   intelWaiting.value = false;
   if (rotateTimer) clearTimeout(rotateTimer);
@@ -263,15 +265,19 @@ const transName = computed(() => {
 
 /** 暫停／繼續：畫面快閃一下，現場的人才知道按到了（使用者 10-22）。降低動畫時改成很淡的一下 */
 const flashing = ref(false);
+/** 閃光的顏色：暫停琥珀、繼續綠（使用者 10-26：進入與離開暫停要分得出來）、釘選白 */
+const flashKind = ref<"pause" | "resume" | "pin">("pin");
 let flashTimer: ReturnType<typeof setTimeout> | null = null;
 function togglePin() {
   pinned.value = !pinned.value;
+  flashKind.value = "pin";
   flashOnce();
   // 重新排時間：釘住 AI 情報後改照停留秒數更新資料（不再等它播完一輪）；放開後恢復等播完（10-26）
   schedule();
 }
 function togglePause() {
   paused.value = !paused.value;
+  flashKind.value = paused.value ? "pause" : "resume";
   flashOnce();
 }
 function flashOnce() {
@@ -549,7 +555,8 @@ const legend = computed<[string, string][]>(() => {
         </div>
       </footer>
 
-      <div v-if="flashing" class="wr-flash" :class="{ soft: reduceMotion }" aria-hidden="true" data-testid="wr-flash" />
+      <div v-if="flashing" class="wr-flash" :class="[`f-${flashKind}`, { soft: reduceMotion }]" :data-kind="flashKind"
+           aria-hidden="true" data-testid="wr-flash" />
       <!-- 12 AI 情報的畫面效果蓋在整個畫布上（使用者 10-26：全版面都要有效） -->
       <WrFx v-if="data?.key === 'ai_intel' && cfg?.intel" :effects="cfg.intel.effects" :scanlines="cfg.intel.scanlines"
             :noise="cfg.intel.noise" :reduce="reduceMotion" />
@@ -669,6 +676,8 @@ const legend = computed<[string, string][]>(() => {
 .wr-flash { position: absolute; inset: 0; background: #ffffff; pointer-events: none; z-index: 50;
   animation: wr-flash .45s ease-out forwards; }
 .wr-flash.soft { animation-name: wr-flash-soft; }
+.wr-flash.f-pause { background: #e9b861; }
+.wr-flash.f-resume { background: var(--wr-accent); }
 @keyframes wr-flash { 0% { opacity: .85; } 100% { opacity: 0; } }
 @keyframes wr-flash-soft { 0% { opacity: .2; } 100% { opacity: 0; } }
 .wr-keyhint { background: none; border: 1px solid var(--wr-line); color: var(--wr-muted); font: inherit; font-size: 20px;

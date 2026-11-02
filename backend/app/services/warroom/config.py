@@ -66,10 +66,11 @@ INTEL_DEFAULTS: dict[str, Any] = {
     "palette": "phosphor", "colors": dict(INTEL_DEFAULT_COLORS),
     "background": False,             # 沒人在看也照排程產生（預設只在有人看這個主題時產生）
     "mask_ips": False,               # 送模型與畫面上的 IP 遮掉最後一段
-    # 重大事件警示：只看這裡列的異常類別（AI 不可以自己升級）。預設十類（使用者 10-26 指定）；
-    # 不含失聯 IP、MAC 變動、對外曝險、兩個子網段混在同一個二層（量大或屬於常態，放進來警示會一直亮）
+    # 重大事件警示：只看這裡列的異常類別（AI 不可以自己升級）。預設九類（使用者 10-26 指定）；
+    # 不含失聯 IP、MAC 變動、對外曝險、兩個子網段混在同一個二層（量大或屬於常態，放進來警示會一直亮），
+    # 也不含 ARP flux（多網卡主機的設定問題，要修但不緊急，使用者 10-26 決定）
     "warning_enabled": True,
-    "warning_categories": ["ip_conflicts", "rogue_dhcp", "arp_flux", "unauthorized_ips", "suspicious_changes", "fw_rule_rot",
+    "warning_categories": ["ip_conflicts", "rogue_dhcp", "unauthorized_ips", "suspicious_changes", "fw_rule_rot",
                            "mac_flapping", "identity_changes", "dangling_dns", "duplicate_ip_records"],
     # 有 WARNING 時右上那一塊持續呼吸燈（使用者 10-26：「要有明顯像呼吸燈效果」）；關掉就常亮
     "warning_breathe": True,

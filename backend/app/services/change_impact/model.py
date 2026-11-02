@@ -19,7 +19,8 @@ ENGINE_VERSION = "1"
 # 4：DHCP 範圍發給用戶端的閘道／DNS／NTP／WINS（Technitium，2026-10-08）
 # 5：正式站台評估逐筆稽核後修正（2026-10-21）：追 CNAME 鏈、LXC 設定裡的靜態位址要改、
 #    沒綁固定位址的 Wazuh 代理只是參考
-RULES_VERSION = "5"
+# 6：電路的 WAN 位址關聯到 IPAM、租用設備除役要歸還、對外路徑上手動插入的設備（客戶許願清單，2026-10-29）
+RULES_VERSION = "6"
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,9 @@ RULES: dict[str, Rule] = {
                                    "SERVICE_ENDPOINT_ADDRESS"),
     "config.system_endpoint": _r("config", "change_required", "high", "review", "explicit", "SYSTEM_ENDPOINT"),
     "config.circuit_address": _r("config", "change_required", "high", "review", "explicit", "CIRCUIT_ADDRESS"),
+    # 電路的 WAN 位址關聯（circuit_addresses）：指到這個 IP＝要一起改；只是落在電路的位址段裡＝參考
+    "config.circuit_wan_address": _r("config", "change_required", "high", "review", "explicit", "CIRCUIT_WAN_ADDRESS"),
+    "config.circuit_wan_block": _r("config", "reference_only", "info", "informational", "explicit", "CIRCUIT_WAN_BLOCK"),
     "text.hint": _r("text", "unknown", "low", "review", "inferred", "TEXT_MENTIONS_ADDRESS"),
     "activity.old_ip_active": _r("activity", "reference_only", "info", "informational", "corroborated", "IP_RECENTLY_ACTIVE"),
     # ── 裝置除役 ──
@@ -128,6 +132,9 @@ RULES: dict[str, Rule] = {
     "device.cert_agent": _r("cert", "change_required", "medium", "review", "explicit", "DEVICE_CERT_AGENT"),
     "device.vpn_tunnel": _r("config", "change_required", "high", "review", "explicit", "DEVICE_VPN_TUNNEL"),
     "device.circuit": _r("physical", "change_required", "medium", "review", "explicit", "DEVICE_CIRCUIT"),
+    "device.lease_return": _r("physical", "change_required", "medium", "review", "explicit", "DEVICE_LEASE_RETURN"),
+    # 手動插在某個 IP 對外路徑上的設備（ip_path_hops）：拆掉後那條路徑要更新
+    "device.path_hop": _r("physical", "change_required", "low", "review", "explicit", "DEVICE_PATH_HOP"),
     "device.nat_device": _r("nat", "change_required", "high", "review", "explicit", "DEVICE_NAT"),
     "device.no_ips": _r("ipam", "reference_only", "info", "informational", "explicit", "DEVICE_HAS_NO_IPS"),
     # ── M2：交換器維護／節點停機（adapters_m2）──

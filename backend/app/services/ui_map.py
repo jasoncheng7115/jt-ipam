@@ -40,6 +40,10 @@ DETAIL_PARENTS: dict[str, str] = {
     "request-detail": "requests",
     "change_impact_plan": "change_impact",
     "change_impact_services": "change_impact",
+    "adv-circuit-detail": "adv-circuits",
+    "vpn-detail": "vpn-tunnels",
+    "adv-domain-detail": "adv-domains",
+    "maintenance-detail": "maintenance",
 }
 
 #: 有頁面元件、但不在選單上也不是詳細頁的路由（理由）。新增頁面沒歸類時，測試會失敗。

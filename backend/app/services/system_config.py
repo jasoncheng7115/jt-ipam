@@ -1784,6 +1784,9 @@ NOTIFY_EVENTS: tuple[tuple[str, bool, bool], ...] = (
     ("cert.expiring", True, False),        # 憑證即將到期 / 已過期
     # API 權杖、對外 MCP 金鑰、DSV／機櫃嵌入權杖即將到期（14／7／1 天與當天各一次）
     ("credential.expiring", True, False),
+    ("domain.expiring", True, False),      # 網域即將到期 / 已到期（30／14／7／1 天與當天各一次）
+    ("maintenance.started", True, False),  # 維護排程開始（範圍內告警暫時靜音）
+    ("maintenance.ended", True, False),    # 維護排程結束（附期間靜音幾則、仍未恢復幾則）
     ("cert.deployed", True, False),        # 代理成功部署新憑證
     ("cert.drift", True, False),           # 憑證飄移（某代理未套到最新版）
     ("cert.push_failed", True, False),     # 憑證推送到防火牆失敗或確認不到而換回（0227）

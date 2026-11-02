@@ -7,6 +7,7 @@ import { getAddress } from "@/api/addresses";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
 import UptimeBar from "@/components/UptimeBar.vue";
 import OpenStackPortsCard from "@/components/OpenStackPortsCard.vue";
+import ExposurePathCard from "@/components/ExposurePathCard.vue";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import type { IPAddress } from "@/types";
 import { openInNewTab } from "@/utils/openInNewTab";
@@ -153,6 +154,9 @@ watch(() => route.params.id, (id) => { if (id) load(String(id)); });
       <n-card v-if="addr" size="small" :bordered="true">
         <UptimeBar :address-id="addr.id" :days="90" />
       </n-card>
+
+      <!-- 對外路徑：網際網路 → WAN IP → 防火牆 → [手動插入] → 交換器埠 → 內部主機（有 NAT 轉發才出現） -->
+      <ExposurePathCard v-if="addr" :address-id="addr.id" />
 
       <!-- OpenStack 網卡（Neutron port）：只有掛在 OpenStack 上的位址才會出現 -->
       <OpenStackPortsCard v-if="addr" :address-id="addr.id" />

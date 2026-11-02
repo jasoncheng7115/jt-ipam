@@ -30,7 +30,7 @@ const injectedCfg = inject<Ref<IntelDisplay | undefined>>("wrIntel", ref(undefin
 const paused = inject<Ref<boolean>>("wrPaused", ref(false));
 const reduceGlobal = inject<Ref<boolean>>("wrReduceMotion", ref(false));
 /** 告訴戰情室：播完一輪（輪播時才換下一個主題）或沒有東西可播（改照停留秒數）；設定頁預覽沒有這個 */
-const signal = inject<(kind: "done" | "empty") => void>("wrIntelSignal", () => {});
+const signal = inject<(kind: "done" | "empty" | "refresh") => void>("wrIntelSignal", () => {});
 
 const DEFAULT: IntelDisplay = {
   interval_minutes: 5, dwell_seconds: 90, layout: "three_panel", playback: "rotate", item_limit: 8, domains: [],
@@ -56,11 +56,12 @@ const vars = computed(() => ({
 
 // ─────────────────────────── 資料：每 15 秒讀一次 ───────────────────────────
 const POLL_MS = 15000;
+const POLL_FAST_MS = 3000;                    // 產生中：新的一批（先系統摘要、再 AI）一出來就換上
 const st = ref<IntelState | null>(props.preview?.state ?? null);
 const batch = ref<IntelBatch | null>(props.preview?.state.batch ?? null);
 const pending = ref<IntelBatch | null>(null);
 const events = ref<IntelEvents | null>(props.preview?.events ?? null);
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function poll() {
   if (props.preview) return;
@@ -68,13 +69,15 @@ async function poll() {
     const s = await getIntel(batch.value?.id ?? null);
     st.value = s;
     if (s.batch?.items && s.batch.id !== batch.value?.id) {
-      if (!batch.value || !playing.value) adopt(s.batch);
+      // 手上這批已經過期（很久沒人看）：新的一到就換，不等這則播完（10-26：一打開先播了幾十秒的舊內容）
+      if (!batch.value || !playing.value || staleBatch.value) adopt(s.batch);
       else pending.value = s.batch;                         // 目前這則播完再換
     } else if (s.batch && batch.value && s.batch.id === batch.value.id) {
       batch.value = { ...batch.value, ...s.batch, items: batch.value.items };   // 同一批：更新重新檢查時間、來源
     }
   } catch { /* 暫時讀不到：照舊播手上這一批 */ }
   if (!batch.value?.items?.length) signal("empty");
+  if (paused.value) return;                                   // 暫停：事件清單先不更新，按繼續後下一輪再套用
   try { events.value = await getIntelEvents(); } catch { /* 同上 */ }
 }
 
@@ -101,8 +104,14 @@ function para(it: IntelItem): Para {
            time: hmOf(batch.value?.generated_at), text: itemText(it, t, te), state: it.state };
 }
 
+/** 手上這批是不是過期的（超過兩個更新間隔沒有重新檢查） */
+const staleBatch = computed(() => !!batch.value && Date.now() - Date.parse(batch.value.checked_at)
+  > 2 * (cfg.value.interval_minutes || 5) * 60000);
+
 function adopt(b: IntelBatch) {
+  const isNew = !!batch.value && batch.value.id !== b.id;
   batch.value = b;
+  if (isNew) signal("refresh");
   pending.value = null;
   idx.value = 0;
   replay.value = false;
@@ -145,18 +154,40 @@ function schedule() {
 
 /** 段落區放不下時，從最上面移除已播完的段落（不會讓上面空著，也不會有被切一半的段落） */
 const parasEl = ref<HTMLElement | null>(null);
+let sliding = false;
 function trim() {
   const el = parasEl.value;
-  if (el && done.value.length && el.scrollHeight > el.clientHeight + 1) done.value = done.value.slice(1);
+  if (!el || sliding || !done.value.length || el.scrollHeight <= el.clientHeight + 1) return;
+  const first = el.querySelector<HTMLElement>(".ai-p");
+  if (reduce.value || !first) { done.value = done.value.slice(1); return; }
+  // 整段往上滑出一則的高度（含間距），最上面那則同時淡出；滑完才真的移除，再把位移歸零（畫面不會跳）
+  sliding = true;
+  const h = first.offsetHeight + 12;
+  el.style.setProperty("--slide", `-${h}px`);
+  el.classList.add("sliding");
+  first.classList.add("leaving");
+  setTimeout(() => {
+    el.classList.remove("sliding");
+    el.style.removeProperty("--slide");
+    done.value = done.value.slice(1);
+    sliding = false;
+  }, 520);
 }
 // 移除一則後等畫面更新再量一次，直到放得下
 watch(done, () => { void nextTick(trim); });
+
+/** 這個事件本批播報已經寫到了（同一個 IP 出現在正文或參數裡）：不再插播（10-26：1.232 播了兩次） */
+function covered(e: IntelEvent): boolean {
+  const key = e.ip || e.label;
+  if (!key) return false;
+  return items.value.some((it) => (it.text ?? "").includes(key) || JSON.stringify(it.params ?? {}).includes(`"${key}"`));
+}
 
 /** 一則播完：有新的一批就換；有沒播報過的重大事件就插播（每分鐘最多一則）；否則下一則，播完重播 */
 function advance() {
   playing.value = false;
   if (pending.value) { adopt(pending.value); return; }
-  const ev = (events.value?.items ?? []).find((e) => e.state !== "resolved" && !announced.has(e.id));
+  const ev = (events.value?.items ?? []).find((e) => e.state !== "resolved" && !announced.has(e.id) && !covered(e));
   if (ev && Date.now() - lastInsert > 60000 && !cur.value?.event) {
     announced.add(ev.id);
     lastInsert = Date.now();
@@ -238,7 +269,7 @@ const flag = computed<{ text: string; tone: "warn" | "muted" } | null>(() => {
   const s = st.value;
   if (paused.value) return { text: t("warroom.intel.text_paused"), tone: "warn" };
   if (!s) return { text: t("warroom.intel.st_loading"), tone: "muted" };
-  if (s.generating && !batch.value) return { text: t("warroom.intel.st_generating"), tone: "muted" };
+  if (s.generating && (!batch.value || s.stale)) return { text: t("warroom.intel.st_generating"), tone: "muted" };
   if (s.last_error_code && batch.value) return { text: t("warroom.intel.st_failed", { at: hmOf(s.last_attempt_at) }), tone: "warn" };
   if (s.stale) return { text: t("warroom.intel.st_stale"), tone: "warn" };
   if (!batch.value) return { text: t("warroom.intel.st_none"), tone: "muted" };
@@ -263,23 +294,28 @@ const pinnedState = (p: { kind: string; state: string }) =>
 onMounted(() => {
   document.addEventListener("visibilitychange", onVisibility);
   clock = setInterval(() => { now.value = Date.now(); }, 1000);
-  warnTimer = setInterval(() => { if (openEvents.value.length > 1) warn.i += 1; }, WARN_ROTATE_MS);
-  srcTimer = setInterval(() => { if (srcPages.value > 1) srcPage.value += 1; }, 15000);
+  // 整個戰情室暫停時右邊兩塊也不換（使用者 10-26）
+  warnTimer = setInterval(() => { if (!paused.value && openEvents.value.length > 1) warn.i += 1; }, WARN_ROTATE_MS);
+  srcTimer = setInterval(() => { if (!paused.value && srcPages.value > 1) srcPage.value += 1; }, 15000);
   if (typeof ResizeObserver !== "undefined") {
     srcRo = new ResizeObserver(measureSrc);
     watch(srcList, (el) => { srcRo?.disconnect(); if (el) { srcRo?.observe(el); measureSrc(); } }, { immediate: true });
   }
   if (batch.value?.items) start();
   if (!props.preview) {
-    void poll().then(() => nextTick());
-    pollTimer = setInterval(() => { void poll(); }, POLL_MS);
+    const loop = async () => {
+      await poll();
+      pollTimer = setTimeout(loop, st.value?.generating ? POLL_FAST_MS : POLL_MS);
+    };
+    void loop();
   }
 });
 onBeforeUnmount(() => {
   stop();
   srcRo?.disconnect();
   document.removeEventListener("visibilitychange", onVisibility);
-  for (const h of [pollTimer, clock, warnTimer, srcTimer]) if (h) clearInterval(h);
+  if (pollTimer) clearTimeout(pollTimer);
+  for (const h of [clock, warnTimer, srcTimer]) if (h) clearInterval(h);
 });
 watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s.batch); } });
 </script>
@@ -409,6 +445,8 @@ watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s
 .ai-ht { color: var(--ai-sec); font-weight: 700; }
 .ai-hr { margin-left: auto; color: var(--ai-sec); font-size: 20px; white-space: nowrap; }
 .ai-paras { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 12px; overflow: hidden; }
+.ai-paras.sliding > .ai-p { transform: translateY(var(--slide)); transition: transform .5s cubic-bezier(.3, .7, .2, 1); }
+.ai-paras .ai-p.leaving { opacity: 0 !important; transition: opacity .45s ease, transform .5s cubic-bezier(.3, .7, .2, 1); }
 .ai-empty { color: var(--ai-sec); font-size: 24px; margin: auto 0; }
 .ai-p { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 22px; padding: 10px 12px; }
 .ai-p.old { opacity: .55; }

@@ -169,10 +169,21 @@ async def list_nat(
     mt_rows = (await session.execute(select(MikroTikRouter.id, MikroTikRouter.name))).all()
     fw_names.update({r[0]: r[1] for r in mt_rows})
 
+    from app.core.sqlin import in_values
+    from app.models.address import IPAddress
+    ip_ids = {i for r in rows for i in (r.src_ip_id, r.dst_ip_id) if i is not None}
+    ip_text: dict[uuid.UUID, str] = {}
+    if ip_ids:
+        for iid, ip in (await session.execute(
+                select(IPAddress.id, IPAddress.ip).where(in_values(IPAddress.id, ip_ids)))).all():
+            ip_text[iid] = str(ip).split("/")[0]
+
     items: list[NATRead] = []
     for r in rows:
         kind, fw_id, label = _parse_origin(r.source_origin, fw_names)
         m = NATRead.model_validate(r)
+        m.src_ip = ip_text.get(r.src_ip_id) if r.src_ip_id else None
+        m.dst_ip = ip_text.get(r.dst_ip_id) if r.dst_ip_id else None
         m.source_kind = kind
         m.source_firewall_id = fw_id
         m.source_label = label

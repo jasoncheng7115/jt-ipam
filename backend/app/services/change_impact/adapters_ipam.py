@@ -337,6 +337,33 @@ async def config_refs(ctx: Ctx) -> None:
 
     # 線路（ISP）的 IP、閘道、DNS：進階資源是全域資料，同 VPN
     if ctx.global_read:
+        linked: set[tuple[Any, Any]] = set()   # 已經用 IPAM 關聯找到的電路，舊文字欄就不重複列
+        for root in ctx.roots:
+            for c in (await ctx.session.execute(text("""
+                SELECT ca.id AS link_id, ca.role, ca.subnet_id, ca.address_id, c.id, c.cid, c.status,
+                       p.name AS provider, s.cidr
+                  FROM circuit_addresses ca
+                  JOIN circuits c ON c.id = ca.circuit_id
+                  LEFT JOIN providers p ON p.id = c.provider_id
+                  LEFT JOIN subnets s ON s.id = ca.subnet_id
+                 WHERE ca.address_id = :ip OR ca.subnet_id = :sub
+            """), {"ip": root.ip_id, "sub": root.subnet_id})).all():
+                linked.add((c.id, root.ip_id))
+                key = ctx.add(Evidence(key=f"circuit_link:{c.link_id}", source_type="config", object_type="circuit",
+                                       object_id=c.id, label=c.cid,
+                                       payload={"role": c.role, "provider": c.provider, "status": c.status,
+                                                "cidr": str(c.cidr) if c.cidr else None},
+                                       freshness="current"))
+                if c.address_id is not None:
+                    ctx.find(Finding("config.circuit_wan_address", "circuit", c.cid, [key], subject_id=c.id,
+                                     subject_key=f"addr:{c.link_id}", match_kind="exact",
+                                     params={"address": root.ip_text, "circuit": c.cid, "circuit_role": c.role,
+                                             "provider": c.provider or ""}))
+                else:
+                    ctx.find(Finding("config.circuit_wan_block", "circuit", c.cid, [key], subject_id=c.id,
+                                     subject_key=f"block:{c.link_id}", match_kind="range_contains",
+                                     params={"address": root.ip_text, "circuit": c.cid, "cidr": str(c.cidr),
+                                             "provider": c.provider or ""}))
         for root in ctx.roots:
             like = f"%{root.ip_text}%"
             for c in (await ctx.session.execute(text("""
@@ -344,6 +371,8 @@ async def config_refs(ctx: Ctx) -> None:
                  WHERE ip_address ILIKE :l OR gateway ILIKE :l OR dns_servers ILIKE :l
             """), {"l": like})).all():
                 for fld in ("ip_address", "gateway", "dns_servers"):
+                    if fld != "dns_servers" and (c.id, root.ip_id) in linked:
+                        continue
                     if root.aip not in text_mentions(getattr(c, fld) or "", [root.aip]):
                         continue
                     key = ctx.add(Evidence(key=f"circuit_cfg:{c.id}", source_type="config", object_type="circuit",
@@ -513,6 +542,32 @@ async def device_relations(ctx: Ctx) -> None:
         key = ctx.add(Evidence(key=f"circuit:{c.id}", source_type="physical", object_type="circuit", object_id=c.id,
                                label=c.cid, payload={"status": c.status}, freshness="current"))
         ctx.find(Finding("device.circuit", "circuit", c.cid, [key], subject_id=c.id, params={"status": c.status}))
+    # 向供應商租用的設備：除役後要歸還（客戶許願清單 2026-10-28）
+    lease = (await ctx.session.execute(text("""
+        SELECT l.id, l.return_required, l.return_due, p.name AS provider, c.cid
+          FROM device_leases l LEFT JOIN providers p ON p.id = l.provider_id
+          LEFT JOIN circuits c ON c.id = l.circuit_id WHERE l.device_id = :d
+    """), {"d": dev_id})).first()
+    for h in (await ctx.session.execute(text("""
+        SELECT h.id, h.kind, h.address_id, host(a.ip) AS ip FROM ip_path_hops h
+          JOIN ip_addresses a ON a.id = h.address_id WHERE h.device_id = :d ORDER BY a.ip LIMIT 200
+    """), {"d": dev_id})).all():
+        key = ctx.add(Evidence(key=f"path_hop:{h.id}", source_type="config", object_type="ip_address",
+                               object_id=h.address_id, label=h.ip, payload={"kind": h.kind},
+                               freshness="current", visibility=("ip", h.address_id)))
+        ctx.find(Finding("device.path_hop", "ip_address", h.ip, [key], subject_id=h.address_id,
+                         subject_key=f"path_hop:{h.id}", params={"address": h.ip, "hop_kind": h.kind},
+                         visibility=("ip", h.address_id)))
+    if lease is not None and lease.return_required:
+        key = ctx.add(Evidence(key=f"device_lease:{lease.id}", source_type="physical", object_type="device",
+                               object_id=dev_id, label=sc.device_name or "",
+                               payload={"provider": lease.provider, "circuit": lease.cid,
+                                        "return_due": lease.return_due.isoformat() if lease.return_due else None},
+                               freshness="current"))
+        ctx.find(Finding("device.lease_return", "device", sc.device_name or "", [key], subject_id=dev_id,
+                         subject_key="lease",
+                         params={"provider": lease.provider or "", "circuit": lease.cid or "",
+                                 "due": lease.return_due.isoformat() if lease.return_due else ""}))
     for t in (await ctx.session.execute(text("""
         SELECT id, name, status, a_device_id, b_device_id FROM vpn_tunnels WHERE a_device_id = :d OR b_device_id = :d
     """), {"d": dev_id})).all():

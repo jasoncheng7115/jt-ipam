@@ -40,6 +40,7 @@ import { useCustomers } from "@/composables/useCustomers";
 import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import MaintenanceQuickButton from "@/components/MaintenanceQuickButton.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import SubnetEditModal from "@/components/SubnetEditModal.vue";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
@@ -767,6 +768,8 @@ onMounted(() => {
         </template>
 <!-- 控制元件移到卡片內文最上方（標題列不放控制元件） -->
         <n-space align="center" justify="end" style="margin-bottom: 10px">
+          <!-- 維護：整個子網路暫時不告警（2026-11-01） -->
+          <MaintenanceQuickButton v-if="subnet" object-type="subnet" :object-id="subnet.id" :label="String(subnet.cidr)" />
           <n-button v-if="subnet" size="small" @click="openSubnetEdit">
             <template #icon><n-icon><EditIcon /></n-icon></template>
             {{ t("common.edit") }}

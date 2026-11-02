@@ -124,6 +124,17 @@ async def _run() -> int:
     async with SessionLocal() as session:
         now = datetime.now(UTC)
 
+        # ── 維護排程：每輪最先判斷開始與結束（發通知、結束時補發），後面的告警才看得到最新的維護狀態 ──
+        try:
+            from app.services import maintenance as _maint_svc
+            mstat = await _maint_svc.tick(session)
+            await session.commit()
+            if mstat["started"] or mstat["ended"]:
+                log.info("maintenance: %s", mstat)
+        except Exception as exc:
+            await session.rollback()
+            log.error("maintenance tick failed: %s", exc)
+
         # ── OPNsense ──
         fws = (
             await session.execute(
@@ -913,6 +924,23 @@ async def _run() -> int:
         except Exception as exc:
             await session.rollback()
             log.error("credential expiry check failed: %s", exc)
+
+        # ── 網域：RDAP（到期日、NS、註冊商）每個網域大約一天查一次；到期通知每輪檢查（同一門檻只發一次）──
+        try:
+            from app.services import domains as _dom_svc
+            dsum = await _dom_svc.refresh_all(session, limit=50, pause=1.0, stale_hours=20)
+            await session.commit()
+            if dsum["checked"]:
+                await _hb(session, kind="domain.rdap", target_type="system", target_id=None,
+                          target_label="domains", ok=dsum["failed"] == 0, summary=dsum,
+                          error=None if dsum["failed"] == 0 else f"{dsum['failed']} failed")
+            dstats = await _dom_svc.check_domain_expiry(session)
+            await session.commit()
+            if dstats.get("notified"):
+                log.info("domain expiry: %s", dstats)
+        except Exception as exc:
+            await session.rollback()
+            log.error("domain check failed: %s", exc)
 
         # ── 稽核鏈驗證與外部錨定 ──
         # 雜湊鏈抓得到中間竄改，**抓不到從尾端整段截斷**（被刪的是還沒人引用的最後幾筆）。

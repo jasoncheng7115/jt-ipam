@@ -56,16 +56,24 @@ async def observe(
     fails = int(cur.get("fails") or 0)
     alerted = bool(cur.get("alerted"))
     out: Transition | None = None
+    # 維護中（維護排程，2026-11-01）：照常累計，但**不標成已告警**。維護結束時還壞著，下一輪就照常發出；
+    # 維護期間壞了又好的，不會在結束後冒出一則「恢復」。只在「本來要發」的那一刻才查，平常不多一次查詢。
+    from app.services.maintenance import muted_key
 
     if failing:
         fails += 1
         if fails >= max(1, threshold) and not alerted:
+            if await muted_key(session, key):
+                state[key] = {"fails": fails, "alerted": False,
+                              "since": cur.get("since") or datetime.now(UTC).isoformat()}
+                await _save(session, row, state)
+                return None
             alerted = True
             out = "down"
         state[key] = {"fails": fails, "alerted": alerted,
                       "since": cur.get("since") or datetime.now(UTC).isoformat()}
     else:
-        if alerted:
+        if alerted and not await muted_key(session, key):
             out = "up"
         # 恢復就把狀態清掉，而不是留一筆 fails=0 ——
         # 那會讓這份設定隨著時間長出一堆早就正常的東西

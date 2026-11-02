@@ -74,7 +74,7 @@
         <n-input v-model:value="title" :placeholder="defaultTitle" maxlength="200" />
       </n-form-item>
       <n-form-item :label="t('change_impact.f_window')">
-        <n-date-picker v-model:value="windowRange" type="datetimerange" clearable style="width: 100%" />
+        <jt-date-picker v-model:value="windowRange" type="datetimerange" clearable style="width: 100%" />
       </n-form-item>
     </n-form>
     <n-alert v-if="error" type="error" :bordered="false" style="margin-bottom: 10px">{{ error }}</n-alert>
@@ -93,11 +93,12 @@
 </template>
 
 <script setup lang="ts">
+import JtDatePicker from "@/components/JtDatePicker.vue";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
-  NAlert, NButton, NDatePicker, NForm, NFormItem, NIcon, NInput, NModal, NRadio, NRadioButton, NRadioGroup, NSelect,
+  NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NRadio, NRadioButton, NRadioGroup, NSelect,
   NSpace,
 } from "naive-ui";
 import { apiErrMsg } from "@/api/client";

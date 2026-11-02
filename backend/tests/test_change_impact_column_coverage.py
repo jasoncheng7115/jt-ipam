@@ -113,6 +113,9 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("customers", "address"): "郵寄地址",
     ("locations", "address"): "郵寄地址",
     ("providers", "portal_url"): "電信業者的客戶入口網站，不在管理的網路內",
+    ("domains", "registrar_url"): "網域註冊商的管理網站，不在管理的網路內",
+    ("maintenance_scopes", "range_start"): "維護排程的 IP 範圍：暫時性的靜音規則，到期就失效；改址不需要跟著改",
+    ("maintenance_scopes", "range_end"): "同上",
 }
 
 

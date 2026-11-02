@@ -56,7 +56,7 @@ SAMPLE_ARGS: dict[str, dict] = {
     "list_connection_targets": {},
     "wazuh_missing_agents": {}, "list_vms": {}, "list_wireless_links": {},
     "list_attack_surface": {},
-    "list_circuits": {}, "list_providers": {}, "list_asns": {}, "list_tenants": {},
+    "list_circuits": {}, "list_domains": {}, "list_maintenance": {}, "list_providers": {}, "list_asns": {}, "list_tenants": {},
     "list_contacts": {}, "list_ssids": {}, "list_cables": {}, "list_power": {},
     "list_wazuh_agents": {}, "list_ocs_computers": {}, "list_rustdesk_peers": {}, "list_rustdesk_audit": {}, "cable_trace": {"cable_id": _U},
     "list_isoinsight_leases": {},

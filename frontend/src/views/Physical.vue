@@ -12,6 +12,7 @@ import { listDevices, listLocations } from "@/api/basic";
 import { useCustomers } from "@/composables/useCustomers";
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import VpnTunnelTable from "@/components/VpnTunnelTable.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
@@ -33,7 +34,6 @@ const cables = ref<any[]>([]);
 const panels = ref<any[]>([]);
 const feeds = ref<any[]>([]);
 const outlets = ref<any[]>([]);
-const vpns = ref<any[]>([]);
 const loading = ref(false);
 
 // 共用下拉資料
@@ -75,8 +75,6 @@ async function refresh() {
       [panels.value, feeds.value, outlets.value] = await Promise.all([
         Physical.panels(), Physical.feeds(), Physical.outlets(),
       ]);
-    } else {
-      vpns.value = await Physical.vpns();
     }
   } catch (e) { msg.error(apiErrMsg(e)); }
   finally { loading.value = false; }
@@ -173,28 +171,6 @@ const panelP = usePowerPrefs("panels", panelCols, panels);
 const feedP = usePowerPrefs("feeds", feedCols, feeds);
 const outletP = usePowerPrefs("outlets", outletCols, outlets);
 
-const vpnCols = computed<DataTableColumns<any>>(() => autoSort([
-  { title: t("common.name"), key: "name" },
-  { title: t("cols.type"), key: "type" },
-  { title: t("common.status"), key: "status" },
-  {
-    title: t("physical.vpn_peer"), key: "peer", minWidth: 260,
-    render: (r) => {
-      if (r.peered && r.a_device_name && r.b_device_name) {
-        const reliable = r.pairing_method === "wireguard_pubkey";
-        const badge = h(NTag, {
-          size: "tiny", type: reliable ? "success" : "warning", bordered: false,
-          style: "margin-left:8px",
-        }, () => reliable ? t("physical.pair_reliable") : t("physical.pair_besteffort"));
-        return h("span", { class: "vpn-peered" }, [
-          `${r.a_device_name} ⇄ ${r.b_device_name}`, badge,
-        ]);
-      }
-      if (r.b_endpoint) return h("span", { style: "opacity:.7" }, `→ ${r.b_endpoint}`);
-      return h("span", { style: "opacity:.4" }, "—");
-    },
-  },
-]));
 
 // ── 新增纜線 ──
 const cableTypeOpts = ["cat5e", "cat6", "cat6a", "dac", "fiber-mm", "fiber-sm"].map((v) => ({ label: v, value: v }));
@@ -429,8 +405,7 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
       </n-tab-pane>
     </n-tabs>
 
-    <n-data-table v-else
-      :columns="vpnCols" :data="vpns" :loading="loading" :bordered="false" :pagination="pg" />
+    <VpnTunnelTable v-else />
 
     <!-- 新增纜線 -->
     <n-modal v-model:show="showCable" preset="card" style="max-width:520px">
@@ -538,9 +513,3 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
   </n-card>
 </template>
 
-<style scoped>
-.vpn-peered {
-  color: #18a058;
-  font-weight: 600;
-}
-</style>

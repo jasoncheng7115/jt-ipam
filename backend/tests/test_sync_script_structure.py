@@ -47,6 +47,8 @@ BLOCK_MARKERS = [
     "check_jump_host_keys",      # 容量與資安告警（DHCP／跳板金鑰／憑證來源）
     "recompute_effective_status",  # 上線判定：每輪一次、不依附 LibreNMS（2026-09-26 稽核）
     "sync_auto_dhcp_ranges",       # 偵測到的 DHCP 發放範圍 → 位址範圍（集區）（2026-09-27）
+    "_dom_svc.refresh_all",        # 網域 RDAP 與到期通知（客戶許願清單 2026-10-29）
+    "_maint_svc.tick",             # 維護排程開始與結束（2026-11-01）
 ]
 
 

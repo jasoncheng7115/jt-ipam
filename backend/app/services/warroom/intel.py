@@ -365,6 +365,34 @@ def model_view(facts: list[dict[str, Any]], tz: Any, now: datetime) -> list[dict
     return [{**f, "params": fmt(f["params"])} for f in facts]
 
 
+_ENUM = re.compile(r"^\s*(?:[(（]\s*\d{1,2}\s*[)）]|\d{1,2}\s*[.、:：)）]|[①-⑳])\s*")
+
+
+def tidy_items(items: Any, facts: list[dict[str, Any]], limit: int) -> Any:
+    """驗證前先整理模型的回覆（正式站 10-26：「at most 12 items」「number not in its facts: 1, 3, 5」）：
+    拿掉每則開頭的「1.」「（2）」這類編號；多寫的則數取前 N 則，但總覽與資料完整性那兩則一定留。"""
+    if not isinstance(items, list):
+        return items
+    out = []
+    for it in items:
+        if isinstance(it, dict) and isinstance(it.get("text"), str):
+            it = {**it, "text": _ENUM.sub("", it["text"], count=1)}
+        out.append(it)
+    if len(out) <= limit:
+        return out
+    by_id = {x["id"]: x["category"] for x in facts}
+
+    def must(it: Any) -> bool:
+        ids = [str(x).strip().upper() for x in (it.get("fact_ids") or [])] if isinstance(it, dict) else []
+        return any(by_id.get(i) in ("overview", "integrity") for i in ids)
+    keep = {i for i, it in enumerate(out) if must(it)}
+    for i in range(len(out)):
+        if len(keep) >= limit:
+            break
+        keep.add(i)
+    return [it for i, it in enumerate(out) if i in keep][:max(limit, len([1 for it in out if must(it)]))]
+
+
 def validate_items(items: Any, facts: list[dict[str, Any]], limit: int) -> list[str]:
     """回傳錯誤清單；空＝通過。只檢查引用與數字出處，不代表敘述正確（決策數字一律由後端給）。"""
     errs: list[str] = []
@@ -432,7 +460,7 @@ async def _ask_model(session: AsyncSession, user: Any, cfg: dict[str, Any],
         except (ValueError, TypeError):
             errors = ["reply is not valid JSON"]
             continue
-        items = parsed.get("items") if isinstance(parsed, dict) else None
+        items = tidy_items(parsed.get("items") if isinstance(parsed, dict) else None, facts, limit)
         errors = validate_items(items, facts, limit)
         if not errors:
             by_id = {x["id"]: x for x in facts}
@@ -481,6 +509,14 @@ async def generate(session: AsyncSession, stream: WarroomIntelStream, user: Any,
     model: str | None = None
     err: str | None = None
     origin = "template"
+    # 很久沒人看（上一批超過兩個更新間隔）或還沒有任何一批：先發一批系統摘要（最新數字、一秒內），
+    # 模型寫好再換上；不然一打開會先播好幾十秒的舊內容（使用者 10-26：「剛進去不應該要很快產新的」）
+    quick: WarroomIntelBatch | None = None
+    if llm.enabled and (comparable_prev is None or now - comparable_prev.checked_at > 2 * interval):
+        quick = _batch(stream, rev, col, ihash, comparable_prev, now, "template", None, None,
+                       template_items(col["facts"], cfg["intel"]["item_limit"]))
+        session.add(quick)
+        await session.commit()
     if llm.enabled:
         try:
             items, model, err = await _ask_model(session, user, cfg, col["facts"])
@@ -493,6 +529,8 @@ async def generate(session: AsyncSession, stream: WarroomIntelStream, user: Any,
             retry = stream.last_error_code is None
             stream.last_error_code = code
             stream.next_due_at = now + (RETRY_AFTER if retry else interval)
+            if quick is not None:
+                return quick                           # 剛發的系統摘要是新數字，留著它
             if prev is not None and prev.config_revision == rev:
                 return None
             err = code                                 # 還沒有任何一批：先發一批系統摘要
@@ -500,14 +538,13 @@ async def generate(session: AsyncSession, stream: WarroomIntelStream, user: Any,
         err = "intel_ai_not_configured"
     if items is None:
         items = template_items(col["facts"], cfg["intel"]["item_limit"])
-    has_data = any(x["category"] != "integrity" for x in col["facts"]) and (
-        (col["facts"][0]["params"].get("registered_ips") or 0) > 0 or bool(col["sources"]))
-    batch = WarroomIntelBatch(
-        scope_key=stream.scope_key, config_revision=rev, status="ready" if has_data else "empty",
-        origin=origin, model=model, error_code=err if origin == "template" else None,
-        baseline=comparable_prev is None, input_hash=ihash, snapshot_at=now, generated_at=now, checked_at=now,
-        items=items, pinned=col["pinned"], sources=col["sources"], snapshot=col["snapshot"], stats=col["stats"])
-    session.add(batch)
+    if quick is not None and origin == "template":
+        batch = quick                                  # 模型回覆不合格：剛發的系統摘要就是這一批
+        batch.error_code = err
+    else:
+        batch = _batch(stream, rev, col, ihash, comparable_prev, datetime.now(UTC) if quick is not None else now,
+                       origin, model, err, items)
+        session.add(batch)
     stream.next_due_at = now + interval
     # 播報流的錯誤只記「連不上模型」這類失敗（決定要不要 30 秒後重試）；回覆不合格改用系統摘要記在批次上
     stream.last_error_code = err if (origin == "template" and err not in (None, "intel_ai_not_configured",
@@ -515,6 +552,18 @@ async def generate(session: AsyncSession, stream: WarroomIntelStream, user: Any,
     await session.flush()
     await _prune(session, stream.scope_key, now)
     return batch
+
+
+def _batch(stream: WarroomIntelStream, rev: str, col: dict[str, Any], ihash: str, comparable_prev: Any,
+           at: datetime, origin: str, model: str | None, err: str | None,
+           items: list[dict[str, Any]]) -> WarroomIntelBatch:
+    has_data = any(x["category"] != "integrity" for x in col["facts"]) and (
+        (col["facts"][0]["params"].get("registered_ips") or 0) > 0 or bool(col["sources"]))
+    return WarroomIntelBatch(
+        scope_key=stream.scope_key, config_revision=rev, status="ready" if has_data else "empty",
+        origin=origin, model=model, error_code=err if origin == "template" else None,
+        baseline=comparable_prev is None, input_hash=ihash, snapshot_at=at, generated_at=at, checked_at=at,
+        items=items, pinned=col["pinned"], sources=col["sources"], snapshot=col["snapshot"], stats=col["stats"])
 
 
 async def _prune(session: AsyncSession, key: str, now: datetime) -> None:

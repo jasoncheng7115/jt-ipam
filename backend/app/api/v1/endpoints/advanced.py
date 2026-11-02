@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import EmailStr, Field
@@ -323,10 +323,15 @@ class ContactAssignmentRead(StrictModel):
     priority: int
 
 
+# 聯絡人可以掛在哪些物件上（以前任何字串都收，沒有畫面在用；2026-10-29 起只收這些並檢查物件存在）
+ContactObjectType = Literal["provider", "circuit", "vpn_tunnel", "device", "location", "customer",
+                            "section", "subnet"]
+
+
 class ContactAssignmentWrite(StrictModel):
     contact_id: uuid.UUID
     role_id: uuid.UUID | None = None
-    object_type: Annotated[str, Field(min_length=1, max_length=32)]
+    object_type: ContactObjectType
     object_id: uuid.UUID
     priority: Annotated[int, Field(ge=0, le=100)] = 0
 
@@ -383,12 +388,28 @@ async def delete_contact(
     await session.commit()
 
 
+def _contact_target_model(object_type: str) -> type:
+    from app.models.customer import Customer
+    from app.models.device import Device
+    from app.models.location import Location
+    from app.models.physical import VPNTunnel
+    from app.models.section import Section
+    from app.models.subnet import Subnet
+    return {"provider": Provider, "circuit": Circuit, "vpn_tunnel": VPNTunnel, "device": Device,
+            "location": Location, "customer": Customer, "section": Section, "subnet": Subnet}[object_type]
+
+
 @router.post("/contact-assignments", response_model=ContactAssignmentRead,
              status_code=201, dependencies=[Depends(require_admin)])
 async def assign_contact(
     payload: ContactAssignmentWrite, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ContactAssignmentRead:
+    from app.core.ui_error import ui_detail
+    if await session.get(Contact, payload.contact_id) is None:
+        raise HTTPException(404, detail=ui_detail("contact_not_found", "找不到這位聯絡人"))
+    if await session.get(_contact_target_model(payload.object_type), payload.object_id) is None:
+        raise HTTPException(404, detail=ui_detail("contact_target_not_found", "找不到要指派的對象"))
     obj = ContactAssignment(**payload.model_dump())
     session.add(obj)
     try:

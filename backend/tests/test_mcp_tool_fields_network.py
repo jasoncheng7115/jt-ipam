@@ -59,7 +59,7 @@ _LIST_TOOLS = (
     "list_mikrotik_address_lists", "list_firewall_rules", "list_firewall_aliases", "list_nat",
     "list_vpn_tunnels", "list_dns_servers", "list_dns_zones", "list_dns_records", "list_dhcp_ranges",
     "list_arp", "list_fdb", "list_certificates", "list_cert_distribution", "list_attack_surface",
-    "list_ai_findings", "list_vms", "list_wireless_links", "list_providers", "list_asns", "list_tenants",
+    "list_ai_findings", "list_vms", "list_wireless_links", "list_domains", "list_providers", "list_asns", "list_tenants",
     "list_contacts", "list_ssids", "list_cables", "list_wazuh_agents", "list_ocs_computers",
     "list_rustdesk_peers", "list_rustdesk_audit", "list_isoinsight_leases",
 )

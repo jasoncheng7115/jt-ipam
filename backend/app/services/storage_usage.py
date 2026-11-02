@@ -28,7 +28,7 @@ GROUP_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("ai", ("ai_", "warroom_intel_")),
     ("reference", ("oui_vendors", "recog_databases")),
     ("dns_dhcp", ("dns_", "dhcp_", "kea_", "isc_dhcp", "windows_dhcp", "technitium_", "isoinsight_", "adguard_",
-                  "checkpoint_dhcp", "external_dns_")),
+                  "checkpoint_dhcp", "external_dns_", "domains")),
     ("firewall", ("opnsense_", "pfsense_", "fortigate_", "paloalto_", "checkpoint_", "mikrotik_", "pve_firewall_",
                   "nat_translations", "vpn_tunnels", "fw_rule_snapshots", "integration_own_addresses")),
     ("network_data", ("arp_entries", "fdb_entries", "librenms_", "wireless_", "snmp_")),
@@ -40,7 +40,8 @@ GROUP_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("ipam", ("sections", "subnets", "ip_", "vlans", "vlan_domains", "vrfs", "customers", "asns", "tenant",
               "unmanaged_sightings", "custom_field", "contact")),
     ("system", ("users", "user_", "groups", "permissions", "api_tokens", "system_settings", "background_tasks",
-                "encrypted_secrets", "event_rules", "webhook_", "alembic_version", "phpipam_migration")),
+                "encrypted_secrets", "event_rules", "webhook_", "alembic_version", "phpipam_migration",
+                "maintenance_")),
 ]
 
 

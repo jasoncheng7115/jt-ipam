@@ -13,11 +13,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -77,6 +79,8 @@ class ContactRole(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # 內建角色（業務、機房現場、NOC、帳務）：介面依語言翻譯名稱、不能刪（migration 0232 建立）
+    builtin_key: Mapped[str | None] = mapped_column(String(32), unique=True)
 
 
 class Contact(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -215,6 +219,49 @@ class Circuit(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             name="ck_circuits_status_valid",
         ),
     )
+
+
+class CircuitAddress(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """電路的 WAN 位址：關聯到 IPAM 的子網路或個別 IP（客戶許願清單 2026-10-28）。
+
+    同類軟體的做法：NetBox 拒絕讓電路直接掛網段（#641：看不出哪些位址可用），Nautobot 用自訂關係。
+    這裡兩種都收 —— ISP 給的一段（子網路）與不連續的個別 IP —— 而且都是真的 IPAM 紀錄，
+    哪個在用、NAT、上線跡象沿用既有的 IP 功能。`circuits.ip_address` 舊文字欄保留。
+    """
+
+    __tablename__ = "circuit_addresses"
+
+    circuit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("circuits.id", ondelete="CASCADE"), nullable=False, index=True)
+    subnet_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subnets.id", ondelete="CASCADE"), index=True)
+    address_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ip_addresses.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="wan", nullable=False)   # wan / gateway / peer
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("(subnet_id IS NULL) <> (address_id IS NULL)", name="ck_circuit_addresses_one_target"),
+        CheckConstraint("role IN ('wan','gateway','peer')", name="ck_circuit_addresses_role"),
+        UniqueConstraint("circuit_id", "subnet_id", name="uq_circuit_addresses_subnet"),
+        UniqueConstraint("circuit_id", "address_id", name="uq_circuit_addresses_address"),
+    )
+
+
+class DeviceLease(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """向供應商租用的設備（例如 ISP 給的 router），除役或解約時要歸還。一台裝置最多一筆。"""
+
+    __tablename__ = "device_leases"
+
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, unique=True)
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("providers.id", ondelete="SET NULL"), index=True)
+    circuit_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("circuits.id", ondelete="SET NULL"), index=True)
+    return_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    return_due: Mapped[date | None] = mapped_column(Date)
+    note: Mapped[str | None] = mapped_column(Text)
 
 
 # ─────────────────── Wireless ───────────────────

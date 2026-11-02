@@ -89,3 +89,35 @@ async def test_nat_list_carries_the_firewall_name(db_session, client, auth_heade
     row = next(x for x in r.json()["items"] if x["name"] == "nat-l")
     assert row["source_kind"] == "opnsense"
     assert row["source_firewall_name"] == opn.name
+
+
+@pytest.mark.anyio
+async def test_nat_list_carries_both_addresses_as_text(db_session, client, auth_headers) -> None:
+    """IP 頁的「相關 NAT」要寫出「外部 IP:埠 → 內部 IP:埠」（客戶 2026-10-28 許願清單）。
+
+    以前只回 src_ip_id / dst_ip_id，表格只能列一個埠，看不出外面哪個位址轉到裡面哪一台。
+    """
+    from app.models.address import IPAddress
+    from app.models.nat import NATTranslation
+    from app.models.section import Section
+    from app.models.subnet import Subnet
+
+    sec = Section(name=f"nat-sec-{uuid.uuid4().hex[:6]}")
+    db_session.add(sec)
+    await db_session.flush()
+    wan = Subnet(section_id=sec.id, cidr="203.0.113.0/29")
+    lan = Subnet(section_id=sec.id, cidr="198.51.100.64/26")
+    db_session.add_all([wan, lan])
+    await db_session.flush()
+    ext = IPAddress(subnet_id=wan.id, ip="203.0.113.3", state="active")
+    inner = IPAddress(subnet_id=lan.id, ip=IP, state="active")
+    db_session.add_all([ext, inner])
+    await db_session.flush()
+    db_session.add(NATTranslation(name="https-to-web", type="port_forward", protocol="tcp",
+                                  src_ip_id=ext.id, src_port=443, dst_ip_id=inner.id, dst_port=8443))
+    await db_session.commit()
+    r = await client.get(f"/api/v1/nat?ip_id={inner.id}", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    row = next(x for x in r.json()["items"] if x["name"] == "https-to-web")
+    assert row["src_ip"] == "203.0.113.3"
+    assert row["dst_ip"] == IP

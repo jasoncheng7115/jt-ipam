@@ -42,6 +42,20 @@ export function useEntityLinks(router: Router) {
         () => { void router.push({ name: "device-detail", params: { id } }); });
     },
 
+    /** circuit id → 電路詳細資料頁 */
+    circuit(id: string | null | undefined, label: string | null | undefined) {
+      if (!id) return label ?? "—";
+      return _link(label ?? id.slice(0, 8) + "…",
+        () => { void router.push({ name: "adv-circuit-detail", params: { id } }); });
+    },
+
+    /** 站對站 VPN id → VPN 詳細資料頁 */
+    vpn(id: string | null | undefined, label: string | null | undefined) {
+      if (!id) return label ?? "—";
+      return _link(label ?? id.slice(0, 8) + "…",
+        () => { void router.push({ name: "vpn-detail", params: { id } }); });
+    },
+
     /** IP id → address-detail 獨立頁 */
     ipById(id: string | null | undefined, label: string | null | undefined) {
       if (!id) return label ?? "—";

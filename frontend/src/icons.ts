@@ -98,6 +98,13 @@ import {
   AntennaSignal,
   BrainResearch,
   Flash,
+  DeliveryTruck,
+  Wrench,
+  Hourglass,
+  TimerOff,
+  BellOff,
+  NavArrowUp,
+  Www,
   // Status
   CheckCircle,
   XmarkCircle,
@@ -274,6 +281,22 @@ export const AdvancedIcon = Group;
 export const VirtualizationIcon = Server;
 export const PhysicalIcon = ServerConnection;
 export const PowerIcon = Flash;
+/** 租用設備（向供應商租用、要寄回歸還） */
+export const LeaseIcon = DeliveryTruck;
+/** 維護排程（維護期間不告警） */
+export const MaintenanceIcon = Wrench;
+/** 被靜音的告警 */
+export const MuteIcon = BellOff;
+/** 延長維護 */
+export const ExtendIcon = Hourglass;
+/** 提前結束維護 */
+export const EndNowIcon = TimerOff;
+/** 網域（註冊商、到期日、NS） */
+export const DomainIcon = Www;
+/** 對外路徑（網際網路 → WAN → 防火牆 → 內部主機） */
+export const PathIcon = DataTransferBoth;
+export const ArrowUpIcon = NavArrowUp;
+export const ArrowDownIcon = NavArrowDown;
 export const LockIcon = Lock;
 export const VpnIcon = Globe;
 

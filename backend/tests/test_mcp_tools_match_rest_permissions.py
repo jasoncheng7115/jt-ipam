@@ -16,6 +16,8 @@ TOOL_REST = {
     "impact_get_evidence": "/api/v1/impact-runs/{run_id}/evidence/{evidence_id}",
     "list_scan_agents": "/api/v1/scan-agents",
     "list_certificates": "/api/v1/certificates",
+    "list_domains": "/api/v1/domains",
+    "list_maintenance": "/api/v1/maintenance",
     "list_cert_distribution": "/api/v1/cert-agents",
     "list_wazuh_agents": "/api/v1/wazuh/agents",
     "wazuh_missing_agents": "/api/v1/wazuh/missing-agents",
