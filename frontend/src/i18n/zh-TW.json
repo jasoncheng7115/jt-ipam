@@ -4454,6 +4454,7 @@
   },
   "relations": {
     "more_ips": "另 {n} 個 IP",
+    "device_ips": "這台裝置的 IP（{n} 個）",
     "title": "關係圖（上下層物件）",
     "wrap_hint": "接續到下一排",
     "vm": "虛擬機",

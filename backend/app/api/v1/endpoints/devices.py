@@ -489,10 +489,25 @@ async def get_device_relations(
         ip = min(linked, key=lambda a: (bool(_BMC_HOST.search(re.sub(r"[-_.]", " ", a.hostname or ""))),
                                         ipaddress.ip_address(str(a.ip).split("/")[0])))
     if ip is not None:
-        more = sum(1 for a in linked if a.id != ip.id)
+        # 這台所有的 IP（客戶 11-02：一台伺服器常有好幾個網段＋iDRAC 的管理網段）—— 卡片點下去列出來，
+        # 以前是拿第一個 IP 去清單模糊搜尋（.21 連 .214 都出來）。只列看得到的網段，「另 N 個」也只算這些。
+        from app.services.permission import visible_ids
+        vis = await visible_ids(session, user=_user, object_type="subnet")
+        shown = [a for a in linked if vis is None or a.subnet_id in vis]
+        if ip.id not in {a.id for a in shown} and (vis is None or ip.subnet_id in vis):
+            shown.append(ip)   # 主要 IP 沒有連到本裝置（device_id 是別的）時也列在第一個
+        shown.sort(key=lambda a: (a.id != ip.id,
+                                  bool(_BMC_HOST.search(re.sub(r"[-_.]", " ", a.hostname or ""))),
+                                  ipaddress.ip_address(str(a.ip).split("/")[0])))
+        cidrs = {sid: str(c) for sid, c in (await session.execute(
+            select(Subnet.id, Subnet.cidr).where(Subnet.id.in_({a.subnet_id for a in shown if a.subnet_id})))).all()}  # bounded: subnets of one device's IPs
+        ips = [{"id": str(a.id), "ip": str(a.ip).split("/")[0], "hostname": a.hostname,
+                "subnet": cidrs.get(a.subnet_id), "subnet_id": str(a.subnet_id) if a.subnet_id else None}
+               for a in shown]
+        more = max(len(ips) - 1, 0)
         chain.append({"type": "ip", "id": str(ip.id),
                       "label": str(ip.ip).split("/")[0], "sub": ip.hostname,
-                      **({"more": more} if more else {})})
+                      **({"more": more} if more else {}), **({"ips": ips} if ips else {})})
         if ip.subnet_id:
             sn = await session.get(Subnet, ip.subnet_id)
             if sn is not None:

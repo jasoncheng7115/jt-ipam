@@ -928,7 +928,10 @@ guacd 是 RDP 與 VNC 的預設引擎（2026-09-27 起，已安裝的站台由�
 - [ ] **站對站 VPN 跟電路一起管**（`test_vpn_detail_shows_contacts_and_the_circuit_it_runs_on`、`circuit-detail.spec.ts` 第二個測試）：電路區「站對站 VPN」頁籤
   與「進階 → 站對站 VPN」是同一份清單，名稱點進 VPN 詳細資料；可以新增聯絡人；端點落在電路關聯的位址段時「跑在哪條電路上」列出那條電路，端點是名稱時不列；
   AI 的 VPN 工具回傳聯絡人與承載電路
-- [ ] **維護排程**（`tests/test_maintenance.py`、`frontend/e2e/maintenance.spec.ts`）：裝置頁按「維護」→ 1 小時，按鈕立刻變「維護中，到 HH:MM」、
+- [ ] **關係圖的 IP 卡片**（`tests/test_device_relations.py`、`frontend/e2e/relation-chain-ips.spec.ts`，客戶 11-02）：裝置有作業系統 IP 與另一個網段的 iDRAC，
+  卡片寫「另 1 個 IP」；點下去列出兩個（主機名稱、網段），不會出現 .214 這種鄰近位址，點任一個進那個 IP；只有一個 IP 的裝置直接進去；
+  看不到管理網段的帳號只看到看得到的那個，也沒有「另 N 個」
+（`tests/test_maintenance.py`、`frontend/e2e/maintenance.spec.ts`）：裝置頁按「維護」→ 1 小時，按鈕立刻變「維護中，到 HH:MM」、
   頂端列出現「維護中 1」；延長 1 小時、再提前結束。維護期間讓裝置或掃描代理失效：不告警、詳細資料頁的被靜音告警列出它；結束前恢復：什麼都不發；
   結束時還壞著：下一輪補發，結束通知寫出靜音幾則、未恢復幾則。區段範圍含子區段與沒登記的位址；機櫃含裝置與它們的主要 IP；整合的主機在範圍內也算。
   「只標示」照常告警。每週例行：可跨午夜、一定要有到期日，提前結束與延長只影響這一次。範圍超過門檻要勾確認；超過最長時數擋下。

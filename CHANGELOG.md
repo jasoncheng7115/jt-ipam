@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [1.0.18] - 2026-11-02
+
+### Fixed
+- Device relationship chain: clicking the IP card searched the IP list for that address, so 198.51.100.21 also matched .214 and .217, and the device's other addresses (for example the iDRAC on a management subnet) did not show. A device with several IPs now opens a list of all of them with host name and subnet, and picking one opens that IP; a device with one IP goes straight to it. Only subnets you can see are listed.
+
 ## [1.0.17] - 2026-11-02
 
 ### Security

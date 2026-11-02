@@ -4454,6 +4454,7 @@
   },
   "relations": {
     "more_ips": "+{n} more IPs",
+    "device_ips": "IPs of this device ({n})",
     "title": "Relationships",
     "wrap_hint": "continues on next row",
     "vm": "VM",

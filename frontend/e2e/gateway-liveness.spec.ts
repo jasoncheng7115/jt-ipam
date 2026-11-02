@@ -17,6 +17,14 @@ async function token(request: APIRequestContext): Promise<Record<string, string>
   return { Authorization: `Bearer ${(await r.json()).access_token}` };
 }
 
+/** 挑一個這個子網路裡還沒用的位址：隨機挑會撞到樣本或之前留下的位址（409，後面整個失敗） */
+async function freeOctet(request: APIRequestContext, H: Record<string, string>, subnetId: string, from: number, to: number) {
+  const r = await (await request.get(`/api/v1/addresses?subnet_id=${subnetId}&page_size=1000`, { headers: H })).json();
+  const used = new Set((r.items ?? []).map((a: any) => Number(String(a.ip).split(".")[3])));
+  for (let o = from; o <= to; o++) if (!used.has(o)) return o;
+  throw new Error(`10.20.0.${from}-${to} 都被用掉了`);
+}
+
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByPlaceholder(/帳號|Username/).fill(ADMIN_USER);
@@ -34,7 +42,7 @@ test("同 MAC 的位址在線 → 提示並一鍵掛到同一台設備、勾「�
   // 刪掉的位址會進冷卻期（重跑時可能抽到上一輪用過的）→ 換一個再試
   let ipRes = null as Awaited<ReturnType<typeof request.post>> | null;
   for (let i = 0; i < 10; i += 1) {
-    const octet = 150 + Math.floor(Math.random() * 80);
+    const octet = await freeOctet(request, H, sub.id, 150, 229);
     ipRes = await request.post("/api/v1/addresses", { headers: H, data: {
       subnet_id: sub.id, ip: `10.20.0.${octet}`, hostname: `${tag}-gw`, mac: "02:00:5e:42:00:01", state: "active" } });
     if (ipRes.ok() || !(await ipRes.text()).includes("ip_in_cooldown")) break;
@@ -73,7 +81,7 @@ test("勾了沒掛設備：表單提醒、燈號是灰色「使用中（不回�
   const tag = `gx${Date.now().toString(36)}`;
   const subs = await (await request.get("/api/v1/subnets?page_size=500", { headers: H })).json();
   const sub = subs.items.find((s: any) => s.cidr === "10.20.0.0/24");
-  const octet = 100 + (Date.now() % 40);
+  const octet = await freeOctet(request, H, sub.id, 100, 149);
   const gw = await (await request.post("/api/v1/addresses", { headers: H, data: {
     subnet_id: sub.id, ip: `10.20.0.${octet}`, hostname: `${tag}-gw`, state: "active" } })).json();
   try {

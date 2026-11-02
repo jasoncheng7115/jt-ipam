@@ -1242,7 +1242,10 @@ what a console is allowed to do.
 - [ ] **Site-to-site VPNs with circuits** (`test_vpn_detail_shows_contacts_and_the_circuit_it_runs_on`, second test in `circuit-detail.spec.ts`): the circuits
   section's "Site-to-site VPN" tab is the same list as Advanced > Site-to-site VPN and names open the VPN detail; contacts can be added; an endpoint inside a
   circuit's linked block lists that circuit under "Runs on circuit", names are not matched; the AI VPN tool returns contacts and carrying circuits
-- [ ] **Maintenance windows** (`tests/test_maintenance.py`, `frontend/e2e/maintenance.spec.ts`): on a device page press "Maintenance" > 1 hour;
+- [ ] **Relationship chain IP card** (`tests/test_device_relations.py`, `frontend/e2e/relation-chain-ips.spec.ts`, customer 11-02): a device with an OS
+  address and an iDRAC on another subnet shows "1 more IP"; clicking lists both with host name and subnet (not neighbours like .214), picking one opens
+  that IP; a device with one IP opens it directly; a user who cannot see the management subnet sees only the visible IP and no "more"
+ (`tests/test_maintenance.py`, `frontend/e2e/maintenance.spec.ts`): on a device page press "Maintenance" > 1 hour;
   the button shows "In maintenance until HH:MM" and the top bar "1 in maintenance" right away; extend by 1 hour, then end early. Make a
   device or scan agent fail during a window: no alert, the detail page lists it under muted alerts; recover before the end: nothing sent; still
   down at the end: alerted on the next run, and the end notice counts muted and not recovered. A section scope covers sub-sections and unregistered

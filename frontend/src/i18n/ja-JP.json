@@ -4454,6 +4454,7 @@
   },
   "relations": {
     "more_ips": "ほか {n} 個の IP",
+    "device_ips": "この装置の IP（{n} 件）",
     "title": "関連",
     "wrap_hint": "次の行へ続く",
     "vm": "VM",
