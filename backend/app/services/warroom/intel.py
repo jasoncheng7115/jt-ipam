@@ -69,7 +69,9 @@ async def scope_key(session: AsyncSession, user: Any, cfg: dict[str, Any]) -> st
     vis = await scoped_visibility(session, user, cfg)
     return _h({"v": sorted(str(x) for x in vis) if vis is not None else "all",
                "full": await full_access(session, user), "scope": cfg.get("scope"),
-               "lang": await _language(session, user, cfg)})
+               "lang": await _language(session, user, cfg),
+               # 資訊展示模式自己一條播報流：不可以播到一般模式產生、講問題的那一批
+               **({"info": True} if cfg.get("info_mode") else {})})
 
 
 async def config_revision(session: AsyncSession, cfg: dict[str, Any]) -> str:
@@ -78,7 +80,8 @@ async def config_revision(session: AsyncSession, cfg: dict[str, Any]) -> str:
     it = cfg["intel"]
     llm = await get_llm_config(session)
     return _h({"domains": it["domains"], "items": it["item_limit"], "mask": it["mask_ips"],
-               "llm": [bool(llm.enabled), llm.provider, llm.url, llm.chat_model]})[:32]
+               "llm": [bool(llm.enabled), llm.provider, llm.url, llm.chat_model],
+               **({"info": True} if cfg.get("info_mode") else {})})[:32]
 
 
 # ─────────────────────────── 事實 ───────────────────────────
@@ -149,6 +152,8 @@ async def collect(session: AsyncSession, user: Any, cfg: dict[str, Any], *, prev
     doms = set(it["domains"])
     full = await full_access(session, user)
     f = _Facts()
+    if cfg.get("info_mode"):
+        return await _collect_info(session, user, cfg, doms, now)
 
     ov = await overview.build(session, user=user, cfg=cfg, page=1, now=now)
     m = ov.get("metrics") or {}
@@ -283,6 +288,48 @@ async def collect(session: AsyncSession, user: Any, cfg: dict[str, Any], *, prev
                       "stale_sources": sum(1 for s in sources if s["state"] in ("stale", "failed"))}}
 
 
+async def _collect_info(session: AsyncSession, user: Any, cfg: dict[str, Any], doms: set[str],
+                        now: datetime) -> dict[str, Any]:
+    """資訊展示模式（11-03）：只有現況與數量 —— 沒有異常、事件、持續關注、資料完整性、AI 巡檢與採集健康，
+    也不帶來源狀態。數字取自各主題的 build（已依觀看者權限與顯示範圍過濾）。"""
+    from app.services.warroom import assets, capacity, overview, services, topology
+
+    f = _Facts()
+    ov = await overview.build(session, user=user, cfg=cfg, page=1, now=now)
+    m = ov.get("metrics") or {}
+    f.add("overview", "overview_info", {"at": now.isoformat(), "registered_ips": m.get("registered_ips"),
+                                        "subnets": m.get("subnets")}, priority=1)
+    if "capacity" in doms:
+        cap = await capacity.build(session, user=user, cfg=cfg, page=1, now=now)
+        top = next((x for x in cap.get("items") or [] if x.get("kind") == "subnet"), None)
+        if top:
+            f.add("capacity", "capacity_info", {"top_label": top.get("label"), "top_cidr": top.get("cidr"),
+                                                "top_pct": top.get("pct")}, priority=3)
+    if doms & {"dns", "dhcp", "certs"}:
+        svc = await services.build(session, user=user, cfg=cfg, page=1, now=now)
+        dns = svc.get("dns") or {}
+        if "dns" in doms and dns.get("state") == "ok":
+            f.add("dns", "dns_info", {"groups": dns.get("total")}, priority=3)
+        pool = (svc.get("pool") or {}).get("item")
+        if "dhcp" in doms and pool:
+            f.add("dhcp", "dhcp", {"pool": pool.get("label"), "pct": pool.get("pct")}, priority=3)
+        certs = svc.get("certs") or {}
+        if "certs" in doms and certs.get("state") == "ok":
+            f.add("certs", "certs_info", {"total": certs.get("all")}, priority=3)
+    if "topology" in doms:
+        tm = (await topology.build(session, user=user, cfg=cfg, page=1, now=now)).get("metrics") or {}
+        if tm.get("devices"):
+            f.add("topology", "topology", {"devices": tm.get("devices"), "links": tm.get("links"),
+                                           "inferred": tm.get("inferred")}, priority=4)
+    if "virt" in doms:
+        am = (await assets.build(session, user=user, cfg=cfg, page=1, now=now)).get("metrics") or {}
+        if am.get("vms") is not None and (am.get("hosts") or am.get("vms")):
+            f.add("virt", "virt", {"hosts": am.get("hosts"), "vms": am.get("vms")}, priority=4)
+    return {"facts": f.items, "sources": [], "pinned": [], "baseline": False,
+            "snapshot": {"open_ids": [], "at": now.isoformat()},
+            "stats": {"registered_ips": m.get("registered_ips"), "subnets": m.get("subnets")}}
+
+
 def _comparable(facts: list[dict[str, Any]]) -> dict[str, Any]:
     """輸入雜湊：拿掉「現在幾點」這類每次都變的欄位，才看得出資料有沒有變。"""
     out = []
@@ -333,6 +380,14 @@ _PROMPT = """你是 jt-ipam 的 AI 情報編輯，把下面的事實整理成戰
 - 不要推測根因；可以建議時寫成「建議確認」，不能假裝已經處理
 - 口吻客觀、短句；用「裝置」「記錄」；不要口號、不要寒暄、不要 Markdown、不要 shell 指令、不要思考過程
 - 事實裡的時間已經是當地時間，照抄（例如 23:40）
+"""
+
+
+#: 資訊展示模式加在提示詞後面（11-03）：只陳述現況，不評論問題
+_PROMPT_INFO = """
+這是「資訊展示模式」的看板（給不允許顯示問題的單位）：
+- 只陳述現況與數量，不評論好壞，不提出建議；這批沒有 integrity 事實，最後一則照一般資訊寫即可
+- 不可以使用這些字或同義詞：異常、告警、警告、離線、失敗、錯誤、過期、到期、問題、風險、衝突、不一致、缺口、待處理、注意
 """
 
 
@@ -393,7 +448,7 @@ def tidy_items(items: Any, facts: list[dict[str, Any]], limit: int) -> Any:
     return [it for i, it in enumerate(out) if i in keep][:max(limit, len([1 for it in out if must(it)]))]
 
 
-def validate_items(items: Any, facts: list[dict[str, Any]], limit: int) -> list[str]:
+def validate_items(items: Any, facts: list[dict[str, Any]], limit: int, *, info: bool = False) -> list[str]:
     """回傳錯誤清單；空＝通過。只檢查引用與數字出處，不代表敘述正確（決策數字一律由後端給）。"""
     errs: list[str] = []
     if not isinstance(items, list) or not items:
@@ -414,6 +469,11 @@ def validate_items(items: Any, facts: list[dict[str, Any]], limit: int) -> list[
         text = it["text"]
         if len(text) > MAX_TEXT:
             errs.append(f"items[{i}].text too long")
+        if info:
+            from app.services.warroom.info_mode import banned_in
+            w = banned_in(text)
+            if w:
+                errs.append(f"items[{i}] uses a word not allowed on this display: {w}")
         cited = [by_id[x] for x in ids]
         cats[cited[0]["category"]] = cats.get(cited[0]["category"], 0) + 1
         cited_cats.update(c["category"] for c in cited)
@@ -446,7 +506,9 @@ async def _ask_model(session: AsyncSession, user: Any, cfg: dict[str, Any],
     facts = model_view(facts, await _timezone(session, user), datetime.now(UTC))
     data = [{"id": x["id"], "category": x["category"], "code": x["code"], "state": x["state"], **x["params"]}
             for x in facts]
-    base = _PROMPT.replace("{LIMIT}", str(limit)) + "\n" + DATA_RULE_ZH + "\n" + await answer_language(session, user)
+    info = bool(cfg.get("info_mode"))
+    base = (_PROMPT.replace("{LIMIT}", str(limit)) + (_PROMPT_INFO if info else "") + "\n" + DATA_RULE_ZH + "\n"
+            + await answer_language(session, user))
     errors: list[str] = []
     for _attempt in range(2):
         prompt = base
@@ -461,7 +523,7 @@ async def _ask_model(session: AsyncSession, user: Any, cfg: dict[str, Any],
             errors = ["reply is not valid JSON"]
             continue
         items = tidy_items(parsed.get("items") if isinstance(parsed, dict) else None, facts, limit)
-        errors = validate_items(items, facts, limit)
+        errors = validate_items(items, facts, limit, info=info)
         if not errors:
             by_id = {x["id"]: x for x in facts}
             out = []
@@ -713,7 +775,7 @@ async def warnings(session: AsyncSession, user: Any, cfg: dict[str, Any], *,
 
     now = now or datetime.now(UTC)
     it = cfg["intel"]
-    if not it["warning_enabled"] or not it["warning_categories"]:
+    if cfg.get("info_mode") or not it["warning_enabled"] or not it["warning_categories"]:
         return {"state": "off", "items": []}
     if not await full_access(session, user):
         return {"state": "forbidden", "items": []}
@@ -778,6 +840,10 @@ async def build(session: AsyncSession, *, user: Any, cfg: dict[str, Any], page: 
     key = await scope_key(session, user, cfg)
     b = await latest(session, key)
     st = (b.stats if b is not None else None) or {}
+    if cfg.get("info_mode"):
+        return {"key": "ai_intel", "data_at": (b.checked_at if b is not None else now).isoformat(), "page": 1,
+                "pages": 1, "metrics": {"registered_ips": st.get("registered_ips", "—") if b is not None else "—",
+                                        "subnets": st.get("subnets", "—") if b is not None else "—"}}
     return {"key": "ai_intel", "data_at": (b.checked_at if b is not None else now).isoformat(), "page": 1, "pages": 1,
             # 第一批還沒產生：「—」＝沒有可用的結果（null 在畫面上是「無權限」）
             "metrics": {"open_anomalies": st.get("open_anomalies"), "watch": st.get("watch"),
@@ -808,4 +874,6 @@ async def state(session: AsyncSession, user: Any, cfg: dict[str, Any], *, rev: s
         "stale": bool(b is not None and now - b.checked_at > 2 * interval),
         "outdated": bool(b is not None and b.config_revision != rev_now),
     }
+    if cfg.get("info_mode"):
+        out["last_error_code"], out["stale"] = None, False
     return out, (stream if mine else None)

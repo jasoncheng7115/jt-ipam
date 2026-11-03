@@ -237,6 +237,62 @@ async def _search_mac(
     ]
 
 
+async def _search_mac_vm_and_ports(
+    session: AsyncSession, *, user: User, mac: str, limit: int
+) -> list[SearchHit]:
+    """MAC 也比對 VM 網卡與裝置自己的連接埠（2026-11-03：以前只比對 IP 記錄的 MAC，
+    VM 沒有 IP 記錄、或 MAC 只記在裝置連接埠上時，搜尋框與 AI 都說找不到）。
+
+    VM：主要 IP 看得到就導到那個 IP（type=vm），否則到虛擬化頁（type=vm_record，search() 最後只留給全域讀取）。
+    連接埠：type=device，照裝置可見性。完整 MAC 用去掉分隔符號的比對（連接埠的 MAC 寫法各來源不一）。"""
+    from app.models.device import Device
+    from app.models.physical import DevicePort
+    from app.models.virt import VirtCluster, VirtualMachine, VMInterface
+    from app.services.mac_history import _hex_of, normalize_mac
+    from app.services.permission import visible_ids
+
+    full = normalize_mac(mac)
+    cleaned = mac.lower().replace("-", ":")
+    hits: list[SearchHit] = []
+
+    vm_cond = (VMInterface.mac == full) if full else cast(VMInterface.mac, String).ilike(f"%{cleaned}%")
+    vm_rows = (await session.execute(
+        select(VirtualMachine.id, VirtualMachine.name, VirtualMachine.kind, VirtualMachine.primary_ip_id,
+               VirtCluster.type, VirtCluster.name, VMInterface.mac)
+        .join(VirtualMachine, VirtualMachine.id == VMInterface.vm_id)
+        .join(VirtCluster, VirtCluster.id == VirtualMachine.cluster_id)
+        .where(vm_cond).order_by(VirtualMachine.name).limit(limit))).all()
+    ip_ids = [r[3] for r in vm_rows if r[3]]
+    ips = {ip.id: ip for ip in (await session.execute(
+        select(IPAddress).where(IPAddress.id.in_(ip_ids))  # bounded: one page of search hits
+    )).scalars().all()} if ip_ids else {}
+    vis = set(await filter_visible(session, user=user, object_type="subnet",
+                                   object_ids=[ip.subnet_id for ip in ips.values()], required="read"))
+    for vid, name, kind, pip, platform, cluster, imac in vm_rows:
+        kindlabel = "CT" if kind == "ct" else "VM"
+        ip = ips.get(pip) if pip else None
+        if ip is not None and ip.subnet_id in vis:
+            hits.append(SearchHit(type="vm", id=str(ip.id), label=name,
+                                  sublabel=f"{kindlabel} · {cluster} · {imac}", score=0.95))
+        else:
+            hits.append(SearchHit(type="vm_record", id=f"{platform}.{vid}", label=name,
+                                  sublabel=f"{kindlabel} · {cluster} · {imac}", score=0.95))
+
+    port_cond = (_hex_of(DevicePort.mac_address) == full.replace(":", "")) if full \
+        else DevicePort.mac_address.ilike(f"%{cleaned}%")
+    port_rows = (await session.execute(
+        select(Device.id, Device.name, DevicePort.name, DevicePort.mac_address)
+        .join(Device, Device.id == DevicePort.device_id)
+        .where(port_cond).order_by(Device.name, DevicePort.name).limit(limit))).all()
+    vis_dev = await visible_ids(session, user=user, object_type="device") if port_rows else None
+    for did, dname, pname, pmac in port_rows:
+        if vis_dev is not None and did not in vis_dev:
+            continue
+        hits.append(SearchHit(type="device", id=str(did), label=dname,
+                              sublabel=f"{pname} · {pmac}", score=0.95))
+    return hits
+
+
 async def _search_vlan_number(
     session: AsyncSession, *, _user: User, number: int, limit: int
 ) -> list[SearchHit]:
@@ -647,8 +703,11 @@ async def search(
                     type="subnet", id=str(r.id), label=r.cidr,
                     sublabel=r.description, score=0.9,
                 ))
-    if kind == "mac" and on("ip_address", "mac"):
-        hits.extend(await _search_mac(session, user=user, mac=q, limit=limit_per_type))
+    if kind == "mac":
+        if on("ip_address", "mac"):
+            hits.extend(await _search_mac(session, user=user, mac=q, limit=limit_per_type))
+        # VM 網卡、裝置連接埠（類型關掉的，下面一起濾掉）
+        hits.extend(await _search_mac_vm_and_ports(session, user=user, mac=q, limit=limit_per_type))
     elif kind == "number":
         n = int(q)
         if 1 <= n <= 4094 and on("vlan", "number"):

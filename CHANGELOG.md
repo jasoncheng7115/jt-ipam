@@ -4,6 +4,43 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [Unreleased]
+
+### Added
+
+#### War room information display mode
+For units that are not allowed to see red text or problems. Turn it on in War room settings ("Information display mode").
+- The board shows only current state and counts: no alerts, anomalies, offline counts, failures or expiry dates.
+- Anomalies and exposure, collection health, availability and AI audit are not played at all: they are missing from the TV menu and their data cannot be fetched.
+- Other topics drop problem content: headline numbers become totals (registered IPs, subnets, DHCP pools, DNS groups, certificates, hosts, VMs); no priority list, warning tags, monitoring gaps or pending links; certificates show only how many there are; statistics show only online addresses; the data time in the header is never red.
+- AI intelligence plays only a current-state briefing: no WARNING, watch list or source status. The model is told not to use problem words, and a reply that does is rewritten or replaced by a system summary. It runs on its own stream, so switching never replays a briefing written in normal mode.
+- Problem data is removed on the server, not just hidden on screen.
+- Only the war room is affected: alerts, notifications, anomaly detection and every other page work as before. The change is audited.
+
+### Fixed
+- Certificate push to firewalls (external review; each point checked against the code). The review's claim that auto push was never scheduled was wrong (the sync timer runs it); everything else was confirmed and fixed:
+  - **OPNsense**: a certificate with an intermediate chain was rejected (OPNsense accepts exactly one certificate per import). The intermediates now go into the trust store as CAs (only once), and only the server certificate is sent. A web GUI restart answered with 403 / 404 / 500 used to be recorded as success; now it fails, and only a dropped connection during the restart counts as expected.
+  - **Palo Alto**: a commit applied the whole candidate configuration. It now stops when other changes are pending, and with "Commit as admin" filled in it makes a partial commit. A failed commit puts the candidate configuration back; a commit that times out is left alone and reports the job number. With auto commit off the result is "Written, awaiting commit", and nothing is verified or reverted.
+  - **FortiGate**: putting the old certificate back did not check the device's answer. When both the admin interface and SSL VPN are changed, both are verified; changing only SSL VPN without a verify address is "not verified" instead of being judged by the admin interface and reverted.
+  - **pfSense**: a connection dropped while the web configurator restarts is no longer a failure; the push is verified and reverted if it did not take.
+  - **Palo Alto and OPNsense**: the replaced certificate is not necessarily the one the management API serves, so only the verify address you fill in is checked. Without one the push is "not verified" and nothing is reverted (it used to be judged by the management interface and could be reverted by mistake). The form says so under the verify address.
+  - The **Push to devices** tab carries a Beta tag (not yet verified on real hardware from every vendor).
+  - **All**: after a rollback the original certificate is checked again ("could not confirm the rollback" if not), and a manual push and the scheduled push no longer run on the same target at once.
+- Certificate push targets: the "Auto push" switch now explains what it does (a new certificate version is pushed on the next scheduled sync, a failed push is retried after 1 hour; off means push only with Push now).
+- AI chat could not say which virtual machine was behind an address: asked who took a printer's IP, it only said the MAC belongs to Proxmox and sits behind an uplink port, although the system has every VM NIC's MAC. `trace_mac` now returns the VM / CT whose NIC has the MAC (name, VMID, node, cluster, platform, status, OS), `get_ip_detail` returns the VMs behind the address's MAC and the VMs whose guest agent reports that IP (the other side of an IP conflict), and `mac_history` adds node and VMID. VM data follows the same rule as `list_vms` (global read).
+- AI chat said "no data" when the system had the answer. The tools now also return:
+  - **Address with no IP record**: `get_ip_detail`, `search_ip` and `investigate_ip` list who saw it in use (`unregistered`: scan agent sightings, ARP MACs with their VM, VMs reporting it, DHCP reservations) instead of only "not found".
+  - **IP conflict with a VM that has no guest agent**: `get_ip_detail` lists every MAC seen in ARP for the IP in the last 7 days (`arp_macs`), marks the record's own MAC and names the VM behind the others.
+  - **Who owns a MAC**: `trace_mac` adds IP records, device ports and DHCP reservations with that MAC.
+  - **Maintenance**: `get_ip_detail` and `get_device` list maintenance windows covering the object now.
+  - **Hypervisors and routers**: `get_device` adds the VMs running on it, its circuits, VPN tunnels and leased-equipment details.
+  - **Subnet IPs**: `list_subnet_ips` adds addresses in use without a record (`unmanaged`) on the first page.
+  - **MAC search**: the search box and `global_search` also find a MAC on a VM NIC or a device port.
+  - Investigate no longer shows a partially authorised user ARP MACs and DHCP reservations of the same address in an overlapping subnet they cannot see.
+  - VM, ARP, DHCP, circuit, VPN and lease data need global read, as in the list tools.
+- Dashboard "IP availability" track list (customer report, with enlarged text): selected IPs filled every line so the search box had no room to type in; searching listed so many addresses that the list ran off the screen; and the tall dialog pushed Save and Cancel out of view. Selected IPs now stay on one line (the rest fold into "+N"), the dropdown is capped to the window height, an exact address match is listed first, already selected IPs are no longer in the dropdown (it used to scroll to them and hide the match), and the dialog body scrolls so the buttons are always visible. The war room scope, IP change assessment and permission pickers also keep their tags on one line.
+- "Next free IP" handed out addresses that are in use but have no IP record. The subnet grid already showed them as "unmanaged" (seen by a scan agent or in ARP in the last 7 days), but finding a free address only looked at IP records. Now they are skipped everywhere a free address is picked: allocate next free, IP request approval, the AI tools `find_free_ip` / `find_free_ips` and the phpIPAM-compatible `first_free` used by Proxmox VE SDN. The AI tools also list the skipped addresses (`skipped_in_use`: sources, last seen, MAC), so an AI does not assume the system has no such data.
+
 ## [1.0.18] - 2026-11-02
 
 ### Fixed
@@ -257,7 +294,7 @@ The data in scope is turned into short briefings typed out on the TV.
 #### Docs
 - DNS integration is described as read-only. The README, features page and API manual used to say records could optionally be pushed to DNS servers for subnets with auto-DNS on, but that path was never wired up; `auto_dns` is documented as a reserved field with no effect.
 - The screenshots tour on the docs homepage ends with the war room (item 15).
-- Features, integrations and the BMC / SOL guide link to the related articles on blog.example.com (DNS comparison groups, IP probe, OCS Inventory, RustDesk, rack shelving, BMC SOL).
+- Features, integrations and the BMC / SOL guide link to the related articles on blog.jason.tools (DNS comparison groups, IP probe, OCS Inventory, RustDesk, rack shelving, BMC SOL).
 
 #### Other
 - Chinese and Japanese UI text uses a half-width slash with spaces (" / ") instead of the full-width "／".

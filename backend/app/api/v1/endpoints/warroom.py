@@ -71,10 +71,13 @@ WarroomPrincipal = Annotated[Principal, Depends(warroom_principal)]
 @router.get("/config")
 async def warroom_config(p: WarroomPrincipal, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, Any]:
     """畫面用的設定（不含權杖、不含代表帳號）。"""
+    from app.services.warroom import info_mode as im
     cfg = await wcfg.get_warroom(session)
     return {
-        "pages": [k for k in cfg["pages"] if k in wcfg.READY_PAGES],
-        "all_pages": list(wcfg.PAGES), "ready_pages": list(wcfg.READY_PAGES),
+        # 資訊展示模式：整頁都是問題的主題連清單都不給（畫面上選不到、也切不到）
+        "pages": im.shown_pages(cfg, [k for k in cfg["pages"] if k in wcfg.READY_PAGES]),
+        "all_pages": im.shown_pages(cfg, list(wcfg.PAGES)), "ready_pages": im.shown_pages(cfg, list(wcfg.READY_PAGES)),
+        "info_mode": im.enabled(cfg),
         "dwell_seconds": cfg["dwell_seconds"], "max_subpages": cfg["max_subpages"],
         "group_by": cfg["group_by"], "language": cfg["language"], "reduce_motion": cfg["reduce_motion"],
         "transition": cfg["transition"], "number_font": cfg["number_font"],
@@ -144,17 +147,21 @@ async def warroom_page(
                 "services": services.build, "anomalies": anomalies.build, "assets": assets.build,
                 "collection": collection.build, "stats": stats.build, "relations": relations.build,
                 "availability": availability.build, "ai_audit": ai_audit.build, "ai_intel": intel.build}
-    if key not in builders:
-        raise HTTPException(404, detail=ui_detail("warroom_page_unknown", "unknown war room page", key=key))
+    from app.services.warroom import info_mode as im
     cfg = await wcfg.get_warroom(session)
+    # 資訊展示模式不提供的主題：跟不存在的主題一樣回 404（直接打網址也拿不到）
+    if key not in builders or (im.enabled(cfg) and key in im.HIDDEN_PAGES):
+        raise HTTPException(404, detail=ui_detail("warroom_page_unknown", "unknown war room page", key=key))
     sc = cfg.get("scope") or {}
     ck = (str(p.user.id), key, page, cfg["group_by"], cfg["capacity_warn"], cfg["capacity_crit"],
-          tuple(tuple(sorted(sc.get(k) or [])) for k in ("customers", "sections", "subnets")))
+          tuple(tuple(sorted(sc.get(k) or [])) for k in ("customers", "sections", "subnets")), im.enabled(cfg))
     hit = _cache.get(ck)
     now = time.monotonic()
     if hit and now - hit[0] < CACHE_SECONDS:
         return hit[1]
     data = await builders[key](session, user=p.user, cfg=cfg, page=page)
+    if im.enabled(cfg):
+        data = im.neutralize(key, data)
     if len(_cache) >= _CACHE_MAX:
         for k in sorted(_cache, key=lambda k: _cache[k][0])[: _CACHE_MAX // 4]:
             _cache.pop(k, None)
@@ -205,6 +212,7 @@ class WarroomPatch(StrictModel):
     capacity_crit: int = Field(90, ge=2, le=100)
     language: str = ""
     reduce_motion: bool = False
+    info_mode: bool = False
     availability_window: str = "7d"
     transition: str = "slide"
     number_font: str = "exo2"
@@ -288,7 +296,8 @@ async def put_settings(payload: WarroomPatch, user: CurrentUser, request: Reques
     cfg = await wcfg.set_warroom(session, data, updated_by_user_id=user.id)
     await append_audit(session, object_type="system_setting", object_id=None, action="update",
                        diff={"setting": "warroom", **{k: data[k] for k in (
-                           "enabled", "pages", "group_by", "display_enabled", "principal_user_id", "scope")},
+                           "enabled", "pages", "group_by", "display_enabled", "principal_user_id", "scope",
+                           "info_mode")},
                              "intel": cfg["intel"]},
                        **_audit_kw(user, request))
     await session.commit()

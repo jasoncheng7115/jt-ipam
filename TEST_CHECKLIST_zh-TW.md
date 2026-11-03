@@ -928,7 +928,26 @@ guacd 是 RDP 與 VNC 的預設引擎（2026-09-27 起，已安裝的站台由�
 - [ ] **站對站 VPN 跟電路一起管**（`test_vpn_detail_shows_contacts_and_the_circuit_it_runs_on`、`circuit-detail.spec.ts` 第二個測試）：電路區「站對站 VPN」頁籤
   與「進階 → 站對站 VPN」是同一份清單，名稱點進 VPN 詳細資料；可以新增聯絡人；端點落在電路關聯的位址段時「跑在哪條電路上」列出那條電路，端點是名稱時不列；
   AI 的 VPN 工具回傳聯絡人與承載電路
-- [ ] **關係圖的 IP 卡片**（`tests/test_device_relations.py`、`frontend/e2e/relation-chain-ips.spec.ts`，客戶 11-02）：裝置有作業系統 IP 與另一個網段的 iDRAC，
+- [ ] **AI 工具給得出系統知道的事**（`tests/test_ai_tool_data_gaps.py`，稽核 11-03）：問沒有 IP 記錄的位址（get_ip_detail / search_ip / investigate_ip 的
+  `unregistered`：目擊、ARP、VM、DHCP 固定分配）；ARP 看到第二個 MAC 的 IP（`arp_macs` 說得出是哪台 VM、標出 `is_record_mac`）；問 MAC（trace_mac 的
+  `ipam_records`、`device_ports`、`dhcp_reservations`）；維護中的 IP 或裝置（`maintenance`）；虛擬化主機（get_device 的 `hosted_vms`、`circuits`、
+  `vpn_tunnels`、`lease`）；list_subnet_ips 的 `unmanaged`；搜尋框找得到 VM 網卡與裝置連接埠的 MAC。只被授權部分物件的帳號拿不到 VM / ARP / DHCP /
+  電路 / VPN / 租用資料，調查也不會出現看不到的重疊子網路的 ARP 與固定分配
+- [ ] **憑證推送的審查修正**（`tests/test_cert_push_review_fixes.py`、`frontend/e2e/cert-push.spec.ts`，外部審查 11-03）：OPNsense 帶憑證鏈時中繼 CA 只匯一次、
+  只送一張；重啟回 403 算失敗；Palo Alto 有別人待提交的變更就不動、填管理員帳號用 partial commit、commit 失敗換回候選設定、關掉 commit 顯示「已寫入，待 commit」；
+  FortiGate 換回失敗會回報、管理介面與 SSL VPN 都確認；pfSense 重啟斷線改由確認判斷；換回沒生效標「換回未確認」；同一台同時推第二次回 busy；Palo Alto 與 OPNsense
+  沒填確認位址標「未確認」、不換回（表單確認位址下方有說明），有填且不符照樣換回；「推送到設備」頁籤有 Beta 標籤
+（`tests/test_ai_vm_by_mac.py`，使用者 11-03）：問 AI 某個 IP 被誰占用、該 MAC 是 Proxmox VM，
+  要答出 VM 名稱、VMID 與節點（trace_mac 的 vms、get_ip_detail 的 vms_with_this_mac / vms_reporting_this_ip）；只被授權部分子網路的帳號拿不到 VM 資料
+（`frontend/e2e/dashboard-uptime-picker.spec.ts`，客戶 11-03）：約 150% 字型（860 × 500 視窗）、
+  已選 8 個主機名稱很長的 IP，標籤只佔一行、搜尋框打得到字、完全符合的位址排第一、下拉清單不超出畫面、儲存與取消看得到
+（`tests/test_warroom_info_mode.py`、`frontend/e2e/warroom-info-mode.spec.ts`，使用者 11-03）：在戰情室設定開啟；
+  電視選單只剩 8 個主題（沒有異常、採集、可用性、AI 巡檢），這四個的 API 回 404；每一頁都沒有異常、離線、告警、WARNING、失敗、過期這類字眼與紅字；
+  總覽沒有優先處理事項、服務只寫憑證張數、統計只有上線列、資產沒有監控涵蓋與變更評估、關係沒有關聯待補；AI 情報只剩現況播報一塊，
+  模型用了問題字眼會重寫；設定頁播放清單標出那四個、其餘編號跟電視一樣；關掉後全部恢復；告警與通知照常發出
+（`tests/test_free_skips_unmanaged.py`，使用者 11-02）：指示計上有「未納管」格子的子網路，下一個可用、IP 申請核准、
+  AI 的 find_free_ip(s)、phpIPAM 的 `first_free` 都不會給這些位址；AI 的結果在 skipped_in_use 列出它們；7 天前看到的不再擋住
+（`tests/test_device_relations.py`、`frontend/e2e/relation-chain-ips.spec.ts`，客戶 11-02）：裝置有作業系統 IP 與另一個網段的 iDRAC，
   卡片寫「另 1 個 IP」；點下去列出兩個（主機名稱、網段），不會出現 .214 這種鄰近位址，點任一個進那個 IP；只有一個 IP 的裝置直接進去；
   看不到管理網段的帳號只看到看得到的那個，也沒有「另 N 個」
 （`tests/test_maintenance.py`、`frontend/e2e/maintenance.spec.ts`）：裝置頁按「維護」→ 1 小時，按鈕立刻變「維護中，到 HH:MM」、

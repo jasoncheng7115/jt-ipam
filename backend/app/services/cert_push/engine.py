@@ -6,7 +6,12 @@
 - 推之前連得到、推完一直不是新版（或連不到）→ 呼叫 driver 的 rollback 換回原本的憑證 → rolled_back。
 - 推之前就連不到（例如 SSL VPN 埠只開在外網）→ 沒辦法確認，不換回 → unverified。
 - 只匯入、不換上（driver 回 rollback=None）→ unverified（設備上有了，但還沒有服務在用）。
+- 只寫進候選設定、等管理員自己套用（Palo Alto commit=false）→ staged，不驗證也不撤回。
+- 一次換好幾個服務（FortiGate 管理介面＋SSL VPN）→ 每個都確認；有一個沒換上就整次換回。
+- 換回去之後再連一次，確認出示的回到原本那張；沒回去 → error（certpush_rollback_unconfirmed），要人去看。
+- 同一個目標同時只推一次（手動與排程撞在一起時，後來的直接回 busy，不動設備也不改紀錄）。
 每次推送都留稽核（不含私鑰），失敗發 cert.push_failed 通知，成功發 cert.deployed。
+2026-11-03 外部審查後補上：多位址確認、換回後確認、staged、互斥。
 """
 from __future__ import annotations
 
@@ -32,6 +37,8 @@ from app.services.cert_push.drivers import DRIVERS
 
 VERIFY_TRIES = 10
 VERIFY_INTERVAL_S = 3.0
+#: 換回去之後確認幾次
+ROLLBACK_TRIES = 6
 #: 自動推送失敗後，隔多久才再試（避免每輪同步都去敲設備）
 RETRY_AFTER = timedelta(hours=1)
 SECRET_TYPE = "cert_push_target"  # noqa: S105 -- encrypted_secrets 的物件類型名稱，不是密碼
@@ -101,6 +108,20 @@ def make_http(target: CertPushTarget, secret: dict[str, str]):
     return call
 
 
+def lock_key(target_id: Any) -> int:
+    """PostgreSQL advisory lock 的鍵（有號 64 位元）：同一個目標同時只推一次。"""
+    h = hashlib.sha256(f"cert_push:{target_id}".encode()).digest()
+    return int.from_bytes(h[:8], "big", signed=True)
+
+
+def _custom_endpoint(target: CertPushTarget) -> tuple[str, int] | None:
+    raw = (target.verify_endpoint or "").strip()
+    if not raw:
+        return None
+    u = urlsplit(raw if "://" in raw else f"https://{raw}")
+    return (u.hostname or ""), (u.port or 443)
+
+
 def verify_address(target: CertPushTarget) -> tuple[str, int]:
     raw = (target.verify_endpoint or "").strip()
     if raw:
@@ -153,6 +174,11 @@ async def push_target(session: AsyncSession, target: CertPushTarget, *, actor_us
     """推一個目標並記錄結果。回 {status, fingerprint, steps, error}。呼叫端負責 commit。"""
     steps = Steps()
     status, error, fp = "error", None, None
+    from sqlalchemy import text
+    got = (await session.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": lock_key(target.id)})).scalar()
+    if not got:
+        # 另一個推送（手動或排程）正在推同一台：不碰設備、不改紀錄
+        return {"status": "busy", "fingerprint": None, "error": "certpush_busy", "steps": []}
     cert = await session.get(Certificate, target.certificate_id)
     ver = await _current(session, target.certificate_id) if cert else None
     try:
@@ -163,37 +189,64 @@ async def push_target(session: AsyncSession, target: CertPushTarget, *, actor_us
         driver_cls = DRIVERS.get(target.kind)
         if driver_cls is None:
             raise PushError("load", "certpush_unknown_kind", target.kind)
-        host, port = verify_address(target)
-        verify = (target.options or {}).get("verify", True) is not False
-        before = await probe(host, port) if verify else None
-        steps.ok("probe_before", f"{host}:{port} {'reachable' if before else 'unreachable'}")
         driver = driver_cls(make_http(target, await load_secret(session, target.id)), target.options or {})
+        api = urlsplit(target.api_url)
+        api_ep = ((api.hostname or ""), (api.port or 443))
+        custom = _custom_endpoint(target)
+        if hasattr(driver, "verify_endpoints"):
+            eps = driver.verify_endpoints(api_ep, custom)
+            skipped = driver.unverifiable(custom)
+        else:
+            eps, skipped = [("service", *verify_address(target))], []
+        verify = (target.options or {}).get("verify", True) is not False
+        before: dict[str, str | None] = {}
+        for label, host, port in (eps if verify else []):
+            before[label] = await probe(host, port)
+            steps.ok("probe_before", f"{label} {host}:{port} {'reachable' if before[label] else 'unreachable'}")
         rollback = await driver.push(bundle, steps)
-        if rollback is None or not verify:
+        if getattr(driver, "staged", False):
+            status = "staged"
+        elif rollback is None or not verify or not eps:
+            for s in skipped:
+                steps.ok("verify", f"{s}: no verify address; not verified")
             status = "unverified"
         else:
-            seen = None
-            for i in range(VERIFY_TRIES):
-                seen = await probe(host, port)
+            failed, unknown = [], []
+            for label, host, port in eps:
+                seen = None
+                for i in range(VERIFY_TRIES):
+                    seen = await probe(host, port)
+                    if seen == fp:
+                        break
+                    if i < VERIFY_TRIES - 1:
+                        await asyncio.sleep(VERIFY_INTERVAL_S)
                 if seen == fp:
-                    break
-                if i < VERIFY_TRIES - 1:
-                    await asyncio.sleep(VERIFY_INTERVAL_S)
-            if seen == fp:
-                steps.ok("verify", f"{host}:{port} presents {fp[:16]}")
-                status = "ok"
-            elif before is None and seen is None:
-                steps.ok("verify", f"{host}:{port} unreachable before and after; not verified")
-                status = "unverified"
-            else:
-                steps.fail("verify", "certpush_verify_failed", f"{host}:{port} presents {(seen or 'nothing')[:16]}")
+                    steps.ok("verify", f"{label} {host}:{port} presents {fp[:16]}")
+                elif before.get(label) is None and seen is None:
+                    steps.ok("verify", f"{label} {host}:{port} unreachable before and after; not verified")
+                    unknown.append(label)
+                else:
+                    steps.fail("verify", "certpush_verify_failed",
+                               f"{label} {host}:{port} presents {(seen or 'nothing')[:16]}")
+                    failed.append(label)
+            for s in skipped:
+                steps.ok("verify", f"{s}: no verify address; not verified")
+            if failed:
                 try:
                     await rollback()
                     steps.ok("rollback")
-                    status, error = "rolled_back", "certpush_verify_failed"
                 except PushError as exc:
                     steps.fail("rollback", exc.code, exc.detail)
                     status, error = "error", "certpush_rollback_failed"
+                else:
+                    # 換回去之後確認真的回到原本那張（以前只看 API 有沒有回成功）
+                    back = await _confirm_restored(eps, before, probe, steps)
+                    status, error = ("rolled_back", "certpush_verify_failed") if back \
+                        else ("error", "certpush_rollback_unconfirmed")
+            elif unknown or skipped:
+                status = "unverified"
+            else:
+                status = "ok"
     except PushError as exc:
         steps.fail(exc.step, exc.code, exc.detail)
         status, error = "error", exc.code
@@ -202,10 +255,34 @@ async def push_target(session: AsyncSession, target: CertPushTarget, *, actor_us
     target.last_status = status
     target.last_error = error
     target.last_steps = steps.items
-    if status in ("ok", "unverified"):
-        target.last_fingerprint = fp
+    if status in ("ok", "unverified", "staged"):
+        target.last_fingerprint = fp            # 自動推送不再重推同一版；畫面另依狀態寫「未確認 / 待 commit」
     await _audit_and_notify(session, target, cert, status, fp, error, actor_user_id, request_id, trigger)
     return {"status": status, "fingerprint": fp, "error": error, "steps": steps.items}
+
+
+async def _confirm_restored(eps: list[tuple[str, str, int]], before: dict[str, str | None], probe: Any,
+                            steps: Steps) -> bool:
+    """換回去之後：推之前連得到的位址，要再出示原本那張才算換回。"""
+    ok = True
+    for label, host, port in eps:
+        want = before.get(label)
+        if want is None:
+            continue
+        seen = None
+        for i in range(ROLLBACK_TRIES):
+            seen = await probe(host, port)
+            if seen == want:
+                break
+            if i < ROLLBACK_TRIES - 1:
+                await asyncio.sleep(VERIFY_INTERVAL_S)
+        if seen == want:
+            steps.ok("rollback_verify", f"{label} {host}:{port} presents the original {want[:16]}")
+        else:
+            steps.fail("rollback_verify", "certpush_rollback_unconfirmed",
+                       f"{label} {host}:{port} presents {(seen or 'nothing')[:16]}")
+            ok = False
+    return ok
 
 
 async def _audit_and_notify(session: AsyncSession, target: CertPushTarget, cert: Certificate | None, status: str,

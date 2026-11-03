@@ -134,3 +134,16 @@ async def for_subnet(session: AsyncSession, subnet_id: uuid.UUID, *, now: dateti
         e["last_seen_at"] = e["last_seen_at"].isoformat() if e["last_seen_at"] else None
         res.append(e)
     return res
+
+
+async def sole_container(session: AsyncSession, subnet_id: uuid.UUID, ip: str) -> bool:
+    """這個子網路是不是包含該位址、唯一最細的那一個（同樣細或更細的其他子網路都不包含它）。
+
+    沒有子網路歸屬的資料（LibreNMS 的 ARP、沒對到 IP 記錄的 DHCP 固定分配）只在這時候才算這個子網路的：
+    重疊網段（不同客戶共用 198.51.100.0/24）分不出是哪一邊，不猜（規則同 for_subnet 的 ARP）。"""
+    others = await session.scalar(text("""
+        SELECT count(*) FROM subnets o, subnets s
+         WHERE s.id = :sid AND o.id <> s.id AND o.archived_at IS NULL
+           AND o.cidr >>= CAST(:ip AS inet) AND masklen(o.cidr) >= masklen(s.cidr)
+    """), {"sid": subnet_id, "ip": ip})
+    return not others

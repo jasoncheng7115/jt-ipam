@@ -6,7 +6,7 @@
  * - 自訂配色只收 #RRGGBB；一般文字對比至少 4.5:1、大字（警告 / 重大）至少 3:1，不足時提示並可一鍵修正
  * - 「立即產生」是獨立的明確操作，後端 60 秒冷卻
  */
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   NAlert, NButton, NCheckbox, NCheckboxGroup, NColorPicker, NFormItem, NIcon, NInputNumber, NRadioButton, NRadioGroup,
@@ -22,6 +22,8 @@ import WrAiIntel from "./WrAiIntel.vue";
 import WrFx from "./WrFx.vue";
 
 const model = defineModel<IntelSettings>({ required: true });
+/** 戰情室設定的「資訊展示模式」：預覽照那個樣子播，WARNING 區塊寫明不會出現 */
+const props = defineProps<{ infoMode?: boolean }>();
 const { t, te } = useI18n();
 const msg = useMessage();
 
@@ -79,7 +81,15 @@ function setColor(k: keyof IntelColors, v: string) {
 function demo(): { state: IntelState; events: IntelEvents } {
   const now = Date.now();
   const iso = (minAgo: number) => new Date(now - minAgo * 60000).toISOString();
-  const items = [
+  const infoItems = [
+    { id: "i1", fact_ids: [], category: "overview", state: "info", code: "overview_info",
+      params: { at: iso(1), registered_ips: 1367, subnets: 42 } },
+    { id: "i2", fact_ids: [], category: "capacity", state: "info", code: "capacity_info",
+      params: { top_label: "203.0.113.0/24", top_pct: 64 } },
+    { id: "i3", fact_ids: [], category: "dns", state: "info", code: "dns_info", params: { groups: 3 } },
+    { id: "i4", fact_ids: [], category: "certs", state: "info", code: "certs_info", params: { total: 18 } },
+  ];
+  const items = props.infoMode ? infoItems : [
     { id: "d1", fact_ids: [], category: "overview", state: "info", code: "overview",
       params: { at: iso(1), registered_ips: 1367, open_anomalies: 4 } },
     { id: "d2", fact_ids: [], category: "events", state: "new", code: "events_changed",
@@ -116,9 +126,10 @@ function demo(): { state: IntelState; events: IntelEvents } {
   return { state, events };
 }
 const demoData = ref(demo());
-const preview = computed(() => ({ ...demoData.value, display: model.value }));
+const preview = computed(() => ({ ...demoData.value, display: model.value, info: !!props.infoMode }));
 const previewKey = ref(0);
 function replayPreview() { demoData.value = demo(); previewKey.value++; }
+watch(() => props.infoMode, replayPreview);
 
 /* 預覽照電視上這個主題內容區的大小（1920×1080 畫布扣掉頁首、指標列、頁尾＝1824×728）排版，再等比例縮到卡片寬度
  * （字級寫死給電視看，直接放進卡片會擠爆） */
@@ -307,6 +318,8 @@ async function generateNow() {
     </template>
 
     <div class="wri-sec">{{ t("warroom_settings.intel_sec_warning") }}</div>
+    <n-alert v-if="props.infoMode" type="info" :show-icon="false" :bordered="false" class="wri-alert" data-testid="wrs-intel-info-note">
+      {{ t("warroom_settings.info_mode_intel_note") }}</n-alert>
     <n-form-item :label="t('warroom_settings.intel_warning_enabled')" label-placement="left">
       <n-switch v-model:value="model.warning_enabled" data-testid="wrs-intel-warning" />
     </n-form-item>

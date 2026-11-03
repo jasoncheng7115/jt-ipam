@@ -86,6 +86,8 @@ DEFAULTS: dict[str, Any] = {
     "capacity_crit": 90,
     "language": "",                  # 空＝跟著瀏覽器
     "reduce_motion": False,
+    # 資訊展示模式（11-03）：只呈現現況與數量，不顯示告警、異常、離線與問題（見 warroom/info_mode.py）
+    "info_mode": False,
     "availability_window": "7d",
     "transition": "slide",
     "number_font": "exo2",           # 預設 Exo 2（10-24 使用者指定）
@@ -169,6 +171,7 @@ def _clean(v: dict[str, Any]) -> dict[str, Any]:
     out["capacity_warn"], out["capacity_crit"] = (warn, crit) if warn < crit else (80, 90)
     out["language"] = out["language"] if out.get("language") in LANGS else ""
     out["reduce_motion"] = bool(out.get("reduce_motion"))
+    out["info_mode"] = bool(out.get("info_mode"))
     if out.get("availability_window") not in AVAILABILITY_WINDOWS:
         out["availability_window"] = "7d"
     if out.get("transition") not in TRANSITIONS:

@@ -51,7 +51,8 @@ function relTime(iso: string | null): string {
 </script>
 
 <template>
-  <div class="ov">
+  <!-- 資訊展示模式（11-03）：格子不分狀態（後端已經都給 ok）、不畫各狀態數量與優先處理事項 -->
+  <div class="ov" :class="{ 'ov--info': data.info_mode }">
     <Transition :name="pageTrans" mode="out-in"><div :key="data.page" class="ov-groups">
       <div v-if="!groups.length" class="wr-empty">{{ t("warroom.no_subnets") }}</div>
       <div v-for="g in groups" :key="g.id ?? 'none'" class="ov-group" data-testid="wr-group">
@@ -63,7 +64,7 @@ function relTime(iso: string | null): string {
           <WrMatrix :cells="g.cells" :cols="12" :size="34" :gap="8" />
           <div v-if="g.unit > 1" class="wr-unit">{{ t("warroom.unit_subnets", { n: g.unit }) }}</div>
         </div>
-        <div class="ov-counts">
+        <div v-if="!data.info_mode" class="ov-counts">
           <div v-for="s in STATES" :key="s" class="ov-count" :class="{ zero: !g.counts[s] }">
             <span class="wr-swatch wr-swatch--sm" :class="`s-${s}`" />
             <span class="ov-count__n">{{ (g.counts[s] ?? 0).toLocaleString() }}</span>
@@ -74,7 +75,7 @@ function relTime(iso: string | null): string {
     </div>
     </Transition>
 
-    <aside class="ov-side">
+    <aside v-if="!data.info_mode" class="ov-side">
       <div class="wr-h2"><WrIco :icon="SECTION_ICONS.priority" />{{ t("warroom.priority") }}<span v-if="prio.total" class="wr-h2__n">{{ prio.total }}</span></div>
       <div v-if="prio.state === 'forbidden'" class="wr-muted">{{ t("warroom.forbidden") }}</div>
       <div v-else-if="!prio.items?.length" class="wr-muted">{{ t("warroom.no_priority") }}</div>
@@ -104,6 +105,8 @@ function relTime(iso: string | null): string {
 <style scoped>
 /* 列高固定為可用高度：右側優先事項很多時曾把整列撐高，左邊第三個地點被推出畫面（10-22） */
 .ov { display: grid; grid-template-columns: 1fr 520px; grid-template-rows: minmax(0, 1fr); gap: 48px; height: 100%; }
+.ov--info { grid-template-columns: 1fr; }
+.ov--info .ov-group { grid-template-columns: 400px 1fr; }
 .ov-groups { display: flex; flex-direction: column; min-height: 0; }
 .ov-group { display: grid; grid-template-columns: 400px 496px 1fr; gap: 40px; align-items: center;
   padding: 12px 0; border-bottom: 1px solid var(--wr-line); flex: 1; min-height: 0; }

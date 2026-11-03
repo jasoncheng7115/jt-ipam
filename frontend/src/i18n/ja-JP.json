@@ -4131,7 +4131,10 @@
     "maintenance_time_required": "開始と終了の時刻を入力してください",
     "maintenance_too_long": "1 回のメンテナンスは最長 {hours} 時間です",
     "maintenance_weekly_incomplete": "毎週のメンテナンスには曜日・時間帯・終了日が必要です",
-    "maintenance_weekly_too_far": "毎週のメンテナンスの終了日は最長 1 年です"
+    "maintenance_weekly_too_far": "毎週のメンテナンスの終了日は最長 1 年です",
+    "certpush_busy": "この配布先は配布中です。しばらくしてから再試行してください",
+    "certpush_paloalto_pending_changes": "ファイアウォールに未コミットの変更があり、commit で一緒に適用されるため何も変更していません。先にそれらの変更を処理してください",
+    "certpush_rollback_unconfirmed": "元の証明書に戻そうとしましたが、機器は元の証明書を提示していません。機器を確認してください"
   },
   "adguard_admin": {
     "scope_subnets": "対象サブネットを限定",
@@ -8839,7 +8842,11 @@
         "integrity_ex_not_configured": "{name} は未同期",
         "integrity_hidden": "情報源の状態は管理者だけが確認できます。",
         "event": "重大イベント：{category}、{subject}（{at}）、まだ解消していません。",
-        "event_unknown": "重大イベント：{category}、{subject}（{at}）は状態未確認です。異常検知がスケジュールより遅れています。"
+        "event_unknown": "重大イベント：{category}、{subject}（{at}）は状態未確認です。異常検知がスケジュールより遅れています。",
+        "overview_info": "{at} 時点で、{subnets} 個のサブネットに {ips} 個の IP が登録されています。",
+        "capacity_info": "使用率が最も高いサブネットは {label}（{pct}%）です。",
+        "dns_info": "DNS 比較グループは {n} 組です。",
+        "certs_info": "{n} 枚の証明書を管理しています。"
       }
     },
     "topic_preparing": "このテーマのデータを準備中です",
@@ -9299,7 +9306,13 @@
     "scope_part_more": "表示範囲：{names} ほか {n} 件",
     "err_hint_disabled": "「管理 → ウォールーム設定」でテレビ表示トークンを有効にし、代表するアカウントを選んで保存してください",
     "no_access_short": "権限なし",
-    "endpoints": "接続端末"
+    "endpoints": "接続端末",
+    "info_records": "レコード",
+    "info_certs_managed": "管理中の証明書",
+    "info_unit_certs": "枚",
+    "info_m_pools": "DHCP プール",
+    "info_m_dns_groups": "DNS 比較グループ",
+    "info_m_certs": "証明書"
   },
   "warroom_settings": {
     "open": "ウォールームを開く",
@@ -9459,7 +9472,11 @@
     "display_saved_off": "現在無効",
     "unsaved": "未保存",
     "principal_required": "先にアカウントを選んでください。テレビにはこのアカウントの表示範囲が表示されます。保存すると有効になります。",
-    "keys_clicker": "プレゼンター（リモコン）の前へ/次へは PgUp/PgDn を送るので、そのままデータページを切り替えられます。"
+    "keys_clicker": "プレゼンター（リモコン）の前へ/次へは PgUp/PgDn を送るので、そのままデータページを切り替えられます。",
+    "info_mode": "情報表示モード",
+    "info_mode_hint": "オンにするとウォールームは現状と件数だけを表示し、アラート・異常・オフライン・問題は表示しません。アラートと通知は通常どおり動作します。異常と露出・収集の健全性・可用性・AI 巡回は再生されません。",
+    "info_mode_hidden": "情報表示モードでは再生しません",
+    "info_mode_intel_note": "情報表示モードです：AI 情報は現状と件数だけを伝え、WARNING・継続注視・ソース状態は表示しません。"
   },
   "certpush": {
     "intro": "ファイアウォールにエージェントは不要です。jt-ipam がデバイスの管理 API で証明書を配布して適用し、配布後に接続して新しい証明書が提示されているかを確認します。確認できなければ元の証明書に戻します。証明書専用のアカウントを別に作成してください（既存の連携アカウントは多くが読み取り専用です）。ベータ：各ベンダーの実機ではまだ検証していません。",
@@ -9524,7 +9541,7 @@
     "verify": "配布後に接続して確認",
     "verify_endpoint": "確認するアドレス（ホスト:ポート）",
     "verify_endpoint_ph": "空欄＝API URL のホストとポート。SSL VPN なら vpn.example.net:10443 など",
-    "verify_hint": "確認のルール：配布前は接続できたのに配布後に新しい証明書が提示されない場合は元に戻します。配布前から接続できないアドレス（インターネット側だけで開いている SSL VPN など）は「未確認」になります。",
+    "verify_hint": "確認ルール：配布前に接続でき、配布後に新しい証明書でない場合は元の証明書に戻し、戻した後も再確認します。配布前から接続できないアドレス（外部からのみ開いている SSL VPN など）は「未確認」になります。FortiGate で管理画面と SSL VPN を両方替える場合は両方を確認します（SSL VPN は確認アドレスを使用、未入力なら「未確認」）。",
     "step_load": "証明書の読み込み",
     "step_probe_before": "配布前に接続",
     "step_read": "現在の設定の読み取り",
@@ -9542,7 +9559,15 @@
     "step_rollback": "元の証明書に戻す",
     "step_connect": "接続",
     "step_list": "デバイスの証明書の読み取り",
-    "tab": "デバイスへ配布"
+    "tab": "デバイスへ配布",
+    "auto_push_hint": "オンにすると、この証明書の新しいバージョン（アップロードまたは更新）が次のスケジュール同期でこの機器へ自動で配布されます。失敗した場合は 1 時間後に再試行します。オフのときは「今すぐ配布」を押したときだけ配布します。",
+    "status_staged": "書き込み済み、commit 待ち",
+    "pa_commit_hint": "配布前に他の管理者の未コミットの変更を確認し、あれば何もしません（commit でそれらも適用されるため）。commit に失敗した場合は候補設定を元に戻します。",
+    "pa_commit_off_hint": "候補設定に書き込むだけで適用しません。状態は「書き込み済み、commit 待ち」で、ファイアウォールでご自身で commit してください。確認も元に戻すこともしません。",
+    "pa_commit_admin": "commit する管理者アカウント",
+    "pa_commit_admin_ph": "任意：このアカウントの変更だけを commit（partial commit）",
+    "verify_explicit_hint": "この機器では証明書が管理画面以外（GlobalProtect、HAProxy など）で使われている場合があるため、確認アドレスが未入力なら「未確認」とするだけで自動では元に戻しません。管理画面の証明書を替える場合は API URL のホスト:ポートを入力してください。",
+    "verify_endpoint_ph_explicit": "例：gp.example.net:443。空欄＝確認しない"
   },
   "not_found": {
     "title": "ページが見つかりません",

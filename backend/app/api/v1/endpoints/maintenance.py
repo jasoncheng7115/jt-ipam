@@ -460,39 +460,13 @@ async def active_for(
     integration_kind: str | None = Query(None, max_length=32),
 ) -> list[dict[str, Any]]:
     """這個物件現在被哪些維護涵蓋（物件頁的橫幅與一鍵維護按鈕用）。"""
-    now = datetime.now(UTC)
-    idx = await svc.build_index(session, now)
-    if not idx.windows:
-        return []
-    wids: set[uuid.UUID] = set()
-    if object_type == "ip":
-        if (wid := idx.for_ip(ip_id=object_id)):
-            wids.add(wid)
-    elif object_type == "device":
-        if object_id in idx.device_ids:
-            wids.add(idx.device_ids[object_id])
-    elif object_type == "subnet":
-        if object_id in idx.subnet_ids:
-            wids.add(idx.subnet_ids[object_id])
-    elif object_type == "integration" and integration_kind:
-        if (wid := idx.for_key(f"integration:{integration_kind}:{object_id}")):
-            wids.add(wid)
-    elif object_type == "scan_agent":
-        if (wid := idx.for_key(f"agent:scan:{object_id}")):
-            wids.add(wid)
-    # 直接選了這個物件的維護（區段、機櫃、地點、單位…）
-    for (wid,) in (await session.execute(select(MaintenanceScope.window_id).where(
-            MaintenanceScope.scope_type == object_type, MaintenanceScope.object_id == object_id))).all():
-        if wid in idx.windows:
-            wids.add(wid)
     out = []
-    for wid in wids:
-        w = idx.windows[wid]
-        occ = svc.occurrence(w, now)
+    for w, until in await svc.active_for_object(session, object_type, object_id,
+                                                integration_kind=integration_kind):
         out.append({"id": str(w.id), "title": w.title, "behavior": w.behavior, "source": w.source,
-                    "until": occ[1] if occ else None, "schedule_type": w.schedule_type,
+                    "until": until, "schedule_type": w.schedule_type,
                     "can_manage": user.is_admin or w.created_by == user.id})
-    return sorted(out, key=lambda x: str(x["until"]))
+    return out
 
 
 @router.post("/preview")

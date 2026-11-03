@@ -22,3 +22,5 @@ global-search-settings.spec.ts
 # 攔截主控台設定 API（不真的寫入），但攔截萬一沒生效，按「改用 guacd」就會改到全站引擎設定：依序跑
 rdp-engine-recommend-guacd.spec.ts
 warroom-display-token.spec.ts
+# 打開戰情室的資訊展示模式（全站設定）：平行時別的戰情室 spec 會少四個主題
+warroom-info-mode.spec.ts

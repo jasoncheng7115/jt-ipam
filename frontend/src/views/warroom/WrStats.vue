@@ -58,13 +58,14 @@ const famTotal = computed(() => families.value.v4 + families.value.v6);
           <div class="st-row__n">
             <div class="st-row__l">
               <span class="st-sw" :class="`st-sw--${r.status}`" />{{ t(`warroom.st_${r.status}`) }}
-              <span class="st-row__p">{{ pctText(r.pct) }}%</span>
+              <!-- 資訊展示模式：只剩上線一列，不寫百分比（百分比等於在說其他的不在線） -->
+              <span v-if="!data.info_mode" class="st-row__p">{{ pctText(r.pct) }}%</span>
             </div>
             <div class="wr-big st-row__v" :class="tone(r.status)" data-testid="wr-st-count">{{ r.count.toLocaleString() }}</div>
           </div>
           <WrMatrix :cells="rowCells(r)" :cols="status.row_cols" :size="16" :gap="4" />
         </div>
-        <footer class="st-sum">
+        <footer v-if="!data.info_mode" class="st-sum">
           <span data-testid="wr-st-sum">{{ t("warroom.st_sum", { n: status.total.toLocaleString() }) }}</span>
           <span v-if="status.online_arp_only" class="st-sum__arp">{{ t("warroom.st_arp_only", { n: status.online_arp_only.toLocaleString() }) }}</span>
         </footer>
@@ -103,8 +104,8 @@ const famTotal = computed(() => families.value.v4 + families.value.v6);
       </div>
       <div class="st-notes" data-testid="wr-st-notes">
         <div class="st-notes__h">{{ t(`warroom.st_scope_${defs.scope}`) }}</div>
-        <div>{{ t("warroom.st_note_registered") }}</div>
-        <div v-if="auditVisible">{{ t("warroom.st_note_audit", { h: defs.audit_window_hours }) }}<template v-if="defs.audit_scoped">{{ t("warroom.st_note_audit_scoped") }}</template></div>
+        <div v-if="!data.info_mode">{{ t("warroom.st_note_registered") }}</div>
+        <div v-if="auditVisible && !data.info_mode">{{ t("warroom.st_note_audit", { h: defs.audit_window_hours }) }}<template v-if="defs.audit_scoped">{{ t("warroom.st_note_audit_scoped") }}</template></div>
       </div>
     </footer>
   </div>

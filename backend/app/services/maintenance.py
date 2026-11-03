@@ -326,6 +326,45 @@ async def build_index(session: AsyncSession, now: datetime | None = None) -> Ind
     return idx
 
 
+async def active_for_object(session: AsyncSession, object_type: str, object_id: uuid.UUID, *,
+                            integration_kind: str | None = None,
+                            now: datetime | None = None) -> list[tuple[MaintenanceWindow, datetime | None]]:
+    """這個物件現在被哪些維護涵蓋：[(維護, 這一次結束時間)]，依結束時間排序。
+
+    物件頁的橫幅（REST /maintenance/active）與 AI 工具（get_ip_detail／get_device）共用同一份判斷。"""
+    now = now or datetime.now(UTC)
+    idx = await build_index(session, now)
+    if not idx.windows:
+        return []
+    wids: set[uuid.UUID] = set()
+    if object_type == "ip":
+        if (wid := idx.for_ip(ip_id=object_id)):
+            wids.add(wid)
+    elif object_type == "device":
+        if object_id in idx.device_ids:
+            wids.add(idx.device_ids[object_id])
+    elif object_type == "subnet":
+        if object_id in idx.subnet_ids:
+            wids.add(idx.subnet_ids[object_id])
+    elif object_type == "integration" and integration_kind:
+        if (wid := idx.for_key(f"integration:{integration_kind}:{object_id}")):
+            wids.add(wid)
+    elif object_type == "scan_agent":
+        if (wid := idx.for_key(f"agent:scan:{object_id}")):
+            wids.add(wid)
+    # 直接選了這個物件的維護（區段、機櫃、地點、單位…）
+    for (wid,) in (await session.execute(select(MaintenanceScope.window_id).where(
+            MaintenanceScope.scope_type == object_type, MaintenanceScope.object_id == object_id))).all():
+        if wid in idx.windows:
+            wids.add(wid)
+    out = []
+    for wid in wids:
+        w = idx.windows[wid]
+        occ = occurrence(w, now)
+        out.append((w, occ[1] if occ else None))
+    return sorted(out, key=lambda x: str(x[1]))
+
+
 async def get_index(session: AsyncSession) -> Index:
     """一輪同步裡共用一份（60 秒內不重建）。"""
     cached = session.info.get(_CACHE_KEY)

@@ -13,8 +13,10 @@ OPNsense（23.7 以後的 Trust API，API 金鑰的權限要能寫 System: Certi
   options: {"cert_uuid": "<要替換的既有憑證>", "restart_webgui": true}
   直接替換一張既有憑證的內容（POST /api/trust/cert/set/{uuid}，action=import）：refid 不變，
   網頁管理介面、OpenVPN、HAProxy…凡是引用這張的都跟著換，不必改各服務的設定。
-  Trust API 存檔不會重啟服務 → restart_webgui 時 POST /api/core/service/restart/webgui
-  （重啟當下連線可能被切斷，這一步的連線錯誤不算失敗，由引擎連過去確認）。
+  crt_payload 只能放一張（上游 CertController 數到不是 1 張就拒，2026-11-03 外部審查）→ 中繼 CA 先匯進
+  信任庫（/api/trust/ca/add，action=existing，已經有同一張就不重複），存檔時 OPNsense 自己把憑證連到它。
+  Trust API 存檔不會重啟服務 → restart_webgui 時 POST /api/core/service/restart/webgui：回 4xx/5xx 是失敗
+  （權限不足、路徑錯）；重啟當下連線被切斷是預期的，由引擎連過去確認。
 
 Palo Alto（PAN-OS XML API；API 金鑰的角色要能匯入憑證、改設定、commit）
   options: {"profile": "<SSL/TLS 服務設定檔名稱>", "commit": true}
@@ -23,11 +25,17 @@ Palo Alto（PAN-OS XML API；API 金鑰的角色要能匯入憑證、改設定�
   2. 讀設定檔目前的憑證 → 改成新的（/config/shared/ssl-tls-service-profile/entry[@name=…]/certificate）
   3. commit，輪詢工作直到 FIN；結果不是 OK 就失敗（換回去也要 commit）
   設定檔被 GlobalProtect 入口、管理介面等引用，換掉設定檔的憑證＝它們一起換。
+  commit 會套用整份候選設定（2026-11-03 外部審查）→ 改之前先查有沒有別人待提交的變更，有就不動；
+  options.commit_admin 有填時用 partial commit 只套用那個管理員的變更。commit 失敗時把候選設定換回原本的
+  （不然下次別人 commit 會意外套上）；逾時代表結果不知道，不亂動、回報工作編號。
+  commit=false＝只寫進候選設定、等管理員自己 commit：狀態是「已寫入待 commit」，引擎不驗證也不撤回。
 
 pfSense（pfSense-pkg-RESTAPI v2；X-API-Key 的權限要能建立憑證與改 webConfigurator）
   options: {"bind_webgui": true}
   1. 憑證清單裡已有同名（jtipam-…-指紋）就沿用，否則 POST /api/v2/system/certificate 建一張
   2. bind_webgui 時讀 /api/v2/system/webgui/settings 的 sslcertref → PATCH 成新憑證的 refid
+     改了會重啟 webConfigurator，這個請求可能被斷線（設定其實已經改了）→ 不當失敗，交給引擎連過去確認，
+     確認不到照樣換回（2026-11-03 外部審查）。
 """
 from __future__ import annotations
 
@@ -42,6 +50,15 @@ from defusedxml import ElementTree as DefusedET
 
 from app.services.cert_push.base import Bundle, Http, PushError, Rollback, Steps, b64
 
+#: Palo Alto commit 工作最多輪詢幾次、間隔幾秒（約 4 分鐘）
+COMMIT_POLLS = 120
+COMMIT_POLL_S = 2.0
+
+
+def _disconnected(exc: PushError) -> bool:
+    """服務重啟時連線被切斷（預期中）。只認連線層的錯誤，不包含設備回的 4xx/5xx 與 SSRF 擋下。"""
+    return exc.code == "certpush_transport"
+
 
 def _body(resp: Any) -> dict[str, Any]:
     try:
@@ -49,6 +66,18 @@ def _body(resp: Any) -> dict[str, Any]:
     except Exception:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+class _ExplicitVerify:
+    """換的憑證不一定是管理介面在用（Palo Alto 的設定檔可能給 GlobalProtect、OPNsense 的憑證可能給 HAProxy）：
+    只確認使用者填的「確認位址」；沒填就標未確認、不換回 —— 以前拿 API 網址去確認，管理介面本來就不會換，
+    會被誤判失敗而換回（使用者 11-03 同意）。換的是管理介面的憑證時，確認位址填 API 網址的主機:埠。"""
+
+    def verify_endpoints(self, api: tuple[str, int], custom: tuple[str, int] | None) -> list[tuple[str, str, int]]:
+        return [("service", custom[0], custom[1])] if custom else []
+
+    def unverifiable(self, custom: tuple[str, int] | None) -> list[str]:
+        return [] if custom else ["service"]
 
 
 class FortiGateDriver:
@@ -92,12 +121,14 @@ class FortiGateDriver:
         done: list[str] = []
 
         async def rollback() -> None:
+            # 換回去也要看回應（以前沒檢查：設備回 500 也當已換回，2026-11-03 外部審查）
             for what in reversed(done):
                 if what == "admin":
-                    await self.http("PUT", "/api/v2/cmdb/system/global", json={"admin-server-cert": old["admin"]})
+                    self._ok("rollback", await self.http("PUT", "/api/v2/cmdb/system/global",
+                                                         json={"admin-server-cert": old["admin"]}))
                 else:
-                    await self.http("PUT", "/api/v2/cmdb/vpn.ssl/settings", params={"vdom": vdom},
-                                    json={"servercert": old["sslvpn"]})
+                    self._ok("rollback", await self.http("PUT", "/api/v2/cmdb/vpn.ssl/settings", params={"vdom": vdom},
+                                                         json={"servercert": old["sslvpn"]}))
 
         try:
             if "admin" in bind:
@@ -114,6 +145,23 @@ class FortiGateDriver:
             await rollback()                         # 綁到一半：已經換掉的先換回去
             raise
         return rollback if done else None
+
+    def verify_endpoints(self, api: tuple[str, int], custom: tuple[str, int] | None) -> list[tuple[str, str, int]]:
+        """要確認哪些位址（2026-11-03 外部審查：以前只驗一個）。管理介面看 API 網址；SSL VPN 看「確認位址」，
+        沒填就沒辦法確認 —— 不可以拿管理介面判斷（它本來就不會換，會被誤判成失敗而換回）。
+        只換管理介面又填了確認位址時，照舊用確認位址。"""
+        bind = [b for b in (self.opt.get("bind") or []) if b in ("admin", "sslvpn")]
+        out: list[tuple[str, str, int]] = []
+        if "admin" in bind:
+            h, port = custom if (custom and "sslvpn" not in bind) else api
+            out.append(("admin", h, port))
+        if "sslvpn" in bind and custom:
+            out.append(("sslvpn", custom[0], custom[1]))
+        return out
+
+    def unverifiable(self, custom: tuple[str, int] | None) -> list[str]:
+        bind = self.opt.get("bind") or []
+        return ["sslvpn"] if "sslvpn" in bind and not custom else []
 
 
 def _parse_cert(raw: Any) -> dict[str, str | None]:
@@ -163,7 +211,7 @@ def _when(v: Any) -> str | None:
     return None
 
 
-class OPNsenseDriver:
+class OPNsenseDriver(_ExplicitVerify):
     kind = "opnsense"
 
     def __init__(self, http: Http, options: dict[str, Any]) -> None:
@@ -193,12 +241,47 @@ class OPNsenseDriver:
         if resp.status_code >= 400 or body.get("result") != "saved":
             raise PushError(step, "certpush_device_error", str(body.get("validations") or resp.text))
 
-    async def _restart(self, steps: Steps) -> None:
+    async def _restart(self, steps: Steps, step: str = "restart_webgui") -> None:
         try:
             resp = await self.http("POST", "/api/core/service/restart/webgui", timeout=20.0)
-            steps.ok("restart_webgui", str(resp.status_code))
-        except Exception as exc:
-            steps.ok("restart_webgui", f"connection closed during restart ({type(exc).__name__})")
+        except PushError as exc:
+            if not _disconnected(exc):
+                raise
+            steps.ok(step, "connection closed during restart; verifying")
+            return
+        if resp.status_code >= 400:
+            raise PushError(step, "certpush_device_error", resp.text)
+        steps.ok(step, str(resp.status_code))
+
+    async def _ensure_cas(self, chain_pem: str, steps: Steps) -> None:
+        """中繼 CA 匯進信任庫；同一張已經在了（不管誰匯的、叫什麼名字）就不重複。"""
+        pems = _split_pems(chain_pem)
+        if not pems:
+            return
+        from cryptography import x509
+        have: set[bytes] = set()
+        rows = _body(await self.http("GET", "/api/trust/ca/search")).get("rows") or []
+        for r in rows[:200]:
+            ca = _body(await self.http("GET", f"/api/trust/ca/get/{r.get('uuid')}")).get("ca") or {}
+            try:
+                have.add(x509.load_pem_x509_certificate(base64.b64decode(str(ca.get("crt") or "")))
+                         .public_bytes(serialization_der()))
+            except ValueError:
+                pass                                 # 讀不出來的 CA（空的、格式不對）不算已有，照樣匯入新的
+        for pem in pems:
+            c = x509.load_pem_x509_certificate(pem.encode())
+            der = c.public_bytes(serialization_der())
+            if der in have:
+                continue
+            import hashlib
+            descr = f"jtipam-ca-{hashlib.sha256(der).hexdigest()[:8]}"
+            resp = await self.http("POST", "/api/trust/ca/add", json={"ca": {
+                "action": "existing", "descr": descr, "crt_payload": pem.strip() + "\n"}})
+            body = _body(resp)
+            if resp.status_code >= 400 or body.get("result") != "saved":
+                raise PushError("import_ca", "certpush_device_error", str(body.get("validations") or resp.text))
+            have.add(der)
+            steps.ok("import_ca", descr)
 
     async def push(self, bundle: Bundle, steps: Steps) -> Rollback | None:
         uuid = str(self.opt.get("cert_uuid") or "").strip()
@@ -218,7 +301,8 @@ class OPNsenseDriver:
         old_crt, old_prv = _dec(cur.get("crt")), _dec(cur.get("prv"))
         steps.ok("read", descr)
 
-        await self._set(uuid, descr, bundle.fullchain, bundle.key_pem, "replace")
+        await self._ensure_cas(bundle.chain_pem, steps)
+        await self._set(uuid, descr, bundle.cert_pem.strip() + "\n", bundle.key_pem, "replace")
         steps.ok("replace", descr)
         restart = self.opt.get("restart_webgui", True) is not False
         if restart:
@@ -227,14 +311,20 @@ class OPNsenseDriver:
         async def rollback() -> None:
             if not (old_crt and old_prv):
                 raise PushError("rollback", "certpush_no_rollback_data")
-            await self._set(uuid, descr, old_crt, old_prv, "rollback")
+            first = (_split_pems(old_crt) or [old_crt])[0]   # 舊版本若曾存成整串鏈，也只送第一張
+            await self._set(uuid, descr, first.strip() + "\n", old_prv, "rollback")
             if restart:
-                await self._restart(Steps())
+                await self._restart(Steps(), "rollback")
         return rollback
 
 
 def _split_pems(text: str) -> list[str]:
     return re.findall(r"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----", text or "", re.S)
+
+
+def serialization_der():  # type: ignore[no-untyped-def]
+    from cryptography.hazmat.primitives.serialization import Encoding
+    return Encoding.DER
 
 
 def _encrypt_key(key_pem: str, passphrase: str) -> str:
@@ -244,11 +334,8 @@ def _encrypt_key(key_pem: str, passphrase: str) -> str:
                              serialization.BestAvailableEncryption(passphrase.encode())).decode()
 
 
-class PaloAltoDriver:
+class PaloAltoDriver(_ExplicitVerify):
     kind = "paloalto"
-
-    def __init__(self, http: Http, options: dict[str, Any]) -> None:
-        self.http, self.opt = http, options or {}
 
     async def _xml(self, step: str, params: dict[str, Any], *, content: bytes | None = None,
                    headers: dict[str, str] | None = None, method: str = "GET") -> Any:
@@ -272,20 +359,31 @@ class PaloAltoDriver:
         await self._xml(step, params, content=content, method="POST",
                         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
 
+    def __init__(self, http: Http, options: dict[str, Any]) -> None:
+        self.http, self.opt = http, options or {}
+        self.staged = False                          # commit=false：只寫進候選設定（引擎看這個決定狀態）
+
+    async def _pending(self) -> bool:
+        r = await self._xml("precheck", {"type": "op", "cmd": "<check><pending-changes></pending-changes></check>"})
+        return (r.findtext(".//result") or "").strip().lower() == "yes"
+
     async def _commit(self, step: str) -> None:
-        root = await self._xml(step, {"type": "commit", "cmd": "<commit></commit>"})
+        admin = str(self.opt.get("commit_admin") or "").strip()
+        cmd = (f"<commit><partial><admin><member>{_xml_escape(admin)}</member></admin></partial></commit>"
+               if admin else "<commit></commit>")
+        root = await self._xml(step, {"type": "commit", "cmd": cmd})
         job = root.findtext(".//job")
         if not job:                                  # 「沒有可以 commit 的變更」
             return
-        for _ in range(120):
+        for _ in range(COMMIT_POLLS):
             r = await self._xml(step, {"type": "op", "cmd": f"<show><jobs><id>{int(job)}</id></jobs></show>"})
             if (r.findtext(".//job/status") or "") == "FIN":
                 if (r.findtext(".//job/result") or "") != "OK":
                     lines = " ".join((e.text or "").strip() for e in r.iter("line"))
                     raise PushError(step, "certpush_commit_failed", lines)
                 return
-            await asyncio.sleep(2)
-        raise PushError(step, "certpush_commit_timeout")
+            await asyncio.sleep(COMMIT_POLL_S)
+        raise PushError(step, "certpush_commit_timeout", f"job {int(job)}")
 
     async def push(self, bundle: Bundle, steps: Steps) -> Rollback | None:
         profile = str(self.opt.get("profile") or "").strip()
@@ -295,6 +393,14 @@ class PaloAltoDriver:
         root = await self._xml("read", {"type": "config", "action": "get", "xpath": f"{xpath}/certificate"})
         old = (root.findtext(".//certificate") or "").strip()
         steps.ok("read", old)
+        commit = self.opt.get("commit", True) is not False
+        if commit and await self._pending():
+            # commit 會連別人還沒準備好的變更一起套用：有待提交的變更就什麼都不動
+            raise PushError("precheck", "certpush_paloalto_pending_changes")
+
+        async def set_cert(step: str, value: str) -> None:
+            await self._xml(step, {"type": "config", "action": "set", "xpath": xpath,
+                                   "element": f"<certificate>{_xml_escape(value)}</certificate>"})
 
         name = bundle.device_name(31)
         for i, ca in enumerate(_split_pems(bundle.chain_pem), 1):
@@ -304,21 +410,31 @@ class PaloAltoDriver:
                            bundle.cert_pem.strip() + "\n" + _encrypt_key(bundle.key_pem, passphrase), passphrase)
         steps.ok("import", name)
 
-        await self._xml("set_profile", {"type": "config", "action": "set", "xpath": xpath,
-                                        "element": f"<certificate>{_xml_escape(name)}</certificate>"})
-        steps.ok("set_profile", profile)
-        commit = self.opt.get("commit", True) is not False
-        if commit:
-            await self._commit("commit")
-            steps.ok("commit")
-
         async def rollback() -> None:
             if not old:
                 raise PushError("rollback", "certpush_no_rollback_data")
-            await self._xml("rollback", {"type": "config", "action": "set", "xpath": xpath,
-                                         "element": f"<certificate>{_xml_escape(old)}</certificate>"})
+            await set_cert("rollback", old)
             if commit:
                 await self._commit("rollback")
+
+        await set_cert("set_profile", name)
+        steps.ok("set_profile", profile)
+        if not commit:
+            self.staged = True                       # 只寫進候選設定，等管理員自己 commit
+            steps.ok("staged", "candidate only; commit on the firewall to apply")
+            return rollback
+        try:
+            await self._commit("commit")
+        except PushError as exc:
+            if exc.code == "certpush_commit_failed" and old:
+                # commit 沒成功，但候選設定已經指向新憑證：換回去，下次別人 commit 才不會意外套上
+                try:
+                    await set_cert("revert_candidate", old)
+                    steps.ok("revert_candidate", old)
+                except PushError as rexc:
+                    steps.fail("revert_candidate", rexc.code, rexc.detail)
+            raise
+        steps.ok("commit")
         return rollback
 
 
@@ -369,13 +485,25 @@ class PfSenseDriver:
             return None
         cur = self._ok("read_webgui", await self.http("GET", "/api/v2/system/webgui/settings")).get("data") or {}
         old = str(cur.get("sslcertref") or "")
-        self._ok("bind_webgui", await self.http("PATCH", "/api/v2/system/webgui/settings", json={"sslcertref": refid}))
-        steps.ok("bind_webgui", refid)
+
+        async def patch(step: str, ref: str, s: Steps) -> None:
+            try:
+                resp = await self.http("PATCH", "/api/v2/system/webgui/settings", json={"sslcertref": ref})
+            except PushError as exc:
+                if not _disconnected(exc):
+                    raise
+                # 改了會重啟 webConfigurator，請求被斷線不代表沒改：交給引擎連過去確認
+                s.ok(step, f"{ref} (connection dropped during webConfigurator restart; verifying)")
+                return
+            self._ok(step, resp)
+            s.ok(step, ref)
 
         async def rollback() -> None:
             if not old:
                 raise PushError("rollback", "certpush_no_rollback_data")
-            self._ok("rollback", await self.http("PATCH", "/api/v2/system/webgui/settings", json={"sslcertref": old}))
+            await patch("rollback", old, Steps())
+
+        await patch("bind_webgui", refid, steps)
         return rollback
 
 

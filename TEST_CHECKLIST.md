@@ -1242,7 +1242,32 @@ what a console is allowed to do.
 - [ ] **Site-to-site VPNs with circuits** (`test_vpn_detail_shows_contacts_and_the_circuit_it_runs_on`, second test in `circuit-detail.spec.ts`): the circuits
   section's "Site-to-site VPN" tab is the same list as Advanced > Site-to-site VPN and names open the VPN detail; contacts can be added; an endpoint inside a
   circuit's linked block lists that circuit under "Runs on circuit", names are not matched; the AI VPN tool returns contacts and carrying circuits
-- [ ] **Relationship chain IP card** (`tests/test_device_relations.py`, `frontend/e2e/relation-chain-ips.spec.ts`, customer 11-02): a device with an OS
+- [ ] **AI tools return what the system knows** (`tests/test_ai_tool_data_gaps.py`, audit 11-03): ask about an address with no IP record (get_ip_detail /
+  search_ip / investigate_ip `unregistered`: sightings, ARP, VMs, DHCP reservations); an IP whose ARP shows a second MAC (`arp_macs` names the VM, marks
+  `is_record_mac`); a MAC (trace_mac `ipam_records`, `device_ports`, `dhcp_reservations`); an IP or device under maintenance (`maintenance`); a hypervisor
+  (get_device `hosted_vms`, `circuits`, `vpn_tunnels`, `lease`); list_subnet_ips `unmanaged`; the search box finds a VM NIC / device port MAC. A partially
+  authorised user gets no VM / ARP / DHCP / circuit / VPN / lease data, and investigate does not show ARP or reservations of an overlapping subnet they cannot see
+- [ ] **Certificate push review fixes** (`tests/test_cert_push_review_fixes.py`, `frontend/e2e/cert-push.spec.ts`, external review 11-03): OPNsense with
+  a chained certificate imports the intermediate as a CA once and sends one certificate; a 403 restart fails; Palo Alto stops when other changes are
+  pending, uses partial commit with "Commit as admin", reverts the candidate when the commit fails, shows "Written, awaiting commit" with commit off;
+  FortiGate rollback errors are reported and both admin and SSL VPN are verified; pfSense restart disconnect is verified; a rollback that does not take
+  effect is "could not confirm"; pushing the same target twice at once gives busy; Palo Alto and OPNsense without a verify address end as "not verified"
+  and are not reverted (the form shows the hint under the verify address), with a verify address a mismatch still reverts; the "Push to devices" tab shows a Beta tag
+ (`tests/test_ai_vm_by_mac.py`, user 11-03): ask the AI who took an IP whose MAC is a Proxmox VM;
+  it names the VM, VMID and node (trace_mac vms, get_ip_detail vms_with_this_mac / vms_reporting_this_ip); a partially authorised user gets no VM data
+ (`frontend/e2e/dashboard-uptime-picker.spec.ts`, customer 11-03): at about 150% text (860 × 500
+  window) with 8 long host names selected, the tags stay on one line, typing in the search works, an exact address is the first option, the
+  dropdown stays on screen, and Save / Cancel are visible
+ (`tests/test_warroom_info_mode.py`, `frontend/e2e/warroom-info-mode.spec.ts`, user 11-03): turn it on in
+  war room settings; the TV menu has 8 topics (no anomalies, collection, availability, AI audit) and their API returns 404; no page shows
+  anomaly / offline / alert / WARNING / failed / expired words or red; overview has no priority list, services shows only the certificate count,
+  statistics only the online row, assets no coverage or change assessment, relations no pending; AI intelligence is a single current-state panel
+  and a model reply with problem words is rewritten; the settings playlist marks the 4 topics and numbers the rest like the TV; turning it off
+  restores everything; alerts and notifications still fire
+ (`tests/test_free_skips_unmanaged.py`, user 11-02): in a subnet whose grid shows "unmanaged" cells, next
+  free, IP request approval, the AI find_free_ip(s) and phpIPAM `first_free` never return those addresses; the AI result lists them in
+  skipped_in_use; a sighting older than 7 days no longer blocks the address
+ (`tests/test_device_relations.py`, `frontend/e2e/relation-chain-ips.spec.ts`, customer 11-02): a device with an OS
   address and an iDRAC on another subnet shows "1 more IP"; clicking lists both with host name and subnet (not neighbours like .214), picking one opens
   that IP; a device with one IP opens it directly; a user who cannot see the management subnet sees only the visible IP and no "more"
  (`tests/test_maintenance.py`, `frontend/e2e/maintenance.spec.ts`): on a device page press "Maintenance" > 1 hour;

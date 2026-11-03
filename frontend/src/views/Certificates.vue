@@ -994,7 +994,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       </n-tab-pane>
       <!-- 推送到設備（0227）：伺服器主動把憑證推到防火牆，不用裝代理 -->
       <n-tab-pane name="push" display-directive="show:lazy">
-        <template #tab><n-icon :component="FirewallIcon" style="margin-right:5px" />{{ t('certpush.tab') }}</template>
+        <template #tab><n-icon :component="FirewallIcon" style="margin-right:5px" />{{ t('certpush.tab') }}<n-tag size="small" type="warning" :bordered="false" style="margin-left:6px" data-testid="certpush-beta">Beta</n-tag></template>
         <CertPushTargets :cert-options="certOptions" />
       </n-tab-pane>
     </n-tabs>

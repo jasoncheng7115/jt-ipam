@@ -21,6 +21,8 @@ export interface WarroomConfig {
   group_by: "location" | "section" | "customer";
   language: string;
   reduce_motion: boolean;
+  /** 資訊展示模式（11-03）：只呈現現況與數量，不顯示告警、異常、離線與問題 */
+  info_mode?: boolean;
   /** 換頁過場：slide／fade／zoom／rise／wipe／flip */
   transition?: string;
   /** 大數字字體（warroomFonts.ts 的鍵） */
@@ -150,6 +152,8 @@ export interface WarroomSettings {
   capacity_crit: number;
   language: string;
   reduce_motion: boolean;
+  /** 資訊展示模式（11-03） */
+  info_mode: boolean;
   /** 換頁過場：slide／fade／zoom／rise／wipe／flip */
   transition?: string;
   /** 大數字字體（warroomFonts.ts 的鍵） */

@@ -80,6 +80,7 @@ const verifyOn = computed({
 async function save() {
   saving.value = true;
   const opts = { ...f.value.options };
+  if (!opts.commit_admin) delete opts.commit_admin;
   if (opts.verify !== false) delete opts.verify;
   const body: CertPushTargetIn = {
     name: f.value.name.trim(), certificate_id: f.value.certificate_id, api_url: f.value.api_url.trim(),
@@ -175,7 +176,7 @@ async function remove(r: CertPushTarget) {
 }
 
 const STATUS_TYPE: Record<string, "success" | "warning" | "error" | "default"> = {
-  ok: "success", unverified: "warning", error: "error", rolled_back: "error",
+  ok: "success", unverified: "warning", staged: "default", error: "error", rolled_back: "error",
 };
 function stepsList(r: CertPushTarget) {
   return h("div", { style: "max-width:420px;font-size:12.5px;line-height:1.7", "data-testid": "certpush-steps" },
@@ -296,6 +297,11 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
             <n-input v-model:value="f.options.profile" placeholder="GP-Portal-Profile" />
           </n-form-item>
           <n-form-item :label="t('certpush.pa_commit')"><n-switch v-model:value="f.options.commit" /></n-form-item>
+          <div class="cp-hint">{{ f.options.commit === false ? t("certpush.pa_commit_off_hint") : t("certpush.pa_commit_hint") }}</div>
+          <n-form-item v-if="f.options.commit !== false" :label="t('certpush.pa_commit_admin')">
+            <n-input v-model:value="f.options.commit_admin" :placeholder="t('certpush.pa_commit_admin_ph')"
+                     data-testid="certpush-pa-commit-admin" />
+          </n-form-item>
         </template>
         <template v-else>
           <n-form-item :label="t('certpush.pf_webgui')"><n-switch v-model:value="f.options.bind_webgui" /></n-form-item>
@@ -315,9 +321,14 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
 
         <n-form-item :label="t('certpush.verify')"><n-switch v-model:value="verifyOn" /></n-form-item>
         <n-form-item v-if="verifyOn" :label="t('certpush.verify_endpoint')">
-          <n-input v-model:value="f.verify_endpoint" :placeholder="t('certpush.verify_endpoint_ph')" />
+          <n-input v-model:value="f.verify_endpoint"
+                   :placeholder="t(f.kind === 'paloalto' || f.kind === 'opnsense' ? 'certpush.verify_endpoint_ph_explicit' : 'certpush.verify_endpoint_ph')" />
         </n-form-item>
+        <!-- Palo Alto、OPNsense：換的憑證可能不是管理介面在用的，沒填確認位址就不確認、不換回（11-03） -->
+        <div v-if="verifyOn && (f.kind === 'paloalto' || f.kind === 'opnsense')" class="cp-hint" data-testid="cp-verify-explicit-hint">
+          {{ t("certpush.verify_explicit_hint") }}</div>
         <n-form-item :label="t('certpush.auto_push')"><n-switch v-model:value="f.auto_push" /></n-form-item>
+        <div class="cp-hint" data-testid="cp-auto-push-hint">{{ t("certpush.auto_push_hint") }}</div>
         <n-form-item :label="t('certpush.enabled')"><n-switch v-model:value="f.enabled" /></n-form-item>
         <div class="cp-hint"><n-icon :component="InfoIcon" /> {{ t("certpush.verify_hint") }}</div>
       </n-form>

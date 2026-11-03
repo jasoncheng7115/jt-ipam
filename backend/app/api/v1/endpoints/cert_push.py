@@ -29,7 +29,7 @@ router = APIRouter(prefix="/cert-push-targets", tags=["certificates"], dependenc
 _OPTION_KEYS: dict[str, set[str]] = {
     "fortigate": {"bind", "vdom", "verify"},
     "opnsense": {"cert_uuid", "restart_webgui", "verify"},
-    "paloalto": {"profile", "commit", "verify"},
+    "paloalto": {"profile", "commit", "commit_admin", "verify"},
     "pfsense": {"bind_webgui", "verify"},
 }
 
@@ -72,6 +72,11 @@ def _check(kind: str, api_url: str, options: dict[str, Any]) -> None:
     extra = set(options) - _OPTION_KEYS[kind]
     if extra:
         raise HTTPException(422, detail=ui_detail("certpush_bad_option", "unknown option", option=sorted(extra)[0]))
+    if kind == "paloalto" and options.get("commit_admin"):
+        # partial commit 的管理員帳號：放進 XML 指令（會 escape），仍只收帳號該有的字元
+        import re
+        if not re.fullmatch(r"[A-Za-z0-9._@-]{1,63}", str(options["commit_admin"])):
+            raise HTTPException(422, detail=ui_detail("certpush_bad_option", "unknown option", option="commit_admin"))
     if kind == "fortigate":
         bind = options.get("bind") or []
         if not isinstance(bind, list) or set(bind) - {"admin", "sslvpn"}:

@@ -23,12 +23,15 @@ import { categoryLabel, eventText, hmOf, itemText } from "./intelText";
 const props = defineProps<{
   data?: PageData;
   /** 設定頁的預覽：固定的示範資料，不輪詢、不呼叫模型 */
-  preview?: { state: IntelState; events: IntelEvents; display: IntelDisplay };
+  preview?: { state: IntelState; events: IntelEvents; display: IntelDisplay; info?: boolean };
 }>();
 const { t, te } = useI18n();
 const injectedCfg = inject<Ref<IntelDisplay | undefined>>("wrIntel", ref(undefined));
 const paused = inject<Ref<boolean>>("wrPaused", ref(false));
 const reduceGlobal = inject<Ref<boolean>>("wrReduceMotion", ref(false));
+/** 資訊展示模式（11-03）：只有現況播報一塊 —— 持續關注、來源狀態、WARNING 都是問題，不畫；頁首也不寫失敗、過期這類狀態 */
+const infoGlobal = inject<Ref<boolean>>("wrInfoMode", ref(false));
+const info = computed(() => props.preview?.info ?? infoGlobal.value);
 /** 告訴戰情室：播完一輪（輪播時才換下一個主題）或沒有東西可播（改照停留秒數）；設定頁預覽沒有這個 */
 const signal = inject<(kind: "done" | "empty" | "refresh") => void>("wrIntelSignal", () => {});
 
@@ -226,7 +229,8 @@ const WARN_ROTATE_MS = 12000;
 const warn = reactive({ i: 0, recoveredUntil: 0 });
 const openEvents = computed<IntelEvent[]>(() => (events.value?.items ?? []).filter((e) => e.state !== "resolved"));
 const shownEvent = computed(() => openEvents.value.length ? openEvents.value[warn.i % openEvents.value.length] : null);
-const warnActive = computed(() => cfg.value.warning_enabled && (openEvents.value.length > 0 || warn.recoveredUntil > now.value));
+const warnActive = computed(() => !info.value && cfg.value.warning_enabled
+  && (openEvents.value.length > 0 || warn.recoveredUntil > now.value));
 const breathing = computed(() => cfg.value.warning_breathe !== false && !reduce.value && openEvents.value.length > 0);
 /** 局部區塊內容換了（輪到下一項、數量或狀態變了）就重播一次掃描進場 */
 const warnKey = computed(() => shownEvent.value
@@ -268,6 +272,12 @@ let srcTimer: ReturnType<typeof setInterval> | null = null;
 const flag = computed<{ text: string; tone: "warn" | "muted" } | null>(() => {
   const s = st.value;
   if (paused.value) return { text: t("warroom.intel.text_paused"), tone: "warn" };
+  if (info.value) {               // 只寫中性的狀態（載入中、產生中、還沒有內容）
+    if (!s) return { text: t("warroom.intel.st_loading"), tone: "muted" };
+    if (s.generating && !batch.value) return { text: t("warroom.intel.st_generating"), tone: "muted" };
+    if (!batch.value) return { text: t("warroom.intel.st_none"), tone: "muted" };
+    return null;
+  }
   if (!s) return { text: t("warroom.intel.st_loading"), tone: "muted" };
   if (s.generating && (!batch.value || s.stale)) return { text: t("warroom.intel.st_generating"), tone: "muted" };
   if (s.last_error_code && batch.value) return { text: t("warroom.intel.st_failed", { at: hmOf(s.last_attempt_at) }), tone: "warn" };
@@ -321,10 +331,10 @@ watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s
 </script>
 
 <template>
-  <div class="ai" :class="[`ai--${cfg.layout}`, `fx-${cfg.effects}`, `sl-${cfg.scanlines}`, `nz-${cfg.noise}`,
+  <div class="ai" :class="[`ai--${info ? 'info' : cfg.layout}`, `fx-${cfg.effects}`, `sl-${cfg.scanlines}`, `nz-${cfg.noise}`,
                           { reduce, 'no-cursor': !cfg.cursor }]" :style="vars" data-testid="wr-intel">
     <!-- 專注模式：標題下預留一列給 WARNING（沒有事件時顯示低對比的摘要，不會讓段落跳動） -->
-    <div v-if="cfg.layout === 'focus'" class="ai-strip" :class="{ warn: warnActive, breathe: breathing }"
+    <div v-if="cfg.layout === 'focus' && !info" class="ai-strip" :class="{ warn: warnActive, breathe: breathing }"
          data-testid="wr-intel-strip">
       <div :key="warnKey" class="ai-swap">
         <i class="ai-scan" aria-hidden="true" />
@@ -350,8 +360,8 @@ watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s
     <div class="ai-body">
       <!-- CH-01 現況播報：標題列右側是播報序號、摘要時間、下次更新，不正常時多一個狀態 -->
       <section class="ai-panel ai-main" data-testid="wr-intel-main">
-        <header v-if="cfg.layout === 'three_panel' || flag" class="ai-h">
-          <template v-if="cfg.layout === 'three_panel'">
+        <header v-if="(cfg.layout === 'three_panel' && !info) || flag" class="ai-h">
+          <template v-if="cfg.layout === 'three_panel' && !info">
             <span class="ai-ht">{{ t("warroom.intel.ch_main") }}</span>
           </template>
           <!-- 只有不正常時才寫狀態（產生失敗、過期、系統摘要、暫停）；摘要時間在每一則左邊、序號與下次更新對看板沒有用（使用者 10-26） -->
@@ -372,7 +382,7 @@ watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s
         </div>
       </section>
 
-      <div v-if="cfg.layout === 'three_panel'" class="ai-side">
+      <div v-if="cfg.layout === 'three_panel' && !info" class="ai-side">
         <!-- CH-02 持續關注；有重大事件時這一塊變成局部 WARNING（大小不變），持續呼吸燈 -->
         <section class="ai-panel ai-watch" :class="{ warn: warnActive, breathe: breathing }" data-testid="wr-intel-watch">
           <div :key="warnKey" class="ai-swap ai-swap--col">
@@ -431,15 +441,16 @@ watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s
   padding: 18px 22px; box-sizing: border-box; overflow: hidden; font-size: 30px; line-height: 1.55; }
 .ai-body { flex: 1; min-height: 0; display: grid; gap: 24px; position: relative; z-index: 1; }
 .ai--three_panel .ai-body { grid-template-columns: 68fr 32fr; }
-.ai--focus .ai-body { grid-template-columns: 1fr; }
+.ai--focus .ai-body, .ai--info .ai-body { grid-template-columns: 1fr; }
 .ai-panel { position: relative; border: 1px solid var(--ai-line); padding: 14px 20px; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; }
 /* 角標：細線、平面（不照抄設計稿的漸層或粗框） */
 .ai-panel::before, .ai-panel::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--ai-accent); }
 .ai-panel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
 .ai-panel::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
-.ai--focus .ai-panel { border: 0; padding: 0 40px; }
-.ai--focus .ai-panel::before, .ai--focus .ai-panel::after { display: none; }
+.ai--focus .ai-panel, .ai--info .ai-panel { border: 0; padding: 0 40px; }
+.ai--focus .ai-panel::before, .ai--focus .ai-panel::after,
+.ai--info .ai-panel::before, .ai--info .ai-panel::after { display: none; }
 .ai-h { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px; margin-bottom: 12px;
   border-bottom: 1px solid var(--ai-line); font-size: 24px; }
 .ai-ht { color: var(--ai-sec); font-weight: 700; }
@@ -465,9 +476,9 @@ watch(() => props.preview?.state, (s) => { if (s?.batch) { st.value = s; adopt(s
 .ai-tx { overflow-wrap: anywhere; }
 .ai-atom { white-space: nowrap; font-family: var(--wr-num); }
 
-.ai--focus .ai-tx { font-size: 40px; line-height: 1.5; }
-.ai--focus .ai-p { grid-template-columns: 220px minmax(0, 1fr); background: none; box-shadow: none; }
-.ai--focus .ai-p.now { box-shadow: inset 3px 0 0 var(--ai-accent); background: none; }
+.ai--focus .ai-tx, .ai--info .ai-tx { font-size: 40px; line-height: 1.5; }
+.ai--focus .ai-p, .ai--info .ai-p { grid-template-columns: 220px minmax(0, 1fr); background: none; box-shadow: none; }
+.ai--focus .ai-p.now, .ai--info .ai-p.now { box-shadow: inset 3px 0 0 var(--ai-accent); background: none; }
 /* 游標：打字時常亮，停下時 600ms 亮暗；只有目前插入點一個 */
 .ai-cur { display: inline-block; width: .55em; height: 1.05em; margin-left: 4px; vertical-align: -0.15em; background: var(--ai-accent);
   animation: ai-blink 1.2s steps(1) infinite; }

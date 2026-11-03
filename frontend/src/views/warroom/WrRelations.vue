@@ -183,7 +183,7 @@ const SRC_ROWS = 2;
         <div class="rl-legend__r">
           <span><svg width="56" height="10"><line x1="0" y1="5" x2="56" y2="5" class="ln-solid" /></svg>{{ t("warroom.rl_lg_direct") }}</span>
           <span><svg width="56" height="10"><line x1="0" y1="5" x2="56" y2="5" class="ln-dashed" /></svg>{{ t("warroom.rl_lg_derived") }}</span>
-          <span><svg width="56" height="10"><line x1="0" y1="5" x2="56" y2="5" class="ln-pending" /></svg>{{ t("warroom.rl_lg_pending") }}</span>
+          <span v-if="!data.info_mode"><svg width="56" height="10"><line x1="0" y1="5" x2="56" y2="5" class="ln-pending" /></svg>{{ t("warroom.rl_lg_pending") }}</span>
         </div>
         <div class="rl-legend__r rl-legend__notes">
           <span><WrIco :icon="ElapsedIcon" />{{ t("warroom.rl_lg_time") }}</span>
@@ -194,8 +194,9 @@ const SRC_ROWS = 2;
 
     <!-- 右欄：關聯待補、焦點來源 -->
     <aside class="rl-side">
-      <div class="wr-h2"><WrIco :icon="LinkIcon" />{{ t("warroom.rl_pending_title") }}</div>
-      <div class="rl-pend" data-testid="wr-rl-pending">
+      <!-- 資訊展示模式（11-03）：關聯待補是問題清單，不畫 -->
+      <div v-if="pending.state !== 'hidden'" class="wr-h2"><WrIco :icon="LinkIcon" />{{ t("warroom.rl_pending_title") }}</div>
+      <div v-if="pending.state !== 'hidden'" class="rl-pend" data-testid="wr-rl-pending">
         <div v-for="p in PENDING" :key="p.key" class="rl-pend__i">
           <div v-if="pending.state === 'ok' && typeof pending[p.key] === 'number'" class="wr-big rl-pend__v"
                :class="(pending[p.key] as number) > 0 ? `tone-${p.tone}` : 'tone-muted'">{{ pad2(pending[p.key] as number) }}</div>

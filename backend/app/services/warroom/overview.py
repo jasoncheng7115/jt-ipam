@@ -184,6 +184,7 @@ async def build(session: AsyncSession, *, user: Any, cfg: dict[str, Any], page: 
             "registered_ips": sum(f.used for f in facts),
             "open_anomalies": open_total,                  # None＝無權限（畫面不顯示數字）
             "capacity_alerts": sum(1 for f in facts if f.pct is not None and f.pct >= warn),
+            "subnets": len(facts),                          # 資訊展示模式的標題列用（info_mode）
         },
         "groups": shown, "total": len(out_groups),
         "priority": await _priority(session, now, scope_ids) if admin else section("forbidden"),

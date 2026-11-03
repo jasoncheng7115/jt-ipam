@@ -34,6 +34,15 @@ export function itemText(it: IntelItem, t: T, te: TE): string {
       return p.open_anomalies == null
         ? t(k("overview_limited"), { at: hmOf(p.at), ips: n(p.registered_ips ?? 0) })
         : t(k("overview"), { at: hmOf(p.at), ips: n(p.registered_ips ?? 0), open: n(p.open_anomalies) });
+    // 資訊展示模式（11-03）：只陳述現況與數量
+    case "overview_info":
+      return t(k("overview_info"), { at: hmOf(p.at), ips: n(p.registered_ips ?? 0), subnets: n(p.subnets ?? 0) });
+    case "capacity_info":
+      return t(k("capacity_info"), { label: p.top_label ?? "—", pct: Math.round(p.top_pct ?? 0) });
+    case "dns_info":
+      return t(k("dns_info"), { n: n(p.groups ?? 0) });
+    case "certs_info":
+      return t(k("certs_info"), { n: n(p.total ?? 0) });
     case "baseline":
       return t(k("baseline"), { open: p.open });
     case "events_none":

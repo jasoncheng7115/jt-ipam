@@ -51,7 +51,7 @@
       <!-- M2：一起維護／停機的其他裝置（同一個情境一次算，不是把單台結果相加）與節點停機的情境模式 -->
       <n-form-item v-if="isM2" :label="t('change_impact.f_also_down')">
         <n-select v-model:value="alsoDown" multiple filterable remote clearable :loading="alsoLoading"
-                  :options="alsoOptions" :max-tag-count="6"
+                  :options="alsoOptions" max-tag-count="responsive"
                   :placeholder="t('change_impact.f_also_down_ph')" data-testid="cip-wiz-also-down"
                   @search="searchAlso" />
       </n-form-item>

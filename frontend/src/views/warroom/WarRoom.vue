@@ -73,6 +73,9 @@ const reduceMotion = computed(() => !!cfg.value?.reduce_motion
 provide("wrReduceMotion", reduceMotion);
 provide("wrPageDir", dir);                       // 同主題換資料頁：各主題自己的分頁區塊用（paged.ts）
 provide("wrPaused", paused);
+/** 資訊展示模式（11-03）：只呈現現況與數量。問題資料後端已經拿掉，這裡收掉剩下的警示色與頁首的逾時紅字 */
+const infoMode = computed(() => !!cfg.value?.info_mode);
+provide("wrInfoMode", infoMode);
 // 12 AI 情報的顯示設定（版面、配色、打字速度…）
 provide("wrIntel", computed(() => cfg.value?.intel));                     // 主題內自己輪播的區塊（AI 巡檢的焦點）暫停時也要停
 
@@ -443,7 +446,36 @@ const METRICS: Record<string, MetricDef[]> = {
     { key: "insufficient", label: "warroom.ai_m_insufficient", tone: "ink" },
   ],
 };
-const metrics = computed(() => (data.value ? METRICS[data.value.key] ?? [] : []));
+/** 資訊展示模式的標題列：問題類數字換成中性的總量（後端也只給這些） */
+const METRICS_INFO: Record<string, MetricDef[]> = {
+  overview: [
+    { key: "registered_ips", label: "warroom.m_registered_ips", tone: "accent" },
+    { key: "subnets", label: "warroom.st_m_subnets", tone: "lilac" },
+  ],
+  capacity: [
+    { key: "registered_ips", label: "warroom.m_registered_ips", tone: "accent" },
+    { key: "subnets", label: "warroom.st_m_subnets", tone: "lilac" },
+    { key: "pools", label: "warroom.info_m_pools", tone: "ink" },
+  ],
+  services: [
+    { key: "dns_groups", label: "warroom.info_m_dns_groups", tone: "accent" },
+    { key: "pools", label: "warroom.info_m_pools", tone: "lilac" },
+    { key: "certs", label: "warroom.info_m_certs", tone: "ink" },
+  ],
+  assets: [
+    { key: "hosts", label: "warroom.m_hosts", tone: "ink" },
+    { key: "vms", label: "warroom.m_vms", tone: "accent" },
+  ],
+  ai_intel: [
+    { key: "registered_ips", label: "warroom.m_registered_ips", tone: "accent" },
+    { key: "subnets", label: "warroom.st_m_subnets", tone: "lilac" },
+  ],
+};
+const metrics = computed(() => {
+  if (!data.value) return [];
+  const key = data.value.key;
+  return (infoMode.value ? METRICS_INFO[key] : undefined) ?? METRICS[key] ?? [];
+});
 /** 長標題（例如英文的 Anomalies and exposure）改成兩行、字小一級，讓三個大指標仍有位置；不再縮更小 */
 const titleLong = computed(() => {
   if (!data.value) return false;
@@ -478,7 +510,8 @@ const legend = computed<[string, string][]>(() => {
 
 <template>
   <div class="wr-viewport" :class="{ 'wr-viewport--op': operator }">
-    <div class="wr" :style="{ transform: `translate(-50%, -50%) scale(${scale})`, ...bigFontStyle }" :class="{ rm: reduceMotion }">
+    <div class="wr" :style="{ transform: `translate(-50%, -50%) scale(${scale})`, ...bigFontStyle }"
+         :class="{ rm: reduceMotion, 'wr--info': infoMode }" :data-info-mode="infoMode ? '1' : '0'">
       <header class="wr-top">
         <div class="wr-brand"><b>jt-ipam</b><span class="wr-brand__sep" />{{ t("warroom.brand_sub") }}</div>
         <div class="wr-top__r">
@@ -486,7 +519,11 @@ const legend = computed<[string, string][]>(() => {
           <span class="wr-clock">{{ hm(now) }}</span>
           <template v-if="data"><span class="wr-vsep" />
             <!-- 資料太久沒更新（連不上或伺服器回的是舊資料）：紅字＋警示圖示（10-23 使用者要求） -->
-            <span :class="{ 'wr-off': dataStale }" data-testid="wr-data-at" :data-stale="dataStale ? '1' : '0'">
+            <!-- 資訊展示模式：只寫資料時間，不用紅字、警示圖示與「連不上」 -->
+            <span v-if="infoMode" data-testid="wr-data-at" data-stale="0">
+              {{ t("warroom.data_at", { time: hm(offlineSince ?? data.data_at) }) }}
+            </span>
+            <span v-else :class="{ 'wr-off': dataStale }" data-testid="wr-data-at" :data-stale="dataStale ? '1' : '0'">
               <WrIco v-if="dataStale" :icon="WarnIcon" />
               {{ offlineSince ? t("warroom.offline_at", { time: hm(offlineSince) }) : t("warroom.data_at", { time: hm(data.data_at) }) }}
             </span>
@@ -591,6 +628,8 @@ const legend = computed<[string, string][]>(() => {
   padding: 0 48px; box-sizing: border-box; overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
+/* 資訊展示模式：表示問題的珊瑚紅收成一般的灰（後端已經不給問題資料，這是剩下的保險） */
+.wr--info { --wr-coral: var(--wr-muted); }
 .wr-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--wr-line);
   font-size: 22px; }
 .wr-brand { display: flex; align-items: center; gap: 18px; letter-spacing: .08em; text-transform: uppercase;

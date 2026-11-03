@@ -36,7 +36,7 @@ const CHANGE = [
 </script>
 
 <template>
-  <div class="as">
+  <div class="as" :class="{ 'as--info': data.info_mode }">
     <Transition :name="pageTrans" mode="out-in"><div :key="data.page" class="as-top">
       <div v-if="clustersState === 'forbidden'" class="wr-empty">{{ t("warroom.forbidden") }}</div>
       <div v-else-if="!clusters.length" class="wr-empty">{{ t("warroom.no_clusters") }}</div>
@@ -67,7 +67,8 @@ const CHANGE = [
     </div>
     </Transition>
 
-    <div class="as-bottom">
+    <!-- 資訊展示模式（11-03）：監控涵蓋（哪些 VM 沒被監控）與變更評估（受阻、待覆核）都是問題，整列不畫 -->
+    <div v-if="!data.info_mode" class="as-bottom">
       <section class="as-q" data-testid="wr-coverage">
         <header class="as-h">
           <div class="wr-h2"><WrIco :icon="SECTION_ICONS.coverage" />{{ t("warroom.monitor_coverage") }}</div>
@@ -111,6 +112,8 @@ const CHANGE = [
 
 <style scoped>
 .as { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+.as--info { grid-template-rows: minmax(0, 1fr); }
+.as--info .as-top { border-bottom: 0; }
 .as-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--wr-line); min-height: 0; }
 .as-cl { padding: 6px 40px 18px 0; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .as-cl:nth-child(2) { padding-left: 40px; padding-right: 0; border-left: 1px solid var(--wr-line); }

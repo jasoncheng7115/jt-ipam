@@ -24,13 +24,15 @@ interface DnsSec { state: string; index?: number; total?: number;
   group?: { name: string; status: string | null; members: number; more_sources: number; diffs: number; confirmed: number; sources: Source[] } }
 interface PoolSec { state: string; index?: number; total?: number;
   item?: { label: string; ident: string; cidr: string | null; server?: string | null; capacity: number; used: number; free: number; pct: number | null; level: string; unit: number; cells: string[] } }
-interface CertSec { state: string; index?: number; total?: number; soon?: number; buckets?: Record<string, number>;
+interface CertSec { state: string; index?: number; total?: number; soon?: number; all?: number; buckets?: Record<string, number>;
   item?: { name: string; days: number; not_after: string } }
 
 const dns = computed(() => props.data.dns as DnsSec);
 const pool = computed(() => props.data.pool as PoolSec);
 const certs = computed(() => props.data.certs as CertSec);
-const SRC_STATES = ["ok", "partial", "pending", "missing"] as const;
+/** 資訊展示模式（11-03）：後端已經不分一致與否，只剩總數；憑證只給張數 */
+const info = computed(() => !!props.data.info_mode);
+const SRC_STATES = computed(() => (info.value ? ["ok"] : ["ok", "partial", "pending", "missing"]) as readonly string[]);
 const BUCKETS = [
   { key: "expired", tone: "coral" }, { key: "d7", tone: "coral" }, { key: "d14", tone: "lilac" }, { key: "d30", tone: "ink" },
 ] as const;
@@ -68,7 +70,7 @@ function bucketCells(n: number): string[] {
       <header class="svc-h">
         <div class="wr-h2"><WrIco :icon="SECTION_ICONS.dns" />{{ t("warroom.dns_group") }}</div>
         <div class="svc-legend">
-          <span v-for="k in SRC_STATES" :key="k"><span class="wr-swatch wr-swatch--sm" :class="`s-${k}`" />{{ t(`warroom.dnsrc_${k}`) }}</span>
+          <span v-for="k in SRC_STATES" :key="k"><span class="wr-swatch wr-swatch--sm" :class="`s-${k}`" />{{ info ? t("warroom.info_records") : t(`warroom.dnsrc_${k}`) }}</span>
         </div>
         <span class="wr-index">{{ idx(dns) }}</span>
       </header>
@@ -77,7 +79,7 @@ function bucketCells(n: number): string[] {
       <template v-else>
         <div class="svc-dns__g">
           <WrName :text="dns.group.name" class="svc-name" />
-          <span class="wr-tag" :class="`dns-${dns.group.status ?? 'none'}`">{{ t(`warroom.dns_status_${dns.group.status ?? 'none'}`) }}</span>
+          <span v-if="!info" class="wr-tag" :class="`dns-${dns.group.status ?? 'none'}`">{{ t(`warroom.dns_status_${dns.group.status ?? 'none'}`) }}</span>
         </div>
         <div class="svc-srcs" :style="{ gridTemplateColumns: `repeat(${Math.max(dns.group.sources.length, 1)}, minmax(0, 1fr))` }">
           <div v-for="s in dns.group.sources" :key="s.id" class="svc-src" data-testid="wr-dns-source">
@@ -111,10 +113,10 @@ function bucketCells(n: number): string[] {
         </div>
         <div class="svc-pool__pct">
           <div class="svc-pool__l">{{ t("warroom.lease_usage") }}</div>
-          <div class="wr-big svc-pool__v" :class="pool.item.level === 'crit' ? 'tone-coral' : 'tone-accent'">
+          <div class="wr-big svc-pool__v" :class="pool.item.level === 'crit' && !info ? 'tone-coral' : 'tone-accent'">
             {{ pctText(pool.item.pct) }}<span class="svc-pool__pc">%</span>
           </div>
-          <span v-if="pool.item.level !== 'ok'" class="wr-tag" :class="`lv-${pool.item.level}`">{{ t(`warroom.level_${pool.item.level}`) }}</span>
+          <span v-if="pool.item.level && pool.item.level !== 'ok'" class="wr-tag" :class="`lv-${pool.item.level}`">{{ t(`warroom.level_${pool.item.level}`) }}</span>
         </div>
         <WrMatrix :cells="pool.item.cells" :cols="20" :size="30" :gap="6" />
         <div class="svc-pool__nums">
@@ -127,8 +129,18 @@ function bucketCells(n: number): string[] {
     </section>
     </Transition>
 
+    <!-- 資訊展示模式：只寫憑證張數（不寫到期日與剩餘天數），佔滿下面整列 -->
+    <section v-if="info" class="svc-q svc-cert svc-cert--count" data-testid="wr-svc-cert-count">
+      <header class="svc-h"><div class="wr-h2"><WrIco :icon="SECTION_ICONS.cert" />{{ t("warroom.certificate") }}</div></header>
+      <div v-if="certs.state === 'forbidden'" class="wr-muted">{{ t("warroom.forbidden") }}</div>
+      <div v-else class="svc-cert__row">
+        <div class="svc-k">{{ t("warroom.info_certs_managed") }}</div>
+        <div class="wr-big svc-cert__v tone-accent">{{ (certs.total ?? 0).toLocaleString() }}<span class="svc-cert__u">{{ t("warroom.info_unit_certs") }}</span></div>
+      </div>
+    </section>
+
     <!-- 最急的憑證 -->
-    <Transition :name="pageTrans" mode="out-in"><section :key="data.page" class="svc-q svc-cert" data-testid="wr-svc-cert">
+    <Transition v-if="!info" :name="pageTrans" mode="out-in"><section :key="data.page" class="svc-q svc-cert" data-testid="wr-svc-cert">
       <header class="svc-h">
         <div class="wr-h2"><WrIco :icon="SECTION_ICONS.cert" />{{ t("warroom.certificate") }}</div>
         <span class="wr-index">{{ idx(certs) }}</span>
@@ -149,7 +161,7 @@ function bucketCells(n: number): string[] {
     </Transition>
 
     <!-- 到期區間 -->
-    <section class="svc-q svc-buckets" data-testid="wr-svc-buckets">
+    <section v-if="!info" class="svc-q svc-buckets" data-testid="wr-svc-buckets">
       <header class="svc-h"><div class="wr-h2"><WrIco :icon="SECTION_ICONS.certExpiry" />{{ t("warroom.cert_expiry") }}</div></header>
       <div v-if="certs.state === 'forbidden'" class="wr-muted">{{ t("warroom.forbidden") }}</div>
       <div v-else-if="!certs.buckets" class="wr-muted">{{ t("warroom.no_certs") }}</div>
@@ -173,6 +185,7 @@ function bucketCells(n: number): string[] {
 <style scoped>
 /* 列高固定為可用高度（minmax(0, …)）：某一區內容多時曾把整列撐高，另一區的下半部被推出畫面（10-22） */
 .svc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr); height: 100%; }
+.svc-cert--count { grid-column: 1 / -1; }
 .svc-q { padding: 10px 40px 14px 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0;
   border-bottom: 1px solid var(--wr-line); overflow: hidden; }
 .svc-q:nth-child(2n) { padding-left: 40px; padding-right: 0; border-left: 1px solid var(--wr-line); }

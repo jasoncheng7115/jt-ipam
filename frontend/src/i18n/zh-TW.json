@@ -4131,7 +4131,10 @@
     "maintenance_time_required": "請填開始與結束時間",
     "maintenance_too_long": "一次維護最長 {hours} 小時",
     "maintenance_weekly_incomplete": "每週例行要選星期、時段與到期日",
-    "maintenance_weekly_too_far": "每週例行的到期日最多一年"
+    "maintenance_weekly_too_far": "每週例行的到期日最多一年",
+    "certpush_busy": "這個目標正在推送中，稍後再試",
+    "certpush_paloalto_pending_changes": "防火牆上有還沒提交的變更，commit 會一起套用，所以沒有動；請先處理那些變更",
+    "certpush_rollback_unconfirmed": "已嘗試換回原本的憑證，但設備出示的不是原本那張，請手動檢查設備"
   },
   "adguard_admin": {
     "scope_subnets": "限定子網路範圍",
@@ -8839,7 +8842,11 @@
         "integrity_ex_not_configured": "{name} 從未同步",
         "integrity_hidden": "資料來源的狀態只有管理員看得到。",
         "event": "重大事件：{category}，{subject}（{at}），尚未解除。",
-        "event_unknown": "重大事件：{category}，{subject}（{at}），狀態待確認，異常偵測超過排程時間還沒更新。"
+        "event_unknown": "重大事件：{category}，{subject}（{at}），狀態待確認，異常偵測超過排程時間還沒更新。",
+        "overview_info": "截至 {at}，共登記 {ips} 個 IP、{subnets} 個子網路。",
+        "capacity_info": "子網路使用率最高的是 {label}（{pct}%）。",
+        "dns_info": "DNS 比對群組共 {n} 組。",
+        "certs_info": "目前管理 {n} 張憑證。"
       }
     },
     "topic_preparing": "這個主題的資料準備中",
@@ -9299,7 +9306,13 @@
     "scope_part_more": "部分範圍：{names} 等 {n} 項",
     "err_hint_disabled": "請到「管理 → 戰情室設定」打開「啟用電視顯示權杖」、選擇要代表的帳號，再按儲存",
     "no_access_short": "無權限",
-    "endpoints": "接的終端"
+    "endpoints": "接的終端",
+    "info_records": "紀錄",
+    "info_certs_managed": "管理中的憑證",
+    "info_unit_certs": "張",
+    "info_m_pools": "DHCP 集區",
+    "info_m_dns_groups": "DNS 比對群組",
+    "info_m_certs": "憑證"
   },
   "warroom_settings": {
     "open": "開啟戰情室",
@@ -9459,7 +9472,11 @@
     "display_saved_off": "目前未啟用",
     "unsaved": "尚未儲存",
     "principal_required": "要先選擇帳號：電視看到的是這個帳號的可見範圍。選好再按儲存才會生效。",
-    "keys_clicker": "簡報筆的上一頁/下一頁送的是 PgUp/PgDn，可以直接用來換資料頁。"
+    "keys_clicker": "簡報筆的上一頁/下一頁送的是 PgUp/PgDn，可以直接用來換資料頁。",
+    "info_mode": "資訊展示模式",
+    "info_mode_hint": "開啟後戰情室只呈現現況與數量，不顯示告警、異常、離線與問題；告警與通知照常運作。異常與曝露、採集健康、可用性、AI 巡檢不會播放。",
+    "info_mode_hidden": "資訊展示模式下不播放",
+    "info_mode_intel_note": "目前是資訊展示模式：AI 情報只播報現況與數量，不會出現 WARNING、持續關注與來源狀態。"
   },
   "certpush": {
     "intro": "不用在防火牆上裝代理：jt-ipam 用設備的管理 API 把憑證推過去並換上，推完會連過去確認對方真的換成新憑證，確認不到就自動換回原本的。請另外建一組只給換憑證用的帳號（現有的整合帳號多半是唯讀）。Beta：尚未在每一家的真機上驗證過。",
@@ -9524,7 +9541,7 @@
     "verify": "推完連過去確認",
     "verify_endpoint": "確認位址（主機:埠）",
     "verify_endpoint_ph": "留空＝API 網址的主機與埠；SSL VPN 可填 vpn.example.net:10443",
-    "verify_hint": "確認規則：推之前連得到、推完卻不是新憑證，會自動換回原本的；推之前就連不到的位址（例如只開在外網的 SSL VPN）只會標「未確認」。",
+    "verify_hint": "確認規則：推之前連得到、推完卻不是新憑證，會自動換回原本的，換回後再確認一次；推之前就連不到的位址（例如只開在外網的 SSL VPN）只會標「未確認」。FortiGate 同時換管理介面與 SSL VPN 時兩個都確認（SSL VPN 用確認位址；沒填就標「未確認」）。",
     "step_load": "載入憑證",
     "step_probe_before": "推之前先連一次",
     "step_read": "讀取目前設定",
@@ -9542,7 +9559,15 @@
     "step_rollback": "換回原本的憑證",
     "step_connect": "連線",
     "step_list": "讀取設備上的憑證",
-    "tab": "推送到設備"
+    "tab": "推送到設備",
+    "auto_push_hint": "開啟後，這張憑證有新版本（上傳或續期）時，下一輪排程同步會自動推到這台設備；推送失敗隔 1 小時再試。關閉時只在按「立即推送」時才推。",
+    "status_staged": "已寫入，待 commit",
+    "pa_commit_hint": "推之前會先查有沒有別人還沒提交的變更，有就不動（commit 會連那些一起套用）。commit 失敗時候選設定會換回原本的。",
+    "pa_commit_off_hint": "只寫進候選設定，不會套用到線上；狀態是「已寫入，待 commit」，請在防火牆上自己 commit。這時不驗證、也不會換回。",
+    "pa_commit_admin": "commit 的管理員帳號",
+    "pa_commit_admin_ph": "選填：填了只 commit 這個帳號的變更（partial commit）",
+    "verify_explicit_hint": "這種設備換的憑證不一定是管理介面在用的（例如 GlobalProtect、HAProxy），所以沒填確認位址時只標「未確認」、不會自動換回。換的是管理介面的憑證，請填 API 網址的主機:埠。",
+    "verify_endpoint_ph_explicit": "例：gp.example.net:443；留空＝不確認"
   },
   "not_found": {
     "title": "找不到這個頁面",

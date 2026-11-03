@@ -30,6 +30,8 @@ test("推送到設備：新增、帳密不外露、刪除", async ({ page, reque
 
   await login(page);
   await page.goto("/certificates");
+  // 使用者 11-03：推送到設備先標示 Beta
+  await expect(page.locator(".n-tabs-tab", { hasText: "推送到設備" }).getByTestId("certpush-beta")).toHaveText("Beta");
   await page.locator(".n-tabs-tab", { hasText: "推送到設備" }).click();
   await page.getByTestId("certpush-new").click();
   await page.getByTestId("certpush-name").locator("input").fill(`${tag}-fg`);
@@ -139,4 +141,28 @@ test("pfSense 目標可以讀出設備上的憑證、標出網頁管理介面用
   await expect(list).toContainText("未使用");
   await expect(list).toContainText("已過期");
   await expect(list).toContainText("簽發者 Let's Encrypt R10");
+});
+
+test("Palo Alto 目標：commit 的說明跟著開關換、可填 partial commit 的管理員帳號（11-03 外部審查）", async ({ page }) => {
+  await login(page);
+  await page.goto("/certificates");
+  await page.locator(".n-tabs-tab", { hasText: "推送到設備" }).click();
+  await page.getByTestId("certpush-new").click();
+  const modal = page.locator(".n-modal");
+  await page.getByTestId("certpush-kind").click();
+  await page.locator(".n-base-select-option", { hasText: "Palo Alto" }).click();
+  await expect(modal).toContainText("推之前會先查有沒有別人還沒提交的變更");
+  await expect(page.getByTestId("certpush-pa-commit-admin")).toBeVisible();
+  await page.getByTestId("certpush-pa-commit-admin").locator("input").fill("jtipam-api");
+  // 沒填確認位址只標未確認、不換回（GlobalProtect 用的憑證，管理介面本來就不會換）
+  await expect(page.getByTestId("cp-verify-explicit-hint")).toContainText("不會自動換回");
+  await page.mouse.move(4, 4);
+  await modal.screenshot({ path: "test-results/certpush-pa-commit.png" });
+  // 關掉自動 commit：說明換成「只寫進候選設定、待 commit」，管理員欄位收起來
+  await modal.locator(".n-form-item", { hasText: "推完自動 commit" }).locator(".n-switch").click();
+  await expect(modal).toContainText("只寫進候選設定，不會套用到線上");
+  await expect(page.getByTestId("certpush-pa-commit-admin")).toHaveCount(0);
+  const tall = await modal.locator(".n-form-item-label").evaluateAll((els) =>
+    els.filter((e) => e.getBoundingClientRect().height > 30).map((e) => e.textContent));
+  expect(tall).toEqual([]);
 });

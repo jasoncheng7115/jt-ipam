@@ -52,7 +52,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.os_fingerprint import wazuh_os_display
@@ -148,6 +148,8 @@ class _Ctx:
     subnet: Subnet
     gread: bool
     admin: bool
+    #: 只被授權部分子網路（visible_ids 不是 None）：沒有子網路歸屬的資料要看重疊網段
+    restricted: bool = False
 
     @property
     def mac(self) -> str | None:
@@ -245,15 +247,21 @@ async def _sec_zabbix(c: _Ctx) -> list[dict[str, Any]] | None:
 
 
 async def _sec_arp(c: _Ctx) -> list[dict[str, Any]]:
-    """ARP：這個位址在網路上被哪些 MAC 用過（換過 MAC 常代表換了機器）。"""
+    """ARP：這個位址在網路上被哪些 MAC 用過（換過 MAC 常代表換了機器）。
+
+    只被授權部分子網路的帳號：只看這個子網路的列；沒有子網路歸屬的（LibreNMS）要這個子網路是唯一最細的容器 ——
+    以前依位址撈全部，重疊網段裡另一個單位同一個位址的 MAC 也給（2026-11-03 稽核；規則同 get_ip_history）。"""
     from app.models.librenms import ARPEntry
+    stmt = select(ARPEntry.mac, ARPEntry.last_seen_at).where(ARPEntry.ip == c.ip)
+    if c.restricted:
+        from app.services.unmanaged import sole_container
+        sole = await sole_container(c.session, c.ipa.subnet_id, c.ip)
+        stmt = stmt.where(or_(ARPEntry.subnet_id == c.ipa.subnet_id,
+                              and_(ARPEntry.subnet_id.is_(None), literal(sole))))
     return [
         {"mac": str(m), "last_seen_at": _dt(t)}
         for m, t in (await c.session.execute(
-            select(ARPEntry.mac, ARPEntry.last_seen_at)
-            .where(ARPEntry.ip == c.ip)
-            .order_by(ARPEntry.last_seen_at.desc()).limit(MAX_ROWS)
-        )).all()
+            stmt.order_by(ARPEntry.last_seen_at.desc()).limit(MAX_ROWS))).all()
     ]
 
 
@@ -411,11 +419,18 @@ async def _sec_dhcp(c: _Ctx) -> dict[str, Any] | None:
     from app.services.ip_ranges import manual_dhcp_pools
 
     s, ipa = c.session, c.ipa
+    # 固定分配沒有子網路欄位：受限帳號只看對到這筆記錄的，或沒對到記錄而這個子網路是唯一容器的
+    # （以前依位址撈全部，重疊網段另一邊的固定分配也給；2026-11-03 稽核）
+    res_stmt = select(DHCPReservation).where(DHCPReservation.ip == c.ip)
+    if c.restricted:
+        from app.services.unmanaged import sole_container
+        sole = await sole_container(s, ipa.subnet_id, c.ip)
+        res_stmt = res_stmt.where(or_(DHCPReservation.ip_address_id == ipa.id,
+                                      and_(DHCPReservation.ip_address_id.is_(None), literal(sole))))
     reservations = [_compact({
         "mac": r.mac, "hostname": r.hostname, "description": _text(r.description),
         "source_type": r.source_type, "source_name": r.source_name, "engine": r.source,
-    }) for r in (await s.execute(
-        select(DHCPReservation).where(DHCPReservation.ip == c.ip).limit(MAX_ROWS))).scalars().all()]
+    }) for r in (await s.execute(res_stmt.limit(MAX_ROWS))).scalars().all()]
 
     sightings = (await s.execute(
         select(DHCPLeaseSighting).where(DHCPLeaseSighting.ip_address_id == ipa.id)
@@ -868,7 +883,8 @@ async def collect_dossier(
     ipa, subnet = rows[0]
     gread = await _global_read(session, user)
     admin = bool(getattr(user, "is_admin", False))
-    c = _Ctx(session=session, user=user, ip=ip, ipa=ipa, subnet=subnet, gread=gread, admin=admin)
+    c = _Ctx(session=session, user=user, ip=ip, ipa=ipa, subnet=subnet, gread=gread, admin=admin,
+             restricted=vis is not None)
     # 掛的裝置：看得到那台裝置才給名稱（與 REST 位址清單同一規則）；單位名稱跟著位址走
     from app.models.customer import Customer
     from app.models.device import Device

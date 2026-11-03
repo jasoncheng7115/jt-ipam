@@ -226,6 +226,8 @@ class FakePanos:
             self.commits += 1
             self.pending = False
             return Resp(200, _xml("<result><job>42</job></result>"))
+        if t == "op" and "<pending-changes>" in p.get("cmd", ""):    # 推之前先查有沒有別人待提交的變更
+            return Resp(200, _xml("<result>no</result>"))
         if t == "op" and "<jobs>" in p.get("cmd", ""):
             return Resp(200, _xml(f"<result><job><status>FIN</status><result>{self.commit_result}</result>"
                                   "<details><line>Configuration committed</line></details></job></result>"))

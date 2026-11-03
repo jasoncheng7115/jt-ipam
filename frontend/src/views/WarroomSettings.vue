@@ -61,6 +61,7 @@ const tvUrl = computed(() => (token.value ? `${location.origin}/warroom?display=
 
 /** 顯示範圍：每一種的選項＝已選的（名稱來自後端）＋目前搜尋結果 */
 const SCOPE_KINDS: ScopeKind[] = ["customers", "sections", "subnets"];
+
 const scopeOpts = ref<Record<ScopeKind, ScopeOption[]>>({ customers: [], sections: [], subnets: [] });
 const scopeLoading = ref<Record<ScopeKind, boolean>>({ customers: false, sections: false, subnets: false });
 const scopeTimers: Partial<Record<ScopeKind, ReturnType<typeof setTimeout>>> = {};
@@ -125,8 +126,13 @@ function onDropPage(i: number) {
   s.value.pages = arr.filter((k) => cur.includes(k));
   dragIndex.value = null;
 }
+/** 資訊展示模式下不播放的主題（整頁都是問題；後端 warroom/info_mode.HIDDEN_PAGES） */
+const INFO_HIDDEN = ["anomalies", "collection", "availability", "ai_audit"];
+const infoHidden = (k: string) => !!s.value?.info_mode && INFO_HIDDEN.includes(k);
 const playNumber = (k: string) => {
-  const i = s.value?.pages.indexOf(k) ?? -1;
+  // 編號照電視上的順序：資訊展示模式下不播放的主題不佔號碼
+  const shown = (s.value?.pages ?? []).filter((p) => !infoHidden(p));
+  const i = shown.indexOf(k);
   return i >= 0 ? String(i + 1).padStart(2, "0") : "–";
 };
 
@@ -195,18 +201,25 @@ onMounted(load);
           <span class="wrs-hint">{{ t("warroom_settings.enabled_hint") }}</span>
         </n-form-item>
 
+        <!-- 資訊展示模式（11-03）：有的單位不允許看到紅字或問題 -->
+        <n-form-item :label="t('warroom_settings.info_mode')" label-placement="left">
+          <n-switch v-model:value="s.info_mode" data-testid="wrs-info-mode" />
+          <span class="wrs-hint">{{ t("warroom_settings.info_mode_hint") }}</span>
+        </n-form-item>
+
         <n-form-item :label="t('warroom_settings.pages')">
           <div class="wrs-playlist" data-testid="wrs-playlist">
             <div class="wrs-hint">{{ t("warroom_settings.pages_drag_hint") }}</div>
             <ul class="rank-list">
               <li v-for="(k, i) in order" :key="k" class="rank-item" data-testid="wrs-page"
-                  :class="{ dragging: dragIndex === i, disabled: !s.pages.includes(k) }"
+                  :class="{ dragging: dragIndex === i, disabled: !s.pages.includes(k) || infoHidden(k) }"
                   draggable="true" @dragstart="dragIndex = i" @dragover.prevent @drop="onDropPage(i)"
                   @dragend="dragIndex = null">
                 <span class="rank-num">{{ playNumber(k) }}</span>
                 <span class="rank-handle">⠿</span>
                 <span class="rank-label">{{ t(`warroom.nav_${k}`) }}</span>
                 <n-tag v-if="!s.ready_pages.includes(k)" size="tiny" :bordered="false">{{ t("warroom_settings.not_ready") }}</n-tag>
+                <n-tag v-if="infoHidden(k)" size="tiny" :bordered="false" data-testid="wrs-info-hidden">{{ t("warroom_settings.info_mode_hidden") }}</n-tag>
                 <n-switch :value="s.pages.includes(k)" :disabled="!s.ready_pages.includes(k)" size="small"
                           style="margin-left: auto" @update:value="(v: boolean) => togglePage(k, v)">
                   <template #checked>{{ t("warroom_settings.page_on") }}</template>
@@ -222,7 +235,7 @@ onMounted(load);
             <div v-for="k in SCOPE_KINDS" :key="k" class="wrs-scope__row">
               <span class="wrs-scope__k">{{ t(`warroom_settings.scope_${k}`) }}</span>
               <n-select v-model:value="s.scope[k]" multiple filterable remote clearable
-                        :options="scopeOpts[k]" :loading="scopeLoading[k]" :max-tag-count="6"
+                        :options="scopeOpts[k]" :loading="scopeLoading[k]" max-tag-count="responsive"
                         :placeholder="t('warroom_settings.scope_all')" :data-testid="`wrs-scope-${k}`"
                         @search="(q: string) => searchScope(k, q)" />
             </div>
@@ -295,7 +308,7 @@ onMounted(load);
           <span data-testid="wrs-intel-title">{{ t("warroom_settings.intel_title") }}</span>
         </n-space>
       </template>
-      <WrsIntelSettings v-model="s.intel" />
+      <WrsIntelSettings v-model="s.intel" :info-mode="s.info_mode" />
       <n-button type="primary" :loading="saving" data-testid="wrs-intel-save" @click="save">
         <template #icon><n-icon :component="SaveIcon" /></template>{{ t("common.save") }}
       </n-button>

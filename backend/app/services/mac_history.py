@@ -111,15 +111,45 @@ async def switch_ports_for_mac(session: AsyncSession, mac: str, *, dev_ok: Any,
     return out
 
 
+async def device_ports_for_mac(session: AsyncSession, mac: str, *, dev_ok: Any,
+                               limit: int = 50) -> list[dict[str, Any]]:
+    """這個 MAC 是哪台裝置自己的網卡（裝置連接埠的 MAC；MAC 歷程與 trace_mac 共用）。
+
+    連接埠的 MAC 是各來源原樣寫入的字串（`AA-BB…`、`aabb…` 都有），用去掉分隔符號的比對（migration 0172 的索引）。
+    `dev_ok(裝置 id)` 決定看不看得到那台裝置。`mac` 要先正規化。"""
+    from app.models.device import Device
+    from app.models.physical import DevicePort
+    hex12 = mac.replace(":", "")
+    return [
+        {"device_id": str(did), "device_name": dname, "port": pname}
+        for did, dname, pname in (await session.execute(
+            select(DevicePort.device_id, Device.name, DevicePort.name)
+            .join(Device, Device.id == DevicePort.device_id)
+            .where(_hex_of(DevicePort.mac_address) == hex12).limit(limit))).all()
+        if dev_ok(did)
+    ]
+
+
+async def dhcp_reservations_for_mac(session: AsyncSession, mac: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    """這個 MAC 的 DHCP 固定分配（全域資料：呼叫端只給全域讀取的帳號）。`mac` 要先正規化。"""
+    from app.models.dhcp import DHCPReservation
+    hex12 = mac.replace(":", "")
+    return [
+        {"ip": ip, "hostname": hn, "source_type": st, "source_name": sn, "description": desc}
+        for ip, hn, st, sn, desc in (await session.execute(
+            select(DHCPReservation.ip, DHCPReservation.hostname, DHCPReservation.source_type,
+                   DHCPReservation.source_name, DHCPReservation.description)
+            .where(_hex_of(DHCPReservation.mac) == hex12).limit(limit))).all()
+    ]
+
+
 async def mac_history(session: AsyncSession, *, user: Any, mac: str,
                       ips_limit: int = IPS_LIMIT, events_limit: int = EVENTS_LIMIT) -> dict[str, Any]:
     """一個 MAC 的完整歷程。不是 MAC → ValueError("mac_invalid")。"""
     from app.models.address import IPAddress
     from app.models.device import Device
-    from app.models.dhcp import DHCPReservation
     from app.models.ip_change_log import IPChangeLog
     from app.models.librenms import ARPEntry
-    from app.models.physical import DevicePort
     from app.models.subnet import Subnet
     from app.models.virt import VirtCluster, VirtualMachine, VMInterface
     from app.services.anomaly import liveness_lookup
@@ -331,31 +361,19 @@ async def mac_history(session: AsyncSession, *, user: Any, mac: str,
     switch_ports = await switch_ports_for_mac(session, m, dev_ok=dev_ok)
 
     # ── 這是哪台裝置自己的網卡 ──
-    device_ports = [
-        {"device_id": str(did), "device_name": dname, "port": pname}
-        for did, dname, pname in (await session.execute(
-            select(DevicePort.device_id, Device.name, DevicePort.name)
-            .join(Device, Device.id == DevicePort.device_id)
-            .where(_hex_of(DevicePort.mac_address) == hex12).limit(50))).all()
-        if dev_ok(did)
-    ]
+    device_ports = await device_ports_for_mac(session, m, dev_ok=dev_ok)
 
     # ── 全域資料：DHCP 固定分配、虛擬機網卡 ──
     dhcp_res: list[dict[str, Any]] = []
     vms: list[dict[str, Any]] = []
     if full:
-        dhcp_res = [
-            {"ip": ip, "hostname": hn, "source_type": st, "source_name": sn, "description": desc}
-            for ip, hn, st, sn, desc in (await session.execute(
-                select(DHCPReservation.ip, DHCPReservation.hostname, DHCPReservation.source_type,
-                       DHCPReservation.source_name, DHCPReservation.description)
-                .where(_hex_of(DHCPReservation.mac) == hex12).limit(50))).all()
-        ]
+        dhcp_res = await dhcp_reservations_for_mac(session, m)
         vms = [
-            {"vm_id": str(vid), "vm_name": vname, "cluster": cname, "interface": iname, "status": vst}
-            for vid, vname, cname, iname, vst in (await session.execute(
+            {"vm_id": str(vid), "vm_name": vname, "cluster": cname, "interface": iname, "status": vst,
+             "node": node, "vmid": vmid, "platform": ctype}
+            for vid, vname, cname, iname, vst, node, vmid, ctype in (await session.execute(
                 select(VirtualMachine.id, VirtualMachine.name, VirtCluster.name, VMInterface.name,
-                       VirtualMachine.status)
+                       VirtualMachine.status, VirtualMachine.node, VirtualMachine.legacy_vmid, VirtCluster.type)
                 .join(VirtualMachine, VirtualMachine.id == VMInterface.vm_id)
                 .join(VirtCluster, VirtCluster.id == VirtualMachine.cluster_id)
                 .where(VMInterface.mac == m).limit(50))).all()

@@ -4131,7 +4131,10 @@
     "maintenance_time_required": "Enter a start and end time",
     "maintenance_too_long": "A single maintenance can last at most {hours} hours",
     "maintenance_weekly_incomplete": "Weekly maintenance needs days, a time window and an end date",
-    "maintenance_weekly_too_far": "A weekly maintenance can run at most one year"
+    "maintenance_weekly_too_far": "A weekly maintenance can run at most one year",
+    "certpush_busy": "This target is already being pushed; try again shortly",
+    "certpush_paloalto_pending_changes": "The firewall has uncommitted changes that a commit would apply too, so nothing was changed; deal with those changes first",
+    "certpush_rollback_unconfirmed": "Tried to put the old certificate back, but the device does not present it; check the device"
   },
   "adguard_admin": {
     "scope_subnets": "Limit to subnets",
@@ -8839,7 +8842,11 @@
         "integrity_ex_not_configured": "{name} never synced",
         "integrity_hidden": "Only admins can see the state of data sources.",
         "event": "Major event: {category} on {subject} ({at}), still open.",
-        "event_unknown": "Major event: {category} on {subject} ({at}), status unconfirmed because anomaly detection is overdue for its schedule."
+        "event_unknown": "Major event: {category} on {subject} ({at}), status unconfirmed because anomaly detection is overdue for its schedule.",
+        "overview_info": "As of {at}, {ips} IPs are registered in {subnets} subnets.",
+        "capacity_info": "The busiest subnet is {label} at {pct}%.",
+        "dns_info": "There are {n} DNS compare groups.",
+        "certs_info": "{n} certificates are managed."
       }
     },
     "topic_preparing": "This topic is being prepared",
@@ -9299,7 +9306,13 @@
     "scope_part_more": "Scope: {names} and {n} more",
     "err_hint_disabled": "In Admin → War room settings, turn on the TV display token, choose the account it represents and save",
     "no_access_short": "No access",
-    "endpoints": "Endpoints"
+    "endpoints": "Endpoints",
+    "info_records": "Records",
+    "info_certs_managed": "Certificates managed",
+    "info_unit_certs": "",
+    "info_m_pools": "DHCP pools",
+    "info_m_dns_groups": "DNS compare groups",
+    "info_m_certs": "Certificates"
   },
   "warroom_settings": {
     "open": "Open war room",
@@ -9459,7 +9472,11 @@
     "display_saved_off": "Currently off",
     "unsaved": "Not saved",
     "principal_required": "Choose an account first: the TV shows what this account can see. It takes effect after you save.",
-    "keys_clicker": "Presentation clickers send PgUp / PgDn, so they page through the data directly."
+    "keys_clicker": "Presentation clickers send PgUp / PgDn, so they page through the data directly.",
+    "info_mode": "Information display mode",
+    "info_mode_hint": "The war room shows only current state and counts, with no alerts, anomalies, offline counts or problems; alerts and notifications keep working. Anomalies and exposure, collection health, availability and AI audit are not played.",
+    "info_mode_hidden": "Not played in information display mode",
+    "info_mode_intel_note": "Information display mode is on: AI intelligence states current figures only, without WARNING, watch list or source status."
   },
   "certpush": {
     "intro": "No agent on the firewall: jt-ipam pushes the certificate through the device's management API and puts it in use, then connects to check that the device really presents the new certificate, and restores the previous one if it cannot confirm. Create a separate account just for certificates (existing integration accounts are usually read-only). Beta: not yet verified on real devices of every vendor.",
@@ -9524,7 +9541,7 @@
     "verify": "Check after the push",
     "verify_endpoint": "Check address (host:port)",
     "verify_endpoint_ph": "Blank = host and port of the API URL; for SSL VPN e.g. vpn.example.net:10443",
-    "verify_hint": "Check rule: if the address was reachable before the push but does not present the new certificate afterwards, the previous one is restored; an address that is unreachable even before (e.g. an SSL VPN only open to the internet) is marked \"not verified\".",
+    "verify_hint": "Verification: if the address answered before the push but does not present the new certificate afterwards, the old one is put back and checked again; an address that could not be reached before (for example an SSL VPN open only to the internet) is marked \"not verified\". When a FortiGate changes both the admin interface and SSL VPN, both are checked (SSL VPN uses the verify address; without one it is marked \"not verified\").",
     "step_load": "Load certificate",
     "step_probe_before": "Connect before the push",
     "step_read": "Read current settings",
@@ -9542,7 +9559,15 @@
     "step_rollback": "Restore the previous certificate",
     "step_connect": "Connect",
     "step_list": "Read device certificates",
-    "tab": "Push to devices"
+    "tab": "Push to devices",
+    "auto_push_hint": "When on, a new version of this certificate (uploaded or renewed) is pushed to this device on the next scheduled sync; a failed push is retried after 1 hour. When off, it is pushed only when you click Push now.",
+    "status_staged": "Written, awaiting commit",
+    "pa_commit_hint": "Before pushing it checks for changes other admins have not committed yet and stops if there are any (a commit would apply them too). If the commit fails, the candidate configuration is put back.",
+    "pa_commit_off_hint": "Only written to the candidate configuration, not applied; the status is \"Written, awaiting commit\" and you commit on the firewall yourself. Nothing is verified or reverted.",
+    "pa_commit_admin": "Commit as admin",
+    "pa_commit_admin_ph": "Optional: commit only this admin's changes (partial commit)",
+    "verify_explicit_hint": "On this device the certificate may serve something other than the admin interface (for example GlobalProtect or HAProxy), so without a verify address the push is only marked \"not verified\" and never reverted. If it is the admin interface certificate, enter the API URL's host:port.",
+    "verify_endpoint_ph_explicit": "e.g. gp.example.net:443; empty = not verified"
   },
   "not_found": {
     "title": "Page not found",

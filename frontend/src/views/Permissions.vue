@@ -277,7 +277,7 @@ onMounted(async () => {
                   <template #unchecked>{{ t("perm.specific") }}</template>
                 </n-switch>
                 <n-select v-if="!fAll" v-model:value="fObjs" :options="fObjOptions" multiple filterable size="small"
-                          :placeholder="t('perm.pick_objects')" style="min-width: 200px" :max-tag-count="2" />
+                          :placeholder="t('perm.pick_objects')" style="min-width: 200px" max-tag-count="responsive" />
                 <n-select v-model:value="fLevel" :options="levelSelOptions" style="width: 110px" size="small" />
                 <n-button type="primary" size="small" :loading="saving" @click="addGrant">
                   <template #icon><n-icon><PlusIcon /></n-icon></template>{{ t("common.create") }}

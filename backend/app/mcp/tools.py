@@ -182,9 +182,12 @@ async def search_ip(session: AsyncSession, *, user: User, ip: str) -> dict[str, 
             .where(IPAddress.ip == ip))
     if vis is not None:
         if not vis:
-            return {"ip": ip, "matches": [], "count": 0}
+            return {"ip": ip, "matches": [], "count": 0, "unregistered": await _unregistered(session, user, ip)}
         stmt = stmt.where(in_values(IPAddress.subnet_id, vis))
     rows = (await session.execute(stmt.order_by(Subnet.cidr))).all()
+    if not rows:
+        # 沒有記錄不等於系統沒看過（同 get_ip_detail）
+        return {"ip": ip, "matches": [], "count": 0, "unregistered": await _unregistered(session, user, ip)}
     devs = await _visible_device_names(session, user, [r.device_id for r, _c in rows])
     custs = await _name_map(session, Customer.name, [r.customer_id for r, _c in rows])
     vendors = await vendor_map(session, [r.mac for r, _c in rows])
@@ -212,7 +215,16 @@ async def find_free_ip(
         "subnet_id": str(subnet.id),
         "cidr": str(subnet.cidr),
         "ip": ip,
+        "skipped_in_use": await _skipped_in_use(session, subnet),
     }
+
+
+async def _skipped_in_use(session: AsyncSession, subnet: Any) -> list[dict[str, Any]]:
+    """沒有 IP 記錄、但看得到在用而被跳過的位址（指示計的「未納管」）。要講出來：不說的話模型會以為系統
+    沒有這份資料，又自己去 ping 一輪（使用者 11-02）。"""
+    from app.services.unmanaged import for_subnet
+    rows = sorted(await for_subnet(session, subnet.id), key=lambda e: ipaddress.ip_address(e["ip"]))
+    return [{k: e.get(k) for k in ("ip", "sources", "last_seen_at", "mac", "hostname")} for e in rows[:50]]
 
 
 async def _resolve_subnet(
@@ -297,7 +309,8 @@ async def find_free_ips(
 ) -> dict[str, Any]:
     """找指定 subnet 內 count 個可用 IP；consecutive=True 要求連續一段。
 
-    回傳真實未配發的 IP（已排除 ip_addresses 既有紀錄），不要自行臆測。
+    回傳真實未配發的 IP（已排除 ip_addresses 既有紀錄、冷卻中、保留／DHCP 範圍，以及看得到在用的未納管位址），
+    不要自行臆測。被跳過的在用位址列在 skipped_in_use。
     """
     count = max(1, min(int(count), 256))
     subnet = await _resolve_subnet(
@@ -313,6 +326,7 @@ async def find_free_ips(
         "consecutive": consecutive,
         "found": len(ips),
         "ips": ips,
+        "skipped_in_use": await _skipped_in_use(session, subnet),
         "note": (
             "fewer free IPs than requested" if len(ips) < count and not consecutive
             else ("no consecutive run of that size" if consecutive and not ips else "ok")
@@ -420,6 +434,153 @@ async def _librenms_name(session: AsyncSession, ln_id: Any) -> str | None:
     return (ln.sysname or ln.hostname) if ln else None
 
 
+async def _vm_nics(session: AsyncSession, user: User, *, mac: str | None = None,
+                   ip: str | None = None) -> list[dict[str, Any]]:
+    """網卡 MAC 相符（或 guest agent 回報用了這個 IP）的 VM／CT：名稱、VMID、節點、叢集、平台、狀態、網卡。
+
+    使用者 11-03：印表機的 IP 被一台 VM 衝了，AI 只說「廠商是 Proxmox、在上行埠後面」，沒說是哪台 ——
+    系統明明有 VM 網卡的 MAC。VM 是全域資料（同 list_vms），只被授權部分物件的帳號不給。"""
+    from app.models.virt import VirtCluster, VirtualMachine, VMInterface
+    if not (mac or ip) or not await has_global_read(session, user):
+        return []
+    cond = VMInterface.mac == mac if mac else func.host(VMInterface.primary_ip) == ip
+    rows = (await session.execute(
+        select(VirtualMachine, VirtCluster.name, VirtCluster.type, VMInterface.name, VMInterface.mac,
+               VMInterface.primary_ip, VMInterface.bridge)
+        .join(VirtualMachine, VirtualMachine.id == VMInterface.vm_id)
+        .join(VirtCluster, VirtCluster.id == VirtualMachine.cluster_id)
+        .where(cond).order_by(VirtualMachine.name).limit(20))).all()
+    return [{"vm_name": vm.name, "vmid": vm.legacy_vmid, "kind": vm.kind, "node": vm.node, "cluster": cname,
+             "platform": ctype, "status": vm.status, "os_name": vm.os_name, "interface": iname,
+             "mac": str(imac) if imac else None, "ip": _host(iip), "bridge": bridge}
+            for vm, cname, ctype, iname, imac, iip, bridge in rows]
+
+
+#: arp_macs 只看最近這段時間的 ARP（太久以前的對應多半是換過機器，不是現在的衝突）
+_ARP_RECENT_DAYS = 7
+#: 沒有記錄的位址：ARP 看最近 30 天（與未納管目擊的保留期限相同）
+_ARP_UNREGISTERED_DAYS = 30
+
+
+async def _arp_mac_summary(session: AsyncSession, user: User, rows: list[Any], *,
+                           record_mac: str | None = None, with_record: bool = False,
+                           limit: int = 10) -> list[dict[str, Any]]:
+    """ARP 列（由新到舊）→ 每個 MAC 一筆：廠商、最早／最後看到、誰回報、來源、是哪台 VM 的網卡。
+
+    IP 衝突而 VM 沒有 guest agent 時，答案就在這裡：印表機的位址，ARP 卻也看到一個 Proxmox 的 MAC →
+    那是哪台 VM、在哪個節點（使用者 11-03）。呼叫端負責只給全域讀取的帳號（ARP 是全域資料）。"""
+    from app.services.anomaly import reporter_names
+    from app.services.unmanaged import usable_mac
+    by_mac: dict[str, dict[str, Any]] = {}
+    for a in rows:
+        m = str(a.mac)
+        if not usable_mac(m):
+            continue                       # 全零、殘缺、廣播：不是某一台機器
+        e = by_mac.get(m)
+        if e is None:
+            if len(by_mac) >= limit:
+                continue
+            e = by_mac[m] = {"mac": m, "first": a.first_seen_at, "last": a.last_seen_at,
+                             "devs": set(), "sources": set()}
+        if a.first_seen_at and (e["first"] is None or a.first_seen_at < e["first"]):
+            e["first"] = a.first_seen_at
+        if a.last_seen_at and (e["last"] is None or a.last_seen_at > e["last"]):
+            e["last"] = a.last_seen_at
+        e["sources"].add(str(a.source))
+        if a.device_id:
+            e["devs"].add(a.device_id)
+    names = await reporter_names(session, {d for e in by_mac.values() for d in e["devs"]})
+    out = []
+    for m, e in by_mac.items():
+        row: dict[str, Any] = {
+            "mac": m, "vendor": await vendor_for_mac(session, m),
+            "first_seen": _iso(e["first"]), "last_seen": _iso(e["last"]),
+            # 哪幾台設備的 ARP 表看到的（LibreNMS）；掃描代理／防火牆的看 sources
+            "seen_by": sorted(names.get(str(d), str(d)) for d in e["devs"]),
+            "sources": sorted(e["sources"]),
+            "vms": await _vm_nics(session, user, mac=m),
+        }
+        if with_record:
+            row["is_record_mac"] = bool(record_mac) and m == str(record_mac).lower()
+        out.append(row)
+    return out
+
+
+async def _arp_scope_for_record(session: AsyncSession, obj: IPAddress, ip: str, vis: Any) -> Any:
+    """某筆 IP 記錄看得到的 ARP 列（重疊網段：另一筆同位址記錄的子網路掃到的不是這筆的）。
+
+    受限帳號同 get_ip_history：只看這個子網路的列；沒有子網路歸屬的（LibreNMS）要這個子網路是唯一最細的容器。"""
+    from app.services.unmanaged import sole_container
+    if vis is not None:
+        sole = await sole_container(session, obj.subnet_id, ip)
+        return or_(ARPEntry.subnet_id == obj.subnet_id, and_(ARPEntry.subnet_id.is_(None), literal(sole)))
+    twins = [sid for (sid,) in (await session.execute(
+        select(IPAddress.subnet_id).where(IPAddress.ip == ip, IPAddress.subnet_id != obj.subnet_id)
+        .limit(100))).all()]
+    if not twins:
+        return literal(True)
+    from app.core.sqlin import not_in_values
+    return or_(ARPEntry.subnet_id.is_(None), not_in_values(ARPEntry.subnet_id, twins))
+
+
+async def _record_arp_macs(session: AsyncSession, user: User, obj: IPAddress, ip: str,
+                           vis: Any) -> list[dict[str, Any]]:
+    """這個 IP 最近 7 天在 ARP 上出現過的 MAC（最多 10 個），標出哪個是記錄上的、各是哪台 VM 的網卡。"""
+    from datetime import timedelta
+    if not await has_global_read(session, user):
+        return []
+    since = datetime.now(UTC) - timedelta(days=_ARP_RECENT_DAYS)
+    rows = list((await session.execute(
+        select(ARPEntry).where(ARPEntry.ip == ip, ARPEntry.last_seen_at >= since,
+                               await _arp_scope_for_record(session, obj, ip, vis))
+        .order_by(ARPEntry.last_seen_at.desc()).limit(200))).scalars().all())
+    return await _arp_mac_summary(session, user, rows, record_mac=str(obj.mac) if obj.mac else None,
+                                  with_record=True)
+
+
+async def _unregistered(session: AsyncSession, user: User, ip: str) -> dict[str, Any]:
+    """IPAM 沒有（看得到的）記錄的位址：系統還看到了什麼。
+
+    以前 get_ip_detail／search_ip 只回「查無」，模型就說系統沒有這個位址的資料 —— 其實掃描代理目擊過、
+    ARP 有它、VM 自己回報用了它、DHCP 有它的固定分配（2026-11-03 稽核）。
+    目擊照子網路可見性；ARP、VM、DHCP 固定分配是全域資料，只給全域讀取（受限的子網路只看那些子網路的 ARP 列）。"""
+    from datetime import timedelta
+
+    from app.models.dhcp import DHCPReservation
+    from app.models.unmanaged_sighting import UnmanagedSighting
+    vis = await visible_ids(session, user=user, object_type="subnet")
+    s_stmt = (select(UnmanagedSighting, Subnet.cidr).join(Subnet, Subnet.id == UnmanagedSighting.subnet_id)
+              .where(UnmanagedSighting.ip == ip))
+    if vis is not None:
+        s_stmt = s_stmt.where(in_values(UnmanagedSighting.subnet_id, vis) if vis else sa_false())
+    sightings = [{"subnet": str(cidr), "source": s.source, "mac": s.mac, "hostname": s.hostname,
+                  "first_seen": _iso(s.first_seen_at), "last_seen": _iso(s.last_seen_at)}
+                 for s, cidr in (await session.execute(
+                     s_stmt.order_by(UnmanagedSighting.last_seen_at.desc()).limit(20))).all()]
+    arp: list[dict[str, Any]] = []
+    reservations: list[dict[str, Any]] = []
+    if await has_global_read(session, user):
+        since = datetime.now(UTC) - timedelta(days=_ARP_UNREGISTERED_DAYS)
+        a_stmt = select(ARPEntry).where(ARPEntry.ip == ip, ARPEntry.last_seen_at >= since)
+        if vis is not None:
+            a_stmt = a_stmt.where(in_values(ARPEntry.subnet_id, vis) if vis else sa_false())
+        arp = await _arp_mac_summary(session, user, list((await session.execute(
+            a_stmt.order_by(ARPEntry.last_seen_at.desc()).limit(200))).scalars().all()))
+        reservations = [{"hostname": r.hostname, "mac": r.mac, "source_type": r.source_type,
+                         "source_name": r.source_name, "description": r.description}
+                        for r in (await session.execute(
+                            select(DHCPReservation).where(DHCPReservation.ip == ip).limit(20))).scalars().all()]
+    return {"sightings": sightings, "arp": arp, "vms": await _vm_nics(session, user, ip=ip),
+            "dhcp_reservations": reservations}
+
+
+async def _maintenance(session: AsyncSession, object_type: str, object_id: Any) -> list[dict[str, Any]]:
+    """目前涵蓋這個物件的維護（與物件頁的維護橫幅同一份判斷；看得到物件就看得到，同 REST）。"""
+    from app.services.maintenance import active_for_object
+    return [{"title": w.title, "behavior": w.behavior, "until": _iso(until)}
+            for w, until in await active_for_object(session, object_type, object_id)]
+
+
 async def trace_mac(
     session: AsyncSession, *, user: User, mac: str,
 ) -> dict[str, Any]:
@@ -524,6 +685,23 @@ async def trace_mac(
                     key=lambda r: (r["macs_on_port"] or 0, -(datetime.fromisoformat(r["last_seen"]).timestamp()
                                                             if r["last_seen"] else 0)))
     best = access[0] if access else (fdb_rows[0] if fdb_rows else None)
+
+    # ── 這個 MAC 是誰：IP 記錄（照子網路可見性）、裝置自己的連接埠（照裝置可見性）、DHCP 固定分配（全域）
+    from app.services.mac_history import device_ports_for_mac, dhcp_reservations_for_mac
+    rec_stmt = (select(IPAddress, Subnet.cidr).join(Subnet, Subnet.id == IPAddress.subnet_id)
+                .where(IPAddress.mac == mac))
+    if vis_sub is not None:
+        rec_stmt = rec_stmt.where(in_values(IPAddress.subnet_id, vis_sub) if vis_sub else sa_false())
+    recs = (await session.execute(rec_stmt.order_by(IPAddress.ip).limit(50))).all()
+    rec_devs = await _visible_device_names(session, user, [r.device_id for r, _c in recs])
+    rec_custs = await _name_map(session, Customer.name, [r.customer_id for r, _c in recs])
+    ipam_records = [{"ip": _host(r.ip), "subnet": str(cidr), "hostname": r.hostname,
+                     "effective_status": r.effective_status, "owner": r.owner,
+                     "device": rec_devs.get(r.device_id), "customer": rec_custs.get(r.customer_id)}
+                    for r, cidr in recs]
+    device_ports = await device_ports_for_mac(
+        session, mac, dev_ok=lambda did: vis_dev is None or (did is not None and did in vis_dev))
+    dhcp_res = await dhcp_reservations_for_mac(session, mac) if await has_global_read(session, user) else []
     return {
         "mac": mac,
         "vendor": await vendor_for_mac(session, mac),
@@ -535,7 +713,15 @@ async def trace_mac(
                  "macs_on_port": best["macs_on_port"], "role": best["role"]} if best else None),
         "arp_sightings": arp_rows,
         "fdb_sightings": fdb_rows,
-        "note": (f"fdb is the most likely access port. A port with more than {UPLINK_MAC_THRESHOLD} MACs "
+        # 這個 MAC 是哪台 VM／CT 的網卡（名稱、節點、叢集…）：上行埠後面的機器常常就是虛擬機
+        "vms": await _vm_nics(session, user, mac=mac),
+        # IPAM 裡用這個 MAC 的記錄、是哪台裝置自己的連接埠、DHCP 固定分配
+        "ipam_records": ipam_records,
+        "device_ports": device_ports,
+        "dhcp_reservations": dhcp_res,
+        "note": (f"vms lists the virtual machine whose NIC has this MAC (answer with its name and node); "
+                 "ipam_records, device_ports and dhcp_reservations also say whose MAC it is. "
+                 f"fdb is the most likely access port. A port with more than {UPLINK_MAC_THRESHOLD} MACs "
                  "behind it is an uplink/trunk (role=uplink) — the device is not plugged into it. "
                  "For the full history of this MAC use mac_history."),
     }
@@ -1068,9 +1254,72 @@ async def get_device(
         "vlans": [{"number": n, "name": nm} for n, nm in vlans],
         "ports": ports, "port_count": port_total, "ports_truncated": port_total > len(ports),
         "power_ports": power_ports,
+        # 目前涵蓋這台裝置的維護（維護中不告警）
+        "maintenance": await _maintenance(session, "device", dev.id),
+        # 上面跑的 VM、接的電路、VPN 通道、向供應商租用（全域資料）
+        **await _device_infra(session, user, dev),
         "librenms": librenms,
         "integrations": integrations,
     }
+
+
+async def _device_infra(session: AsyncSession, user: User, dev: Device) -> dict[str, Any]:
+    """裝置頁之外、但跟這台裝置有關的全域資料：上面跑的 VM（虛擬化主機）、電路、VPN 通道、租用設備。
+
+    以前問「這台 PVE 節點上有哪些 VM」「這台路由器接哪條電路、要不要歸還」，get_device 都沒有，模型就說沒有。
+    VM／電路／VPN／租用的清單工具都要全域讀取，這裡同一層：只被授權部分物件的帳號拿到空的（count 是 None＝不知道）。"""
+    empty: dict[str, Any] = {"hosted_vm_count": None, "hosted_vms": [], "circuits": [], "vpn_tunnels": [],
+                             "lease": None}
+    if not await has_global_read(session, user):
+        return empty
+    from app.models.advanced import Circuit, DeviceLease, Provider
+    from app.models.physical import VPNTunnel
+    from app.models.virt import VirtCluster, VirtualMachine
+    # 跑在這台上的 VM：同 relation_chain.vm_host_device —— VM 記錄連到這台，或（沒連時）節點名稱＝裝置名稱／FQDN；
+    # 跟裝置同名的那台是這台自己（裝置記錄的是 VM 的客體），不算
+    own = (dev.name or "").strip().lower()
+    names = [n for n in {own, (dev.fqdn or "").strip().lower()} if n]
+    cond = VirtualMachine.device_id == dev.id
+    if names:
+        cond = or_(cond, and_(VirtualMachine.device_id.is_(None),
+                              func.lower(VirtualMachine.node).in_(names)))  # bounded: 名稱與 FQDN 兩個
+    vm_stmt = select(VirtualMachine).where(cond, func.lower(VirtualMachine.name) != own)
+    vm_total = await _count_rows(session, vm_stmt)
+    vms = list((await session.execute(vm_stmt.order_by(VirtualMachine.name).limit(50))).scalars().all())
+    vm_ips = await _name_map(session, IPAddress.ip, [v.primary_ip_id for v in vms])
+    clusters = await _name_map(session, VirtCluster.name, [v.cluster_id for v in vms])
+    hosted = [{"name": v.name, "vmid": v.legacy_vmid, "kind": v.kind, "status": v.status,
+               "cluster": clusters.get(v.cluster_id), "primary_ip": _host(vm_ips.get(v.primary_ip_id))}
+              for v in vms]
+    circuits = [{"cid": c.cid, "provider": pname, "status": c.status, "ip_address": c.ip_address,
+                 "contract_end_date": _date_only(c.contract_end_date)}
+                for c, pname in (await session.execute(
+                    select(Circuit, Provider.name).outerjoin(Provider, Provider.id == Circuit.provider_id)
+                    .where(Circuit.device_id == dev.id).order_by(Circuit.cid).limit(50))).all()]
+    tunnels = list((await session.execute(
+        select(VPNTunnel).where(or_(VPNTunnel.a_device_id == dev.id, VPNTunnel.b_device_id == dev.id))
+        .order_by(VPNTunnel.name).limit(50))).scalars().all())
+    peers = await _visible_device_names(session, user, [
+        t.b_device_id if t.a_device_id == dev.id else t.a_device_id for t in tunnels])
+    vpn = []
+    for t in tunnels:
+        a_side = t.a_device_id == dev.id
+        peer_id = t.b_device_id if a_side else t.a_device_id
+        vpn.append({"name": t.name, "type": t.type, "status": t.status,
+                    "peer_device": peers.get(peer_id), "peer_endpoint": t.b_endpoint if a_side else t.a_endpoint,
+                    "pairing_method": t.pairing_method})
+    lease_row = (await session.execute(
+        select(DeviceLease, Provider.name, Circuit.cid)
+        .outerjoin(Provider, Provider.id == DeviceLease.provider_id)
+        .outerjoin(Circuit, Circuit.id == DeviceLease.circuit_id)
+        .where(DeviceLease.device_id == dev.id))).first()
+    lease = None
+    if lease_row is not None:
+        ls, pname, cid = lease_row
+        lease = {"provider": pname, "circuit": cid, "return_required": ls.return_required,
+                 "return_due": ls.return_due.isoformat() if ls.return_due else None, "note": ls.note}
+    return {"hosted_vm_count": vm_total, "hosted_vms": hosted, "circuits": circuits, "vpn_tunnels": vpn,
+            "lease": lease}
 
 
 async def list_customers(
@@ -1872,11 +2121,12 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
     stmt = select(IPAddress).where(IPAddress.ip == ip)
     if vis is not None:                      # None＝全部可見（admin 或萬用授權）
         if not vis:
-            return {"found": False, "ip": ip}
+            return {"found": False, "ip": ip, "unregistered": await _unregistered(session, user, ip)}
         stmt = stmt.where(in_values(IPAddress.subnet_id, vis))
     found = list((await session.execute(stmt.order_by(IPAddress.subnet_id).limit(20))).scalars().all())
     if not found:
-        return {"found": False, "ip": ip}
+        # 沒有記錄不等於系統沒看過：目擊、ARP、VM 回報、DHCP 固定分配
+        return {"found": False, "ip": ip, "unregistered": await _unregistered(session, user, ip)}
     obj = found[0]
     sub = await session.get(Subnet, obj.subnet_id) if obj.subnet_id else None
     devs = await _visible_device_names(session, user, [obj.device_id])
@@ -1898,9 +2148,17 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
         cidrs = await _name_map(session, Subnet.cidr, [o.subnet_id for o in found[1:]])
         others = [{"subnet": str(cidrs.get(o.subnet_id)), "subnet_id": str(o.subnet_id),
                    "hostname": o.hostname, "effective_status": o.effective_status} for o in found[1:]]
+    mac_txt = str(obj.mac) if obj.mac else None
     return {
         "found": True,
         **_ip_fields(obj),
+        # 這個 IP 的 MAC 是哪台 VM 的網卡；哪台 VM 自己回報用了這個 IP（IP 衝突時就是對方）
+        "vms_with_this_mac": await _vm_nics(session, user, mac=mac_txt) if mac_txt else [],
+        "vms_reporting_this_ip": await _vm_nics(session, user, ip=_host(obj.ip)),
+        # 最近在 ARP 上用這個 IP 的每個 MAC（is_record_mac＝記錄上的那個；其他的＝衝突的對方，vms 是哪台 VM）
+        "arp_macs": await _record_arp_macs(session, user, obj, ip, vis),
+        # 目前涵蓋這個 IP 的維護（維護中不告警）
+        "maintenance": await _maintenance(session, "ip", obj.id),
         "subnet": str(sub.cidr) if sub else None,
         "subnet_description": sub.description if sub else None,
         "hostname_source_pin": obj.hostname_source_pin,
@@ -2052,6 +2310,10 @@ async def list_subnet_ips(
     has_more = off + len(rows) < total
     devs = await _visible_device_names(session, user, [r.device_id for r in rows])
     vendors = await vendor_map(session, [r.mac for r in rows])
+    extra: dict[str, Any] = {}
+    if off == 0:
+        # 看得到在用、但沒有記錄的位址（指示計的「未納管」，前 50 個）：問「這個網段哪些 IP 在用」時也算
+        extra["unmanaged"] = await _skipped_in_use(session, sub)
     return {
         "subnet": str(sub.cidr),
         "count": len(rows),
@@ -2073,6 +2335,8 @@ async def list_subnet_ips(
             "os_family": r.os_family, "os_guess": r.os_guess,
             "last_seen": _ip_last_seen(r), "discovery_source": r.discovery_source,
         } for r in rows],
+        # 放在清單後面：結果過長時從尾巴截掉的是這段，不是記錄
+        **extra,
     }
 
 
@@ -4623,7 +4887,15 @@ async def investigate_ip(
     （與對應的 REST 端點同一層，不會因為走 AI 對話就鬆一級）。
     """
     from app.services.investigate import collect_dossier
-    return await collect_dossier(session, user=user, ip=str(ip).strip())
+    d = await collect_dossier(session, user=user, ip=str(ip).strip())
+    if not d.get("found"):
+        try:
+            ipaddress.ip_address(d.get("ip") or "")
+        except ValueError:
+            return d
+        # 沒有記錄不等於系統沒看過（同 get_ip_detail）；只加在 AI 工具這邊，REST 的調查頁不變
+        d["unregistered"] = await _unregistered(session, user, d["ip"])
+    return d
 
 
 
@@ -4684,9 +4956,9 @@ TOOLS: dict[str, dict[str, Any]] = {
     "search_ip": {
         "fn": search_ip,
         "description": (
-            "Find the IPAM record(s) of one IP (several when overlapping subnets hold it) with subnet, hostname, "
-            "MAC, state, liveness, owner, device, customer, switch port, device type, OS, last seen and flags. "
-            "More detail: get_ip_detail."),
+            "IPAM record(s) of one IP (several in overlapping subnets) with subnet, hostname, MAC, state, "
+            "liveness, owner, device, customer, switch port, device type, OS, last seen and flags; none: "
+            "unregistered. More: get_ip_detail."),
         "parameters": {
             "type": "object",
             "properties": {"ip": {"type": "string", "description": "IPv4 or IPv6"}},
@@ -4697,7 +4969,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "fn": find_free_ip,
         "description": (
             "Get the FIRST free IP in a subnet (by id or CIDR). For multiple or "
-            "consecutive free IPs, use find_free_ips instead."
+            "consecutive free IPs, use find_free_ips instead. Addresses seen in use without an IP record "
+            "are skipped and listed in skipped_in_use."
         ),
         "parameters": {
             "type": "object",
@@ -4712,7 +4985,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Find multiple free IPs in a subnet (by id or CIDR). Set count for how "
             "many; set consecutive=true to require a contiguous run. Returns only "
-            "genuinely unallocated IPs — never invent or extend the list yourself."
+            "genuinely unallocated IPs — never invent or extend the list yourself. Addresses seen in use "
+            "(scan agent or ARP) without an IP record are skipped and listed in skipped_in_use."
         ),
         "parameters": {
             "type": "object",
@@ -4752,8 +5026,9 @@ TOOLS: dict[str, dict[str, Any]] = {
     "trace_mac": {
         "fn": trace_mac,
         "description": (
-            "Where a MAC is now: current ARP sightings and switch FDB sightings with role access/uplink; 'fdb' is"
-            " the most likely access port. Full history: mac_history."),
+            "Who a MAC is and where it is now: vms (VM/CT with this NIC MAC: name, node), ipam_records, "
+            "device_ports, dhcp_reservations, ARP and FDB sightings (role access/uplink; 'fdb' = likely access "
+            "port). History: mac_history."),
         "parameters": {
             "type": "object",
             "properties": {"mac": {"type": "string", "description": "MAC address"}},
@@ -4841,9 +5116,9 @@ TOOLS: dict[str, dict[str, Any]] = {
     "get_device": {
         "fn": get_device,
         "description": (
-            "One device by id or name: every field of the device page, its IPs, ports and what they connect to, "
-            "power ports, VLANs, rack position, LibreNMS / Wazuh / VM / OCS / RustDesk data. If several devices "
-            "share the name you get ambiguous=true with candidates: ask, or call again with device_id."),
+            "One device by id or name: every field of the device page, IPs, ports and peers, power ports, VLANs, "
+            "rack position, LibreNMS / Wazuh / VM / OCS / RustDesk data, hosted_vms, circuits, vpn_tunnels, lease,"
+            " maintenance. Name shared: ambiguous=true with candidates; ask, or pass device_id."),
         "parameters": {
             "type": "object",
             "properties": {
@@ -5012,10 +5287,10 @@ TOOLS: dict[str, dict[str, Any]] = {
     "get_ip_detail": {
         "fn": get_ip_detail,
         "description": (
-            "Full record for one IP: every field of the IP form and detail page (state, hostname and source, MAC "
-            "and vendor, owner, device, customer, switch port, device type, OS, last seen per source, flags such "
-            "as exclude_from_ping / ptr_ignore / liveness_from_device, DHCP and gateway tags, console toggles, "
-            "OCS, RustDesk) and other records in overlapping subnets."),
+            "One IP: every field of the IP form and detail page (state, hostname, MAC/vendor, "
+            "owner, device, customer, switch port, OS, last seen per source, flags (ptr_ignore…), DHCP/gateway tags, consoles, "
+            "OCS, RustDesk), vms_with_this_mac, vms_reporting_this_ip, arp_macs (for IP conflicts), maintenance, "
+            "overlapping records. No record: unregistered."),
         "parameters": {"type": "object", "properties": {"ip": {"type": "string"}}, "required": ["ip"]},
     },
     "get_subnet_detail": {
@@ -5032,9 +5307,9 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_subnet_ips": {
         "fn": list_subnet_ips,
         "description": (
-            "IPs registered in a subnet with the IP-list columns (hostname, state, liveness, MAC and vendor, "
-            "owner, device, switch port, device type, OS, last seen). Provide subnet_id or subnet_cidr; page with"
-            " offset=next_offset."),
+            "Registered IPs of a subnet with the IP-list columns (hostname, state, liveness, MAC/vendor, owner, "
+            "device, switch port, type, OS, last seen); offset 0 adds unmanaged (in use, no record). Give "
+            "subnet_id or subnet_cidr; next page: offset=next_offset."),
         "parameters": {"type": "object", "properties": {
             "subnet_id": {"type": "string"}, "subnet_cidr": {"type": "string"},
             "state": {"type": "string", "description": "optional filter e.g. active"},

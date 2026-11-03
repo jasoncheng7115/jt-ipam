@@ -221,6 +221,15 @@ def _in_ranges(addr: Any, ranges: list[tuple[Any, Any]]) -> bool:
     return any(a.version == addr.version and a <= addr <= b for a, b in ranges)
 
 
+async def seen_in_use(session: AsyncSession, subnet: Subnet) -> list[str]:
+    """IPAM 沒有記錄、但最近看得到在用的位址（子網路指示計的「未納管」：掃描代理目擊＋ARP，7 天內）。
+
+    配發「下一個可用」時要跳過（使用者 11-02：另一支 AI 用 MCP 找空位，拿到的位址其實有回應、有 ARP）。
+    指示計早就畫出來了，只是算可用位址的地方從沒用到。"""
+    from app.services.unmanaged import for_subnet
+    return [e["ip"] for e in await for_subnet(session, subnet.id)]
+
+
 async def find_first_free_address(
     session: AsyncSession,
     subnet: Subnet,
@@ -254,6 +263,9 @@ async def find_first_free_address(
                 SELECT host(ip)::inet
                   FROM ip_cooldowns
                  WHERE subnet_id = :sid AND cleared_at IS NULL AND until > now()
+                UNION
+                -- 看得到在用、只是 IPAM 沒有記錄（未納管）的也不給
+                SELECT unnest(CAST(:seen AS inet[]))
             )
             SELECT host(CAST(:base AS inet) + g) AS candidate
               FROM generate_series(0, :span) AS g
@@ -273,6 +285,7 @@ async def find_first_free_address(
                 "base": str(ipaddress.IPv4Address(first)),
                 "span": last - first,
                 "purposes": list(NO_AUTO_ALLOCATE_PURPOSES),
+                "seen": await seen_in_use(session, subnet),
             },
         )
         row = result.first()
@@ -289,7 +302,7 @@ async def find_first_free_address(
                  else ipaddress.ip_address(str(max_ip)) + 1)
     # 冷卻中的位址跳過（見上面 IPv4 的說明）
     from app.services.ip_lifecycle import active_cooldowns
-    cooling = set(await active_cooldowns(session, subnet.id))
+    cooling = set(await active_cooldowns(session, subnet.id)) | set(await seen_in_use(session, subnet))
     ranges = await blocked_ranges(session, subnet.id)
     while candidate in net and (str(candidate) in cooling or _in_ranges(candidate, ranges)):
         hit = next((b for a, b in ranges if a.version == candidate.version and a <= candidate <= b), None)
@@ -338,7 +351,8 @@ async def find_free_addresses(
         # 冷卻中的位址也算「不可用」：它剛被釋放，外面的 DNS 快取／防火牆規則還指著它。
         # 這裡不是額外功能，是配發正確性的一部分 —— 少了它，冷卻期等於沒設。
         from app.services.ip_lifecycle import active_cooldowns
-        for cip in (await active_cooldowns(session, subnet.id)):
+        # 看得到在用、只是 IPAM 沒有記錄的（未納管）一樣不給
+        for cip in [*(await active_cooldowns(session, subnet.id)), *(await seen_in_use(session, subnet))]:
             try:
                 used.add(int(ipaddress.IPv4Address(cip)))
             except (ValueError, ipaddress.AddressValueError):

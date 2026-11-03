@@ -58,10 +58,12 @@
     </n-spin>
 
     <!-- 選 IP -->
+    <!-- 視窗矮（筆電＋字型放大）時內容在裡面捲動，儲存 / 取消一定看得到（客戶 11-03：按鈕被擠出畫面） -->
     <n-modal
       v-model:show="pickerShow"
       preset="card"
-      style="max-width: 640px"
+      style="width: 640px; max-width: calc(100vw - 32px)"
+      :content-style="{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }"
       :title="t('uptime.dash_edit')"
     >
       <n-alert type="info" :show-icon="true" style="margin-bottom: 12px">
@@ -74,7 +76,10 @@
         clearable
         :options="selectOptions"
         :loading="optLoading"
-        :max-tag-count="6"
+        max-tag-count="responsive"
+        :render-tag="renderTag"
+        :theme-overrides="MENU_FIT"
+        data-testid="uptime-picker"
         :placeholder="t('uptime.dash_ph')"
         @search="onSearch"
       />
@@ -108,9 +113,11 @@
       </div>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="pickerShow = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :disabled="draft.length > MAX" @click="save">
-            {{ t("common.save") }}
+          <n-button data-testid="uptime-cancel" @click="pickerShow = false">
+            <template #icon><n-icon :component="CancelIcon" /></template>{{ t("common.cancel") }}
+          </n-button>
+          <n-button type="primary" :disabled="draft.length > MAX" data-testid="uptime-save" @click="save">
+            <template #icon><n-icon :component="SaveIcon" /></template>{{ t("common.save") }}
           </n-button>
         </n-space>
       </template>
@@ -119,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import {
@@ -128,7 +135,7 @@ import {
 } from "naive-ui";
 import CardTitle from "@/components/CardTitle.vue";
 import {
-  AddressesIcon, HostnameIcon, IPChangesIcon, SettingsIcon,
+  AddressesIcon, CancelIcon, HostnameIcon, IPChangesIcon, SaveIcon, SettingsIcon,
   SlaIcon, SortAscIcon, SortDescIcon,
 } from "@/icons";
 import { apiClient } from "@/api/client";
@@ -168,14 +175,36 @@ function ipLabel(ip: string, hostname: string | null): string {
   return hostname ? `${ip} — ${hostname}` : ip;
 }
 
-/** 搜尋結果 ＋ 已選但不在結果裡的項目（後者補在最前面，才不會被搜尋洗掉標籤）。 */
+/** 下拉清單最高佔視窗的 38%：放大字型時清單曾超出畫面，下面的位址選不到（客戶 11-03） */
+const MENU_FIT = { peers: { InternalSelectMenu: { height: "min(260px, 38vh)" } } };
+
+/** 搜尋的排序：完全符合的位址排第一（打 198.51.100.1 時它不會埋在 .10、.100… 裡），其次是開頭符合，再照數字 */
+function ipKey(ip: string): number[] {
+  return ip.split(/[.:]/).map((x) => parseInt(x, ip.includes(":") ? 16 : 10) || 0);
+}
+function rankFor(q: string) {
+  const s = q.trim().toLowerCase();
+  return (label: string): number => {
+    const ip = label.split(" — ")[0].toLowerCase();
+    if (!s) return 2;
+    if (ip === s) return 0;
+    return ip.startsWith(s) ? 1 : 2;
+  };
+}
+const lastQuery = ref("");
+
+/** 下拉清單只列還沒選的（已選的在上面是標籤，可以按 × 拿掉）。已選的也列出來時，清單一打開就捲到
+ * 第一個已選的位置，完全符合的那一筆被捲到看不到（客戶 11-03：「打 198.51.100.1 選不到」）。
+ * 標籤文字由 renderTag 從 labelCache 取，不靠選項清單。 */
 const selectOptions = computed(() => {
-  const inList = new Set(ipOptions.value.map((o) => o.value));
-  const missing = draft.value
-    .filter((id) => !inList.has(id))
-    .map((id) => ({ label: labelCache.value[id] ?? t("uptime.dash_ip_gone"), value: id }));
-  return [...missing, ...ipOptions.value];
+  const picked = new Set(draft.value);
+  return ipOptions.value.filter((o) => !picked.has(o.value));
 });
+function renderTag({ option, handleClose }: { option: { value?: string | number }; handleClose: () => void }) {
+  const id = String(option.value ?? "");
+  return h(NTag, { size: "small", closable: true, onClose: (e: MouseEvent) => { e.stopPropagation(); handleClose(); } },
+           { default: () => labelCache.value[id] ?? t("uptime.dash_ip_gone") });
+}
 
 async function load() {
   if (!ids.value.length) { rows.value = []; return; }
@@ -198,11 +227,19 @@ async function loadOptions(q?: string) {
   optLoading.value = true;
   try {
     const res = await listAddresses({ page: 1, pageSize: 200, q: q || undefined });
+    lastQuery.value = q ?? "";
+    const rank = rankFor(lastQuery.value);
     ipOptions.value = res.items.map((a: any) => {
       const label = ipLabel(a.ip, a.hostname);
       labelCache.value[a.id] = label;
-      return { label, value: a.id };
-    });
+      return { label, value: a.id, ip: String(a.ip) };
+    }).sort((x: { label: string; ip: string }, y: { label: string; ip: string }) => {
+      const r = rank(x.label) - rank(y.label);
+      if (r) return r;
+      const a = ipKey(x.ip), b = ipKey(y.ip);
+      for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) - (b[i] ?? 0);
+      return 0;
+    }).map(({ label, value }: { label: string; value: string }) => ({ label, value }));
   } catch {
     ipOptions.value = [];
   } finally {

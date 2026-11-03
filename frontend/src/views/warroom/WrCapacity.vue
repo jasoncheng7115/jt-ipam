@@ -48,7 +48,7 @@ function pctText(p: number | null): string {
         <div class="cap-f__l">{{ it.kind === 'pool' ? t("warroom.lease_usage") : t("warroom.allocation") }}</div>
         <div class="cap-f__v">{{ pctText(it.pct) }}<span class="cap-f__pc">%</span></div>
         <div class="cap-f__tags">
-          <span v-if="it.level !== 'ok'" class="wr-tag" :class="`lv-${it.level}`">
+          <span v-if="it.level && it.level !== 'ok'" class="wr-tag" :class="`lv-${it.level}`">
             {{ t(`warroom.level_${it.level}`) }}
           </span>
           <span v-if="it.scan === 'stale'" class="wr-tag lv-stale">{{ t("warroom.state_stale") }}</span>

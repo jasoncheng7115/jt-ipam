@@ -122,6 +122,8 @@ async def build(session: AsyncSession, *, user: Any, cfg: dict[str, Any], page: 
             "registered_ips": sum(f.used for f in facts),
             "high_util_subnets": sum(1 for f in v4 if (f.pct or 0) >= warn),
             "pools_alert": sum(1 for it in items if it["kind"] == "pool" and it["level"] == "crit"),
+            # 資訊展示模式的標題列用（info_mode）
+            "subnets": len(facts), "pools": sum(1 for it in items if it["kind"] == "pool"),
         },
         "thresholds": {"warn": warn, "crit": crit},
         "items": shown, "total": len(items),
