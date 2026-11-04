@@ -36,6 +36,8 @@ import { withExportValue } from "@/utils/tableExport";
 import { deviceKindLabel, renderDeviceKind } from "@/utils/deviceKindCell";
 import { apiErrMsg } from "@/api/client";
 import { SUDO } from "@/utils/sudo";
+import AgentTrustPicker from "@/components/AgentTrustPicker.vue";
+import { renderTlsState, useAgentTrust } from "@/composables/useAgentTrust";
 
 const { t, te } = useI18n();
 const msg = useMessage();
@@ -48,7 +50,7 @@ const TABS: Tab[] = ["servers", "devices", "audit"];
 const tab = ref<Tab>(TABS.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : "servers");
 watch(tab, (v) => { void router.replace({ query: { ...route.query, tab: v === "servers" ? undefined : v } }); });
 
-const COLS = ["name", "agent", "agent_hostname", "agent_source_ip", "agent_version", "enabled", "server_version",
+const COLS = ["name", "agent", "agent_hostname", "agent_source_ip", "agent_version", "agent_tls", "enabled", "server_version",
   "public_key", "devices", "db", "reports", "last_report_at", "last_error", "actions"];
 const { visibleKeys: vis, setVisible: setVis, reset: resetVis, order, setOrder, orderColumns } =
   useColumnPrefs("rustdesk", COLS, COLS);
@@ -58,6 +60,7 @@ const picker = computed(() => [
   { key: "agent_hostname", label: t("rustdesk.col_agent_host") },
   { key: "agent_source_ip", label: t("rustdesk.col_agent_ip") },
   { key: "agent_version", label: t("rustdesk.col_agent_version") },
+  { key: "agent_tls", label: t("certTrust.col") },
   { key: "enabled", label: t("cols.status") },
   { key: "server_version", label: t("rustdesk.col_hbbs_version") },
   { key: "public_key", label: t("rustdesk.public_key") },
@@ -237,13 +240,18 @@ const serverOrigin = window.location.origin;
 // sudo 只在非 root 時加（見 utils/sudo）；帶環境變數一定要透過 env，否則 root 時 VAR=val 會被當成指令
 // 這台允許「刪除舊註冊」時，安裝指令帶 JT_RD_ALLOW_DELETE=1（主機端也同意，代理才寫得了 hbbs 的資料庫）
 const installAllowDelete = computed(() => !!installLive.value?.allow_peer_delete);
+// 代理怎麼確認連到的是真的 jt-ipam（2026-11-04，見 useAgentTrust）。安裝程式重跑會沿用舊設定，
+// 所以「用系統 CA 驗證」要明講（explicitCa），舊的指紋才會被清掉
+const trust = useAgentTrust({ explicitCa: true });
 const installCmd = computed(() =>
-  `curl -fsSLk ${serverOrigin}/api/v1/rustdesk/agent/installer.sh | ${SUDO} env `
-  + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${installKey.value ?? "<key>"} JT_IPAM_INSECURE=1 `
+  `curl ${trust.linux.value[0]} ${serverOrigin}/api/v1/rustdesk/agent/installer.sh | ${SUDO} env `
+  + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${installKey.value ?? "<key>"}${trust.linux.value[1]} `
   + `${installAllowDelete.value ? "JT_RD_ALLOW_DELETE=1 " : ""}bash`);
-// 已經裝好的主機：只開啟寫入（網址與金鑰沿用主機上現有的設定）
-const allowDeleteCmd = `curl -fsSLk ${serverOrigin}/api/v1/rustdesk/agent/installer.sh | ${SUDO} env JT_RD_ALLOW_DELETE=1 bash`;
-const uninstallCmd = `curl -fsSLk ${serverOrigin}/api/v1/rustdesk/agent/installer.sh | ${SUDO} env JT_IPAM_UNINSTALL=1 bash`;
+// 已經裝好的主機：只開啟寫入（網址、金鑰與伺服器驗證沿用主機上現有的設定；下載安裝程式那一次照樣驗證）
+const allowDeleteCmd = computed(() =>
+  `curl ${trust.linux.value[0]} ${serverOrigin}/api/v1/rustdesk/agent/installer.sh | ${SUDO} env JT_RD_ALLOW_DELETE=1 bash`);
+const uninstallCmd = computed(() =>
+  `curl ${trust.linux.value[0]} ${serverOrigin}/api/v1/rustdesk/agent/installer.sh | ${SUDO} env JT_IPAM_UNINSTALL=1 bash`);
 const PATHS = [
   ["path_program", "/opt/jt-ipam-rustdesk-agent/jt_ipam_rustdesk_agent.py"],
   ["path_config", "/etc/jt-ipam-rustdesk-agent.env"],
@@ -387,6 +395,12 @@ const allCols = computed<DataTableColumns<RustDeskServer>>(() => autoSort([
         default: () => t("rustdesk.agent_outdated", { v: r.agent_latest_version }),
       });
     },
+  },
+  {
+    title: t("certTrust.col"), key: "agent_tls", width: 130,
+    sorter: byValue((r: RustDeskServer) => r.agent_tls_mode ?? ""),
+    render: (r) => renderTlsState(!!r.agent_last_seen_at, r.agent_tls_mode, "rustdesk-agent-tls",
+      (st) => (st === "pinned" || st === "ca" ? t(`certTrust.hint_${st}`) : t(`rustdesk.trust_fix_${st}`)), t),
   },
   {
     title: t("common.status"), key: "enabled", width: 90,
@@ -840,7 +854,7 @@ const devicesTabLabel = computed(() => {
   return n == null ? t("rustdesk.devices") : `${t("rustdesk.devices")} (${n})`;
 });
 
-onMounted(() => { void refresh(); });
+onMounted(() => { void refresh(); void trust.load(); });
 </script>
 
 <template>
@@ -1127,6 +1141,7 @@ onMounted(() => { void refresh(); });
           </div>
         </n-alert>
         <template v-if="installKey">
+          <AgentTrustPicker :trust="trust" testid="rustdesk-trust" />
           <div class="rd-label">{{ t("rustdesk.install_where") }}</div>
           <n-space align="center" :wrap="false" :size="8">
             <code class="rd-code" data-testid="rustdesk-install-cmd">{{ installCmd }}</code>

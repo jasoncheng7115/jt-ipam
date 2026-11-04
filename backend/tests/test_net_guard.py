@@ -77,6 +77,7 @@ EXEMPT: dict[str, str] = {
     "services/netdiag.py": "工具頁的網路診斷有自己的出站規則（tests/test_netdiag_http_guard.py、test_safe_http_guard.py）",
     "services/nettools.py": "工具頁的 DNS 查詢，同上",
     "services/rdp_freerdp.py": "主控台目標在 WebSocket 開始時已由 console_target_blocked 檢查",
+    "services/server_tls.py": "只連本機 127.0.0.1 的同一個埠（寫死），讀 jt-ipam 自己出示的憑證給代理安裝指令釘選；網址只用來取主機名稱當 SNI",
     "services/sftp.py": "SFTP 主控台的目標在 WebSocket 開始時已由 console_target_blocked 檢查",
 }
 

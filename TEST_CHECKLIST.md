@@ -1289,6 +1289,17 @@ what a console is allowed to do.
   the Linux agent (0.4.175) with `DEPLOY_N_VERIFY=www.example.com:443@127.0.0.1` reports "verified" on a good change; with nginx serving other paths (new files
   written but not presented) the files are put back, the service reloaded, failed is reported with the fingerprint actually presented, and the "deployment failed"
   notification carries the reason; a Proxmox host checks 127.0.0.1:8006 without any setting; filling the verify address when generating the config adds a VERIFY line
+- [ ] **Certificate agents check the server** (`tests/test_cert_agent_trust.py`, `e2e/cert-agent-trust.spec.ts`): on an https jt-ipam "New agent" defaults to
+  "Pin this server's certificate"; the command carries `--pinnedpubkey` (Windows: `JT_IPAM_CERT_SHA256`) and no `JT_IPAM_INSECURE`; after running it the config has
+  `PINNED_PUBKEY` and the list shows "Pinned"; a wrong fingerprint in the config makes the agent fail without sending its key; a site with a public certificate
+  defaults to "Verify with system CAs"; an old agent shows "Not verified (old)" and becomes "Pinned" after running the install command again, deployments kept;
+  self-update: a new version with a bad signature logs "SIGNATURE CHECK FAILED" and is not installed; a host without openssl does not auto-update;
+  paste the Windows pinned command into PowerShell 5.1 on a real machine (a manual selection copies multiple lines too): right fingerprint downloads the installer, wrong one fails with "Could not establish trust relationship for the SSL/TLS secure channel"
+- [ ] **Scan and RustDesk agents check the server** (`tests/test_python_agent_trust.py`, `e2e/cert-agent-trust.spec.ts`): on an https jt-ipam the install commands on both
+  pages default to "Pin this server's certificate", with `--pinnedpubkey` and `JT_IPAM_PIN` and no `JT_IPAM_INSECURE=1`; once installed the "Server check" column shows "Pinned";
+  a wrong `JT_IPAM_PIN` in the config makes the agent fail without the server ever receiving its key, and the console relay cannot open either; an old scan agent
+  (`JT_IPAM_INSECURE=1` in its config) runs the "Already installed" command → no key needed, becomes "Pinned", subnets and relay settings kept; re-running with
+  "Verify with system CAs" clears the fingerprint from the config; self-update: a new version with a bad signature logs "SIGNATURE CHECK FAILED" and is not installed
 - [ ] **Several DHCP ranges in one subnet are one pool** (`tests/test_dhcp_pool_multi_range.py`, issue #57): a FortiGate interface with two ip-ranges (or a Kea subnet
   with two pools), first range full and second mostly free → the war room capacity shows one pool card with each range on its own line, the combined usage and
   no "almost full"; only when both are nearly full does the notification fire, naming both ranges; the subnet Address ranges page still has two rows;

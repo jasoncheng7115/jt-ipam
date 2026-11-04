@@ -82,6 +82,21 @@
   /* 頂列固定一行：放不下時先把 GitHub、再把語言收進選單（頁尾程式量寬度決定；三種語言的字寬不同）。
      2026-10-10 使用者：topbar 不要換行。選擇器多一層 nav 是為了蓋過各頁 560px 那條換行規則。 */
   .mnav .m-gh,.mnav .m-lang{display:none}
+  /* 寬螢幕也照實際寬度收：英文版連結多，超過收合寬度照樣排不下一行、連 logo 都被擠成兩行（2026-11-04 使用者）。
+     nav-c0 由頁尾的程式量過寬度才加；收合後的樣子跟窄螢幕一樣（連結進「選單」）。 */
+  nav .brand{flex:0 0 auto;white-space:nowrap}
+  /* 頂列可以比內文寬：寬螢幕上英文、日文的連結才放得下一行，不必收進選單 */
+  nav .wrap.nav-in{max-width:1360px}
+  nav.nav-c0 .nav-in{flex-wrap:nowrap}
+  nav.nav-c0 .nav-links{flex-wrap:nowrap;gap:8px}
+  nav.nav-c0 .nav-links > *{flex-shrink:0}
+  nav.nav-c0 .nav-links a:not(.btn){display:none}
+  nav.nav-c0 .btn.nav-menu-btn{display:inline-flex}
+  nav.nav-c0 .mnav.open{display:block;position:absolute;left:0;right:0;top:100%;background:#fff;border-bottom:1px solid var(--line);
+    box-shadow:0 14px 28px rgba(15,23,42,.10);padding:4px 20px 10px;max-height:calc(100vh - 80px);overflow:auto}
+  nav.nav-c0 .mnav a{display:block;padding:12px 2px;border-bottom:1px solid #eef2ef;color:var(--body);font-size:15px;font-weight:500}
+  nav.nav-c0 .mnav a:last-child{border-bottom:0}
+  nav.nav-c0 .mnav a[aria-current="page"]{color:var(--green);font-weight:700}
   @media(max-width:900px){
     nav .nav-in{flex-wrap:nowrap}
     nav .brand{flex:0 0 auto;white-space:nowrap}
@@ -537,8 +552,8 @@
       <a href="index.html#features"><span class="zh">特色</span><span class="en">Features</span><span class="ja">機能</span></a>
       <a href="index.html#integrations"><span class="zh">整合</span><span class="en">Integrations</span><span class="ja">連携</span></a>
       <a href="index.html#install"><span class="zh">安裝</span><span class="en">Install</span><span class="ja">インストール</span></a>
-      <a href="adoption.html" aria-current="page"><span class="zh">導入流程</span><span class="en">Adoption roadmap</span><span class="ja">導入ガイド</span></a>
-      <a href="integrations.html"><span class="zh">整合導入</span><span class="en">Integrations guide</span><span class="ja">連携ガイド</span></a>
+      <a href="adoption.html" aria-current="page"><span class="zh">導入流程</span><span class="en">Roadmap</span><span class="ja">導入ガイド</span></a>
+      <a href="integrations.html"><span class="zh">整合導入</span><span class="en">Integ. guide</span><span class="ja">連携ガイド</span></a>
       <a href="features.html"><span class="zh">功能地圖</span><span class="en">Feature map</span><span class="ja">機能マップ</span></a>
       <a href="api.html">API</a>
       <a class="btn btn-ghost btn-sm" href="index.html"><span class="zh">回首頁</span><span class="en">Home</span><span class="ja">ホーム</span></a>
@@ -878,9 +893,19 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts
     function mark(){ Array.prototype.forEach.call(panel.querySelectorAll('.m-lang button'), function(b){
       b.setAttribute('aria-pressed', String(b.dataset.lang === cur())); }); }
     function over(){ return inner.scrollWidth > inner.clientWidth + 1; }
-    function fit(){
-      nav.classList.remove('nav-c1', 'nav-c2');
-      if (getComputedStyle(btn).display === 'none') return;   // 寬螢幕：導覽連結都在頂列，不收
+function wrapped(){
+  var kids = Array.prototype.filter.call(document.querySelectorAll('.nav-links > *'), function(k){ return k.offsetParent !== null; });
+  if (!kids.length) return over();
+  // 比整排的高度：同一行裡按鈕比文字連結高、置中後頂端不齊，比頂端位置會誤判成換行
+  var tallest = Math.max.apply(null, kids.map(function(k){ return k.offsetHeight; }));
+  return over() || document.querySelector('.nav-links').offsetHeight > tallest + 4;
+}
+function fit(){
+      nav.classList.remove('nav-c0', 'nav-c1', 'nav-c2');
+      if (getComputedStyle(btn).display === 'none'){                // 寬螢幕：連結都在頂列
+        if (!wrapped()) return;
+        nav.classList.add('nav-c0');                               // 排不下一行：連結收進選單
+      }
       if (over()) nav.classList.add('nav-c1');                 // 先收 GitHub
       if (over()) nav.classList.add('nav-c2');                 // 還是放不下：再收語言
     }

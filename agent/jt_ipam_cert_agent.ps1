@@ -66,7 +66,12 @@ param(
     [switch] $Help
 )
 
-$AGENT_VERSION = "1.1.0"
+$AGENT_VERSION = "1.1.1"
+
+# Public key (RSA) that signs this script: self-update only installs a copy whose signature verifies, so
+# neither a fake server nor a compromised one can push a script that runs as SYSTEM.
+$AGENT_SIGNING_MODULUS = "58yoM59293eHgMFKcrE6nWfpIWVQqHr7SJIhyXmCjaAQVoqwCY2VNqinJIMGGDE2wAiKKjxm8xSi+0Cx89/fF/hNAs59s+T9m8q4pV7f39QW/AeREcMj+1qk3Y+f4XbarAh2kd82f9eNx4mQ7P+1AIpyFTfPRsX/lzcNVZ8L9PcwgOA08qydmiuJ0yLNR987OMaWuc2wRIXjcYmwjYLXrpqxDC+jCccY2Ni25nCrJzJIoqGbhWJP5Ddu3lq/gD37DiNoqmleNYiDeEAM1/w7LtplmMF0Pn4QsMvcRzgORMwYoBFrT09ouC3iKiIcZNlDnlg9dBvpE1QmyY2EwLVxS7Y+FmMPyfgTvKQyT2s63+3KrXhR3nOESdfolZdbjW09dEybI6TPSRjAlQKl7cuIKyJeySlxeFu4ARscP6HcmoBNVpqLZP2epoDz0mORCeGG9U2K4yDDHZwrmI+U+/BvO7LX+hO8YXbYeONCuztgg1MiwFyWdPk+xg0/jC651a2N"
+$AGENT_SIGNING_EXPONENT = "AQAB"
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
@@ -178,6 +183,9 @@ try {
     exit 2
 }
 $VERIFY_TLS = Test-CfgTrue (Get-Cfg $CFG "VERIFY_TLS" "true")
+$CERT_SHA256 = "$(Get-Cfg $CFG "CERT_SHA256" "")".Trim()
+# How the agent makes sure it talks to the real jt-ipam (reported to the server, shown on the agent list).
+$TLS_MODE = if ($CERT_SHA256) { "pinned" } elseif (-not $VERIFY_TLS) { "insecure" } else { "ca" }
 $AUTO_UPDATE = Test-CfgTrue (Get-Cfg $CFG "AUTO_UPDATE" "true")
 $REMOVE_OLD_CERT = Test-CfgTrue (Get-Cfg $CFG "REMOVE_OLD_CERT" "false")
 $API = "$SERVER/api/v1/cert-agents"
@@ -190,7 +198,39 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = $proto
 } catch { Write-Dbg "could not raise SecurityProtocol: $($_.Exception.Message)" }
 
-if (-not $VERIFY_TLS) {
+function Enable-JtPin {
+    <# Only trust the jt-ipam server whose certificate has this SHA-256 (hex). Works with a self-signed
+       server certificate; any other server -- including one posing as jt-ipam -- is refused before the
+       agent key is sent. The check is compiled C#: a PowerShell script block as the callback can run on a
+       thread without a runspace and fail. #>
+    param([string] $Sha256)
+    if (-not ("JtPin" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Net.Security;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+public static class JtPin {
+    public static string Sha256 = "";
+    public static bool Check(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errors) {
+        if (cert == null) return false;
+        using (SHA256 h = SHA256.Create()) {
+            string got = BitConverter.ToString(h.ComputeHash(cert.GetRawCertData())).Replace("-", "");
+            return string.Equals(got, Sha256.Replace(":", ""), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}
+"@
+    }
+    [JtPin]::Sha256 = $Sha256
+    [Net.ServicePointManager]::ServerCertificateValidationCallback =
+        [Delegate]::CreateDelegate([Net.Security.RemoteCertificateValidationCallback], [JtPin].GetMethod("Check"))
+}
+
+if ($CERT_SHA256) {
+    Write-Dbg "pinned to the jt-ipam server certificate $CERT_SHA256"
+    Enable-JtPin -Sha256 $CERT_SHA256
+} elseif (-not $VERIFY_TLS) {
     Write-Dbg "TLS verification disabled for calls to $SERVER"
     [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 }
@@ -201,7 +241,7 @@ function Invoke-Jt {
     <# Returns the raw response body as a byte[]. Used for both text and binary parts so the
        PKCS#12 blob never has to touch the disk. #>
     param([string] $Url, [hashtable] $ExtraHeaders = @{})
-    $headers = @{ "X-Agent-Key" = $AGENT_KEY; "X-Agent-Version" = "$AGENT_VERSION-win" }
+    $headers = @{ "X-Agent-Key" = $AGENT_KEY; "X-Agent-Version" = "$AGENT_VERSION-win"; "X-Agent-Tls" = $TLS_MODE }
     foreach ($k in $ExtraHeaders.Keys) { $headers[$k] = $ExtraHeaders[$k] }
     Write-Dbg "GET $Url"
     $r = Invoke-WebRequest -Uri $Url -Headers $headers -UseBasicParsing -TimeoutSec 30
@@ -342,7 +382,7 @@ function Send-Report {
     if ($script:ReportLines.Count -eq 0) { return }
     $body = ($script:ReportLines -join "`n") + "`n"
     try {
-        $headers = @{ "X-Agent-Key" = $AGENT_KEY; "X-Agent-Version" = "$AGENT_VERSION-win" }
+        $headers = @{ "X-Agent-Key" = $AGENT_KEY; "X-Agent-Version" = "$AGENT_VERSION-win"; "X-Agent-Tls" = $TLS_MODE }
         $null = Invoke-WebRequest -Uri "$API/report" -Method Post -Headers $headers `
             -ContentType "text/plain" -Body ([Text.Encoding]::UTF8.GetBytes($body)) `
             -UseBasicParsing -TimeoutSec 30
@@ -775,6 +815,19 @@ function Get-FileSha256 {
     finally { $sha.Dispose() }
 }
 
+function Test-JtSignature {
+    <# $true when $Bytes carries a valid signature (base64 RSA / SHA-256) from the jt-ipam signing key. #>
+    param([byte[]] $Bytes, [string] $SignatureB64)
+    try {
+        $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+        $kp = New-Object Security.Cryptography.RSAParameters
+        $kp.Modulus = [Convert]::FromBase64String($AGENT_SIGNING_MODULUS)
+        $kp.Exponent = [Convert]::FromBase64String($AGENT_SIGNING_EXPONENT)
+        $rsa.ImportParameters($kp)
+        return $rsa.VerifyData($Bytes, "SHA256", [Convert]::FromBase64String($SignatureB64.Trim()))
+    } catch { return $false }
+}
+
 function Invoke-SelfUpdate {
     param([string] $ServerSha, [bool] $ForceUpdate)
     if (-not $ForceUpdate -and -not $AUTO_UPDATE) { return }
@@ -784,9 +837,17 @@ function Invoke-SelfUpdate {
     Write-Log "[update] server has a newer agent, downloading update..."
     $tmp = "$SELF.new"
     try {
-        [IO.File]::WriteAllBytes($tmp, (Invoke-Jt -Url "$API/agent.ps1"))
+        $bytes = Invoke-Jt -Url "$API/agent.ps1"
+        [IO.File]::WriteAllBytes($tmp, $bytes)
         if ((Get-FileSha256 -Path $tmp) -ne $ServerSha) {
             Write-Log "[update] downloaded sha mismatch, skipping this round"
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+            return
+        }
+        # Only a copy signed with the jt-ipam signing key replaces this script (it runs as SYSTEM).
+        $sig = Invoke-JtText -Url "$API/agent.ps1.sig"
+        if (-not (Test-JtSignature -Bytes $bytes -SignatureB64 $sig)) {
+            Write-Log "[update] SIGNATURE CHECK FAILED - the downloaded agent is not signed by jt-ipam; not installing it"
             Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
             return
         }

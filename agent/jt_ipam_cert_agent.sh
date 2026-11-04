@@ -9,8 +9,10 @@
 #
 #   SERVER=https://ipam.example.com
 #   AGENT_KEY=<enrollment key>
-#   VERIFY_TLS=true            # set false if the server cert is self-signed, or use CA_CERT
+#   VERIFY_TLS=true            # set false if the server cert is self-signed, or use CA_CERT / PINNED_PUBKEY
 #   # CA_CERT=/etc/ssl/certs/ipam-ca.pem
+#   # PINNED_PUBKEY=sha256//<base64>   # pin the jt-ipam server's public key (the install command fills this in);
+#   #                                  # with a pin the agent only talks to that server, self-signed or not
 #   AUTO_UPDATE=true           # auto-update self when the server has a newer agent
 #   TLS_BASE=/etc/ssl/jt-ipam  # default write directory for built-in profiles
 #
@@ -47,7 +49,21 @@
 #   #   DEPLOY_1_VERIFY=off   (Proxmox / Cockpit / Webmin verify 127.0.0.1 by default; nginx etc. only when set)
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
-AGENT_VERSION=0.4.175
+AGENT_VERSION=0.4.176
+
+# Public key that signs this script. Self-update only replaces the agent with a copy whose signature
+# verifies against it, so neither a fake server nor a compromised one can push a script that runs as root.
+AGENT_SIGNING_PUBKEY='-----BEGIN PUBLIC KEY-----
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA58yoM59293eHgMFKcrE6
+nWfpIWVQqHr7SJIhyXmCjaAQVoqwCY2VNqinJIMGGDE2wAiKKjxm8xSi+0Cx89/f
+F/hNAs59s+T9m8q4pV7f39QW/AeREcMj+1qk3Y+f4XbarAh2kd82f9eNx4mQ7P+1
+AIpyFTfPRsX/lzcNVZ8L9PcwgOA08qydmiuJ0yLNR987OMaWuc2wRIXjcYmwjYLX
+rpqxDC+jCccY2Ni25nCrJzJIoqGbhWJP5Ddu3lq/gD37DiNoqmleNYiDeEAM1/w7
+LtplmMF0Pn4QsMvcRzgORMwYoBFrT09ouC3iKiIcZNlDnlg9dBvpE1QmyY2EwLVx
+S7Y+FmMPyfgTvKQyT2s63+3KrXhR3nOESdfolZdbjW09dEybI6TPSRjAlQKl7cuI
+KyJeySlxeFu4ARscP6HcmoBNVpqLZP2epoDz0mORCeGG9U2K4yDDHZwrmI+U+/Bv
+O7LX+hO8YXbYeONCuztgg1MiwFyWdPk+xg0/jC651a2NAgMBAAE=
+-----END PUBLIC KEY-----'
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -115,14 +131,30 @@ command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 2; }
 : "${SERVER:?config missing SERVER}"
 : "${AGENT_KEY:?config missing AGENT_KEY}"
 VERIFY_TLS="${VERIFY_TLS:-true}"
+PINNED_PUBKEY="${PINNED_PUBKEY:-}"
 AUTO_UPDATE="${AUTO_UPDATE:-true}"
 TLS_BASE="${TLS_BASE:-/etc/ssl/jt-ipam}"
 SERVER="${SERVER%/}"
 API="$SERVER/api/v1/cert-agents"
 
-CURL=(curl -fsS --max-time 30 -H "X-Agent-Key: $AGENT_KEY" -H "X-Agent-Version: $AGENT_VERSION")
-[ "$VERIFY_TLS" = "false" ] && CURL+=(-k)
-[ -n "${CA_CERT:-}" ] && CURL+=(--cacert "$CA_CERT")
+# How this agent makes sure it is talking to the real jt-ipam (reported to the server, shown on the agent list):
+#   pinned   - the server's public key must equal PINNED_PUBKEY (works with a self-signed server certificate)
+#   ca       - normal certificate verification against the system CAs or CA_CERT
+#   insecure - no verification: anyone who can intercept the traffic could pose as jt-ipam (old default)
+build_curl() {
+  if [ -n "$PINNED_PUBKEY" ]; then TLS_MODE=pinned
+  elif [ "$VERIFY_TLS" = "false" ]; then TLS_MODE=insecure
+  else TLS_MODE=ca; fi
+  CURL=(curl -fsS --max-time 30 -H "X-Agent-Key: $AGENT_KEY" -H "X-Agent-Version: $AGENT_VERSION"
+        -H "X-Agent-Tls: $TLS_MODE")
+  # The pin replaces CA verification (the usual case is a self-signed jt-ipam certificate), so -k goes with it;
+  # curl still aborts before sending anything when the key does not match.
+  if [ -n "$PINNED_PUBKEY" ]; then CURL+=(-k --pinnedpubkey "$PINNED_PUBKEY")
+  elif [ "$VERIFY_TLS" = "false" ]; then CURL+=(-k); fi
+  [ -n "${CA_CERT:-}" ] && CURL+=(--cacert "$CA_CERT")
+  return 0
+}
+build_curl
 
 # ─────────────────── Per-profile file list + test + reload ───────────────────
 # Outputs to globals: PFILES (each line "kind|path|mode"), PTEST, PRELOAD, PSPECIAL
@@ -489,6 +521,20 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
 
 # ─────────────────── Self-update ───────────────────
 # self_update <server_sha> [force]  — force=1 ignores AUTO_UPDATE=false (used by --upgrade).
+# verify_sig <file> <base64-signature-file>  — 0 = signed by AGENT_SIGNING_PUBKEY, 1 = bad, 2 = cannot check
+verify_sig() {
+  command -v openssl >/dev/null 2>&1 || return 2
+  command -v base64 >/dev/null 2>&1 || return 2
+  local pub sig rc
+  pub="$(mktemp)"; sig="$(mktemp)"
+  printf '%s\n' "$AGENT_SIGNING_PUBKEY" > "$pub"
+  if ! base64 -d < "$2" > "$sig" 2>/dev/null; then rm -f "$pub" "$sig"; return 1; fi
+  openssl dgst -sha256 -verify "$pub" -signature "$sig" "$1" >/dev/null 2>&1; rc=$?
+  rm -f "$pub" "$sig"
+  [ "$rc" = 0 ] && return 0
+  return 1
+}
+
 self_update() {
   local server_sha="$1" force="${2:-0}"
   [ "$force" != 1 ] && [ "$AUTO_UPDATE" = "false" ] && return 0
@@ -500,12 +546,25 @@ self_update() {
   local tmp="$SELF.new"
   if "${CURL[@]}" -o "$tmp" "$API/agent.sh" 2>/dev/null; then
     local new_sha; new_sha="$(sha256sum "$tmp" | cut -d' ' -f1)"
-    if [ "$new_sha" = "$server_sha" ]; then
-      chmod 0755 "$tmp"; mv -f "$tmp" "$SELF"
-      log "[update] updated, re-executing new version"
-      exec "$SELF" "${ARGS[@]}"
+    if [ "$new_sha" != "$server_sha" ]; then
+      log "[update] downloaded sha mismatch, skipping this round"; rm -f "$tmp"; return 0
     fi
-    log "[update] downloaded sha mismatch, skipping this round"; rm -f "$tmp"
+    # Only a copy signed with the jt-ipam signing key replaces this script (it runs as root).
+    if ! "${CURL[@]}" -o "$tmp.sig" "$API/agent.sh.sig" 2>/dev/null; then
+      log "[update] could not download the signature, skipping this round"; rm -f "$tmp" "$tmp.sig"; return 0
+    fi
+    verify_sig "$tmp" "$tmp.sig"
+    case $? in
+      0) ;;
+      2) log "[update] openssl is not installed, so the update signature cannot be checked; skipping (install openssl, or update with the installer)"
+         rm -f "$tmp" "$tmp.sig"; return 0 ;;
+      *) log "[update] SIGNATURE CHECK FAILED - the downloaded agent is not signed by jt-ipam; not installing it"
+         rm -f "$tmp" "$tmp.sig"; return 0 ;;
+    esac
+    rm -f "$tmp.sig"
+    chmod 0755 "$tmp"; mv -f "$tmp" "$SELF"
+    log "[update] updated (signature verified), re-executing new version"
+    exec "$SELF" "${ARGS[@]}"
   fi
 }
 

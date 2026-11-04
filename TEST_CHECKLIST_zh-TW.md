@@ -963,6 +963,15 @@ guacd 是 RDP 與 VNC 的預設引擎（2026-09-27 起，已安裝的站台由�
   憑證清單有「簽發者」欄，簽發者下拉篩選只留那家簽的，文字篩選打 CA 名稱也找得到；
   Linux 代理（0.4.175）設 `DEPLOY_N_VERIFY=www.example.com:443@127.0.0.1` 後正常換上 → 回報「verified」；故意讓 nginx 用別的路徑（新憑證寫進去但沒送出）→ 檔案換回、
   再 reload、回報 failed 並附服務實際送的指紋，「憑證派送失敗」通知附原因；Proxmox 主機不填也會確認 127.0.0.1:8006；「產生設定檔」填確認位址會產生 VERIFY 行
+- [ ] **派送代理驗證伺服器**（`tests/test_cert_agent_trust.py`、`e2e/cert-agent-trust.spec.ts`）：https 的 jt-ipam 上「新增派送代理」預設「釘選這台的憑證」，
+  安裝指令帶 `--pinnedpubkey`（Windows 帶 `JT_IPAM_CERT_SHA256`）、不帶 `JT_IPAM_INSECURE`；在主機上執行後設定檔有 `PINNED_PUBKEY`，清單顯示「釘選」；
+  把設定檔的指紋改錯 → 代理連不上、不送金鑰；正式憑證的站台預設「用系統 CA 驗證」；舊代理顯示「未驗證（舊版）」，重新執行安裝指令後變「釘選」且部署設定不變；
+  自我更新：伺服器送的新版簽章不對 → 日誌「SIGNATURE CHECK FAILED」、代理沒被換掉；沒有 openssl 的主機不自動更新；
+  Windows 釘選指令在 PowerShell 5.1 實機貼上執行（手動反白複製也要是多行）：指紋對 → 下載安裝程式，指紋錯 → 「無法為 SSL/TLS 安全通道建立信任關係」
+- [ ] **掃描代理、RustDesk 代理驗證伺服器**（`tests/test_python_agent_trust.py`、`e2e/cert-agent-trust.spec.ts`）：https 的 jt-ipam 上兩個頁面的安裝指令預設「釘選這台的憑證」，
+  帶 `--pinnedpubkey` 與 `JT_IPAM_PIN`、不帶 `JT_IPAM_INSECURE=1`；裝好後清單「伺服器驗證」顯示「釘選」；把設定檔的 `JT_IPAM_PIN` 改錯 → 代理連不上、伺服器收不到金鑰，
+  主控台中繼也開不起來；舊掃描代理（設定檔有 `JT_IPAM_INSECURE=1`）在主機上執行「已安裝的主機」那行指令 → 不用金鑰、改成「釘選」、子網路與中繼設定不變；
+  選「用系統 CA 驗證」重跑 → 設定檔的指紋清掉；自我更新：伺服器送的新版簽章不對 → 日誌「SIGNATURE CHECK FAILED」、代理沒被換掉
 - [ ] **同網段多段 DHCP 範圍算一個集區**（`tests/test_dhcp_pool_multi_range.py`，issue #57）：FortiGate 一個介面設兩段 ip-range（或 Kea 一個 subnet 兩個 pool），
   第一段發滿、第二段還很空 → 戰情室位址容量只有一張集區卡片、兩段範圍各一行、使用率是合計、不報快滿；兩段都快滿才發「集區快用完」，訊息列出兩段；
   子網路「位址範圍」頁仍是兩列；不同網段的範圍各自一張卡片

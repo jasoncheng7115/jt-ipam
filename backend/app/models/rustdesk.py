@@ -45,6 +45,8 @@ class RustDeskServer(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # 一台伺服器一把金鑰：代理拿這把金鑰就只能讀寫這台伺服器的資料
     agent_key_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     agent_version: Mapped[str | None] = mapped_column(String(32))
+    # 代理怎麼確認連到的是真的 jt-ipam（X-Agent-Tls：pinned / ca / insecure；舊版代理沒帶 → None）
+    agent_tls_mode: Mapped[str | None] = mapped_column(String(16))
     agent_last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     agent_source_ip: Mapped[str | None] = mapped_column(String(64))
     agent_hostname: Mapped[str | None] = mapped_column(String(255))

@@ -76,6 +76,8 @@ export interface CertAgent {
   recent_source_ips: string[];
   multi_source_recent: boolean;
   agent_version: string | null;
+  /** 代理怎麼確認伺服器：pinned / ca / insecure；null＝舊版代理沒報 */
+  tls_mode?: string | null;
   server_agent_version: string | null;
   reported: Array<Record<string, unknown>> | null;
   has_key: boolean;
@@ -205,6 +207,22 @@ export async function getCertAgentKey(id: string): Promise<{ enroll_key: string 
   const { data } = await apiClient.get(`/api/v1/cert-agents/${id}/key`);
   return data;
 }
+/** jt-ipam 自己出示的 HTTPS 憑證（只連本機），給安裝指令釘選用 */
+export interface ServerIdentity {
+  available: boolean;
+  reason?: string;
+  ca_trusted?: boolean;
+  /** 憑證鏈是公開 CA 簽的（不管主機名稱）：會定期續約，釘選的指紋續約後就對不上 */
+  chain_valid?: boolean;
+  spki_pin?: string;
+  cert_sha256?: string;
+  subject?: string;
+  not_after?: string;
+}
+export async function getServerIdentity(origin: string): Promise<ServerIdentity> {
+  const { data } = await apiClient.get(`/api/v1/cert-agents/server-identity`, { params: { origin } });
+  return data;
+}
 export async function getServerAgentVersion(): Promise<{ version: string | null; windows_version?: string | null }> {
   const { data } = await apiClient.get(`/api/v1/cert-agents/server-version`);
   return data;
@@ -238,6 +256,8 @@ export interface CertAgentStatus {
   recent_source_ips: string[];
   multi_source_recent: boolean;
   agent_version: string | null;
+  /** 代理怎麼確認伺服器：pinned / ca / insecure；null＝舊版代理沒報 */
+  tls_mode?: string | null;
   server_agent_version: string | null;
   deployments: CertStatusDeployment[];
 }

@@ -61,6 +61,8 @@ export interface ScanAgent {
   auto_create_ips: boolean;
   has_key: boolean;
   agent_version: string | null;
+  /** 代理怎麼驗證伺服器（X-Agent-Tls）：pinned / ca / insecure；null＝舊版代理 */
+  tls_mode?: string | null;
   server_agent_version: string | null;
   last_source_ip: string | null;
   enabled_probes: string[];

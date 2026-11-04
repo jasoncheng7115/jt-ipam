@@ -11,7 +11,9 @@
 # Usage:
 #   sudo JT_IPAM_URL=https://ipam.example.com JT_IPAM_AGENT_KEY=<key> ./jt-ipam-rustdesk-agent-installer.sh
 # Options:
-#   JT_IPAM_INSECURE=1        the jt-ipam server certificate is self-signed
+#   JT_IPAM_PIN=sha256//...   the jt-ipam server's public key (the install command shown in jt-ipam sets it):
+#                             the agent talks only to that server, also with a self-signed certificate
+#   JT_IPAM_INSECURE=1        skip TLS verification entirely (not recommended; use JT_IPAM_PIN)
 #   JT_IPAM_RUSTDESK_DIR=...  hbbs working directory when it is not /var/lib/rustdesk-server (official deb)
 #   JT_IPAM_UNINSTALL=1       remove the agent (service, program, config) and exit
 #   --allow-delete            (or JT_RD_ALLOW_DELETE=1) let jt-ipam delete old registrations from the hbbs
@@ -25,7 +27,7 @@
 #   jt-ipam-rustdesk-agent.service                           runs as the owner of the hbbs directory, with
 #                                                            that directory mounted read-only for the agent
 #                                                            (writable, minus the private key, with --allow-delete)
-# Re-running upgrades the program. JT_IPAM_URL / JT_IPAM_AGENT_KEY / JT_IPAM_INSECURE / JT_IPAM_RUSTDESK_DIR that are
+# Re-running upgrades the program. JT_IPAM_URL / JT_IPAM_AGENT_KEY / JT_IPAM_INSECURE / JT_IPAM_PIN / JT_IPAM_RUSTDESK_DIR that are
 # not given are kept from the existing config, so on an installed host
 #   curl -fsSL <jt-ipam>/api/v1/rustdesk/agent/installer.sh | sudo env JT_RD_ALLOW_DELETE=1 bash
 # only switches deleting on. Each run decides it again: re-running without --allow-delete makes it read-only.
@@ -67,12 +69,17 @@ fi
 
 # Values not given on this run are kept from the existing config (re-running only to add --allow-delete,
 # or to upgrade, does not need the key again). Parsed line by line, never sourced.
+# The server check is one choice: a run that passes JT_IPAM_PIN or JT_IPAM_INSECURE (even empty, as the
+# "verify with system CAs" command does) replaces it, so an old pin cannot outlive a certificate change.
+TRUST_GIVEN=""
+[[ -n "${JT_IPAM_PIN+x}${JT_IPAM_INSECURE+x}" ]] && TRUST_GIVEN=1
 if [[ -f "$ENVFILE" ]]; then
     while IFS='=' read -r k v || [[ -n "$k" ]]; do
         case "$k" in
             JT_IPAM_URL)          [[ -n "${JT_IPAM_URL:-}" ]] || JT_IPAM_URL="$v" ;;
             JT_IPAM_AGENT_KEY)    [[ -n "${JT_IPAM_AGENT_KEY:-}" ]] || JT_IPAM_AGENT_KEY="$v" ;;
-            JT_IPAM_INSECURE)     [[ -n "${JT_IPAM_INSECURE+x}" ]] || JT_IPAM_INSECURE="$v" ;;
+            JT_IPAM_INSECURE)     [[ -n "$TRUST_GIVEN" ]] || JT_IPAM_INSECURE="$v" ;;
+            JT_IPAM_PIN)          [[ -n "$TRUST_GIVEN" ]] || JT_IPAM_PIN="$v" ;;
             JT_IPAM_RUSTDESK_DIR) [[ -n "${JT_IPAM_RUSTDESK_DIR:-}" ]] || JT_IPAM_RUSTDESK_DIR="$v" ;;
         esac
     done < "$ENVFILE"
@@ -81,7 +88,9 @@ fi
 : "${JT_IPAM_URL:?JT_IPAM_URL is required, e.g. https://ipam.example.com}"
 : "${JT_IPAM_AGENT_KEY:?JT_IPAM_AGENT_KEY is required (shown for the RustDesk server in jt-ipam)}"
 JT_IPAM_URL="${JT_IPAM_URL%/}"
+JT_IPAM_PIN="${JT_IPAM_PIN:-}"
 JT_IPAM_INSECURE="${JT_IPAM_INSECURE:-}"
+[[ -n "$JT_IPAM_PIN" ]] && JT_IPAM_INSECURE=""
 DATA_DIR="${JT_IPAM_RUSTDESK_DIR:-/var/lib/rustdesk-server}"
 case "$JT_IPAM_URL" in https://*|http://*) ;; *) echo "JT_IPAM_URL must start with https://" >&2; exit 1 ;; esac
 
@@ -110,7 +119,9 @@ else
 fi
 
 CURL_OPTS=(-fsSL --connect-timeout 10 --max-time 60 --retry 2)
-[[ -n "$JT_IPAM_INSECURE" ]] && CURL_OPTS+=(-k)
+# 釘選：curl 不看 CA 與主機名稱、只認這把公鑰（-k 之下 --pinnedpubkey 照樣檢查）
+if [[ -n "$JT_IPAM_PIN" ]]; then CURL_OPTS+=(-k --pinnedpubkey "$JT_IPAM_PIN")
+elif [[ -n "$JT_IPAM_INSECURE" ]]; then CURL_OPTS+=(-k); fi
 echo "==> Downloading the agent from ${JT_IPAM_URL}"
 install -d -m 0755 "$DEST"
 TMP="$(mktemp "${DEST}/.agent.XXXXXX")"
@@ -132,6 +143,7 @@ echo "==> Writing ${ENVFILE}"
     echo "JT_IPAM_URL=${JT_IPAM_URL}"
     echo "JT_IPAM_AGENT_KEY=${JT_IPAM_AGENT_KEY}"
     echo "JT_IPAM_INSECURE=${JT_IPAM_INSECURE}"
+    echo "JT_IPAM_PIN=${JT_IPAM_PIN}"
     [[ -n "${JT_IPAM_RUSTDESK_DIR:-}" ]] && echo "JT_IPAM_RUSTDESK_DIR=${JT_IPAM_RUSTDESK_DIR}"
     # the agent reports "can delete" only with this AND a writable directory (both come from this run)
     [[ -n "$ALLOW_DELETE" ]] && echo "JT_RD_ALLOW_DELETE=1"

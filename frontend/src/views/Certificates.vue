@@ -24,6 +24,8 @@ import { getCertExpiryDays } from "@/api/basic";
 import { autoSort } from "@/composables/useTableSort";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useTablePagination } from "@/composables/useTablePagination";
+import AgentTrustPicker from "@/components/AgentTrustPicker.vue";
+import { renderTlsState, useAgentTrust } from "@/composables/useAgentTrust";
 import { SUDO } from "@/utils/sudo";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
@@ -122,8 +124,10 @@ async function loadServerVersion() {
     serverAgentVersionWin.value = sv.windows_version ?? null; }
   catch { /* 非致命 */ }
 }
+// 安裝指令要怎麼確認連到的是真的 jt-ipam（2026-11-04）：見 useAgentTrust
+const trust = useAgentTrust();
 onMounted(() => {
-  void loadGlobalWarnDays(); loadCerts(); loadAgents(); loadServerVersion(); loadDeviceOptions(); });
+  void loadGlobalWarnDays(); loadCerts(); loadAgents(); loadServerVersion(); loadDeviceOptions(); void trust.load(); });
 
 // 代理有兩支（Linux 純 bash / Windows PowerShell）。這個選擇貫穿安裝說明、
 // 支援清單、profile 選項與設定檔產生器 —— 宣告放最前面，因為底下多個 computed 都靠它。
@@ -677,19 +681,18 @@ const serverOrigin = window.location.origin;
 const installerOneLiner = computed(() => {
   const key = newKey.value || `<${t("certs.key_placeholder")}>`;
   if (isWin.value) {
-    // iex 收不到 -switch，所以旗標一律走環境變數；自簽憑證要先關掉驗證才抓得到 installer
-    return `[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}\n`
-      + `$env:JT_IPAM_SERVER='${serverOrigin}'; $env:JT_IPAM_AGENT_KEY='${key}'; $env:JT_IPAM_INSECURE='1'\n`
+    // iex 收不到 -switch，所以旗標一律走環境變數
+    return `$env:JT_IPAM_SERVER='${serverOrigin}'; $env:JT_IPAM_AGENT_KEY='${key}'\n` + trust.windows.value
       + `iwr -UseBasicParsing "$env:JT_IPAM_SERVER/api/v1/cert-agents/installer.ps1" | iex`;
   }
-  return `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | ${SUDO} env `
-    + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${key} JT_IPAM_INSECURE=1 bash`;
+  const [flags, env] = trust.linux.value;
+  return `curl ${flags} ${serverOrigin}/api/v1/cert-agents/installer.sh | ${SUDO} env `
+    + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${key}${env} bash`;
 });
 const uninstallOneLiner = computed(() => isWin.value
-  ? `[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}\n`
-    + `$env:JT_IPAM_UNINSTALL='1'\n`
+  ? trust.windows.value + `$env:JT_IPAM_UNINSTALL='1'\n`
     + `iwr -UseBasicParsing "${serverOrigin}/api/v1/cert-agents/installer.ps1" | iex`
-  : `curl -fsSLk ${serverOrigin}/api/v1/cert-agents/installer.sh | ${SUDO} env JT_IPAM_UNINSTALL=1 bash`);
+  : `curl ${trust.linux.value[0]} ${serverOrigin}/api/v1/cert-agents/installer.sh | ${SUDO} env JT_IPAM_UNINSTALL=1 bash`);
 const configExampleLinux = `# ── 快速模式（優先）：只設憑證 + 服務 ──
 # 代理會把憑證寫到固定路徑並自動重載，你再把服務設定指過去：
 DEPLOY_1_CERT=wildcard-example-com
@@ -829,13 +832,14 @@ const certCols = computed<DataTableColumns<Certificate>>(() =>
   certPrefs.orderColumns(certColsAll.value.filter((c: any) => certPrefs.visibleKeys.value.includes(c.key))));
 
 // ── 派送代理表格欄位 + 顯示偏好 ──
-const AGENT_KEYS = ["name", "enabled", "scope", "agent_version", "source_ip", "last_seen_at", "reported", "actions"];
+const AGENT_KEYS = ["name", "enabled", "scope", "agent_version", "tls", "source_ip", "last_seen_at", "reported", "actions"];
 const agentPrefs = useColumnPrefs("cert_agents", AGENT_KEYS, AGENT_KEYS);
 const agentPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "enabled", label: t("cols.enabled") },
   { key: "scope", label: t("certs.scope") },
   { key: "agent_version", label: t("cols.version") },
+  { key: "tls", label: t("certTrust.col") },
   { key: "source_ip", label: t("cols.source_ip") },
   { key: "last_seen_at", label: t("cols.last_report") },
   { key: "reported", label: t("certs.deployed") },
@@ -847,6 +851,7 @@ const agentExportCols = computed(() => [
   { key: "enabled", label: t("cols.enabled") },
   { key: "scope", label: t("certs.scope") },
   { key: "agent_version", label: t("cols.version") },
+  { key: "tls", label: t("certTrust.col") },
   { key: "source_ip", label: t("cols.source_ip") },
   { key: "last_seen_at", label: t("cols.last_report") },
   { key: "reported", label: t("certs.deployed") },
@@ -859,6 +864,7 @@ const agentExportRows = computed(() => agentsFiltered.value.map((a) => {
     name: a.name, enabled: a.enabled ? "Y" : "N",
     scope: scopeNames.join("、"),
     agent_version: a.agent_version ? `v${a.agent_version}` : "",
+    tls: a.last_seen_at ? t(`certTrust.state_${a.tls_mode ?? "legacy"}`) : "",
     source_ip: a.last_source_ip ?? "",
     last_seen_at: a.last_seen_at ? fmtDateTime(a.last_seen_at) : "",
     reported: `${ok} / ${reps.length}`,
@@ -888,6 +894,9 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
         default: () => names.join("、"),
       });
     } },
+  { title: t("certTrust.col"), key: "tls", width: 130,
+    sorter: (a, b) => (a.tls_mode ?? "").localeCompare(b.tls_mode ?? ""),
+    render: (a) => renderTlsState(!!a.last_seen_at, a.tls_mode, "cert-agent-tls", (st) => t(`certTrust.hint_${st}`), t) },
   { title: t("cols.version"), key: "agent_version", width: 120,
     render: (a) => {
       if (!a.agent_version) return "—";
@@ -1039,7 +1048,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </n-button>
           </n-space>
         </n-space>
-        <n-data-table :columns="agentCols" :data="agentsFiltered" size="small" :scroll-x="1041" :pagination="agentPg" :row-key="(r:CertAgent) => r.id" />
+        <n-data-table :columns="agentCols" :data="agentsFiltered" size="small" :scroll-x="1171" :pagination="agentPg" :row-key="(r:CertAgent) => r.id" />
       </n-tab-pane>
       <!-- 推送到設備（0227）：伺服器主動把憑證推到防火牆，不用裝代理 -->
       <n-tab-pane name="push" display-directive="show:lazy">
@@ -1350,9 +1359,10 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
           </n-button>
         </n-space>
       </n-alert>
+      <AgentTrustPicker :trust="trust" />
       <div style="font-weight: 600; margin: 4px 0 6px">{{ t("certHelp.oneliner_label") }}</div>
       <n-space align="center" :wrap="false" :size="8">
-        <code class="help-code">{{ installerOneLiner }}</code>
+        <code class="help-code" data-testid="cert-install-oneliner">{{ installerOneLiner }}</code>
         <n-button size="small" secondary @click="copy(installerOneLiner)">
           <template #icon><n-icon :component="CopyIcon" /></template>{{ t("certHelp.copy") }}
         </n-button>
@@ -1671,7 +1681,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
 .help-step-title { font-weight: 600; line-height: 1.6; }
 .help-code {
   display: block;            /* 改 block：padding 對每一行一致，第一行不再被縮排 */
-  flex: 1; min-width: 0; word-break: break-all;
+  flex: 1; min-width: 0; word-break: break-all; white-space: pre-wrap;  /* 多行指令（Windows）手動反白複製也保有換行 */
   background: var(--n-color-embedded, rgba(0,0,0,.05)); padding: 9px 10px;
   border-radius: 6px; font-size: 12px; line-height: 1.5;
 }

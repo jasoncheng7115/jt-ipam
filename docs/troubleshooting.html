@@ -76,6 +76,21 @@
   /* 頂列固定一行：放不下時先把 GitHub、再把語言收進選單（頁尾程式量寬度決定；三種語言的字寬不同）。
      2026-10-10 使用者：topbar 不要換行。選擇器多一層 nav 是為了蓋過各頁 560px 那條換行規則。 */
   .mnav .m-gh,.mnav .m-lang{display:none}
+  /* 寬螢幕也照實際寬度收：英文版連結多，超過收合寬度照樣排不下一行、連 logo 都被擠成兩行（2026-11-04 使用者）。
+     nav-c0 由頁尾的程式量過寬度才加；收合後的樣子跟窄螢幕一樣（連結進「選單」）。 */
+  nav .brand{flex:0 0 auto;white-space:nowrap}
+  /* 頂列可以比內文寬：寬螢幕上英文、日文的連結才放得下一行，不必收進選單 */
+  nav .wrap.nav-in{max-width:1360px}
+  nav.nav-c0 .nav-in{flex-wrap:nowrap}
+  nav.nav-c0 .nav-links{flex-wrap:nowrap;gap:8px}
+  nav.nav-c0 .nav-links > *{flex-shrink:0}
+  nav.nav-c0 .nav-links a:not(.btn){display:none}
+  nav.nav-c0 .btn.nav-menu-btn{display:inline-flex}
+  nav.nav-c0 .mnav.open{display:block;position:absolute;left:0;right:0;top:100%;background:#fff;border-bottom:1px solid var(--line);
+    box-shadow:0 14px 28px rgba(15,23,42,.10);padding:4px 20px 10px;max-height:calc(100vh - 80px);overflow:auto}
+  nav.nav-c0 .mnav a{display:block;padding:12px 2px;border-bottom:1px solid #eef2ef;color:var(--body);font-size:15px;font-weight:500}
+  nav.nav-c0 .mnav a:last-child{border-bottom:0}
+  nav.nav-c0 .mnav a[aria-current="page"]{color:var(--green);font-weight:700}
   @media(max-width:900px){
     nav .nav-in{flex-wrap:nowrap}
     nav .brand{flex:0 0 auto;white-space:nowrap}
@@ -212,8 +227,8 @@
     <div class="nav-links">
       <button type="button" class="btn btn-ghost btn-sm nav-menu-btn" aria-expanded="false" aria-controls="mnav"><svg class="i-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><svg class="i-close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><span class="zh">選單</span><span class="en">Menu</span><span class="ja">メニュー</span></button>
       <a href="index.html#install"><span class="zh">安裝</span><span class="en">Install</span><span class="ja">インストール</span></a>
-      <a href="adoption.html"><span class="zh">導入流程</span><span class="en">Adoption roadmap</span><span class="ja">導入ガイド</span></a>
-      <a href="integrations.html"><span class="zh">整合導入</span><span class="en">Integrations guide</span><span class="ja">連携ガイド</span></a>
+      <a href="adoption.html"><span class="zh">導入流程</span><span class="en">Roadmap</span><span class="ja">導入ガイド</span></a>
+      <a href="integrations.html"><span class="zh">整合導入</span><span class="en">Integ. guide</span><span class="ja">連携ガイド</span></a>
       <a href="features.html"><span class="zh">功能地圖</span><span class="en">Feature map</span><span class="ja">機能マップ</span></a>
       <a href="api.html">API</a>
       <a class="btn btn-ghost btn-sm" href="index.html"><span class="zh">回首頁</span><span class="en">Home</span><span class="ja">ホーム</span></a>
@@ -347,7 +362,7 @@ fatal: refusing to merge unrelated histories</code>
         </p>
         <pre><code>cd /opt/jt-ipam
 sudo -u jtipam git fetch origin
-# 只在本機的提交先留成分支（沒有就跳過這行） / keep local-only commits / ローカル限定のコミットを退避
+# <span class="zh">只在本機的提交先留成分支（沒有就跳過這行）</span><span class="en">keep local-only commits on a branch (skip this line if there are none)</span><span class="ja">ローカル限定のコミットをブランチに退避（無ければこの行は不要）</span>
 sudo -u jtipam git branch pre-upgrade-$(date +%Y%m%d) HEAD
 sudo -u jtipam git reset --hard origin/main
 sudo bash scripts/jt-ipam.sh upgrade</code></pre>
@@ -390,7 +405,7 @@ sudo bash scripts/jt-ipam.sh upgrade</code></pre>
           <span class="ja">まず外部へ出られるかを確認し、次にプロキシ設定を確認します。</span>
         </p>
         <pre><code>sudo -u jtipam git -C /opt/jt-ipam ls-remote origin
-# proxy が要る場合（git は apt のプロキシ設定を引き継ぎません）
+# <span class="zh">需要 proxy 時（git 不會沿用 apt 的 proxy 設定）</span><span class="en">if you need a proxy (git does not use apt's proxy settings)</span><span class="ja">proxy が要る場合（git は apt のプロキシ設定を引き継ぎません）</span>
 sudo -u jtipam git config --global http.proxy http://proxy.example.com:3128</code></pre>
         <p>
           <span class="zh">離線環境：把新版原始碼自行複製到 <code>/opt/jt-ipam</code>，再用 <code>upgrade --no-pull</code> 跑後面的備份/遷移/建置/重啟。</span>
@@ -448,9 +463,9 @@ sudo -u jtipam bash -c 'set -a; source /etc/jt-ipam/backend.env; set +a; .venv/b
           <span class="en">Three usual causes: Node too old, pnpm missing, or not enough memory.</span>
           <span class="ja">よくある原因は三つです。Node が古い、pnpm が無い、メモリが足りない。</span>
         </p>
-        <pre><code>node -v          # >= 18 が必要（推奨は 20）
-pnpm -v          # 無ければ: sudo npm install -g pnpm@9
-free -m          # ビルドには 1 GB 程度の空きメモリが必要</code></pre>
+        <pre><code>node -v          # <span class="zh">需要 18 以上（建議 20）</span><span class="en">18 or later required (20 recommended)</span><span class="ja">&gt;= 18 が必要（推奨は 20）</span>
+pnpm -v          # <span class="zh">沒有的話：sudo npm install -g pnpm@9</span><span class="en">if missing: sudo npm install -g pnpm@9</span><span class="ja">無ければ: sudo npm install -g pnpm@9</span>
+free -m          # <span class="zh">建置需要約 1 GB 可用記憶體</span><span class="en">the build needs about 1 GB of free memory</span><span class="ja">ビルドには 1 GB 程度の空きメモリが必要</span></code></pre>
         <p>
           <span class="zh">記憶體吃緊的機器可以先開一個暫時的 swap 再重跑升級；或手動建置後再重跑 <code>upgrade --no-pull</code>：</span>
           <span class="en">On a memory-tight box, add temporary swap and re-run; or build by hand and then re-run <code>upgrade --no-pull</code>:</span>
@@ -502,15 +517,15 @@ free -m          # ビルドには 1 GB 程度の空きメモリが必要</code>
           <span class="en">The script prints these three steps when an upgrade aborts; here they are in full:</span>
           <span class="ja">アップグレードが中断すると、スクリプトはこの三つの手順を表示します。以下はその完全版です。</span>
         </p>
-        <pre><code># 1) ソースをアップグレード前のコミットへ戻す（開始時に表示されています）
+        <pre><code># <span class="zh">1) 把原始碼退回升級前的 commit（升級開始時有顯示）</span><span class="en">1) put the source back to the pre-upgrade commit (shown when the upgrade started)</span><span class="ja">1) ソースをアップグレード前のコミットへ戻す（開始時に表示されています）</span>
 sudo -u jtipam git -C /opt/jt-ipam reset --hard &lt;old commit&gt;
 
-# 2) データベースを戻す（マイグレーションが完了した場合のみ必要）
+# <span class="zh">2) 還原資料庫（只有遷移已經跑完時才需要）</span><span class="en">2) restore the database (only needed if the migration completed)</span><span class="ja">2) データベースを戻す（マイグレーションが完了した場合のみ必要）</span>
 sudo systemctl stop jt-ipam-backend
 sudo -u postgres pg_restore --clean --no-owner -d jt_ipam \
      /var/backups/jt-ipam/&lt;date&gt;/jt-ipam-&lt;date&gt;.dump
 
-# 3) フロントエンドを再ビルドして起動
+# <span class="zh">3) 重新建置前端並啟動</span><span class="en">3) rebuild the front end and start</span><span class="ja">3) フロントエンドを再ビルドして起動</span>
 cd /opt/jt-ipam/frontend &amp;&amp; sudo -u jtipam pnpm install &amp;&amp; sudo -u jtipam pnpm build
 sudo systemctl start jt-ipam-backend</code></pre>
         <p class="note">
@@ -538,10 +553,10 @@ FATAL: Failed to create the required PostgreSQL extensions</code>
           <span class="en">This host almost certainly <strong>already runs a PostgreSQL cluster</strong> (from SonarQube, GitLab, …). jt-ipam connects to <code>127.0.0.1:5432</code> (that cluster), so pgvector has to be installed for <strong>its</strong> major version; installing it for another version does nothing.</span>
           <span class="ja">このホストにはほぼ確実に<strong>既存の PostgreSQL クラスタ</strong>があります（SonarQube や GitLab などが入れたもの）。jt-ipam は <code>127.0.0.1:5432</code>、つまりその既存クラスタに接続するため、pgvector は<strong>そのクラスタの</strong>メジャーバージョン向けに入れる必要があります。別のバージョン向けに入れても効果はありません。</span>
         </p>
-        <pre><code>sudo -u postgres psql -tAc 'SHOW server_version_num'   # 例: 180004 → メジャー 18
+        <pre><code>sudo -u postgres psql -tAc 'SHOW server_version_num'   # <span class="zh">例：180004 → 主版本 18</span><span class="en">e.g. 180004 → major version 18</span><span class="ja">例: 180004 → メジャー 18</span>
 sudo apt install -y postgresql-18-pgvector
 sudo -u postgres psql -d jt_ipam -c 'CREATE EXTENSION IF NOT EXISTS vector;'
-sudo bash /opt/jt-ipam/scripts/jt-ipam.sh install …     # 同じコマンドを再実行</code></pre>
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh install …     # <span class="zh">重新執行同一個指令</span><span class="en">run the same command again</span><span class="ja">同じコマンドを再実行</span></code></pre>
         <p class="note">
           <span class="zh">v0.5.161 起安裝腳本會自己偵測執行中叢集的版本、裝對應的 pgvector，也不會再多裝一個 server 套件（那會生出第二個叢集）。</span>
           <span class="en">Since v0.5.161 the installer detects the running cluster's version, installs the matching pgvector, and no longer pulls a second server package (which would create a second cluster).</span>
@@ -606,9 +621,9 @@ sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade      # (or: install)</code></p
           <span class="en">pnpm is required to build the frontend</span>
           <span class="ja">pnpm is required to build the frontend / <code>/usr/local/bin/pnpm: No such file or directory</code></span>
         </h3>
-        <pre><code>sudo npm install -g pnpm@9        # または: curl -fsSL https://get.pnpm.io/install.sh | sh -
+        <pre><code>sudo npm install -g pnpm@9        # <span class="zh">或：</span><span class="en">or: </span><span class="ja">または: </span>curl -fsSL https://get.pnpm.io/install.sh | sh -
 pnpm --version
-sudo bash /opt/jt-ipam/scripts/jt-ipam.sh install …   # 同じコマンドを再実行</code></pre>
+sudo bash /opt/jt-ipam/scripts/jt-ipam.sh install …   # <span class="zh">重新執行同一個指令</span><span class="en">run the same command again</span><span class="ja">同じコマンドを再実行</span></code></pre>
       </article>
 
       <article class="qa" id="qa-ping">
@@ -623,7 +638,7 @@ sudo bash /opt/jt-ipam/scripts/jt-ipam.sh install …   # 同じコマンドを�
           <span class="ja">コンテナ内では <code>net.ipv4.ping_group_range</code> は読み取り専用です（カーネルはホストのもの）。したがって <code>/etc/sysctl.d/</code> に書いても効きません。<code>setcap</code> を使う方法も、ユニットの <code>NoNewPrivileges=yes</code> によって黙って無効化されます。有効なのは systemd の drop-in で ambient capability を与える方法で、インストール時もアップグレード時も自動的に適用し、実際に付いたかを読み戻して確認します。</span>
         </p>
         <pre><code>sudo systemctl show jt-ipam-backend -p AmbientCapabilities
-# cap_net_raw が含まれていれば OK。無ければ upgrade を一度流せば付きます
+# <span class="zh">有 cap_net_raw 就沒問題；沒有的話跑一次 upgrade 就會加上</span><span class="en">cap_net_raw listed means OK; if not, running upgrade once adds it</span><span class="ja">cap_net_raw が含まれていれば OK。無ければ upgrade を一度流せば付きます</span>
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade --no-pull</code></pre>
         <p>
           <span class="zh">不需要動 Proxmox 宿主，非特權容器也適用。</span>
@@ -697,8 +712,8 @@ sudo journalctl -u jt-ipam-ai-audit -n 100 --no-pager</code></pre>
           <span class="en">Run <code>doctor</code> first (top of this page). By hand:</span>
           <span class="ja">まず <code>doctor</code>（このページの冒頭）を実行します。手作業で確認するなら次のとおりです。</span>
         </p>
-        <pre><code>ls -l /etc/jt-ipam/backend.env                 # 設定ファイルはあるか
-ls -l /opt/jt-ipam/frontend/dist/index.html    # フロントエンドはビルドされたか
+        <pre><code>ls -l /etc/jt-ipam/backend.env                 # <span class="zh">設定檔在不在</span><span class="en">is the config file there</span><span class="ja">設定ファイルはあるか</span>
+ls -l /opt/jt-ipam/frontend/dist/index.html    # <span class="zh">前端建置了沒</span><span class="en">was the front end built</span><span class="ja">フロントエンドはビルドされたか</span>
 sudo systemctl status jt-ipam-backend
 sudo ss -ltnp | grep -E '8000|8443|443'</code></pre>
       </article>
@@ -720,7 +735,7 @@ sudo ss -ltnp | grep -E '8000|8443|443'</code></pre>
           <span class="ja"><code>--tls-mode self-signed</code> / <code>direct</code> では uvicorn 自身が TLS を終端し、URL は <code>https://&lt;FQDN&gt;:8443/</code> になります。このモードでは nginx も apache も<strong>不要</strong>です。</span>
         </p>
         <pre><code>sudo ss -ltnp | grep 8443
-curl -kI https://127.0.0.1:8443/     # HTTP/1.1 200 が返れば OK</code></pre>
+curl -kI https://127.0.0.1:8443/     # <span class="zh">回 HTTP/1.1 200 就正常</span><span class="en">HTTP/1.1 200 means OK</span><span class="ja">HTTP/1.1 200 が返れば OK</span></code></pre>
         <p>
           <span class="zh">要改用 443，安裝時加 <code>--bind-port 443</code>（安裝腳本會一併授予特權埠所需的能力）。</span>
           <span class="en">To use 443, pass <code>--bind-port 443</code> at install time (the installer also grants the capability a privileged port needs).</span>
@@ -1421,9 +1436,19 @@ sudo journalctl -u jt-ipam-backend -n 100 --no-pager
     function mark(){ Array.prototype.forEach.call(panel.querySelectorAll('.m-lang button'), function(b){
       b.setAttribute('aria-pressed', String(b.dataset.lang === cur())); }); }
     function over(){ return inner.scrollWidth > inner.clientWidth + 1; }
-    function fit(){
-      nav.classList.remove('nav-c1', 'nav-c2');
-      if (getComputedStyle(btn).display === 'none') return;   // 寬螢幕：導覽連結都在頂列，不收
+function wrapped(){
+  var kids = Array.prototype.filter.call(document.querySelectorAll('.nav-links > *'), function(k){ return k.offsetParent !== null; });
+  if (!kids.length) return over();
+  // 比整排的高度：同一行裡按鈕比文字連結高、置中後頂端不齊，比頂端位置會誤判成換行
+  var tallest = Math.max.apply(null, kids.map(function(k){ return k.offsetHeight; }));
+  return over() || document.querySelector('.nav-links').offsetHeight > tallest + 4;
+}
+function fit(){
+      nav.classList.remove('nav-c0', 'nav-c1', 'nav-c2');
+      if (getComputedStyle(btn).display === 'none'){                // 寬螢幕：連結都在頂列
+        if (!wrapped()) return;
+        nav.classList.add('nav-c0');                               // 排不下一行：連結收進選單
+      }
       if (over()) nav.classList.add('nav-c1');                 // 先收 GitHub
       if (over()) nav.classList.add('nav-c2');                 // 還是放不下：再收語言
     }

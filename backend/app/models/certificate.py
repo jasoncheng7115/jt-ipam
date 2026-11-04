@@ -103,6 +103,9 @@ class CertAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_source_ip: Mapped[str | None] = mapped_column(String(64))
     agent_version: Mapped[str | None] = mapped_column(String(32))
+    # 代理怎麼確認連到的是真的 jt-ipam（代理每次連線帶 X-Agent-Tls）：pinned 釘選、ca 憑證驗證、insecure 沒驗證；
+    # None＝舊版代理沒報（0.4.176 / 1.1.1 以前，預設安裝指令都沒驗證）
+    tls_mode: Mapped[str | None] = mapped_column(String(16))
     # agent 回報的各部署狀態：list of {cert,profile,fingerprint,not_after,applied_at,status,message,dry_run}
     reported: Mapped[list[Any] | None] = mapped_column(JSONB)
     # 近期回報來源 IP（list of {ip, at}，去重、上限 10、保留 7 天）；多筆不同 IP＝同把 Key 被多台主機共用

@@ -50,6 +50,8 @@ class ScanAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     agent_version: Mapped[str | None] = mapped_column(String(32))  # agent 連上來回報的版本
+    # 代理怎麼確認連到的是真的 jt-ipam（X-Agent-Tls：pinned / ca / insecure；舊版代理沒帶 → None）
+    tls_mode: Mapped[str | None] = mapped_column(String(16))
     last_source_ip: Mapped[str | None] = mapped_column(String(64))  # agent 連上來的來源 IP
 
     # 此代理「被允許 / 有能力」執行的探測項目（能力天花板）；預設只 ICMP。

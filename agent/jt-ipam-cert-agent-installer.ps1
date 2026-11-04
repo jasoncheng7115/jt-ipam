@@ -11,7 +11,8 @@
 
     $env:JT_IPAM_SERVER = "https://ipam.example.com"
     $env:JT_IPAM_AGENT_KEY = "<enrollment key from the jt-ipam cert agent page>"
-    $env:JT_IPAM_INSECURE = "1"   # only if the jt-ipam server certificate is self-signed
+    $env:JT_IPAM_CERT_SHA256 = "<SHA-256 of the jt-ipam server certificate>"   # the install command fills this in
+    # ($env:JT_IPAM_INSECURE = "1" skips server verification entirely -- not recommended)
     iwr -UseBasicParsing "$env:JT_IPAM_SERVER/api/v1/cert-agents/installer.ps1" | iex
 
   Or, having saved this file:
@@ -83,6 +84,7 @@ Assert-Admin
 # same choices are also readable from the environment.
 if ($env:JT_IPAM_UNINSTALL) { $Uninstall = $true }
 if ($env:JT_IPAM_INSECURE) { $NoVerifyTls = $true }
+$CertSha256 = "$env:JT_IPAM_CERT_SHA256".Trim()
 if ($env:JT_IPAM_TIME) { $Time = $env:JT_IPAM_TIME }
 
 if ($Uninstall) { Remove-Install; exit 0 }
@@ -99,7 +101,37 @@ try {
     if ([Enum]::GetNames([Net.SecurityProtocolType]) -contains "Tls13") { $proto = $proto -bor [Net.SecurityProtocolType]::Tls13 }
     [Net.ServicePointManager]::SecurityProtocol = $proto
 } catch { }
-if ($NoVerifyTls) { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
+function Enable-JtPin {
+    <# Only trust the jt-ipam server whose certificate has this SHA-256 (hex). Works with a self-signed
+       server certificate; any other server -- including one posing as jt-ipam -- is refused before the
+       agent key is sent. The check is compiled C#: a PowerShell script block as the callback can run on a
+       thread without a runspace and fail. #>
+    param([string] $Sha256)
+    if (-not ("JtPin" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Net.Security;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+public static class JtPin {
+    public static string Sha256 = "";
+    public static bool Check(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errors) {
+        if (cert == null) return false;
+        using (SHA256 h = SHA256.Create()) {
+            string got = BitConverter.ToString(h.ComputeHash(cert.GetRawCertData())).Replace("-", "");
+            return string.Equals(got, Sha256.Replace(":", ""), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}
+"@
+    }
+    [JtPin]::Sha256 = $Sha256
+    [Net.ServicePointManager]::ServerCertificateValidationCallback =
+        [Delegate]::CreateDelegate([Net.Security.RemoteCertificateValidationCallback], [JtPin].GetMethod("Check"))
+}
+
+if ($CertSha256) { Enable-JtPin -Sha256 $CertSha256 }
+elseif ($NoVerifyTls) { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
 
 Write-Step "Creating directories"
 foreach ($d in @($INSTALL_DIR, $DATA_DIR)) {
@@ -112,13 +144,23 @@ $resp = Invoke-WebRequest -Uri "$Server/api/v1/cert-agents/agent.ps1" -UseBasicP
 
 if (Test-Path -LiteralPath $CONFIG_PATH) {
     Write-Step "Config already exists, keeping it ($CONFIG_PATH)"
+    if ($CertSha256) {
+        # Re-running the install command is how an existing agent gets the server pin; deployments stay.
+        $lines = @(Get-Content -LiteralPath $CONFIG_PATH | Where-Object { $_ -notmatch '^CERT_SHA256=' })
+        $out = New-Object Collections.Generic.List[string]
+        foreach ($l in $lines) { $out.Add($l); if ($l -match '^AGENT_KEY=') { $out.Add("CERT_SHA256=$CertSha256") } }
+        Set-Content -LiteralPath $CONFIG_PATH -Value $out -Encoding UTF8
+        Write-Step "Pinned the jt-ipam server certificate in the existing config"
+    }
 } else {
     Write-Step "Writing config"
-    $verify = if ($NoVerifyTls) { "false" } else { "true" }
+    $verify = if ($NoVerifyTls -and -not $CertSha256) { "false" } else { "true" }
+    $pinLine = if ($CertSha256) { "CERT_SHA256=$CertSha256" } else { "# CERT_SHA256=<SHA-256 of the jt-ipam server certificate>  (pin; works with a self-signed server)" }
     $config = @"
 # jt-ipam certificate distribution agent configuration.
 SERVER=$Server
 AGENT_KEY=$AgentKey
+$pinLine
 VERIFY_TLS=$verify
 AUTO_UPDATE=true
 # Delete the previously bound certificate from the store after a successful switch.

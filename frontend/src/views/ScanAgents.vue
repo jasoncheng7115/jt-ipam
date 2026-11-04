@@ -25,6 +25,8 @@ import ScanAgentLoadPanel from "@/components/ScanAgentLoadPanel.vue";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import { autoSort } from "@/composables/useTableSort";
 import { SUDO } from "@/utils/sudo";
+import AgentTrustPicker from "@/components/AgentTrustPicker.vue";
+import { renderTlsState, useAgentTrust } from "@/composables/useAgentTrust";
 import { probeInstall, toolInstallCmd } from "@/utils/probeInstall";
 import { listSnmpAgents, type SnmpAgentInfo } from "@/api/snmp";
 import ColumnPicker from "@/components/ColumnPicker.vue";
@@ -35,7 +37,7 @@ const { catalog } = useScanProbes();
 
 // 所有欄位 = 預設可見（含新加的 tools「相依套件」）。tools 同時在 allKeys（才點得動/開得起來）
 // 與 defaultVisible（才預設打開；在此 → withNewDefaults 讓舊用戶升級後也自動帶出這欄）。
-const SA_COLS = ["name", "enabled", "has_key", "agent_version", "source_ip", "subnet_count", "load",
+const SA_COLS = ["name", "enabled", "has_key", "agent_version", "tls", "source_ip", "subnet_count", "load",
   "tools", "snmp", "last_seen_at", "last_error", "actions"];
 const { visibleKeys: saVis, setVisible: saSet, reset: saReset,
   order: saOrder, setOrder: saSetOrder, orderColumns: saOrderCols } = useColumnPrefs(
@@ -46,6 +48,7 @@ const saPicker = computed(() => [
   { key: "enabled", label: t("cols.enabled") },
   { key: "has_key", label: t("cols.key") },
   { key: "agent_version", label: t("cols.version") },
+  { key: "tls", label: t("certTrust.col") },
   { key: "source_ip", label: t("cols.source_ip") },
   { key: "subnet_count", label: t("cols.subnet") },
   { key: "load", label: t("scan_load.col_load") },
@@ -193,9 +196,17 @@ const revealedKey = ref("");
 const revealedName = ref("");
 
 const serverOrigin = window.location.origin;
+// 代理怎麼確認連到的是真的 jt-ipam（2026-11-04，見 useAgentTrust）。安裝程式重跑會沿用舊設定，
+// 所以「用系統 CA 驗證」要明講（explicitCa），舊的指紋才會被清掉
+const trust = useAgentTrust({ explicitCa: true });
 const installerOneLiner = computed(() =>
-  `curl -fsSLk ${serverOrigin}/api/v1/scan-agents/installer.sh | ${SUDO} env `
-  + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${revealedKey.value || "<KEY>"} JT_IPAM_INSECURE=1 bash`,
+  `curl ${trust.linux.value[0]} ${serverOrigin}/api/v1/scan-agents/installer.sh | ${SUDO} env `
+  + `JT_IPAM_URL=${serverOrigin} JT_IPAM_AGENT_KEY=${revealedKey.value || "<KEY>"}${trust.linux.value[1]} bash`,
+);
+// 已安裝的主機：金鑰與其他設定沿用主機上的設定檔，只換伺服器驗證（或單純升級）
+const reinstallOneLiner = computed(() =>
+  `curl ${trust.linux.value[0]} ${serverOrigin}/api/v1/scan-agents/installer.sh | ${SUDO} env `
+  + `JT_IPAM_URL=${serverOrigin}${trust.linux.value[1]} bash`,
 );
 
 // SNMP 收集（0217）：這裡只顯示能力與被指派幾個收集目標，設定在 SNMP 頁（憑證不是代理的屬性，換代理不該重填）
@@ -355,6 +366,12 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
     },
   },
   {
+    title: t("certTrust.col"), key: "tls", width: 130,
+    sorter: (a, b) => (a.tls_mode ?? "").localeCompare(b.tls_mode ?? ""),
+    render: (r) => renderTlsState(!!r.last_seen_at, r.tls_mode, "scan-agent-tls",
+      (st) => (st === "pinned" || st === "ca" ? t(`certTrust.hint_${st}`) : t(`scanAgentHelp.trust_fix_${st}`)), t),
+  },
+  {
     title: t("cols.source_ip"), key: "source_ip", width: 150,
     render: (r) => r.last_source_ip
       ? h("span", { style: "font-family:monospace;white-space:nowrap" }, r.last_source_ip) : "—",
@@ -476,6 +493,7 @@ function toolStateLabel(s: ToolState): string {
 }
 
 onMounted(async () => {
+  void trust.load();
   await refresh();
   const want = String(route.query.load || "");
   const hit = want ? rows.value.find((a) => a.id === want) : undefined;
@@ -715,11 +733,12 @@ onMounted(async () => {
         <h4>{{ t("scanAgentHelp.key_label") }}</h4>
         <n-input-group>
           <n-input :value="revealedKey" readonly />
-          <n-button @click="copy(revealedKey)">{{ t("scanAgentHelp.copy") }}</n-button>
+          <n-button @click="copy(revealedKey)"><template #icon><n-icon><CloneIcon /></n-icon></template>{{ t("scanAgentHelp.copy") }}</n-button>
         </n-input-group>
+        <AgentTrustPicker :trust="trust" testid="scan-trust" style="margin-top: 12px" />
         <h4>{{ t("scanAgentHelp.oneliner_label") }}</h4>
-        <pre>{{ installerOneLiner }}</pre>
-        <n-button size="small" @click="copy(installerOneLiner)">{{ t("scanAgentHelp.copy") }}</n-button>
+        <pre data-testid="scan-install-oneliner">{{ installerOneLiner }}</pre>
+        <n-button size="small" @click="copy(installerOneLiner)"><template #icon><n-icon><CloneIcon /></n-icon></template>{{ t("scanAgentHelp.copy") }}</n-button>
         <div class="paths-box">
           <div class="paths-title">{{ t("scanAgentHelp.paths_title") }}</div>
           <div class="path-row"><span class="pl">{{ t('scanAgentHelp.path_program') }}</span><code>/opt/jt-ipam-agent/jt_ipam_agent.py</code></div>
@@ -746,10 +765,19 @@ onMounted(async () => {
           <li><span class="sn">3</span><span>{{ t("scanAgentHelp.step3") }}</span></li>
         </ol>
 
+        <AgentTrustPicker :trust="trust" testid="scan-trust" />
         <h4>{{ t("scanAgentHelp.oneliner_label") }}</h4>
         <div class="code-row">
           <pre>{{ installerOneLiner }}</pre>
           <n-button size="small" secondary @click="copy(installerOneLiner)">
+            <template #icon><n-icon><CloneIcon /></n-icon></template>
+            {{ t("scanAgentHelp.copy") }}
+          </n-button>
+        </div>
+        <h4>{{ t("scanAgentHelp.reinstall_label") }}</h4>
+        <div class="code-row">
+          <pre data-testid="scan-reinstall-oneliner">{{ reinstallOneLiner }}</pre>
+          <n-button size="small" secondary @click="copy(reinstallOneLiner)">
             <template #icon><n-icon><CloneIcon /></n-icon></template>
             {{ t("scanAgentHelp.copy") }}
           </n-button>

@@ -129,6 +129,8 @@ class CertAgentRead(StrictModel):
     recent_source_ips: list[str] = Field(default_factory=list)
     multi_source_recent: bool = False
     agent_version: str | None
+    # 代理怎麼確認伺服器：pinned / ca / insecure；None＝舊版代理沒報（多半是沒驗證）
+    tls_mode: str | None = None
     server_agent_version: str | None = None  # server 端 agent.sh 版本；UI 比對標「可更新」
     reported: list[dict[str, Any]] | None
     has_key: bool = False

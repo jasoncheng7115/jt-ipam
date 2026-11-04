@@ -82,6 +82,21 @@
   /* 頂列固定一行：放不下時先把 GitHub、再把語言收進選單（頁尾程式量寬度決定；三種語言的字寬不同）。
      2026-10-10 使用者：topbar 不要換行。選擇器多一層 nav 是為了蓋過各頁 560px 那條換行規則。 */
   .mnav .m-gh,.mnav .m-lang{display:none}
+  /* 寬螢幕也照實際寬度收：英文版連結多，超過收合寬度照樣排不下一行、連 logo 都被擠成兩行（2026-11-04 使用者）。
+     nav-c0 由頁尾的程式量過寬度才加；收合後的樣子跟窄螢幕一樣（連結進「選單」）。 */
+  nav .brand{flex:0 0 auto;white-space:nowrap}
+  /* 頂列可以比內文寬：寬螢幕上英文、日文的連結才放得下一行，不必收進選單 */
+  nav .wrap.nav-in{max-width:1360px}
+  nav.nav-c0 .nav-in{flex-wrap:nowrap}
+  nav.nav-c0 .nav-links{flex-wrap:nowrap;gap:8px}
+  nav.nav-c0 .nav-links > *{flex-shrink:0}
+  nav.nav-c0 .nav-links a:not(.btn){display:none}
+  nav.nav-c0 .btn.nav-menu-btn{display:inline-flex}
+  nav.nav-c0 .mnav.open{display:block;position:absolute;left:0;right:0;top:100%;background:#fff;border-bottom:1px solid var(--line);
+    box-shadow:0 14px 28px rgba(15,23,42,.10);padding:4px 20px 10px;max-height:calc(100vh - 80px);overflow:auto}
+  nav.nav-c0 .mnav a{display:block;padding:12px 2px;border-bottom:1px solid #eef2ef;color:var(--body);font-size:15px;font-weight:500}
+  nav.nav-c0 .mnav a:last-child{border-bottom:0}
+  nav.nav-c0 .mnav a[aria-current="page"]{color:var(--green);font-weight:700}
   @media(max-width:900px){
     nav .nav-in{flex-wrap:nowrap}
     nav .brand{flex:0 0 auto;white-space:nowrap}
@@ -566,8 +581,8 @@
       <a href="index.html#features"><span class="zh">特色</span><span class="en">Features</span><span class="ja">機能</span></a>
       <a href="index.html#integrations"><span class="zh">整合</span><span class="en">Integrations</span><span class="ja">連携</span></a>
       <a href="index.html#install"><span class="zh">安裝</span><span class="en">Install</span><span class="ja">インストール</span></a>
-      <a href="adoption.html"><span class="zh">導入流程</span><span class="en">Adoption roadmap</span><span class="ja">導入ガイド</span></a>
-      <a href="integrations.html" aria-current="page"><span class="zh">整合導入</span><span class="en">Integrations guide</span><span class="ja">連携ガイド</span></a>
+      <a href="adoption.html"><span class="zh">導入流程</span><span class="en">Roadmap</span><span class="ja">導入ガイド</span></a>
+      <a href="integrations.html" aria-current="page"><span class="zh">整合導入</span><span class="en">Integ. guide</span><span class="ja">連携ガイド</span></a>
       <a href="features.html"><span class="zh">功能地圖</span><span class="en">Feature map</span><span class="ja">機能マップ</span></a>
       <a href="api.html">API</a>
       <a class="btn btn-ghost btn-sm" href="index.html"><span class="zh">回首頁</span><span class="en">Home</span><span class="ja">ホーム</span></a>
@@ -1882,7 +1897,7 @@
   <section class="igroup" id="out-write">
     <h2><span class="zh">你開啟時才寫回</span><span class="en">Writes back only when you turn it on</span><span class="ja">有効にしたときだけ書き戻す</span></h2>
     <article class="ig" id="ig-opnsense-alias">
-  <div class="ig-h"><h3>OPNsense 防火牆別名推送</h3><span class="ig-tags"><span class="tag rw"><span class="zh">會寫回</span><span class="en">Writes back</span><span class="ja">書き戻しあり</span></span> <span class="tag">REST API</span></span></div>
+  <div class="ig-h"><h3><span class="zh">OPNsense 防火牆別名推送</span><span class="en">OPNsense firewall alias push</span><span class="ja">OPNsense ファイアウォールエイリアスへの書き込み</span></h3><span class="ig-tags"><span class="tag rw"><span class="zh">會寫回</span><span class="en">Writes back</span><span class="ja">書き戻しあり</span></span> <span class="tag">REST API</span></span></div>
   <p class="ig-lead"><span class="zh">把 IPAM 裡某個範圍的 IP 自動寫成 OPNsense 防火牆別名（alias），規則引用這個別名，名單就跟著 IPAM 走。只有你建立方向為「push」或「both」的別名對應時才會寫入。</span><span class="en">Writes the IPs of an IPAM scope into an OPNsense firewall alias, so rules that use the alias follow the IPAM. Nothing is written unless you create an alias mapping with direction "push" or "both".</span><span class="ja">IPAM の特定範囲の IP を OPNsense のファイアウォールエイリアスに書き込み、そのエイリアスを使うルールが IPAM に追従します。方向が「push」または「both」のエイリアス対応付けを作成した場合だけ書き込みます。</span></p>
   <div class="ig-grid">
     <div><h4><span class="zh">讀取與寫回的資料</span><span class="en">What it reads and writes</span><span class="ja">読み取りと書き戻すデータ</span></h4><ul>
@@ -1911,7 +1926,7 @@
 </article>
 
 <article class="ig" id="ig-cert-agent">
-  <div class="ig-h"><h3>憑證派送代理（nginx / Apache / Proxmox VE / IIS）</h3><span class="ig-tags"><span class="tag rw"><span class="zh">會寫回</span><span class="en">Writes back</span><span class="ja">書き戻しあり</span></span> <span class="tag"><span class="zh">代理</span><span class="en">agent</span><span class="ja">エージェント</span></span> <span class="tag">HTTPS</span></span></div>
+  <div class="ig-h"><h3><span class="zh">憑證派送代理（nginx / Apache / Proxmox VE / IIS）</span><span class="en">Certificate agent (nginx / Apache / Proxmox VE / IIS)</span><span class="ja">証明書配布エージェント（nginx / Apache / Proxmox VE / IIS）</span></h3><span class="ig-tags"><span class="tag rw"><span class="zh">會寫回</span><span class="en">Writes back</span><span class="ja">書き戻しあり</span></span> <span class="tag"><span class="zh">代理</span><span class="en">agent</span><span class="ja">エージェント</span></span> <span class="tag">HTTPS</span></span></div>
   <p class="ig-lead"><span class="zh">在目標主機裝一支小代理，定期向 jt-ipam 詢問負責的憑證有沒有新版，有就換上、測試、重載，失敗自動還原，再回報結果。Linux 用純 bash，Windows 用 PowerShell。</span><span class="en">A small agent on the target host regularly asks jt-ipam whether its certificates have a new version; if so it installs, tests and reloads, rolls back on failure, and reports the result. Pure bash on Linux, PowerShell on Windows.</span><span class="ja">対象ホストに小さなエージェントを入れ、担当する証明書に新版があるか定期的に jt-ipam へ問い合わせます。新版があれば配置、テスト、再読み込みを行い、失敗時は自動で元に戻して結果を報告します。Linux は純粋な bash、Windows は PowerShell です。</span></p>
   <div class="ig-grid">
     <div><h4><span class="zh">讀取與寫回的資料</span><span class="en">What it reads and writes</span><span class="ja">読み取りと書き戻すデータ</span></h4><ul>
@@ -1942,7 +1957,7 @@
 </article>
 
 <article class="ig" id="ig-cert-push">
-  <div class="ig-h"><h3>憑證推送到防火牆（FortiGate / OPNsense / Palo Alto / pfSense）</h3><span class="ig-tags"><span class="tag rw"><span class="zh">會寫回</span><span class="en">Writes back</span><span class="ja">書き戻しあり</span></span> <span class="tag beta">Beta</span> <span class="tag">REST API</span> <span class="tag">PAN-OS XML API</span></span></div>
+  <div class="ig-h"><h3><span class="zh">憑證推送到防火牆（FortiGate / OPNsense / Palo Alto / pfSense）</span><span class="en">Certificate push to firewalls (FortiGate / OPNsense / Palo Alto / pfSense)</span><span class="ja">ファイアウォールへの証明書配布（FortiGate / OPNsense / Palo Alto / pfSense）</span></h3><span class="ig-tags"><span class="tag rw"><span class="zh">會寫回</span><span class="en">Writes back</span><span class="ja">書き戻しあり</span></span> <span class="tag beta">Beta</span> <span class="tag">REST API</span> <span class="tag">PAN-OS XML API</span></span></div>
   <p class="ig-lead"><span class="zh">防火牆裝不了代理，改由 jt-ipam 透過設備的管理 API 把憑證推過去並換上，推完連過去確認對方出示的就是新憑證，確認不到就自動換回原本的。</span><span class="en">Firewalls cannot run an agent, so jt-ipam pushes the certificate through the device's management API, switches it in, connects back to confirm the device now presents the new certificate, and switches back automatically if it cannot confirm.</span><span class="ja">ファイアウォールにはエージェントを入れられないため、jt-ipam が機器の管理 API で証明書を送って切り替え、接続して新しい証明書が提示されているか確認し、確認できなければ自動で元に戻します。</span></p>
   <div class="ig-grid">
     <div><h4><span class="zh">讀取與寫回的資料</span><span class="en">What it reads and writes</span><span class="ja">読み取りと書き戻すデータ</span></h4><ul>
@@ -2086,9 +2101,19 @@
     function mark(){ Array.prototype.forEach.call(panel.querySelectorAll('.m-lang button'), function(b){
       b.setAttribute('aria-pressed', String(b.dataset.lang === cur())); }); }
     function over(){ return inner.scrollWidth > inner.clientWidth + 1; }
-    function fit(){
-      nav.classList.remove('nav-c1', 'nav-c2');
-      if (getComputedStyle(btn).display === 'none') return;   // 寬螢幕：導覽連結都在頂列，不收
+function wrapped(){
+  var kids = Array.prototype.filter.call(document.querySelectorAll('.nav-links > *'), function(k){ return k.offsetParent !== null; });
+  if (!kids.length) return over();
+  // 比整排的高度：同一行裡按鈕比文字連結高、置中後頂端不齊，比頂端位置會誤判成換行
+  var tallest = Math.max.apply(null, kids.map(function(k){ return k.offsetHeight; }));
+  return over() || document.querySelector('.nav-links').offsetHeight > tallest + 4;
+}
+function fit(){
+      nav.classList.remove('nav-c0', 'nav-c1', 'nav-c2');
+      if (getComputedStyle(btn).display === 'none'){                // 寬螢幕：連結都在頂列
+        if (!wrapped()) return;
+        nav.classList.add('nav-c0');                               // 排不下一行：連結收進選單
+      }
       if (over()) nav.classList.add('nav-c1');                 // 先收 GitHub
       if (over()) nav.classList.add('nav-c2');                 // 還是放不下：再收語言
     }

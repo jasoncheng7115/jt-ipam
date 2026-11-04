@@ -13,6 +13,8 @@ export interface RustDeskServer {
   name: string;
   has_agent_key: boolean;
   agent_version: string | null;
+  /** 代理怎麼驗證伺服器（X-Agent-Tls）：pinned / ca / insecure；null＝舊版代理 */
+  agent_tls_mode?: string | null;
   agent_latest_version: string | null;
   agent_last_seen_at: string | null;
   agent_source_ip: string | null;

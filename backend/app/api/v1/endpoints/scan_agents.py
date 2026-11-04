@@ -46,13 +46,24 @@ async def download_installer() -> Any:
     return PlainTextResponse(p.read_text(), media_type="text/x-shellscript")
 
 
+def _exact(name: str, media_type: str) -> Any:
+    """原封不動送出檔案的位元組：代理驗的是這份的簽章與 sha256（read_text 會改掉換行）。"""
+    from fastapi.responses import Response
+    p = _AGENT_DIR / name
+    if not p.exists():
+        raise HTTPException(404, detail="not found")
+    return Response(p.read_bytes(), media_type=media_type)
+
+
 @router.get("/agent.py", include_in_schema=False)
 async def download_agent() -> Any:
-    from fastapi.responses import PlainTextResponse
-    p = _AGENT_DIR / "jt_ipam_agent.py"
-    if not p.exists():
-        raise HTTPException(404, detail="agent not found")
-    return PlainTextResponse(p.read_text(), media_type="text/x-python")
+    return _exact("jt_ipam_agent.py", "text/x-python")
+
+
+@router.get("/agent.py.sig", include_in_schema=False)
+async def download_agent_signature() -> Any:
+    """agent.py 的簽章（base64 RSA / SHA-256）。代理自我更新只裝驗得過的版本。"""
+    return _exact("jt_ipam_agent.py.sig", "text/plain")
 
 
 @router.get("/probes")
@@ -98,6 +109,7 @@ class ScanAgentRead(StrictModel):
     auto_create_ips: bool = False
     has_key: bool = False
     agent_version: str | None = None
+    tls_mode: str | None = None               # 代理怎麼驗證伺服器：pinned / ca / insecure；None＝舊版代理
     server_agent_version: str | None = None   # server 端 agent.py 版本；UI 比對標「可更新」
     last_source_ip: str | None = None
     enabled_probes: list[str] = Field(default_factory=lambda: ["icmp"])
@@ -567,6 +579,7 @@ async def agent_poll(
     x_agent_probes: Annotated[str | None, Header()] = None,
     x_agent_tools: Annotated[str | None, Header()] = None,
     x_agent_relay: Annotated[str | None, Header()] = None,
+    x_agent_tls: Annotated[str | None, Header()] = None,
 ) -> AgentPollOut:
     """Agent 主動拉取「要掃哪些網段、各網段跑哪些探測、各探測間隔、逐 IP 略過」。"""
     agent = await _agent_from_key(session, x_agent_key)
@@ -577,6 +590,7 @@ async def agent_poll(
                             else (request.client.host if request.client else None))
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
+    agent.tls_mode = x_agent_tls if x_agent_tls in ("pinned", "ca", "insecure") else None
     # 代理用 X-Agent-Probes 回報它「裝得起」哪些（逗號分隔）→ UI 反灰用
     if x_agent_probes is not None:
         agent.available_probes = scan_probes.normalize_probes(

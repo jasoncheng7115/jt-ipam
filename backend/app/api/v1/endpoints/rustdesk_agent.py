@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,11 +78,22 @@ async def download_installer() -> PlainTextResponse:
                              media_type="text/x-shellscript")
 
 
+def _exact(path: Any, media_type: str) -> Response:
+    """原封不動送出檔案的位元組：代理驗的是這份的簽章與 sha256。"""
+    if not path.exists():
+        raise HTTPException(404, detail="not found")
+    return Response(path.read_bytes(), media_type=media_type)
+
+
 @router.get("/agent.py")
-async def download_agent() -> PlainTextResponse:
-    if not rustdesk_svc.AGENT_FILE.exists():
-        raise HTTPException(404, detail="agent not found")
-    return PlainTextResponse(rustdesk_svc.AGENT_FILE.read_text(encoding="utf-8"), media_type="text/x-python")
+async def download_agent() -> Response:
+    return _exact(rustdesk_svc.AGENT_FILE, "text/x-python")
+
+
+@router.get("/agent.py.sig")
+async def download_agent_signature() -> Response:
+    """agent.py 的簽章（base64 RSA / SHA-256）。代理自我更新只裝驗得過的版本。"""
+    return _exact(rustdesk_svc.AGENT_FILE.with_name(rustdesk_svc.AGENT_FILE.name + ".sig"), "text/plain")
 
 
 @router.post("/poll", response_model=RustDeskAgentPollOut)
@@ -91,9 +102,11 @@ async def agent_poll(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     x_agent_key: Annotated[str | None, Header()] = None,
+    x_agent_tls: Annotated[str | None, Header()] = None,
 ) -> RustDeskAgentPollOut:
     srv = await _server_from_key(session, x_agent_key)
     _touch(srv, request, payload.version)
+    srv.agent_tls_mode = x_agent_tls if x_agent_tls in ("pinned", "ca", "insecure") else None
     if payload.hostname:
         srv.agent_hostname = payload.hostname
     kc = payload.key_checks

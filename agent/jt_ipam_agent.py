@@ -12,7 +12,8 @@ Capability self-report: each poll also carries header  X-Agent-Probes  listing t
 probe keys this host can actually perform (depends on tools/permissions available).
 
 Auto-update: each poll returns the server's agent.py sha256. If it differs from this
-running copy, the agent downloads the new agent.py, overwrites itself and re-executes.
+running copy, the agent downloads the new agent.py and agent.py.sig, and only installs it (then
+re-executes) when the signature verifies against the jt-ipam signing key built into this file.
 
 排程（重點）：輕量探測（icmp/tcp/arp/rdns）跟著 fast loop（interval_seconds）每輪跑；
 重量探測（os/ports，可能上 nmap）只在距離上次執行超過 intervals[probe] 秒時才跑。
@@ -22,7 +23,9 @@ Environment variables:
   JT_IPAM_URL        e.g. https://ipam.example.com    (required)
   JT_IPAM_AGENT_KEY  enrollment key from the agent page (required)
   JT_IPAM_INTERVAL   fallback fast-loop seconds if server omits interval_seconds, default 300
-  JT_IPAM_INSECURE   =1 to skip TLS verification (self-signed server)
+  JT_IPAM_PIN        sha256//<base64> of the jt-ipam server's public key (the install command shown in
+                     jt-ipam sets it): talk only to that server, also with a self-signed certificate
+  JT_IPAM_INSECURE   =1 to skip TLS verification entirely (not recommended; use JT_IPAM_PIN)
   JT_IPAM_MAX_HOSTS  max hosts scanned per subnet per cycle, default 4096; larger subnets are
                      scanned in rotating chunks (a /16 takes 16 cycles to cover once). From 1.18.0 the
                      server sends a plan for large subnets: known addresses every cycle, the rest
@@ -47,8 +50,8 @@ Environment variables:
   JT_IPAM_RELAY_PORTS   only relay to these ports (narrows the list set in the web UI)
   JT_IPAM_RELAY_MAX     at most this many concurrent sessions (narrows the web UI setting)
   JT_IPAM_RELAY_CIDRS   comma separated: only relay into these networks, whatever the server says
-                        (a compromised server still cannot reach past them; for a real guarantee
-                        also set JT_IPAM_AUTO_UPDATE=0)
+                        (a compromised server still cannot reach past them, and cannot push a
+                        new agent either: updates must carry the jt-ipam signature)
 """
 from __future__ import annotations
 
@@ -56,6 +59,8 @@ import base64
 import bisect
 import concurrent.futures
 import hashlib
+import http.client
+import hmac
 import ipaddress
 import json
 import os
@@ -75,7 +80,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-AGENT_VERSION = "1.20.0"
+AGENT_VERSION = "1.21.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INTERVAL = int(os.environ.get("JT_IPAM_INTERVAL", "300"))
@@ -104,16 +109,107 @@ _last_run: dict[tuple, float] = {}
 _CURRENT_FAST: list[int] = [0]
 
 
+# ── 伺服器身分（2026-11-04）──────────────────────────────────────────────────
+# 安裝指令帶 jt-ipam 憑證公鑰的指紋（JT_IPAM_PIN=sha256//<base64>，跟 curl --pinnedpubkey 同格式）：代理只跟
+# 出示這把公鑰的伺服器講話，握手完、送出金鑰之前就比對。沒有指紋時用系統 CA 驗證；JT_IPAM_INSECURE 才完全不驗。
+# 以前的安裝指令一律 INSECURE：能攔截網路的人可以假冒 jt-ipam，拿走金鑰、推一支以 root 執行的「新版代理」。
+# 這一段在掃描代理與 RustDesk 代理裡一字不差（tests/test_python_agent_trust.py 比對）。
+PIN = os.environ.get("JT_IPAM_PIN", "").strip()
+# 自我更新只裝用 jt-ipam 簽章金鑰簽過的版本（RSA-3072、PKCS#1 v1.5、SHA-256；私鑰不在程式庫裡）
+AGENT_SIGNING_N = int.from_bytes(base64.b64decode(
+    "58yoM59293eHgMFKcrE6nWfpIWVQqHr7SJIhyXmCjaAQVoqwCY2VNqinJIMGGDE2wAiKKjxm8xSi+0Cx89/fF/hNAs59s+T9m8q4pV7f39QW/AeREcMj+1qk3Y+f4XbarAh2kd82f9eNx4mQ7P+1AIpyFTfPRsX/lzcNVZ8L9PcwgOA08qydmiuJ0yLNR987OMaWuc2wRIXjcYmwjYLXrpqxDC+jCccY2Ni25nCrJzJIoqGbhWJP5Ddu3lq/gD37DiNoqmleNYiDeEAM1/w7LtplmMF0Pn4QsMvcRzgORMwYoBFrT09ouC3iKiIcZNlDnlg9dBvpE1QmyY2EwLVxS7Y+FmMPyfgTvKQyT2s63+3KrXhR3nOESdfolZdbjW09dEybI6TPSRjAlQKl7cuIKyJeySlxeFu4ARscP6HcmoBNVpqLZP2epoDz0mORCeGG9U2K4yDDHZwrmI+U+/BvO7LX+hO8YXbYeONCuztgg1MiwFyWdPk+xg0/jC651a2N"), "big")
+AGENT_SIGNING_E = 65537
+_SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
+
+
+def _tls_mode() -> str:
+    """回報給伺服器（X-Agent-Tls）：pinned / ca / insecure。http 根本沒加密，算 insecure。"""
+    if not SERVER.startswith("https"):
+        return "insecure"
+    return "pinned" if PIN else ("insecure" if INSECURE else "ca")
+
+
 def _ctx() -> ssl.SSLContext | None:
     if not SERVER.startswith("https"):
         return None
     ctx = ssl.create_default_context()
     # 代理連回伺服器一律 TLS 1.2 以上（CodeQL #43）。Python 3.10 起預設就是，明寫出來不靠預設值
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    if INSECURE:
+    if PIN or INSECURE:
+        # 釘選時身分由 _check_pin 比對公鑰（自簽憑證、用 IP 連都可以）；只有 INSECURE 是真的不驗
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     return ctx
+
+
+def _der_tlv(der: bytes, i: int) -> tuple[int, int, int]:
+    """DER 的一個 TLV → (tag, 內容起點, 結尾)。"""
+    tag, n = der[i], der[i + 1]
+    i += 2
+    if n & 0x80:
+        k = n & 0x7F
+        n = int.from_bytes(der[i:i + k], "big")
+        i += k
+    return tag, i, i + n
+
+
+def _spki_pin(der: bytes) -> str:
+    """憑證 DER → sha256//<base64>（SubjectPublicKeyInfo 的 SHA-256）。標準函式庫取不出公鑰，自己走 X.509 結構。"""
+    _, i, _ = _der_tlv(der, 0)                 # Certificate
+    _, i, _ = _der_tlv(der, i)                 # TBSCertificate 的內容
+    tag, _, end = _der_tlv(der, i)
+    if tag == 0xA0:                            # [0] version（v1 憑證沒有這欄）
+        i = end
+    for _ in range(5):                         # serialNumber, signature, issuer, validity, subject
+        i = _der_tlv(der, i)[2]
+    end = _der_tlv(der, i)[2]                  # subjectPublicKeyInfo 整段
+    return "sha256//" + base64.b64encode(hashlib.sha256(der[i:end]).digest()).decode()
+
+
+def _check_pin(sock: ssl.SSLSocket) -> None:
+    if not PIN:
+        return
+    try:
+        got = _spki_pin(sock.getpeercert(binary_form=True) or b"")
+    except (IndexError, ValueError):
+        got = ""
+    if not hmac.compare_digest(got.encode(), PIN.encode()):
+        sock.close()
+        raise ssl.SSLError("server certificate does not match JT_IPAM_PIN "
+                           "(not the jt-ipam server this agent was installed for)")
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self) -> None:
+        super().connect()
+        _check_pin(self.sock)
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):  # type: ignore[no-untyped-def]
+        return self.do_open(_PinnedHTTPSConnection, req, context=self._context)
+
+
+def _urlopen(req: urllib.request.Request, timeout: float):  # type: ignore[no-untyped-def]
+    """連回伺服器的 HTTP(S) 都走這裡：釘選時在送出請求（與金鑰）之前比對公鑰。"""
+    if PIN and SERVER.startswith("https"):
+        return urllib.request.build_opener(_PinnedHTTPSHandler(context=_ctx())).open(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout, context=_ctx())  # noqa: S310
+
+
+def _verify_signature(data: bytes, sig_b64: str) -> bool:
+    """RSA PKCS#1 v1.5 / SHA-256 驗章，純 Python：不靠 openssl，也就不會因為主機沒裝而跳過。"""
+    try:
+        sig = base64.b64decode(sig_b64.strip(), validate=True)
+    except (ValueError, TypeError):
+        return False
+    k = (AGENT_SIGNING_N.bit_length() + 7) // 8
+    s = int.from_bytes(sig, "big")
+    if len(sig) != k or s >= AGENT_SIGNING_N:
+        return False
+    t = _SHA256_DIGEST_INFO + hashlib.sha256(data).digest()
+    want = b"\x00\x01" + b"\xff" * (k - len(t) - 3) + b"\x00" + t
+    return hmac.compare_digest(pow(s, AGENT_SIGNING_E, AGENT_SIGNING_N).to_bytes(k, "big"), want)
 
 
 def _capabilities() -> list[str]:
@@ -193,12 +289,13 @@ def _req(method: str, path: str, body: dict | None = None,
     req = urllib.request.Request(url, data=data, method=method)  # noqa: S310
     req.add_header("X-Agent-Key", KEY)
     req.add_header("X-Agent-Version", AGENT_VERSION)
+    req.add_header("X-Agent-Tls", _tls_mode())
     if extra_headers:
         for k, v in extra_headers.items():
             req.add_header(k, v)
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=timeout, context=_ctx()) as resp:  # noqa: S310
+    with _urlopen(req, timeout) as resp:
         return json.loads(resp.read().decode() or "{}")
 
 
@@ -206,7 +303,8 @@ def _get_bytes(path: str) -> bytes:
     req = urllib.request.Request(f"{SERVER}{path}", method="GET")  # noqa: S310
     req.add_header("X-Agent-Key", KEY)
     req.add_header("X-Agent-Version", AGENT_VERSION)
-    with urllib.request.urlopen(req, timeout=30, context=_ctx()) as resp:  # noqa: S310
+    req.add_header("X-Agent-Tls", _tls_mode())
+    with _urlopen(req, 30) as resp:
         return resp.read()
 
 
@@ -270,6 +368,11 @@ def _maybe_self_update(server_sha: str | None) -> None:
         new = _get_bytes("/api/v1/scan-agents/agent.py")
         if hashlib.sha256(new).hexdigest() != server_sha:
             print("[update] downloaded sha mismatch; skip this round", flush=True)
+            return
+        # 只裝 jt-ipam 簽章金鑰簽過的版本：sha256 是同一台伺服器給的，假冒或被入侵的伺服器照樣算得出來
+        sig = _get_bytes("/api/v1/scan-agents/agent.py.sig").decode("ascii", "replace")
+        if not _verify_signature(new, sig):
+            print("[update] SIGNATURE CHECK FAILED; keeping the current agent", file=sys.stderr, flush=True)
             return
         tmp = AGENT_PATH + ".new"
         with open(tmp, "wb") as f:
@@ -2841,13 +2944,15 @@ def _ws_connect(path: str, headers: dict, timeout: float = RELAY_CONNECT_TIMEOUT
     raw = socket.create_connection((host, port), timeout=timeout)
     try:
         sock = _ctx().wrap_socket(raw, server_hostname=host) if tls else raw
+        if tls:
+            _check_pin(sock)              # 主控台中繼一樣只跟釘選的伺服器講話
         key = base64.b64encode(os.urandom(16)).decode()
         hosthdr = f"[{host}]" if ":" in host else host
         if u.port:
             hosthdr += f":{u.port}"
         lines = [f"GET {u.path.rstrip('/')}{path} HTTP/1.1", f"Host: {hosthdr}", "Upgrade: websocket",
                  "Connection: Upgrade", f"Sec-WebSocket-Key: {key}", "Sec-WebSocket-Version: 13",
-                 f"X-Agent-Key: {KEY}", f"X-Agent-Version: {AGENT_VERSION}"]
+                 f"X-Agent-Key: {KEY}", f"X-Agent-Version: {AGENT_VERSION}", f"X-Agent-Tls: {_tls_mode()}"]
         lines += [f"{k}: {v}" for k, v in headers.items()]
         sock.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
         resp = b""
@@ -3021,7 +3126,7 @@ def main() -> int:
               file=sys.stderr)
         return 2
     print(f"jt-ipam agent v{AGENT_VERSION} -> {SERVER}  fallback_interval={INTERVAL}s "
-          f"insecure={INSECURE} auto_update={AUTO_UPDATE}", flush=True)
+          f"tls={_tls_mode()} auto_update={AUTO_UPDATE}", flush=True)
     # fast loop 由 server 的 interval_seconds 決定；poll 失敗時退回 env INTERVAL。
     sleep_for = INTERVAL
     # On-demand probe jobs run in a separate thread: scanning must not wait on them,

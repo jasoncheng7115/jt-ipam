@@ -93,9 +93,9 @@
     "step3_gen_a": "Fastest: in the Distribution Agents list, click the",
     "step3_gen_b": "tool in that agent's action column, pick certs + services, then paste the result back.",
     "oneliner_label": "One-line install (auto root / sudo):",
-    "distros": "Supports Debian 11/12/13, Ubuntu 22.04/24.04/26.04, RHEL/Rocky/AlmaLinux/CentOS, Fedora, openSUSE/SLES (auto-detects apt/dnf/yum/zypper). Keep JT_IPAM_INSECURE=1 if the server uses a self-signed cert.",
+    "distros": "Supports Debian 11/12/13, Ubuntu 22.04/24.04/26.04, RHEL/Rocky/AlmaLinux/CentOS, Fedora, openSUSE/SLES (auto-detects apt/dnf/yum/zypper).",
     "distros_title": "Supported OS / distributions",
-    "distros_note": "Auto-detects apt / dnf / yum / zypper; keep JT_IPAM_INSECURE=1 if the server cert is self-signed.",
+    "distros_note": "Auto-detects apt / dnf / yum / zypper. With a self-signed jt-ipam certificate the command pins its fingerprint, so verification stays on.",
     "after_install_gen": "Once the agent is installed, come back to this list and click the \"Generate config\" tool in its action column to quickly build its deployment config (which certificates to push, which service profile to use).",
     "service_note": "Installed units (systemd): jt-ipam-cert-agent.timer (schedule, daily) + jt-ipam-cert-agent.service (each run). Full logs: journalctl -u jt-ipam-cert-agent.service (add -f to follow). Run once now: systemctl start jt-ipam-cert-agent.service.",
     "config_label": "Config example (/etc/jt-ipam-cert-agent/config):",
@@ -1025,7 +1025,7 @@
     "step2": "On a Linux host in the target segment, run the one-liner below (downloads the agent, sets up systemd, starts reporting).",
     "step3": "In Subnets, set the subnets you want scanned to use this agent and enable scanning.",
     "oneliner_label": "One-line install (run as root on the agent host)",
-    "note": "The key is shown only once (at create / rotate). The command includes JT_IPAM_INSECURE=1 for self-signed server certs.",
+    "note": "The key is shown only once (at create / rotate). The install command pins this jt-ipam's certificate by default (self-signed works too): the agent talks only to this server and self-update only installs versions signed by jt-ipam.",
     "key_title": "Agent created — copy the key now",
     "key_warn": "The enrollment key for \"{name}\" is shown only once.",
     "key_label": "Enrollment Key",
@@ -1049,7 +1049,10 @@
     "col_version": "Version",
     "assign_subnets": "Subnets to scan",
     "assign_subnets_ph": "Pick subnets this agent scans (same setting as the subnet edit page)",
-    "col_subnets": "Subnets"
+    "col_subnets": "Subnets",
+    "reinstall_label": "Already installed: upgrade or change the server check (the key and other settings are kept, no need to pass them)",
+    "trust_fix_insecure": "This agent does not verify the server: anyone who can intercept the traffic could pose as jt-ipam to take the key or push a malicious program. Open the install guide, choose \"Pin this server's certificate\" and run the \"Already installed\" command on the host (the key and other settings are kept).",
+    "trust_fix_legacy": "Older agents do not report how they check the server, and one installed with the old command most likely does not. The agent updates itself; then open the install guide, choose \"Pin this server's certificate\" and run the \"Already installed\" command on the host (the key and other settings are kept)."
   },
   "chat": {
     "local_badge": "Local Ollama",
@@ -7075,7 +7078,9 @@
     "del_status_skipped_online": "Skipped (online)",
     "del_status_not_found": "Not found",
     "del_status_failed": "Failed",
-    "del_status_cancelled": "Cancelled"
+    "del_status_cancelled": "Cancelled",
+    "trust_fix_insecure": "This agent does not verify the server: anyone who can intercept the traffic could pose as jt-ipam to take the key or push a malicious program. Click \"Install command\", choose \"Pin this server's certificate\" and run it again on the RustDesk host (other settings are kept).",
+    "trust_fix_legacy": "Older agents do not report how they check the server, and one installed with the old command most likely does not. The agent updates itself; then click \"Install command\", choose \"Pin this server's certificate\" and run it again on the RustDesk host (other settings are kept)."
   },
   "rdfile": {
     "badge": "File transfer",
@@ -9823,5 +9828,25 @@
     "wd_4": "Fri",
     "wd_5": "Sat",
     "wd_6": "Sun"
+  },
+  "certTrust": {
+    "col": "Server check",
+    "title": "How the agent makes sure it talks to this jt-ipam",
+    "mode_pinned": "Pin this server's certificate (recommended)",
+    "mode_ca": "Verify with system CAs",
+    "mode_insecure": "Do not verify (not recommended)",
+    "hint_mode_pinned": "The install command and every later connection of the agent only accept a server whose certificate fingerprint is {fp}…; another host posing as jt-ipam is refused before the agent key is sent. After jt-ipam changes its certificate (with a new key), run the install command on the host again.",
+    "hint_mode_ca": "The host's system CAs verify the jt-ipam certificate; use this when jt-ipam has a certificate from a public CA.",
+    "hint_unavailable": "The certificate this jt-ipam presents cannot be read (for example a load balancer handles HTTPS in front of it), so it cannot be pinned; with a public certificate choose \"Verify with system CAs\".",
+    "hint_mode_insecure": "No server check: anyone who can intercept the traffic could pose as jt-ipam, take the agent key or push a program that runs as root / SYSTEM on the host. Use it only for testing.",
+    "state_pinned": "Pinned",
+    "state_ca": "Certificate",
+    "state_insecure": "Not verified",
+    "state_legacy": "Not verified (old)",
+    "hint_pinned": "The agent only talks to the jt-ipam whose certificate fingerprint matches, and self-update only accepts versions signed by jt-ipam.",
+    "hint_ca": "The agent verifies the jt-ipam certificate with the host's system CAs, and self-update only accepts versions signed by jt-ipam.",
+    "hint_insecure": "This agent does not verify the server: anyone who can intercept the traffic could pose as jt-ipam to take the key or push a malicious program. Open \"View agent connection key & install command\", choose \"Pin this server's certificate\" and run the install command on the host again (the deployments are kept).",
+    "hint_legacy": "An older agent does not report how it checks the server; ones installed with the old command usually do not. The agent updates itself on its next run; then open \"View agent connection key & install command\" and run the install command on the host once more to pin the server certificate (the deployments are kept).",
+    "hint_pinned_public": "This certificate comes from a public CA (for example Let's Encrypt) and is renewed regularly, usually with a new key; after a renewal the pinned fingerprint no longer matches and the agent cannot connect. Open jt-ipam by the domain name on the certificate and generate the command there; it then uses system CA verification."
   }
 }

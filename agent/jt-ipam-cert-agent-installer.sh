@@ -13,7 +13,11 @@
 # Usage:
 #   sudo JT_IPAM_URL=https://ipam.example.com JT_IPAM_AGENT_KEY=<key> ./jt-ipam-cert-agent-installer.sh
 # Options:
-#   JT_IPAM_INSECURE=1      set to 1 when the server cert is self-signed (writes VERIFY_TLS=false)
+#   JT_IPAM_PIN=sha256//…   pin the jt-ipam server's public key (the install command on the agent page fills
+#                           this in). Works with a self-signed server certificate and is written to the config,
+#                           so every later connection is checked against it too. Preferred over JT_IPAM_INSECURE.
+#   JT_IPAM_INSECURE=1      skip server verification entirely (not recommended: anyone who can intercept the
+#                           traffic could pose as jt-ipam and push a script that runs as root)
 #   JT_IPAM_ONCALENDAR=...  custom schedule (default: daily)
 #   JT_IPAM_UNINSTALL=1     remove the agent (timer, service, agent files, config and state) and exit
 #
@@ -44,6 +48,7 @@ fi
 : "${JT_IPAM_URL:?JT_IPAM_URL is required, e.g. https://ipam.example.com}"
 : "${JT_IPAM_AGENT_KEY:?JT_IPAM_AGENT_KEY is required (obtained when creating a cert-agent)}"
 JT_IPAM_INSECURE="${JT_IPAM_INSECURE:-}"
+JT_IPAM_PIN="${JT_IPAM_PIN:-}"
 JT_IPAM_ONCALENDAR="${JT_IPAM_ONCALENDAR:-daily}"
 
 # ── Detect package manager (only needed to install curl if missing) ──
@@ -71,7 +76,8 @@ install -d "$DEST" "$CONFDIR"
 # Always set connect/overall timeouts so a dead IPv6 path or a firewall blackhole
 # (common in LXC / containers) fails fast instead of hanging silently with no output.
 CURL_OPTS=(-fsSL --connect-timeout 10 --max-time 60 --retry 2)
-[[ -n "$JT_IPAM_INSECURE" ]] && CURL_OPTS+=(-k)
+if [[ -n "$JT_IPAM_PIN" ]]; then CURL_OPTS+=(-k --pinnedpubkey "$JT_IPAM_PIN")   # the pin replaces CA checks
+elif [[ -n "$JT_IPAM_INSECURE" ]]; then CURL_OPTS+=(-k); fi
 echo "Downloading agent from ${JT_IPAM_URL%/} …"
 if ! curl "${CURL_OPTS[@]}" "${JT_IPAM_URL%/}/api/v1/cert-agents/agent.sh" -o "$AGENT"; then
     echo "ERROR: could not download the agent from ${JT_IPAM_URL%/} (timeout / unreachable)." >&2
@@ -99,7 +105,8 @@ if [[ ! -f "$CONF" ]]; then
     cat > "$CONF" <<EOF
 SERVER=${JT_IPAM_URL%/}
 AGENT_KEY=${JT_IPAM_AGENT_KEY}
-VERIFY_TLS=$([[ -n "$JT_IPAM_INSECURE" ]] && echo false || echo true)
+VERIFY_TLS=$([[ -n "$JT_IPAM_INSECURE" && -z "$JT_IPAM_PIN" ]] && echo false || echo true)
+$([[ -n "$JT_IPAM_PIN" ]] && echo "PINNED_PUBKEY=${JT_IPAM_PIN}")
 AUTO_UPDATE=true
 TLS_BASE=/etc/ssl/jt-ipam
 
@@ -178,6 +185,16 @@ EOF
     CONF_STATUS="created (template - edit DEPLOY_1_* to enable)"
 else
     CONF_STATUS="kept (existing config left untouched)"
+    # Re-running the install command from the agent page is how an existing agent gets the server pin:
+    # only the pin line changes, the deployments stay as they are.
+    if [[ -n "$JT_IPAM_PIN" ]]; then
+        if grep -q '^PINNED_PUBKEY=' "$CONF"; then
+            sed -i "s|^PINNED_PUBKEY=.*|PINNED_PUBKEY=${JT_IPAM_PIN}|" "$CONF"
+        else
+            sed -i "/^AGENT_KEY=/a PINNED_PUBKEY=${JT_IPAM_PIN}" "$CONF"
+        fi
+        CONF_STATUS="kept, jt-ipam server key pinned (deployments left untouched)"
+    fi
 fi
 
 # Compact one-line list of certs this agent can deploy (valid DEPLOY_<N>_CERT values).

@@ -240,11 +240,22 @@ async def download_installer() -> PlainTextResponse:
     return PlainTextResponse(p.read_text(), media_type="text/x-shellscript")
 
 
+def _exact(path: Path, media_type: str) -> Response:
+    """原封不動送出檔案的位元組：代理驗的是這份的簽章與 sha256（read_text 會改掉換行）。"""
+    if not path.exists():
+        raise HTTPException(404, detail="not found")
+    return Response(content=path.read_bytes(), media_type=media_type)
+
+
 @router.get("/agent.sh", include_in_schema=False)
-async def download_agent() -> PlainTextResponse:
-    if not _AGENT_SH.exists():
-        raise HTTPException(404, detail="agent not found")
-    return PlainTextResponse(_AGENT_SH.read_text(), media_type="text/x-shellscript")
+async def download_agent() -> Response:
+    return _exact(_AGENT_SH, "text/x-shellscript")
+
+
+@router.get("/agent.sh.sig", include_in_schema=False)
+async def download_agent_sig() -> Response:
+    """agent.sh 的簽章（base64 RSA / SHA-256，scripts/sign-agents.sh 產生）。代理自我更新前會驗。"""
+    return _exact(_AGENT_SH.with_name(_AGENT_SH.name + ".sig"), "text/plain")
 
 
 @router.get("/installer.ps1", include_in_schema=False)
@@ -257,10 +268,25 @@ async def download_installer_ps1() -> PlainTextResponse:
 
 
 @router.get("/agent.ps1", include_in_schema=False)
-async def download_agent_ps1() -> PlainTextResponse:
-    if not _AGENT_PS1.exists():
-        raise HTTPException(404, detail="agent not found")
-    return PlainTextResponse(_AGENT_PS1.read_text(), media_type="text/plain; charset=utf-8")
+async def download_agent_ps1() -> Response:
+    return _exact(_AGENT_PS1, "text/plain; charset=utf-8")
+
+
+@router.get("/agent.ps1.sig", include_in_schema=False)
+async def download_agent_ps1_sig() -> Response:
+    return _exact(_AGENT_PS1.with_name(_AGENT_PS1.name + ".sig"), "text/plain")
+
+
+@router.get("/server-identity", dependencies=[Depends(require_admin)])
+async def server_identity(origin: Annotated[str, Query(max_length=300)]) -> dict[str, Any]:
+    """jt-ipam 自己出示的 HTTPS 憑證，給「新增派送代理」的安裝指令釘選用。
+
+    `origin` 是瀏覽器網址列上的 jt-ipam（例如 https://ipam.example.net）。**只連本機**（127.0.0.1 的同一個埠，
+    SNI 帶網址的主機名稱），拿到的就是這台伺服器實際送出去的那張，也不會被拿來連別的主機（不是 SSRF 入口）。
+    前面還有負載平衡器在終結 TLS 時，本機拿到的不是使用者看到的那張 → 畫面讓管理員改用憑證驗證。
+    """
+    from app.services.server_tls import local_identity
+    return await local_identity(origin)
 
 
 @router.get("/server-version", dependencies=[Depends(require_admin)])
@@ -319,6 +345,7 @@ async def agents_status(
             "recent_source_ips": recent_ips,
             "multi_source_recent": len(recent_ips) > 1,
             "agent_version": a.agent_version,
+            "tls_mode": a.tls_mode,
             "server_agent_version": _server_agent_version(a.agent_version),
             "deployments": deps,
         })
@@ -501,6 +528,7 @@ async def agent_check(
     fmt: Annotated[str, Query(alias="format")] = "json",
     x_agent_key: Annotated[str | None, Header()] = None,
     x_agent_version: Annotated[str | None, Header()] = None,
+    x_agent_tls: Annotated[str | None, Header()] = None,
 ):
     """agent poll：回傳此 agent scope 內各憑證的「目前版本」指紋 + 到期日。
 
@@ -513,6 +541,8 @@ async def agent_check(
     _record_source_ip(agent, agent.last_source_ip)
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
+    # 代理怎麼確認伺服器（舊版代理不帶 → None，清單會提示重新安裝）
+    agent.tls_mode = x_agent_tls if x_agent_tls in ("pinned", "ca", "insecure") else None
     certs = await _current_versions_for_scope(session, agent)
     await session.commit()
     sha = _agent_sha()  # server 上派送代理程式的 sha256；agent 比對不同就自我更新

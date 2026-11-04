@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [Unreleased]
+
+### Security
+- **Certificate agents make sure they talk to the real jt-ipam** (a user asked "what if someone poses as the jt-ipam certificate server"). The install commands used to turn TLS verification off (`curl -k`, `JT_IPAM_INSECURE`), so anyone who could intercept the traffic could pose as jt-ipam, take the agent key, or push a "new agent" that the host runs as root / SYSTEM.
+  - **The install command pins the jt-ipam certificate**: the page reads the certificate this jt-ipam actually presents (connecting to itself only) and puts its fingerprint in the command. Linux uses curl's `--pinnedpubkey`, Windows compares the certificate's SHA-256; it is written to the agent config and checked on every connection, which stops before the key is sent when it does not match. Works with a self-signed certificate.
+  - With a certificate from a public CA the command uses normal certificate verification; "do not verify" can still be chosen but is marked as risky and is no longer the default.
+  - **Self-update checks a signature**: the agent only installs a version signed with the jt-ipam signing key (openssl on Linux, .NET on Windows), so neither a fake nor a compromised server can push a script. Linux agent 0.4.176, Windows agent 1.1.1.
+  - **The list shows agents that do not check the server**: the agents tab has a "Server check" column (pinned, certificate, not verified, not verified (old)) with the fix on hover. Running the install command on the host again adds the pin to an existing agent; the deployments stay.
+
+- **Scan and RustDesk agents make sure they talk to the real jt-ipam too**. Their install commands always carried `JT_IPAM_INSECURE=1`, the same problem as the certificate agents.
+  - The install command pins the jt-ipam certificate's public key by default here too (`JT_IPAM_PIN`). The agent checks it on every connection (the console relay included) before sending its key, and all three agent pages use the same choice.
+  - **Self-update only installs versions signed by jt-ipam**, checked in pure Python without openssl. Scan agent 1.21.0, RustDesk agent 1.3.0.
+  - The lists have a "Server check" column. Re-running the scan agent installer now keeps the key and other settings from the config file: on an installed host the "Already installed" command in the install guide adds the pin without rotating the key.
+
+### Fixed
+- Copying a certificate agent install command by selecting it lost the line breaks, which broke it in PowerShell; the line breaks are kept now.
+- The docs site top bar wrapped to two lines in English and Japanese, breaking the logo too. It now measures the bar and moves the links into the menu when they do not fit; the bar may be wider than the content and three English labels are shorter.
+- Some docs titles and code comments were not translated and showed the same Chinese or Japanese text in every language (three integration guide card titles, a talk title, about a dozen troubleshooting comments and more). They now switch with the language, with a guard test.
+
 ## [1.0.19] - 2026-11-04
 
 ### Added

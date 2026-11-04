@@ -91,6 +91,7 @@ class RustDeskServerRead(StrictModel):
     # 專用代理
     has_agent_key: bool = False
     agent_version: str | None = None
+    agent_tls_mode: str | None = None          # pinned / ca / insecure；None＝舊版代理
     agent_latest_version: str | None = None     # 伺服器上這一版代理程式的版本（給畫面標「版本落後」）
     agent_last_seen_at: datetime | None = None
     agent_source_ip: str | None = None
