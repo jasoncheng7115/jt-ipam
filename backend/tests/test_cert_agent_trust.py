@@ -71,7 +71,9 @@ class _Https:
 
         class H(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
+                # 要帶長度：沒有的話回應靠斷線結束，OpenSSL 3.5（Ubuntu 26.04）的 curl 會當成 unexpected eof（rc=56）
                 self.send_response(200)
+                self.send_header("Content-Length", "2")
                 self.end_headers()
                 self.wfile.write(b"ok")
 
