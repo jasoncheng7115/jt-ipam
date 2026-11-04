@@ -226,3 +226,23 @@ async def test_server_identity_reads_the_local_certificate(client, auth_headers,
     r = await client.get("/api/v1/cert-agents/server-identity", headers=auth_headers,
                          params={"origin": "http://ipam.example.net"})
     assert r.json() == {"available": False, "reason": "not_https"}
+
+
+@NEED_TOOLS
+def test_server_identity_never_offers_old_tls(tmp_path, monkeypatch) -> None:
+    """讀本機憑證的連線也只用 TLS 1.2 以上（CodeQL #61 #62：create_default_context 預設還允許 1.0 / 1.1）。"""
+    from app.services import server_tls
+    made: list[ssl.SSLContext] = []
+    real = ssl.create_default_context
+
+    def spy(*a, **kw):  # type: ignore[no-untyped-def]
+        ctx = real(*a, **kw)
+        made.append(ctx)
+        return ctx
+    monkeypatch.setattr(server_tls.ssl, "create_default_context", spy)
+    srv = _Https(tmp_path)
+    try:
+        server_tls._fetch("ipam.example.net", srv.port)
+    finally:
+        srv.close()
+    assert len(made) >= 2 and all(c.minimum_version >= ssl.TLSVersion.TLSv1_2 for c in made)

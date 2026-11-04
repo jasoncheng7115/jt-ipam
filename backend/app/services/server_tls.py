@@ -26,6 +26,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 def _verifies(host: str, port: int, *, check_hostname: bool, timeout: float) -> bool:
     try:
         vctx = ssl.create_default_context()
+        vctx.minimum_version = ssl.TLSVersion.TLSv1_2     # CodeQL #61：預設還允許 TLS 1.0 / 1.1
         vctx.check_hostname = check_hostname
         with socket.create_connection(("127.0.0.1", port), timeout=timeout) as raw, \
                 vctx.wrap_socket(raw, server_hostname=host):
@@ -37,6 +38,7 @@ def _verifies(host: str, port: int, *, check_hostname: bool, timeout: float) -> 
 def _fetch(host: str, port: int, timeout: float = 5.0) -> tuple[bytes, bool, bool]:
     """(本機出示的憑證 DER, 用系統 CA 驗得過且主機名稱相符, 憑證鏈本身是公開 CA 簽的（不管主機名稱）)"""
     ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2          # CodeQL #62
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     with socket.create_connection(("127.0.0.1", port), timeout=timeout) as raw, \
