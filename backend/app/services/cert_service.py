@@ -157,6 +157,43 @@ def validate_bundle(cert_pem: str, key_pem: str, chain_pem: str | None = None) -
     )
 
 
+def pfx_to_pem(data: bytes, password: str | None) -> tuple[str, str | None, str | None]:
+    """PFX / P12 → (葉憑證 PEM, 私鑰 PEM 或 None, 中繼鏈 PEM 或 None)。
+
+    Windows / IIS 匯出、CA 寄來的多半是 PFX；以前只能先自己轉成 PEM（2026-11-03）。
+    沒有私鑰的 PFX（只裝了憑證）回 None，由呼叫端決定要不要沿用目前版本的私鑰。
+    """
+    from cryptography.hazmat.primitives.serialization import pkcs12
+
+    pw = password.encode() if password else None
+    try:
+        key, leaf, extra = pkcs12.load_key_and_certificates(data, pw)
+    except ValueError as exc:
+        # 密碼錯與檔案壞掉 cryptography 都丟 ValueError；訊息裡有 password 的多半是密碼
+        if "password" in str(exc).lower() or "mac" in str(exc).lower():
+            raise CertError("PFX 密碼不對（或這個檔案需要密碼）", code="cert_pfx_password") from exc
+        raise CertError(f"PFX 無法解析：{exc}", code="cert_pfx_bad", reason=str(exc)) from exc
+    except Exception as exc:
+        raise CertError(f"PFX 無法解析：{exc}", code="cert_pfx_bad", reason=str(exc)) from exc
+    extra = list(extra or [])
+    if leaf is None:
+        # 沒有私鑰的 PFX：葉憑證不會被認成「金鑰的憑證」，而是混在其他憑證裡 → 挑不是 CA 的那張
+        def _is_ca(c: x509.Certificate) -> bool:
+            try:
+                return bool(c.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+            except x509.ExtensionNotFound:
+                return False
+        leaves = [c for c in extra if not _is_ca(c)]
+        if not leaves:
+            raise CertError("PFX 裡沒有憑證", code="cert_pfx_bad", reason="no certificate")
+        leaf = leaves[0]
+        extra = [c for c in extra if c is not leaf]
+    cert_pem = leaf.public_bytes(Encoding.PEM).decode()
+    key_pem = key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode() if key else None
+    chain_pem = "".join(c.public_bytes(Encoding.PEM).decode() for c in extra) or None
+    return cert_pem, key_pem, chain_pem
+
+
 def export_cert_file(
     cert_pem: str, key_pem: str, chain_pem: str | None, fmt: str,
     *, name: str = "certificate", pfx_password: str = "", pfx_legacy: bool = False,

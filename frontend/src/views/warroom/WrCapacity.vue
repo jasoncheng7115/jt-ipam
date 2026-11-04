@@ -19,7 +19,7 @@ const pageTrans = usePageTransition();     // 換資料頁只換分頁的那一�
 const { t } = useI18n();
 
 interface Item {
-  kind: "subnet" | "pool"; id: string; label: string; ident: string; cidr: string | null; server?: string | null; capacity: number;
+  kind: "subnet" | "pool"; id: string; label: string; ident: string; cidr: string | null; ranges?: [string, string][]; server?: string | null; capacity: number;
   used: number; reserved: number; free: number; pct: number | null; level: string; scan: string; unit: number;
   order: string; cells: string[];
 }
@@ -37,7 +37,13 @@ function pctText(p: number | null): string {
       <header class="cap-h">
         <span class="cap-h__ico"><WrIco :icon="it.kind === 'pool' ? SECTION_ICONS.pool : SECTION_ICONS.subnet" /></span><WrName :text="it.label" class="cap-h__n" />
         <div class="cap-h__id">
-          <div class="cap-h__ident">{{ it.ident }}</div>
+          <!-- 同一個網段設了好幾段範圍（issue #57）：一段一行，太多就只列前兩段 -->
+          <template v-if="it.ranges && it.ranges.length > 1">
+            <div v-for="r in it.ranges.slice(0, 2)" :key="r[0]" class="cap-h__ident cap-h__ident--multi"
+                 data-testid="wr-cap-range">{{ r[0] }} - {{ r[1] }}</div>
+            <div v-if="it.ranges.length > 2" class="cap-h__sub">{{ t("warroom.more_ranges", { n: it.ranges.length - 2 }) }}</div>
+          </template>
+          <div v-else class="cap-h__ident">{{ it.ident }}</div>
           <!-- 集區：標題跟子網路卡片一樣是子網路名稱，這裡標明是 DHCP 集區與發放的伺服器 -->
           <div v-if="it.kind === 'pool'" class="cap-h__sub">{{ t("warroom.dhcp_pool") }}<template v-if="it.server"> · {{ it.server }}</template></div>
           <div v-else class="cap-h__sub">{{ it.capacity.toLocaleString() }} {{ t("warroom.addresses") }}</div>
@@ -72,6 +78,7 @@ function pctText(p: number | null): string {
 .cap-h__n { font-size: 30px; font-weight: 700; color: var(--wr-ink); }
 .cap-h__id { text-align: right; font-family: var(--wr-num); }
 .cap-h__ident { font-size: 26px; color: var(--wr-ink); white-space: nowrap; }
+.cap-h__ident--multi { font-size: 22px; line-height: 1.25; }
 .cap-h__sub { font-size: 20px; color: var(--wr-muted); white-space: nowrap; margin-top: 4px; }
 .cap-f { display: flex; align-items: baseline; gap: 18px; margin-top: auto; }
 .cap-f__l { font-size: 24px; color: var(--wr-ink); white-space: nowrap; }

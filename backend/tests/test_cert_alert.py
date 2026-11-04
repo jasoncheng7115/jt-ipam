@@ -66,3 +66,36 @@ async def test_drift_detected(db_session, admin_user):
     s = await check_cert_alerts(db_session)
     await db_session.commit()
     assert s["drift"] == 1
+
+
+async def test_failed_deployment_counts_as_drift_with_the_agent_message(db_session, admin_user):
+    """代理套用失敗時回報的是**新版**的指紋（它想換成的那張），以前因此比對不出來、不發告警；
+    這正是「換了但沒成功」的那幾台（2026-11-03 CA 出事、全面換憑證的情境：要知道誰還沒換好）。"""
+    cur_fp = "c" * 64
+    cert = await _cert_version(db_session, name=f"f-{uuid.uuid4().hex[:6]}",
+                               days_to_expiry=300, fingerprint=cur_fp)
+    agent = CertAgent(name=f"ag-{uuid.uuid4().hex[:6]}", enabled=True,
+                      reported=[{"cert": cert.name, "profile": "nginx", "fingerprint": cur_fp, "status": "failed",
+                                 "message": "verify failed: www.example.net:443 presents 0123456789ab…; rolled back",
+                                 "dry_run": False}])
+    db_session.add(agent)
+    await db_session.commit()
+    s = await check_cert_alerts(db_session)
+    await db_session.commit()
+    assert s["drift"] == 1
+    n = (await db_session.execute(select(Notification).where(Notification.object_id == cert.id))).scalars().first()
+    assert n.title_key == "notif.cert_deploy_failed"
+    assert "verify failed" in (n.params or {}).get("msg", "")
+
+
+async def test_skipped_and_dry_run_reports_are_not_drift(db_session, admin_user):
+    cur_fp = "d" * 64
+    cert = await _cert_version(db_session, name=f"s-{uuid.uuid4().hex[:6]}",
+                               days_to_expiry=300, fingerprint=cur_fp)
+    db_session.add(CertAgent(name=f"ag-{uuid.uuid4().hex[:6]}", enabled=True, reported=[
+        {"cert": cert.name, "fingerprint": "", "status": "skipped", "dry_run": False},
+        {"cert": cert.name, "fingerprint": cur_fp, "status": "failed", "dry_run": True},
+    ]))
+    await db_session.commit()
+    s = await check_cert_alerts(db_session)
+    assert s["drift"] == 0

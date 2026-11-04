@@ -3,6 +3,8 @@
 - 到期:current 版本 not_after 在 expiry_days 內(或已過期)→ 通知管理員。
 - 飄移:某 cert-agent 回報的 fingerprint ≠ 該憑證目前版本 → 代表那台沒套到最新 → 通知。
   這直接守住原始痛點「站台多容易漏掉某一台沒換」。
+  回報 failed 也算：代理套用失敗時回報的是**新版**指紋（它想換成的那張），只比指紋永遠比不出來，
+  而那正是「換了但沒成功」的機器（2026-11-03）。通知帶代理的失敗訊息。
 
 去重:同一憑證在 dedup_hours 內只發一次(查既有 Notification),所以可安全地每次 sync 都呼叫,不會洗版。
 """
@@ -110,23 +112,33 @@ async def check_cert_alerts(
             cname, fp = d.get("cert"), d.get("fingerprint")
             want = name_fp.get(cname)
             cid = name_id.get(cname)
-            if not (want and fp and cid) or fp == want:
+            failed = d.get("status") == "failed"
+            if not (want and fp and cid) or (fp == want and not failed):
                 continue
             if not notify_wanted(drift_ch):
                 continue
             if await _recently_notified(session, cid, since):
                 continue
-            dtitle = f"憑證飄移:{agent.name} 未套用最新版"
-            dbody = (f"代理「{agent.name}」上的「{cname}」指紋為 {str(fp)[:12]}…,"
-                     f"並非目前版本 {want[:12]}…;該站台可能沒換成功,請查代理紀錄。")
+            msg = str(d.get("message") or "")[:300]
+            if failed:
+                dtitle = f"憑證派送失敗:{agent.name} 沒換成 {cname}"
+                dbody = (f"代理「{agent.name}」套用「{cname}」({d.get('profile') or ''})失敗:{msg or '沒有訊息'};"
+                         f"這台還在用舊憑證,請查代理紀錄。")
+                tkey, bkey = "notif.cert_deploy_failed", "notif.cert_deploy_failed_body"
+            else:
+                dtitle = f"憑證飄移:{agent.name} 未套用最新版"
+                dbody = (f"代理「{agent.name}」上的「{cname}」指紋為 {str(fp)[:12]}…,"
+                         f"並非目前版本 {want[:12]}…;該站台可能沒換成功,請查代理紀錄。")
+                tkey, bkey = "notif.cert_drift", "notif.cert_drift_body"
             if drift_ch.get("in_app"):
-                _dp = {"agent": agent.name, "cert": cname, "fp": str(fp)[:12], "want": want[:12]}
+                _dp = {"agent": agent.name, "cert": cname, "fp": str(fp)[:12], "want": want[:12],
+                       "profile": d.get("profile") or "", "msg": msg}
                 for a in admins:
                     await push_notification(
                         session, user_id=a.id, title=dtitle, body=dbody,
                         severity="warning", link="/certificates",
                         object_type="certificate", object_id=cid,
-                        title_key="notif.cert_drift", body_key="notif.cert_drift_body", params=_dp,
+                        title_key=tkey, body_key=bkey, params=_dp,
                     )
             if drift_ch.get("email"):
                 await email_users(session, admin_emails, f"[jt-ipam] {dtitle}", dbody, link="/certificates")

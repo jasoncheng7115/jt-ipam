@@ -138,7 +138,10 @@
     "scope_hint": "このエージェントの対象になっている証明書だけを表示しています。他の証明書を配備するには、証明書ページでエージェントに追加してください。",
     "binding": "IIS のバインディング",
     "binding_hint": "アドレス:ポート の形式で指定します。IP（0.0.0.0:443）なら非 SNI のバインディング、ホスト名（www.example.com:443）なら SNI のバインディングです。そのバインディングは IIS 側に既に存在している必要があります。",
-    "test_ph": "TEST（config-test コマンド）"
+    "test_ph": "TEST（config-test コマンド）",
+    "verify": "置き換え後の確認先（任意）",
+    "verify_hint": "reload 後にこのアドレスへ接続し、サービスが新しい証明書を提示しているか確認します。違う場合はファイルを元に戻し、もう一度 reload します。形式は「ホスト名:ポート」で、「{'@'}」の後に実際の接続先を指定できます（例：www.example.com:443{'@'}127.0.0.1）。メールサービスは smtp://、imap:// で始めると STARTTLS で確認します。nginx・Apache など複数サイトを持つサービスは指定したときだけ確認し、Proxmox・Cockpit・Webmin は既定でローカルを確認します。",
+    "verify_ph": "VERIFY（確認先、例：www.example.com:443{'@'}127.0.0.1）"
   },
   "certFiles": {
     "title": "証明書の情報とファイル",
@@ -205,7 +208,7 @@
     "renew_action": "更新",
     "renew_done": "更新しました（新しいバージョンを発行し、現行として設定しました）",
     "renew_hint": "現在の CN と SAN をそのまま使って自己署名証明書を再発行し、現行のバージョンとして設定します（配布エージェントは、次にフィンガープリントが変わった時点で各拠点を自動更新します）。必要に応じて有効日数を調整してください。",
-    "filter_name": "名称 / ドメインで絞り込み",
+    "filter_name": "名前 / ドメイン / 発行者で絞り込み",
     "filter_agent": "名称 / IP で絞り込み",
     "filter_by_cert": "証明書で絞り込み",
     "multi_ip_badge": "複数 IP",
@@ -257,7 +260,17 @@
     "files_no_reload": "ファイルのみ、reload なし",
     "win_check_binding": "バインドが現在どの証明書を使っているか確認",
     "key_placeholder": "エージェント作成時の-KEY",
-    "chain_ph": "-----BEGIN CERTIFICATE-----（任意）"
+    "chain_ph": "-----BEGIN CERTIFICATE-----（任意）",
+    "need_cert": "証明書ファイルを選択してください",
+    "need_pfx": "PFX / P12 ファイルを選択してください",
+    "mode_pfx": "PFX / P12",
+    "pfx_file": "PFX / P12 ファイル",
+    "pfx_password": "PFX パスワード",
+    "pfx_hint": "証明書・秘密鍵・中間証明書を取り出します。PFX に秘密鍵がない場合は現在のバージョンの秘密鍵を使います。パスワードはファイルを開くためだけに使い、保存しません。",
+    "key_file_optional": "秘密鍵（.key、任意）",
+    "key_optional_hint": "秘密鍵は空欄にでき、その場合は現在のバージョンの秘密鍵を使います。CA が鍵を変えずに再発行・更新した場合は、新しい証明書と中間証明書だけをアップロードしてください。証明書と秘密鍵の対応は確認します。",
+    "filter_issuer": "発行者で絞り込み",
+    "issuer_self": "自己署名"
   },
   "nav": {
     "open_menu": "メニュー",
@@ -4134,7 +4147,12 @@
     "maintenance_weekly_too_far": "毎週のメンテナンスの終了日は最長 1 年です",
     "certpush_busy": "この配布先は配布中です。しばらくしてから再試行してください",
     "certpush_paloalto_pending_changes": "ファイアウォールに未コミットの変更があり、commit で一緒に適用されるため何も変更していません。先にそれらの変更を処理してください",
-    "certpush_rollback_unconfirmed": "元の証明書に戻そうとしましたが、機器は元の証明書を提示していません。機器を確認してください"
+    "certpush_rollback_unconfirmed": "元の証明書に戻そうとしましたが、機器は元の証明書を提示していません。機器を確認してください",
+    "cert_file_required": "証明書ファイルを選択してください",
+    "cert_key_required": "この証明書にはまだバージョンがありません。最初のアップロードには秘密鍵が必要です",
+    "cert_key_reuse_mismatch": "新しい証明書が現在の秘密鍵と一致しません（新しい鍵で発行されています）。新しい秘密鍵も一緒にアップロードしてください",
+    "cert_pfx_password": "PFX のパスワードが違います（またはパスワードが必要です）",
+    "cert_pfx_bad": "PFX を読み込めません：{reason}"
   },
   "adguard_admin": {
     "scope_subnets": "対象サブネットを限定",
@@ -4586,7 +4604,7 @@
       "ip_request_rejected": "IP 申請が却下された（申請者へ通知）",
       "cert_expiring": "証明書の期限が近い / 期限切れ",
       "cert_deployed": "エージェントが新しい証明書を配備した",
-      "cert_drift": "証明書のずれ（エージェントが最新でない）",
+      "cert_drift": "証明書のずれ・配布失敗（エージェントが最新でない）",
       "cert_push_failed": "ファイアウォールへの証明書の配布に失敗（または確認できず元に戻した）",
       "anomaly_detected": "異常検知が新しい問題を見つけた",
       "firewall_rules_changed": "ファイアウォールのルールが変わった（監視）",
@@ -5099,7 +5117,9 @@
     "maint_started": "メンテナンス開始：{title}",
     "maint_started_body": "範囲内のアラートを {until} まで停止します。",
     "maint_ended": "メンテナンス終了：{title}",
-    "maint_ended_body": "期間中に {suppressed} 件を停止、終了時に未復旧 {failing} 件（通常どおり送ります）。"
+    "maint_ended_body": "期間中に {suppressed} 件を停止、終了時に未復旧 {failing} 件（通常どおり送ります）。",
+    "cert_deploy_failed": "証明書の配布に失敗：{agent} が {cert} に切り替わっていません",
+    "cert_deploy_failed_body": "エージェント「{agent}」で「{cert}」（{profile}）の適用に失敗しました：{msg}。このホストはまだ古い証明書を使っています。エージェントのログを確認してください。"
   },
   "system_transfer": {
     "title": "システムのエクスポート / インポート",
@@ -9312,7 +9332,8 @@
     "info_unit_certs": "枚",
     "info_m_pools": "DHCP プール",
     "info_m_dns_groups": "DNS 比較グループ",
-    "info_m_certs": "証明書"
+    "info_m_certs": "証明書",
+    "more_ranges": "ほか {n} 範囲"
   },
   "warroom_settings": {
     "open": "ウォールームを開く",
@@ -9567,7 +9588,14 @@
     "pa_commit_admin": "commit する管理者アカウント",
     "pa_commit_admin_ph": "任意：このアカウントの変更だけを commit（partial commit）",
     "verify_explicit_hint": "この機器では証明書が管理画面以外（GlobalProtect、HAProxy など）で使われている場合があるため、確認アドレスが未入力なら「未確認」とするだけで自動では元に戻しません。管理画面の証明書を替える場合は API URL のホスト:ポートを入力してください。",
-    "verify_endpoint_ph_explicit": "例：gp.example.net:443。空欄＝確認しない"
+    "verify_endpoint_ph_explicit": "例：gp.example.net:443。空欄＝確認しない",
+    "step_precheck": "他者の未コミットの変更を確認",
+    "step_import_ca": "中間 CA を取り込み",
+    "step_staged": "候補設定に書き込み済み（commit 待ち）",
+    "step_revert_candidate": "候補設定を元に戻す",
+    "step_rollback_verify": "元に戻ったことを確認",
+    "step_read_admin": "管理画面の現在の証明書を読み込み",
+    "step_read_sslvpn": "SSL VPN の現在の証明書を読み込み"
   },
   "not_found": {
     "title": "ページが見つかりません",

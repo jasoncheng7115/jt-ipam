@@ -138,7 +138,10 @@
     "scope_hint": "Only certificates within this agent's scope are listed; to deploy others, add them to the agent on the Certificates page.",
     "binding": "IIS binding",
     "binding_hint": "Written as address:port. An IP (0.0.0.0:443) is a non-SNI binding; a hostname (www.example.com:443) is an SNI binding. The binding must already exist in IIS.",
-    "test_ph": "TEST (config-test command)"
+    "test_ph": "TEST (config-test command)",
+    "verify": "Verify address after the change (optional)",
+    "verify_hint": "After the reload, connect here and check the service presents the new certificate; if not, the files are put back and the service is reloaded again. Format is host:port, with an optional connect address after {'@'} (for example www.example.com:443{'@'}127.0.0.1); prefix smtp:// or imap:// for STARTTLS. Services that host many sites, such as nginx and Apache, are verified only when this is set; Proxmox, Cockpit and Webmin verify the local port by default.",
+    "verify_ph": "VERIFY (address to check, e.g. www.example.com:443{'@'}127.0.0.1)"
   },
   "certFiles": {
     "title": "Certificate info / files",
@@ -205,7 +208,7 @@
     "renew_action": "Renew",
     "renew_done": "Renewed (new version issued and set as current)",
     "renew_hint": "Re-issue a new self-signed certificate reusing the current CN and SANs, set as the current version (distribution agents auto-update each site on the next fingerprint change). Adjust the validity days if needed.",
-    "filter_name": "Filter by name / domain",
+    "filter_name": "Filter name / domain / issuer",
     "filter_agent": "Filter by name / IP",
     "filter_by_cert": "Filter by certificate",
     "multi_ip_badge": "Multi-IP",
@@ -257,7 +260,17 @@
     "files_no_reload": "files only, no reload",
     "win_check_binding": "Check which certificate the binding is currently using",
     "key_placeholder": "THE-KEY-FROM-WHEN-YOU-CREATED-THE-AGENT",
-    "chain_ph": "-----BEGIN CERTIFICATE----- (optional)"
+    "chain_ph": "-----BEGIN CERTIFICATE----- (optional)",
+    "need_cert": "Choose a certificate file",
+    "need_pfx": "Choose a PFX / P12 file",
+    "mode_pfx": "PFX / P12",
+    "pfx_file": "PFX / P12 file",
+    "pfx_password": "PFX password",
+    "pfx_hint": "The certificate, private key and intermediates are taken from it; without a private key in the PFX, the current version's key is kept. The password is only used to open the file and is not stored.",
+    "key_file_optional": "Private key (.key, optional)",
+    "key_optional_hint": "The private key may be left empty to keep the current version's key. When the CA reissues or renews without a new key, upload only the new certificate and intermediates; the certificate is checked against the key.",
+    "filter_issuer": "Filter by issuer",
+    "issuer_self": "Self-signed"
   },
   "nav": {
     "open_menu": "Menu",
@@ -4134,7 +4147,12 @@
     "maintenance_weekly_too_far": "A weekly maintenance can run at most one year",
     "certpush_busy": "This target is already being pushed; try again shortly",
     "certpush_paloalto_pending_changes": "The firewall has uncommitted changes that a commit would apply too, so nothing was changed; deal with those changes first",
-    "certpush_rollback_unconfirmed": "Tried to put the old certificate back, but the device does not present it; check the device"
+    "certpush_rollback_unconfirmed": "Tried to put the old certificate back, but the device does not present it; check the device",
+    "cert_file_required": "Choose a certificate file",
+    "cert_key_required": "This certificate has no version yet; the first upload needs a private key",
+    "cert_key_reuse_mismatch": "The new certificate does not match the current private key (it was issued for a new key); upload the new private key as well",
+    "cert_pfx_password": "Wrong PFX password (or the file needs one)",
+    "cert_pfx_bad": "The PFX cannot be read: {reason}"
   },
   "adguard_admin": {
     "scope_subnets": "Limit to subnets",
@@ -4586,7 +4604,7 @@
       "ip_request_rejected": "IP request rejected (notify requester)",
       "cert_expiring": "Certificate expiring / expired",
       "cert_deployed": "Agent deployed a new certificate",
-      "cert_drift": "Certificate drift (an agent is not up to date)",
+      "cert_drift": "Certificate drift or failed deployment (an agent is not on the latest version)",
       "cert_push_failed": "Certificate push to a firewall failed (or was rolled back)",
       "anomaly_detected": "Anomaly detection found new issues",
       "firewall_rules_changed": "Firewall rules changed (sentinel)",
@@ -5099,7 +5117,9 @@
     "maint_started": "Maintenance started: {title}",
     "maint_started_body": "Alerts in scope are muted until {until}.",
     "maint_ended": "Maintenance ended: {title}",
-    "maint_ended_body": "{suppressed} muted meanwhile; {failing} still open at the end (sent as usual)."
+    "maint_ended_body": "{suppressed} muted meanwhile; {failing} still open at the end (sent as usual).",
+    "cert_deploy_failed": "Certificate deployment failed: {agent} did not switch to {cert}",
+    "cert_deploy_failed_body": "Agent \"{agent}\" failed to apply \"{cert}\" ({profile}): {msg}. This host still uses the old certificate; check the agent log."
   },
   "system_transfer": {
     "title": "System Export / Import",
@@ -9312,7 +9332,8 @@
     "info_unit_certs": "",
     "info_m_pools": "DHCP pools",
     "info_m_dns_groups": "DNS compare groups",
-    "info_m_certs": "Certificates"
+    "info_m_certs": "Certificates",
+    "more_ranges": "+{n} more ranges"
   },
   "warroom_settings": {
     "open": "Open war room",
@@ -9567,7 +9588,14 @@
     "pa_commit_admin": "Commit as admin",
     "pa_commit_admin_ph": "Optional: commit only this admin's changes (partial commit)",
     "verify_explicit_hint": "On this device the certificate may serve something other than the admin interface (for example GlobalProtect or HAProxy), so without a verify address the push is only marked \"not verified\" and never reverted. If it is the admin interface certificate, enter the API URL's host:port.",
-    "verify_endpoint_ph_explicit": "e.g. gp.example.net:443; empty = not verified"
+    "verify_endpoint_ph_explicit": "e.g. gp.example.net:443; empty = not verified",
+    "step_precheck": "Check for changes pending from others",
+    "step_import_ca": "Import the intermediate CA",
+    "step_staged": "Written to the candidate configuration (awaiting commit)",
+    "step_revert_candidate": "Revert the candidate configuration",
+    "step_rollback_verify": "Check the original is back",
+    "step_read_admin": "Read the admin interface certificate",
+    "step_read_sslvpn": "Read the SSL VPN certificate"
   },
   "not_found": {
     "title": "Page not found",

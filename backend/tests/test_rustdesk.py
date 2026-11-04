@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 from app.models.address import IPAddress
 from app.models.rustdesk import RustDeskPeer, RustDeskServer
@@ -894,6 +894,13 @@ async def test_same_device_hint_does_not_reveal_ips_the_user_cannot_see(client, 
 
 # ── 受控端 Key 設錯：代理從 hbbr／hbbs 日誌看到 invalid key ─────────────────────────
 
+def _t8(minutes: int) -> str:
+    """日誌時間（+08:00）：以「昨天這個時候」為基準加減分鐘。不可寫死日期 —— key 問題只算 30 天內的，
+    寫死 2026-10-05 的版本在 11-04 起就整批失敗（2026-11-04）。"""
+    base = (datetime.now(UTC) - timedelta(days=1)).replace(microsecond=0)
+    return (base + timedelta(minutes=minutes)).astimezone(timezone(timedelta(hours=8))).isoformat()
+
+
 def _kc(fails=(), ok=(), logs=None) -> dict:
     return {"fails": list(fails), "ok": list(ok), "dropped": 0,
             "logs": logs or {"dir": "/var/log/rustdesk-server", "hbbr": True, "hbbs": True, "error": None}}
@@ -908,14 +915,15 @@ async def test_key_failure_flags_the_only_peer_at_that_ip(client, auth_headers, 
     srv = await _server(db_session, raw)
     await _send(client, raw, _report(srv.id, [("123450001", "192.0.2.54", True), ("123450002", "192.0.2.55", True)]))
     r = await _poll(client, raw, key_checks=_kc(fails=[
-        {"scope": "relay", "ip": "192.0.2.54", "n": 2, "first": "2026-10-05T07:02:15+08:00",
-         "last": "2026-10-05T07:02:26+08:00", "target": None}]))
+        {"scope": "relay", "ip": "192.0.2.54", "n": 2, "first": _t8(0),
+         "last": _t8(1), "target": None}]))
     assert r.status_code == 200, r.text
     rows = {p["rustdesk_id"]: p for p in (await client.get(
         f"/api/v1/rustdesk/servers/{srv.id}/peers", headers=auth_headers)).json()["items"]}
     kp = rows["123450001"]["key_problem"]
     assert kp["scope"] == "relay" and kp["count"] == 2
-    assert kp["at"].startswith("2026-10-04T23:02:26")
+    want = datetime.fromisoformat(_t8(1)).astimezone(UTC)
+    assert datetime.fromisoformat(kp["at"]).astimezone(UTC) == want, "日誌的 +08:00 時間換成 UTC 存"
     assert rows["123450002"]["key_problem"] is None
     d = (await client.get(f"/api/v1/addresses/{ip.id}", headers=auth_headers)).json()
     assert d["rustdesk"]["key_problem"]["scope"] == "relay"
@@ -930,8 +938,8 @@ async def test_key_failure_on_a_shared_ip_blames_nobody(client, auth_headers, db
     srv = await _server(db_session, raw)
     await _send(client, raw, _report(srv.id, [("123450011", "203.0.113.9", True), ("123450012", "203.0.113.9", True)]))
     await _poll(client, raw, key_checks=_kc(fails=[
-        {"scope": "relay", "ip": "203.0.113.9", "n": 1, "first": "2026-10-05T07:02:15+08:00",
-         "last": "2026-10-05T07:02:15+08:00", "target": None}]))
+        {"scope": "relay", "ip": "203.0.113.9", "n": 1, "first": _t8(0),
+         "last": _t8(0), "target": None}]))
     peers = await _peers(db_session, srv)
     assert all(p.key_fail_at is None for p in peers.values())
 
@@ -941,20 +949,18 @@ async def test_later_relay_success_clears_the_key_problem(client, auth_headers, 
     raw = "kc" * 20
     srv = await _server(db_session, raw)
     await _send(client, raw, _report(srv.id, [("123450021", "192.0.2.60", True)]))
-    fail = {"scope": "relay", "ip": "192.0.2.60", "n": 1, "first": "2026-10-05T07:02:15+08:00",
-            "last": "2026-10-05T07:02:15+08:00", "target": None}
-    await _poll(client, raw, key_checks=_kc(fails=[fail], ok=[{"ip": "192.0.2.60", "last": "2026-10-05T07:00:00+08:00"}]))
+    fail = {"scope": "relay", "ip": "192.0.2.60", "n": 1, "first": _t8(0), "last": _t8(0), "target": None}
+    await _poll(client, raw, key_checks=_kc(fails=[fail], ok=[{"ip": "192.0.2.60", "last": _t8(-2)}]))
 
     async def problem():
         rows = (await client.get(f"/api/v1/rustdesk/servers/{srv.id}/peers", headers=auth_headers)).json()["items"]
         return rows[0]["key_problem"]
 
     assert await problem() is not None, "比被拒還早的通過不能清掉"
-    await _poll(client, raw, key_checks=_kc(ok=[{"ip": "192.0.2.60", "last": "2026-10-05T07:10:00+08:00"}]))
+    await _poll(client, raw, key_checks=_kc(ok=[{"ip": "192.0.2.60", "last": _t8(8)}]))
     assert await problem() is None
     # 又被拒：次數從 1 重新算
-    await _poll(client, raw, key_checks=_kc(fails=[{**fail, "first": "2026-10-05T07:20:00+08:00",
-                                                    "last": "2026-10-05T07:20:00+08:00"}]))
+    await _poll(client, raw, key_checks=_kc(fails=[{**fail, "first": _t8(18), "last": _t8(18)}]))
     assert (await problem())["count"] == 1
 
 
@@ -964,8 +970,8 @@ async def test_hbbs_key_failure_flags_the_caller(client, auth_headers, db_sessio
     srv = await _server(db_session, raw)
     await _send(client, raw, _report(srv.id, [("123450031", "192.0.2.70", True)]))
     await _poll(client, raw, key_checks=_kc(fails=[
-        {"scope": "hbbs", "ip": "192.0.2.70", "n": 1, "first": "2026-10-05T07:02:15+08:00",
-         "last": "2026-10-05T07:02:15+08:00", "target": "000000001"}]))
+        {"scope": "hbbs", "ip": "192.0.2.70", "n": 1, "first": _t8(0),
+         "last": _t8(0), "target": "000000001"}]))
     peers = await _peers(db_session, srv)
     assert peers["123450031"].key_fail_scope == "hbbs"
 

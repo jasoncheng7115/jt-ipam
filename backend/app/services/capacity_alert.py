@@ -26,16 +26,19 @@ EVENT_CERT_FETCH = "cert.fetch_failed"
 
 
 def pool_alert_key(pool: Any) -> str:
-    """同一個集區每一輪都要是同一個 key：來源＋子網路＋設定的範圍。
+    """同一個集區每一輪都要是同一個 key：來源＋子網路（沒有子網路時再加上範圍）。
 
     以前用範圍那一筆的 id —— 每個 DHCP 來源每次同步都刪掉重建範圍，id 每輪都變，
     滿著的集區就每一輪都被當成新的再通知一次（客戶 2026-10-12）。
+    同一個網段的多段範圍是同一個集區（issue #57），範圍增減或順序改變也還是同一個。
     """
     src = getattr(pool, "source_type", None)
     sid = getattr(pool, "source_id", None)
     if src is None or sid is None:
         return f"dhcp:{pool.id}"
-    return f"dhcp:{src}:{sid}:{pool.subnet_cidr or ''}:{pool.start_ip}-{pool.end_ip}"
+    if pool.subnet_cidr:
+        return f"dhcp:{src}:{sid}:{pool.subnet_cidr}"
+    return f"dhcp:{src}:{sid}::{pool.start_ip}-{pool.end_ip}"
 
 
 async def check_dhcp_pools(
@@ -59,7 +62,8 @@ async def check_dhcp_pools(
         # 網段與範圍之間要有分隔 —— 少了它會黏成「192.0.2.0/24192.0.2.150」，
         # 讀的人得自己找界線在哪
         scope = f"{pool.subnet_cidr} " if pool.subnet_cidr else ""
-        where = f"{pool.source_name}（{scope}{pool.start_ip}–{pool.end_ip}）"
+        rng = pool.ranges_text("–", ", ") if hasattr(pool, "ranges_text") else f"{pool.start_ip}–{pool.end_ip}"
+        where = f"{pool.source_name}（{scope}{rng}）"
         # 排除區間不發放：總數已經扣掉，講出來，免得跟範圍的大小對不上
         excluded = int(getattr(pool, "excluded", 0) or 0)
         _p = {"where": where, "used": used, "size": size, "pct": pct, "excluded": excluded}

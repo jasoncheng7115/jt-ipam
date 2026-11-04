@@ -40,8 +40,14 @@
 #   #   DEPLOY_1_FULLCHAIN=/etc/nginx/ssl/site.pem  DEPLOY_1_KEY=/etc/nginx/ssl/site.key  DEPLOY_1_RELOAD=systemctl reload nginx
 #   #   Other path fields: DEPLOY_1_CRT= (leaf)  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_TEST=
 #
+#   # VERIFY (optional): after the reload, connect and check the service presents the new certificate;
+#   # if it still presents the old one, the files are put back and the service reloaded again.
+#   #   DEPLOY_1_VERIFY=www.example.com:443@127.0.0.1   (host:port[@connect-address]; host is the SNI name)
+#   #   DEPLOY_1_VERIFY=smtp://mail.example.com:25@127.0.0.1   (STARTTLS: smtp / imap / pop3 / ftp; needs openssl)
+#   #   DEPLOY_1_VERIFY=off   (Proxmox / Cockpit / Webmin verify 127.0.0.1 by default; nginx etc. only when set)
+#
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
-AGENT_VERSION=0.4.174
+AGENT_VERSION=0.4.175
 
 set -u
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
@@ -123,6 +129,10 @@ CURL=(curl -fsS --max-time 30 -H "X-Agent-Key: $AGENT_KEY" -H "X-Agent-Version: 
 profile_spec() {
   local profile="$1" cert="$2" base="$3"
   PFILES=""; PTEST=""; PRELOAD=""; PSPECIAL=""
+  # PVERIFY: where to check the presented certificate by default. Only for services that present
+  # ONE certificate per port — on nginx / apache etc. a guessed SNI name could see another site's
+  # certificate and roll back a good deployment, so those verify only when DEPLOY_N_VERIFY is set.
+  PVERIFY=""
   case "$profile" in
     nginx)
       PFILES="fullchain|$base/$cert.fullchain.pem|644
@@ -143,23 +153,25 @@ key|$base/$cert.key|600"
       # best-effort no-op there (and correct on any non-pmxcfs path).
       PFILES="fullchain|/etc/pve/local/pveproxy-ssl.pem|640|root:www-data
 key|/etc/pve/local/pveproxy-ssl.key|640|root:www-data"
-      PRELOAD="systemctl restart pveproxy" ;;
+      PRELOAD="systemctl restart pveproxy"; PVERIFY="127.0.0.1:8006" ;;
     pmg)
       # pmgproxy runs as www-data and reads pmg-api.pem; pmg-tls.pem (postfix) stays root:root 0600.
       PFILES="combined|/etc/pmg/pmg-api.pem|640|root:www-data
 combined|/etc/pmg/pmg-tls.pem|600|root:root"
-      PRELOAD="systemctl restart pmgproxy; command -v pmgdaemon >/dev/null 2>&1 && pmgdaemon restart || true" ;;
+      PRELOAD="systemctl restart pmgproxy; command -v pmgdaemon >/dev/null 2>&1 && pmgdaemon restart || true"
+      PVERIFY="127.0.0.1:8006" ;;
     pbs)
       # proxmox-backup-proxy runs as the 'backup' user and must be able to read proxy.key.
       PFILES="fullchain|/etc/proxmox-backup/proxy.pem|640|root:backup
 key|/etc/proxmox-backup/proxy.key|640|root:backup"
-      PRELOAD="systemctl reload proxmox-backup-proxy 2>/dev/null || systemctl restart proxmox-backup-proxy" ;;
+      PRELOAD="systemctl reload proxmox-backup-proxy 2>/dev/null || systemctl restart proxmox-backup-proxy"
+      PVERIFY="127.0.0.1:8007" ;;
     pdm)
       # Proxmox Datacenter Manager (official: cert+chain -> auth/api.pem, key -> auth/api.key,
       # root:www-data; the API daemon runs as www-data on :8443). Key must NOT be password-protected.
       PFILES="fullchain|/etc/proxmox-datacenter-manager/auth/api.pem|640|root:www-data
 key|/etc/proxmox-datacenter-manager/auth/api.key|640|root:www-data"
-      PRELOAD="systemctl restart proxmox-datacenter-api.service" ;;
+      PRELOAD="systemctl restart proxmox-datacenter-api.service"; PVERIFY="127.0.0.1:8443" ;;
     wazuh-dashboard)
       # Wazuh dashboard (OpenSearch Dashboards). opensearch_dashboards.yml must point
       # server.ssl.certificate / server.ssl.key at these files (the Wazuh default paths).
@@ -209,10 +221,10 @@ key|$base/$cert.key|600"
       PRELOAD="systemctl restart mosquitto" ;;
     cockpit)
       PFILES="combined|/etc/cockpit/ws-certs.d/$cert.cert|640"
-      PRELOAD="systemctl try-restart cockpit.service 2>/dev/null || true" ;;
+      PRELOAD="systemctl try-restart cockpit.service 2>/dev/null || true"; PVERIFY="127.0.0.1:9090" ;;
     webmin)
       PFILES="combined|/etc/webmin/miniserv.pem|600"
-      PRELOAD="systemctl restart webmin" ;;
+      PRELOAD="systemctl restart webmin"; PVERIFY="127.0.0.1:10000" ;;
     zoraxy)
       # Zoraxy hot-reloads certs from disk; restart only if needed.
       PFILES="fullchain|$base/$cert.crt|644
@@ -247,6 +259,43 @@ fetch_part() {
   fi
   "${CURL[@]}" -G --data-urlencode "cert=$cert" --data-urlencode "part=$part" \
     -o "$dest" "$API/bundle/raw" 2>/dev/null
+}
+
+# ─────────────────── Verify: which certificate does the service actually present? ───────────────────
+# served_fp <spec>  — spec is [proto://]host:port[@connect-address]; prints the SHA-256 of the leaf the
+# service presents (lowercase hex, same as the server's fingerprint) or nothing when unreachable.
+# Uses openssl when present; otherwise curl's %{certs} (curl 7.88+, direct TLS only). Exit 2 = no tool.
+served_fp() {
+  local spec="$1" proto="" hp addr host port pem=""
+  case "$spec" in *://*) proto="${spec%%://*}"; spec="${spec#*://}" ;; esac
+  hp="${spec%%@*}"; addr="$hp"; [ "$spec" != "$hp" ] && addr="${spec#*@}"
+  host="${hp%:*}"; port="${hp##*:}"
+  case "$addr" in *:*) ;; *) addr="$addr:$port" ;; esac
+  if command -v openssl >/dev/null 2>&1; then
+    local -a o=(openssl s_client -connect "$addr")
+    case "$host" in *[!0-9.]*) o+=(-servername "$host") ;; esac   # SNI only for names
+    [ -n "$proto" ] && o+=(-starttls "$proto")
+    pem="$(timeout 10 "${o[@]}" </dev/null 2>/dev/null)"
+  elif [ -z "$proto" ] && command -v curl >/dev/null 2>&1; then
+    pem="$(curl -sk --max-time 10 --connect-to "$host:$port:${addr%:*}:${addr##*:}" \
+      -o /dev/null -w '%{certs}' "https://$host:$port/" 2>/dev/null)"
+  else
+    return 2
+  fi
+  pem="$(printf '%s\n' "$pem" | awk '/-----BEGIN CERTIFICATE-----/{f=1;next} /-----END CERTIFICATE-----/{exit} f')"
+  [ -n "$pem" ] || return 1
+  printf '%s\n' "$pem" | base64 -d 2>/dev/null | sha256sum | cut -d' ' -f1
+}
+
+# wait_fp <spec> <want-fp> <tries>  — poll until the service presents <want-fp>; prints the last seen fp.
+wait_fp() {
+  local spec="$1" want="$2" tries="$3" i seen=""
+  for ((i = 1; i <= tries; i++)); do
+    seen="$(served_fp "$spec")"
+    [ "$seen" = "$want" ] && { printf '%s' "$seen"; return 0; }
+    [ "$i" -lt "$tries" ] && sleep "${VERIFY_WAIT:-3}"
+  done
+  printf '%s' "$seen"; return 1
 }
 
 # ─────────────────── Apply a single deployment ───────────────────
@@ -353,14 +402,23 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
     log "[$cert/$profile] generic specifies no *_path"; add_report "$cert" "$profile" failed "$fp" "$na" "generic: no path specified"; return 1
   fi
 
+  # verify target: DEPLOY_N_VERIFY, else the profile default; "off" disables it
+  local vspec="${D_verify:-$PVERIFY}"
+  case "$vspec" in off|none|false|no) vspec="" ;; esac
+
   # dry-run: just print the plan
   if [ "$DRY_RUN" = 1 ]; then
     log "[$cert/$profile] (dry-run) would write:"
     while IFS='|' read -r kind path mode owner; do [ -n "$kind" ] && log "    $kind -> $path ($mode${owner:+, $owner})"; done <<< "$files"
     [ -n "$PRELOAD" ] && log "    reload: $PRELOAD"
+    [ -n "$vspec" ] && log "    verify: $vspec"
     add_report "$cert" "$profile" dry-run "$fp" "$na" "planned"
     return 0
   fi
+
+  # What does the service present right now? (empty = unreachable → we will not roll back on verify)
+  local pre_fp=""
+  [ -n "$vspec" ] && pre_fp="$(served_fp "$vspec")"
 
   # Download + install (atomic swap + backup, restore on failure)
   local tmpd; tmpd="$(mktemp -d)"; local -a written=() backed=()
@@ -399,10 +457,33 @@ apply_deployment() {  # cert profile fp not_after  (+ D_* override vars)
     log "[$cert/$profile] reload failed -> rollback"; rollback
     add_report "$cert" "$profile" failed "$fp" "$na" "reload failed"; return 1
   fi
+  # verify: connect and check the service presents the new certificate
+  local vmsg="applied"
+  if [ -n "$vspec" ]; then
+    local seen
+    if seen="$(wait_fp "$vspec" "$fp" "${VERIFY_TRIES:-10}")"; then
+      vmsg="applied, verified $vspec"
+    elif [ -z "$pre_fp" ] && [ -z "$seen" ]; then
+      # unreachable before and after: nothing to compare against — keep it, say so
+      vmsg="applied (not verified: $vspec unreachable)"
+    else
+      log "[$cert/$profile] verify failed: $vspec presents ${seen:0:12}… not ${fp:0:12}… -> rollback"
+      rollback
+      local back="rolled back"
+      if [ -n "$PRELOAD" ] && ! run_q "$PRELOAD"; then
+        back="rolled back files, reload failed — check the service"
+      elif [ -n "$pre_fp" ] && ! wait_fp "$vspec" "$pre_fp" "${VERIFY_TRIES:-10}" >/dev/null; then
+        back="rolled back, but $vspec does not present the previous certificate — check the service"
+      fi
+      local shown="${seen:0:12}…"; [ -z "$seen" ] && shown="nothing"
+      add_report "$cert" "$profile" failed "$fp" "$na" "verify failed: $vspec presents $shown; $back"
+      return 1
+    fi
+  fi
   # success -> drop backups
   local p; for p in "${backed[@]}"; do rm -f "$p.jtbak"; done
-  log "[$cert/$profile] applied (${fp:0:12}…)"
-  add_report "$cert" "$profile" ok "$fp" "$na" "applied"
+  log "[$cert/$profile] $vmsg (${fp:0:12}…)"
+  add_report "$cert" "$profile" ok "$fp" "$na" "$vmsg"
   return 0
 }
 
@@ -482,6 +563,7 @@ while :; do
   [ -n "$(_f "$n" COMBINED)" ]  && D_combined_path="$(_f "$n" COMBINED)"
   [ -n "$(_f "$n" RELOAD)" ]    && D_reload="$(_f "$n" RELOAD)"
   [ -n "$(_f "$n" TEST)" ]      && D_test="$(_f "$n" TEST)"
+  [ -n "$(_f "$n" VERIFY)" ]    && D_verify="$(_f "$n" VERIFY)"
   target="$(deploy_target)"
   n=$((n+1))
   # look up this cert's current fingerprint from the check output

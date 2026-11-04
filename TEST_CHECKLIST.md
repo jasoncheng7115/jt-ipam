@@ -1281,6 +1281,18 @@ what a console is allowed to do.
   list_maintenance answers "what is under maintenance". Dropdown items all have icons; the custom length offers minutes / hours / days; weekdays start
   with Sunday; list headers sort, the column picker and export work, and all columns fit at 1440 px; the audit detail shows site-time schedule,
   scope names and before / after of changed fields only, and the target links to the window
+- [ ] **Certificate reissue** (`tests/test_cert_upload_reissue.py`, `tests/test_cert_agent_verify.py`, `tests/test_cert_alert.py`, `e2e/cert-reissue.spec.ts`):
+  "Upload new version" on a certificate that has a version, with only the new certificate and intermediates and no key, becomes the new version and keeps the
+  private key (the downloaded key equals the old one); a certificate for a new key gives the "issued for a new key" error; a first version without a key asks for one;
+  "PFX / P12" with a PFX containing intermediates puts them in the chain, a wrong password says so, and the audit has no password;
+  the certificate list has an Issuer column, the issuer filter keeps only that CA's certificates, and typing the CA name in the text filter finds them;
+  the Linux agent (0.4.175) with `DEPLOY_N_VERIFY=www.example.com:443@127.0.0.1` reports "verified" on a good change; with nginx serving other paths (new files
+  written but not presented) the files are put back, the service reloaded, failed is reported with the fingerprint actually presented, and the "deployment failed"
+  notification carries the reason; a Proxmox host checks 127.0.0.1:8006 without any setting; filling the verify address when generating the config adds a VERIFY line
+- [ ] **Several DHCP ranges in one subnet are one pool** (`tests/test_dhcp_pool_multi_range.py`, issue #57): a FortiGate interface with two ip-ranges (or a Kea subnet
+  with two pools), first range full and second mostly free → the war room capacity shows one pool card with each range on its own line, the combined usage and
+  no "almost full"; only when both are nearly full does the notification fire, naming both ranges; the subnet Address ranges page still has two rows;
+  ranges in different subnets get separate cards
 - [ ] **Date picker buttons** (`tests/test_date_picker_icons.py`, `frontend/e2e/maintenance.spec.ts`): open the date pickers on maintenance, domains,
   leased equipment, circuits and IP change assessment; clear / now / confirm have icons and the calendar starts on Sunday
 - [ ] **Domain management** (`tests/test_domains.py`, `frontend/e2e/domains.spec.ts`, customer wishlist): "Advanced > Domains" add (case, trailing

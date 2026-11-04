@@ -138,7 +138,10 @@
     "scope_hint": "這裡只列出此代理範圍內的憑證；要派送其它憑證，請先在憑證頁把它加入此代理的範圍。",
     "binding": "IIS 繫結",
     "binding_hint": "格式為「位址:埠」。填 IP（如 0.0.0.0:443）為非 SNI 繫結；填主機名稱（如 www.example.com:443）為 SNI 繫結。此繫結要先在 IIS 建好。",
-    "test_ph": "TEST（config-test 指令）"
+    "test_ph": "TEST（config-test 指令）",
+    "verify": "換上後確認位址（選用）",
+    "verify_hint": "reload 之後連到這個位址，確認服務送出的是新憑證；不是的話把檔案換回原本的、再 reload 一次。格式是「主機名稱:埠」，「{'@'}」後面可以指定實際連線的位址（例如 www.example.com:443{'@'}127.0.0.1）；郵件服務用 smtp://、imap:// 開頭做 STARTTLS。nginx、Apache 這類一台有多個站台的服務只在有填時才確認；Proxmox、Cockpit、Webmin 預設就會確認本機。",
+    "verify_ph": "VERIFY（確認位址，如 www.example.com:443{'@'}127.0.0.1）"
   },
   "certFiles": {
     "title": "憑證資訊 / 檔案",
@@ -205,7 +208,7 @@
     "renew_action": "續簽",
     "renew_done": "已續簽（已產生新版本並設為目前版本）",
     "renew_hint": "沿用目前的 CN 與 SAN 重新簽發一張新的自簽憑證，並設為目前版本（派送代理下次比對指紋不同就會自動更新各站台）。可調整效期天數。",
-    "filter_name": "篩選名稱 / 網域",
+    "filter_name": "篩選名稱 / 網域 / 簽發者",
     "filter_agent": "篩選名稱 / IP",
     "filter_by_cert": "依憑證篩選",
     "multi_ip_badge": "多 IP",
@@ -257,7 +260,17 @@
     "files_no_reload": "僅換檔，不 reload",
     "win_check_binding": "確認繫結目前用的是哪張憑證",
     "key_placeholder": "建立代理時的-KEY",
-    "chain_ph": "-----BEGIN CERTIFICATE-----（選填）"
+    "chain_ph": "-----BEGIN CERTIFICATE-----（選填）",
+    "need_cert": "請選擇憑證檔",
+    "need_pfx": "請選擇 PFX / P12 檔",
+    "mode_pfx": "PFX / P12",
+    "pfx_file": "PFX / P12 檔",
+    "pfx_password": "PFX 密碼",
+    "pfx_hint": "會取出憑證、私鑰與中繼憑證；PFX 裡沒有私鑰時沿用目前版本的私鑰。密碼只用來開檔，不會儲存。",
+    "key_file_optional": "私鑰（.key，選用）",
+    "key_optional_hint": "私鑰可以留空：沿用目前版本的私鑰。CA 重新簽發或續約沒有換金鑰時，只要上傳新憑證與中繼憑證；系統會檢查新憑證跟私鑰是否成對。",
+    "filter_issuer": "依簽發者篩選",
+    "issuer_self": "自簽"
   },
   "nav": {
     "open_menu": "選單",
@@ -4134,7 +4147,12 @@
     "maintenance_weekly_too_far": "每週例行的到期日最多一年",
     "certpush_busy": "這個目標正在推送中，稍後再試",
     "certpush_paloalto_pending_changes": "防火牆上有還沒提交的變更，commit 會一起套用，所以沒有動；請先處理那些變更",
-    "certpush_rollback_unconfirmed": "已嘗試換回原本的憑證，但設備出示的不是原本那張，請手動檢查設備"
+    "certpush_rollback_unconfirmed": "已嘗試換回原本的憑證，但設備出示的不是原本那張，請手動檢查設備",
+    "cert_file_required": "請選擇憑證檔",
+    "cert_key_required": "這張憑證還沒有任何版本，第一次上傳要附私鑰",
+    "cert_key_reuse_mismatch": "新憑證跟目前版本的私鑰不成對（簽發時換了金鑰），請一併上傳新的私鑰",
+    "cert_pfx_password": "PFX 密碼不對（或這個檔案需要密碼）",
+    "cert_pfx_bad": "PFX 無法解析：{reason}"
   },
   "adguard_admin": {
     "scope_subnets": "限定子網路範圍",
@@ -4586,7 +4604,7 @@
       "ip_request_rejected": "IP 申請已拒絕（通知申請人）",
       "cert_expiring": "憑證即將到期 / 已過期",
       "cert_deployed": "代理成功更換新憑證",
-      "cert_drift": "憑證飄移（某代理未套到最新版）",
+      "cert_drift": "憑證飄移或派送失敗（某代理沒換成最新版）",
       "cert_push_failed": "憑證推送到防火牆失敗（或確認不到而換回）",
       "anomaly_detected": "異常偵測有新發現",
       "firewall_rules_changed": "防火牆規則有異動",
@@ -5099,7 +5117,9 @@
     "maint_started": "維護開始：{title}",
     "maint_started_body": "範圍內的告警暫時靜音，到 {until}。",
     "maint_ended": "維護結束：{title}",
-    "maint_ended_body": "期間靜音 {suppressed} 則，結束時仍未恢復 {failing} 則（會照常發出）。"
+    "maint_ended_body": "期間靜音 {suppressed} 則，結束時仍未恢復 {failing} 則（會照常發出）。",
+    "cert_deploy_failed": "憑證派送失敗：{agent} 沒換成 {cert}",
+    "cert_deploy_failed_body": "代理「{agent}」套用「{cert}」（{profile}）失敗：{msg}；這台還在用舊憑證，請查代理紀錄。"
   },
   "system_transfer": {
     "title": "系統匯出 / 匯入",
@@ -9312,7 +9332,8 @@
     "info_unit_certs": "張",
     "info_m_pools": "DHCP 集區",
     "info_m_dns_groups": "DNS 比對群組",
-    "info_m_certs": "憑證"
+    "info_m_certs": "憑證",
+    "more_ranges": "另 {n} 段範圍"
   },
   "warroom_settings": {
     "open": "開啟戰情室",
@@ -9567,7 +9588,14 @@
     "pa_commit_admin": "commit 的管理員帳號",
     "pa_commit_admin_ph": "選填：填了只 commit 這個帳號的變更（partial commit）",
     "verify_explicit_hint": "這種設備換的憑證不一定是管理介面在用的（例如 GlobalProtect、HAProxy），所以沒填確認位址時只標「未確認」、不會自動換回。換的是管理介面的憑證，請填 API 網址的主機:埠。",
-    "verify_endpoint_ph_explicit": "例：gp.example.net:443；留空＝不確認"
+    "verify_endpoint_ph_explicit": "例：gp.example.net:443；留空＝不確認",
+    "step_precheck": "檢查有沒有別人待提交的變更",
+    "step_import_ca": "匯入中繼 CA",
+    "step_staged": "已寫進候選設定（待 commit）",
+    "step_revert_candidate": "換回候選設定",
+    "step_rollback_verify": "確認已換回原本的",
+    "step_read_admin": "讀取管理介面目前的憑證",
+    "step_read_sslvpn": "讀取 SSL VPN 目前的憑證"
   },
   "not_found": {
     "title": "找不到這個頁面",

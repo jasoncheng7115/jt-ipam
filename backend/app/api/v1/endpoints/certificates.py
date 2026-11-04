@@ -60,6 +60,7 @@ from app.services.cert_service import (
     analyze_chain,
     export_cert_file,
     generate_self_signed,
+    pfx_to_pem,
     validate_bundle,
 )
 
@@ -74,6 +75,7 @@ def _key_aad(certificate_id: uuid.UUID, fingerprint: str) -> bytes:
 async def _store_version(
     session: AsyncSession, *, cert: Certificate, cert_pem: str, key_pem: str,
     chain_pem: str | None, info: CertInfo, user: CurrentUser, request: Request, action: str,
+    audit_extra: dict[str, object] | None = None,
 ) -> CertVersion:
     """把驗證過的 bundle 存成新版本（加密私鑰、設為 current、寫稽核）。upload 與 self-signed 共用。"""
     if (await session.execute(
@@ -106,21 +108,25 @@ async def _store_version(
         actor_user_agent=request.headers.get("user-agent"),
         object_type="certificate", object_id=str(cert.id), action=action,
         diff={"fingerprint": info.fingerprint_sha256, "not_after": info.not_after.isoformat(),
-              "domains": info.domains},  # 不含 key
+              "domains": info.domains, **(audit_extra or {})},  # 不含 key
         request_id=getattr(request.state, "request_id", None),
     )
     await session.commit()
     return v
 
 
-def _common_name_of(subject: str | None) -> str | None:
-    """從 rfc4514 subject（如 `CN=foo.example,O=bar`）取出 CN。"""
-    if not subject:
+def _rdn_of(name: str | None, attr: str) -> str | None:
+    """從 rfc4514 名稱（如 `CN=foo.example,O=bar`）取出某個屬性（CN、O）。"""
+    if not name:
         return None
-    m = re.search(r"CN=((?:[^,\\]|\\.)+)", subject)
+    m = re.search(rf"(?:^|,){attr}=((?:[^,\\]|\\.)+)", name)
     if not m:
         return None
     return m.group(1).replace("\\,", ",").replace("\\=", "=").strip()
+
+
+def _common_name_of(subject: str | None) -> str | None:
+    return _rdn_of(subject, "CN")
 
 
 async def _to_read(session: AsyncSession, cert: Certificate) -> CertificateRead:
@@ -140,6 +146,10 @@ async def _to_read(session: AsyncSession, cert: Certificate) -> CertificateRead:
         m.current_days_remaining = (cur.not_after - datetime.now(UTC)).days
         # 自簽＝subject==issuer；自簽才提供「續簽」並帶出 CN/SAN 重簽一張
         m.current_is_self_signed = bool(cur.subject and cur.issuer and cur.subject == cur.issuer)
+        # 簽發者：CA 出事要全面換憑證時，第一個問題就是「哪些是這家簽的」（2026-11-03）
+        m.current_issuer = cur.issuer
+        m.current_issuer_name = _rdn_of(cur.issuer, "CN") or _rdn_of(cur.issuer, "O")
+        m.current_issuer_org = _rdn_of(cur.issuer, "O")
         if m.current_is_self_signed:
             m.current_common_name = _common_name_of(cur.subject)
             m.current_sans = list(cur.domains or [])
@@ -406,23 +416,61 @@ async def upload_version(
     user: CurrentUser,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    cert_file: Annotated[UploadFile, File()],
-    key_file: Annotated[UploadFile, File()],
+    cert_file: Annotated[UploadFile | None, File()] = None,
+    key_file: Annotated[UploadFile | None, File()] = None,
     chain_file: Annotated[UploadFile | None, File()] = None,
+    pfx_file: Annotated[UploadFile | None, File()] = None,
+    pfx_password: Annotated[str | None, Form()] = None,
     allow_expired: Annotated[bool, Form()] = False,
 ) -> CertVersionRead:
-    """上傳新版憑證 bundle(crt + key [+ chain])。驗證後加密私鑰、設為目前版本。"""
+    """上傳新版憑證：crt [+ key] [+ chain]，或一個 PFX / P12。驗證後加密私鑰、設為目前版本。
+
+    沒給私鑰時沿用目前版本的私鑰 —— CA 重新簽發多半沿用原本的 CSR（2026-11-03 某家 CA 的中繼憑證
+    不合規、全面重新簽發），私鑰只在伺服器上的人不必再交一次。新憑證跟目前私鑰不成對＝簽發時換了
+    金鑰，要求一併上傳新的私鑰。
+    """
     cert = await session.get(Certificate, cert_id)
     if cert is None:
         raise HTTPException(404, detail="Not found")
 
-    cert_pem = (await cert_file.read()).decode("utf-8-sig", errors="replace")
-    key_pem = (await key_file.read()).decode("utf-8-sig", errors="replace")
-    chain_pem = (await chain_file.read()).decode("utf-8-sig", errors="replace") if chain_file else None
+    async def _text(f: UploadFile | None) -> str | None:
+        return (await f.read()).decode("utf-8-sig", errors="replace") if f else None
+
+    fmt = "pem"
+    try:
+        if pfx_file is not None:
+            fmt = "pfx"
+            cert_pem, key_pem, chain_pem = pfx_to_pem(await pfx_file.read(), pfx_password)
+            extra_chain = await _text(chain_file)
+            if extra_chain:
+                chain_pem = (chain_pem or "") + extra_chain
+        else:
+            if cert_file is None:
+                raise HTTPException(400, detail=ui_detail("cert_file_required", "請選擇憑證檔"))
+            cert_pem = await _text(cert_file) or ""
+            key_pem = await _text(key_file)
+            chain_pem = await _text(chain_file)
+    except CertError as exc:
+        raise HTTPException(400, detail=detail_of(exc, "cert_invalid")) from exc
+
+    key_reused = False
+    if not (key_pem or "").strip():
+        cur = (await session.execute(select(CertVersion).where(
+            CertVersion.certificate_id == cert.id, CertVersion.is_current.is_(True)).limit(1))).scalar_one_or_none()
+        if cur is None:
+            raise HTTPException(400, detail=ui_detail(
+                "cert_key_required", "這張憑證還沒有任何版本，第一次上傳要附私鑰"))
+        key_pem = decrypt_secret(cur.key_enc, cur.key_nonce,
+                                 aad=_key_aad(cert.id, cur.fingerprint_sha256)).decode("utf-8")
+        key_reused = True
 
     try:
         info = validate_bundle(cert_pem, key_pem, chain_pem)
     except CertError as exc:
+        if key_reused and exc.code == "cert_key_mismatch":
+            raise HTTPException(400, detail=ui_detail(
+                "cert_key_reuse_mismatch",
+                "新憑證跟目前版本的私鑰不成對（簽發時換了金鑰），請一併上傳新的私鑰")) from exc
         raise HTTPException(400, detail=detail_of(exc, "cert_invalid")) from exc
     if info.is_expired and not allow_expired:
         raise HTTPException(400, detail=ui_detail("cert_expired_upload",
@@ -432,6 +480,7 @@ async def upload_version(
     v = await _store_version(
         session, cert=cert, cert_pem=cert_pem, key_pem=key_pem, chain_pem=chain_pem,
         info=info, user=user, request=request, action="cert_version_upload",
+        audit_extra={"format": fmt, "key_reused": key_reused},
     )
     return CertVersionRead.model_validate(v, from_attributes=True)
 

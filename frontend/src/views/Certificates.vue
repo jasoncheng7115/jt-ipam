@@ -67,13 +67,27 @@ async function loadDeviceOptions() {
 
 // ── 篩選 ──
 const certFilter = ref("");
+// 依簽發者篩選：CA 出事要全面換憑證時，第一個問題就是「哪些是這家簽的」（2026-11-03）
+const certIssuerFilter = ref<string | null>(null);
+const issuerKey = (c: Certificate) => c.current_is_self_signed
+  ? t("certs.issuer_self") : (c.current_issuer_org || c.current_issuer_name || "");
+const issuerOptions = computed(() => {
+  const n = new Map<string, number>();
+  for (const c of certs.value) { const k = issuerKey(c); if (k) n.set(k, (n.get(k) ?? 0) + 1); }
+  return [...n.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([k, cnt]) => ({ label: `${k}（${cnt}）`, value: k }));
+});
 const agentFilter = ref("");
 const agentCertFilter = ref<string | null>(null);  // 依「可取憑證」篩選代理
 const certsFiltered = computed(() => {
   const q = certFilter.value.trim().toLowerCase();
-  if (!q) return certs.value;
-  return certs.value.filter((c) =>
-    c.name.toLowerCase().includes(q) || (c.domains ?? []).some((d) => d.toLowerCase().includes(q)));
+  const iss = certIssuerFilter.value;
+  return certs.value.filter((c) => {
+    if (iss && issuerKey(c) !== iss) return false;
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || (c.domains ?? []).some((d) => d.toLowerCase().includes(q))
+      || (c.current_issuer ?? "").toLowerCase().includes(q);
+  });
 });
 const agentsFiltered = computed(() => {
   const q = agentFilter.value.trim().toLowerCase();
@@ -142,6 +156,9 @@ const PROFILE_OPTIONS_WINDOWS = ["iis", "winrm", "rdp", "store", "files"];
 const PROFILE_OPTIONS = computed(() => isWin.value ? PROFILE_OPTIONS_WINDOWS : PROFILE_OPTIONS_LINUX);
 // IIS 繫結：位址:埠（位址是 IP → 非 SNI；是主機名稱 → SNI）
 const genWinBinding = ref("0.0.0.0:443");
+// Linux：換上後連過去確認的位址（host:port[@連線位址]）。只在有填時才確認 nginx 這類多站台服務；
+// Proxmox / Cockpit / Webmin 一個埠只送一張憑證，代理預設就會確認 127.0.0.1
+const genVerify = ref("");
 const WIN_AGENT = 'C:\\Program Files\\jt-ipam-cert-agent\\jt_ipam_cert_agent.ps1';
 const dryRunCmd = computed(() => isWin.value
   ? `powershell -ExecutionPolicy Bypass -File "${WIN_AGENT}" -DryRun -DebugLog`
@@ -154,7 +171,7 @@ const genAgentName = ref("");
 const genScopeIds = ref<string[]>([]);
 const genCerts = ref<string[]>([]);
 const genProfiles = ref<string[]>([]);
-const genManual = ref({ cert: "", fullchain: "", key: "", chain: "", crt: "", combined: "", reload: "", test: "" });
+const genManual = ref({ cert: "", fullchain: "", key: "", chain: "", crt: "", combined: "", reload: "", test: "", verify: "" });
 // 此代理 scope 內的憑證（依名稱）
 const genCertOptions = computed(() =>
   certs.value.filter(c => genScopeIds.value.includes(c.id)).map(c => ({ label: c.name, value: c.name })));
@@ -165,7 +182,8 @@ function openGen(a: CertAgent) {
   genAgentName.value = a.name;
   genScopeIds.value = (a.scope_cert_ids ?? []).map(String);
   genCerts.value = []; genProfiles.value = [];
-  genManual.value = { cert: "", fullchain: "", key: "", chain: "", crt: "", combined: "", reload: "", test: "" };
+  genManual.value = { cert: "", fullchain: "", key: "", chain: "", crt: "", combined: "", reload: "", test: "", verify: "" };
+  genVerify.value = "";
   showGen.value = true;
 }
 // 各 profile 預設寫入的檔案（kind → 完整路徑），與 agent 端 profile_spec 一致。
@@ -256,6 +274,9 @@ const genConfig = computed(() => {
       if (isWin.value && prof === "iis" && genWinBinding.value) {
         lines.push(`DEPLOY_${n}_BINDING=${genWinBinding.value}`);
       }
+      if (!isWin.value && genVerify.value.trim() && prof !== "files") {
+        lines.push(`DEPLOY_${n}_VERIFY=${genVerify.value.trim()}`);
+      }
       lines.push("");
       n++;
     }
@@ -270,6 +291,7 @@ const genConfig = computed(() => {
     if (m.key) lines.push(`DEPLOY_${n}_KEY=${m.key}`);
     if (m.reload) lines.push(`DEPLOY_${n}_RELOAD=${m.reload}`);
     if (m.test) lines.push(`DEPLOY_${n}_TEST=${m.test}`);
+    if (m.verify) lines.push(`DEPLOY_${n}_VERIFY=${m.verify}`);
   }
   return lines.join("\n").trim();
 });
@@ -384,7 +406,11 @@ async function doCreate() {
 // ── 上傳新版 ──
 const showUpload = ref(false);
 const uploadTarget = ref<Certificate | null>(null);
-const upMode = ref<"file" | "paste">("file");
+const upMode = ref<"file" | "paste" | "pfx">("file");
+const upPfx = ref<File | null>(null);
+const upPfxPassword = ref("");
+// 已經有版本時私鑰可以留空：沿用目前版本的私鑰（CA 重新簽發多半沿用原本的 CSR）
+const keyOptional = computed(() => (uploadTarget.value?.version_count ?? 0) > 0);
 const upCert = ref<File | null>(null);
 const upKey = ref<File | null>(null);
 const upChain = ref<File | null>(null);
@@ -395,32 +421,38 @@ const upAllowExpired = ref(false);
 const upBusy = ref(false);
 function openUpload(c: Certificate) {
   uploadTarget.value = c; upMode.value = "file";
-  upCert.value = upKey.value = upChain.value = null;
+  upCert.value = upKey.value = upChain.value = upPfx.value = null; upPfxPassword.value = "";
   pasteCert.value = pasteKey.value = pasteChain.value = "";
   upAllowExpired.value = false; showUpload.value = true;
 }
-function pick(ev: Event, slot: "cert" | "key" | "chain") {
+function pick(ev: Event, slot: "cert" | "key" | "chain" | "pfx") {
   const f = (ev.target as HTMLInputElement).files?.[0] ?? null;
-  if (slot === "cert") upCert.value = f; else if (slot === "key") upKey.value = f; else upChain.value = f;
+  if (slot === "cert") upCert.value = f; else if (slot === "key") upKey.value = f;
+  else if (slot === "pfx") upPfx.value = f; else upChain.value = f;
 }
 function _pem(text: string, name: string): File {
   return new File([text], name, { type: "application/x-pem-file" });
 }
 async function doUpload() {
   if (!uploadTarget.value) return;
-  let cert: File | null, key: File | null, chain: File | null;
-  if (upMode.value === "paste") {
-    if (!pasteCert.value.trim() || !pasteKey.value.trim()) { msg.warning(t("certs.need_cert_key")); return; }
+  let cert: File | null = null, key: File | null = null, chain: File | null = null, pfx: File | null = null;
+  const needKey = () => { msg.warning(t(keyOptional.value ? "certs.need_cert" : "certs.need_cert_key")); };
+  if (upMode.value === "pfx") {
+    if (!upPfx.value) { msg.warning(t("certs.need_pfx")); return; }
+    pfx = upPfx.value;
+  } else if (upMode.value === "paste") {
+    if (!pasteCert.value.trim() || (!pasteKey.value.trim() && !keyOptional.value)) { needKey(); return; }
     cert = _pem(pasteCert.value, "cert.pem");
-    key = _pem(pasteKey.value, "key.pem");
+    key = pasteKey.value.trim() ? _pem(pasteKey.value, "key.pem") : null;
     chain = pasteChain.value.trim() ? _pem(pasteChain.value, "chain.pem") : null;
   } else {
-    if (!upCert.value || !upKey.value) { msg.warning(t("certs.need_cert_key")); return; }
+    if (!upCert.value || (!upKey.value && !keyOptional.value)) { needKey(); return; }
     cert = upCert.value; key = upKey.value; chain = upChain.value;
   }
   upBusy.value = true;
   try {
-    await uploadVersion(uploadTarget.value.id, { cert, key, chain }, upAllowExpired.value);
+    await uploadVersion(uploadTarget.value.id,
+      { cert, key, chain, pfx, pfxPassword: upPfxPassword.value }, upAllowExpired.value);
     showUpload.value = false; await loadCerts(); msg.success(t("certs.uploaded"));
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
   finally { upBusy.value = false; }
@@ -710,13 +742,14 @@ function actBtn(icon: any, label: string, onClick: () => void, props: Record<str
 }
 
 // ── 憑證表格欄位 + 顯示偏好 ──
-const CERT_KEYS = ["name", "domains", "exp_date", "days_left", "version_count", "source", "actions"];
+const CERT_KEYS = ["name", "domains", "issuer", "exp_date", "days_left", "version_count", "source", "actions"];
 const certPg = useTablePagination();
 const agentPg = useTablePagination();
 const certPrefs = useColumnPrefs("certificates", CERT_KEYS, CERT_KEYS);
 const certPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "domains", label: t("certs.domains") },
+  { key: "issuer", label: t("certFiles.issuer") },
   { key: "exp_date", label: t("certs.expiry_date") },
   { key: "days_left", label: t("certs.days_remaining") },
   { key: "version_count", label: t("certs.versions") },
@@ -726,13 +759,14 @@ const certPickerItems = computed(() => [
 const certExportCols = computed(() => [
   { key: "name", label: t("cols.name") },
   { key: "domains", label: t("certs.domains") },
+  { key: "issuer", label: t("certFiles.issuer") },
   { key: "exp_date", label: t("certs.expiry_date") },
   { key: "days_left", label: t("certs.days_remaining") },
   { key: "version_count", label: t("certs.versions") },
   { key: "source", label: t("certSource.col_source") },
 ]);
 const certExportRows = computed(() => certsFiltered.value.map((c) => ({
-  name: c.name, domains: (c.domains ?? []).join("、"),
+  name: c.name, domains: (c.domains ?? []).join("、"), issuer: c.current_issuer ?? "",
   exp_date: c.current_not_after ? fmtDateTime(c.current_not_after).slice(0, 10) : "",
   days_left: c.current_days_remaining != null ? String(c.current_days_remaining) : "",
   version_count: String(c.version_count),
@@ -745,6 +779,14 @@ const certColsAll = computed<DataTableColumns<Certificate>>(() => autoSort([
     sorter: (a, b) => (a.domains?.[0] ?? "").localeCompare(b.domains?.[0] ?? ""),
     render: (c) => h(NSpace, { size: 4 }, () => (c.domains ?? []).slice(0, 4).map(d =>
       h(NTag, { size: "small" }, () => d))) },
+  { title: t("certFiles.issuer"), key: "issuer", minWidth: 250, ellipsis: { tooltip: false },
+    sorter: (a, b) => (a.current_issuer_name ?? "").localeCompare(b.current_issuer_name ?? ""),
+    render: (c) => c.current_issuer_name
+      ? h(NTooltip, null, {
+          trigger: () => h("span", { "data-testid": "cert-issuer" }, c.current_is_self_signed
+            ? t("certs.issuer_self") : (c.current_issuer_name ?? "")),
+          default: () => c.current_issuer ?? "" })
+      : h("span", { style: "opacity:.5" }, "—") },
   { title: t("certs.expiry_date"), key: "exp_date", width: 120,
     sorter: (a, b) => (a.current_not_after ?? "").localeCompare(b.current_not_after ?? ""),
     render: expDateCell },
@@ -759,7 +801,7 @@ const certColsAll = computed<DataTableColumns<Certificate>>(() => autoSort([
         ? h("span", { style: "opacity:.5" }, "—")
         : h(NTag, { size: "small", type: c.last_fetch_error ? "error" : "info" },
             () => c.source_type.toUpperCase()) },
-  { title: t("cols.actions"), key: "actions", className: "col-actions", width: 248, fixed: "right",
+  { title: t("cols.actions"), key: "actions", className: "col-actions", width: 296, fixed: "right",
     render: (c) => h("div", { style: "padding-right:8px" }, h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       c.version_count > 0
         ? actBtn(ExportIcon, t("certFiles.title"), () => openFiles(c))
@@ -896,11 +938,16 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
       // hover 顯示實際派送了哪些憑證 / 服務與狀態
       return h(NTooltip, null, {
         trigger: () => h("span", { style: "border-bottom:1px dotted currentColor;cursor:help" }, label),
-        default: () => h("div", { style: "display:flex;flex-direction:column;gap:3px" },
-          reps.map(d => h("div", { style: "display:flex;align-items:center;gap:6px;white-space:nowrap" }, [
-            h(NTag, { size: "tiny", type: d.status === "ok" ? "success" : "warning", bordered: false },
-              () => d.status ?? "?"),
-            h("span", `${d.cert ?? "?"} / ${d.profile ?? "?"}`),
+        // 代理回報的訊息一起列：失敗原因（確認失敗已換回、config-test 失敗）與「已確認」都在這裡
+        default: () => h("div", { style: "display:flex;flex-direction:column;gap:6px;max-width:520px" },
+          reps.map(d => h("div", { "data-testid": "cert-agent-report-line" }, [
+            h("div", { style: "display:flex;align-items:center;gap:6px;white-space:nowrap" }, [
+              h(NTag, { size: "tiny", bordered: false,
+                        type: d.status === "ok" ? "success" : d.status === "failed" ? "error" : "warning" },
+                () => d.status ?? "?"),
+              h("span", `${d.cert ?? "?"} / ${d.profile ?? "?"}`),
+            ]),
+            d.message ? h("div", { style: "font-size:12px;opacity:.8;margin-left:2px;word-break:break-word" }, d.message) : null,
           ]))),
       });
     } },
@@ -940,6 +987,8 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
                      :placeholder="t('certs.filter_name')" style="width: 220px">
               <template #prefix><n-icon :component="SearchIcon" /></template>
             </n-input>
+            <n-select v-model:value="certIssuerFilter" :options="issuerOptions" clearable filterable
+                      :placeholder="t('certs.filter_issuer')" style="width: 240px" data-testid="cert-issuer-filter" />
           </n-space>
           <n-space :size="8">
             <ExportButton :columns="certExportCols" :rows="certExportRows" filename="certificates"
@@ -953,7 +1002,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
           </n-space>
         </n-space>
         <n-data-table :columns="certCols" :data="certsFiltered" :loading="loading" size="small"
-                      :scroll-x="1008" :pagination="certPg" :row-key="(r:Certificate) => r.id" />
+                      :scroll-x="1306" :pagination="certPg" :row-key="(r:Certificate) => r.id" />
       </n-tab-pane>
 
       <!-- 派送代理 -->
@@ -1036,7 +1085,9 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     </n-alert>
     <template #footer>
       <n-space justify="end">
-        <n-button size="small" @click="pfxAsk = null">{{ t("common.cancel") }}</n-button>
+        <n-button size="small" @click="pfxAsk = null">
+          <template #icon><n-icon :component="CancelIcon" /></template>{{ t("common.cancel") }}
+        </n-button>
         <n-button size="small" type="primary" :disabled="pfxMismatch" @click="confirmPfx">
           <template #icon><n-icon :component="ExportIcon" /></template>{{ t("certFiles.download") }}
         </n-button>
@@ -1107,12 +1158,25 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     <n-radio-group v-model:value="upMode" size="small" style="margin-bottom: 12px">
       <n-radio-button value="file">{{ t("certs.mode_file") }}</n-radio-button>
       <n-radio-button value="paste">{{ t("certs.mode_paste") }}</n-radio-button>
+      <n-radio-button value="pfx" data-testid="cert-up-mode-pfx">{{ t("certs.mode_pfx") }}</n-radio-button>
     </n-radio-group>
-    <n-form v-if="upMode === 'file'">
+    <n-alert v-if="keyOptional && upMode !== 'pfx'" type="info" :bordered="false" :show-icon="false"
+             style="margin-bottom: 12px" data-testid="cert-up-key-optional">{{ t("certs.key_optional_hint") }}</n-alert>
+    <n-form v-if="upMode === 'pfx'">
+      <n-form-item :label="t('certs.pfx_file')">
+        <input type="file" accept=".pfx,.p12" data-testid="cert-up-pfx" @change="(e) => pick(e, 'pfx')" />
+      </n-form-item>
+      <n-form-item :label="t('certs.pfx_password')">
+        <n-input v-model:value="upPfxPassword" type="password" show-password-on="click"
+                 :input-props="{ autocomplete: 'off' }" data-testid="cert-up-pfx-password" />
+      </n-form-item>
+      <div style="font-size: 12px; opacity: .7; margin: -8px 0 8px">{{ t("certs.pfx_hint") }}</div>
+    </n-form>
+    <n-form v-else-if="upMode === 'file'">
       <n-form-item :label="t('certs.crt_file')">
         <input type="file" accept=".crt,.pem,.cer" @change="(e) => pick(e, 'cert')" />
       </n-form-item>
-      <n-form-item :label="t('certs.key_file')">
+      <n-form-item :label="keyOptional ? t('certs.key_file_optional') : t('certs.key_file')">
         <input type="file" accept=".key,.pem" @change="(e) => pick(e, 'key')" />
       </n-form-item>
       <n-form-item :label="t('certs.chain_file')">
@@ -1124,7 +1188,7 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
         <n-input v-model:value="pasteCert" type="textarea" :rows="4"
                  placeholder="-----BEGIN CERTIFICATE-----" />
       </n-form-item>
-      <n-form-item :label="t('certs.key_file')">
+      <n-form-item :label="keyOptional ? t('certs.key_file_optional') : t('certs.key_file')">
         <n-input v-model:value="pasteKey" type="textarea" :rows="4"
                  placeholder="-----BEGIN PRIVATE KEY-----" />
       </n-form-item>
@@ -1135,7 +1199,14 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
     </n-form>
     <n-checkbox v-model:checked="upAllowExpired">{{ t("certs.allow_expired") }}</n-checkbox>
     <template #footer>
-      <n-button type="primary" :loading="upBusy" @click="doUpload">{{ t("certs.upload") }}</n-button>
+      <n-space justify="end">
+        <n-button @click="showUpload = false">
+          <template #icon><n-icon :component="CancelIcon" /></template>{{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="upBusy" :disabled="upBusy" data-testid="cert-up-submit" @click="doUpload">
+          <template #icon><n-icon :component="ImportIcon" /></template>{{ t("certs.upload") }}
+        </n-button>
+      </n-space>
     </template>
   </n-modal>
 
@@ -1157,7 +1228,14 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       </n-form-item>
     </n-form>
     <template #footer>
-      <n-button type="primary" @click="doSelf">{{ selfRenew ? t("certs.renew_action") : t("certs.generate") }}</n-button>
+      <n-space justify="end">
+        <n-button @click="showSelf = false">
+          <template #icon><n-icon :component="CancelIcon" /></template>{{ t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" @click="doSelf">
+          <template #icon><n-icon :component="selfRenew ? RefreshIcon : TokenIcon" /></template>{{ selfRenew ? t("certs.renew_action") : t("certs.generate") }}
+        </n-button>
+      </n-space>
     </template>
   </n-modal>
 
@@ -1226,7 +1304,9 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
             </span>
             <n-popconfirm v-if="pinnedFingerprint" @positive-click="forgetHostKey">
               <template #trigger>
-                <n-button size="tiny" secondary data-testid="cert-src-forget-host-key">{{ t("certSource.host_key_forget") }}</n-button>
+                <n-button size="tiny" secondary data-testid="cert-src-forget-host-key">
+                  <template #icon><n-icon :component="RefreshIcon" /></template>{{ t("certSource.host_key_forget") }}
+                </n-button>
               </template>
               {{ t("certSource.host_key_forget_confirm") }}
             </n-popconfirm>
@@ -1462,6 +1542,14 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
         <div class="help-note" style="margin-top:4px">{{ t("certGen.binding_hint") }}</div>
       </div>
     </n-form-item>
+    <n-form-item v-if="!isWin && genProfiles.length" :label="t('certGen.verify')"
+                 :show-feedback="false" style="margin-top:8px">
+      <div style="width:100%">
+        <n-input v-model:value="genVerify" clearable placeholder="www.example.com:443@127.0.0.1"
+                 data-testid="cert-gen-verify" />
+        <div class="help-note" style="margin-top:4px">{{ t("certGen.verify_hint") }}</div>
+      </div>
+    </n-form-item>
 
     <n-collapse style="margin-top:12px">
       <n-collapse-item :title="t('certGen.advanced')" name="adv">
@@ -1486,6 +1574,8 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
           <n-input v-model:value="genManual.combined" placeholder="COMBINED" />
           <n-input v-model:value="genManual.test" :placeholder="t('certGen.test_ph')" />
         </n-space>
+        <n-input v-model:value="genManual.verify" style="margin-top:8px"
+                 :placeholder="t('certGen.verify_ph')" />
       </n-collapse-item>
     </n-collapse>
 
@@ -1558,8 +1648,12 @@ const agentCols = computed<DataTableColumns<CertAgent>>(() =>
       </n-space>
       <template #footer>
         <n-space justify="end">
-          <n-button size="small" @click="showWarn = false">{{ t("common.cancel") }}</n-button>
-          <n-button size="small" type="primary" @click="saveWarn">{{ t("common.save") }}</n-button>
+          <n-button size="small" @click="showWarn = false">
+            <template #icon><n-icon :component="CancelIcon" /></template>{{ t("common.cancel") }}
+          </n-button>
+          <n-button size="small" type="primary" @click="saveWarn">
+            <template #icon><n-icon :component="SaveIcon" /></template>{{ t("common.save") }}
+          </n-button>
         </n-space>
       </template>
     </n-modal>

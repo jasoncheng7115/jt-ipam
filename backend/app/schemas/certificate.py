@@ -69,6 +69,10 @@ class CertificateRead(StrictModel):
     expiry_warn_days: int | None = None
     # 目前版本是否為自簽（subject==issuer）→ 前端據此顯示「續簽」按鈕並帶出 CN/SAN
     current_is_self_signed: bool = False
+    # 目前版本的簽發者（完整 rfc4514 字串、CN（沒有 CN 時用 O）、O）
+    current_issuer: str | None = None
+    current_issuer_name: str | None = None
+    current_issuer_org: str | None = None
     current_common_name: str | None = None
     current_sans: list[str] | None = None
     # 自動抓取來源狀態（source_config 不含機敏:URL/host/路徑/帳號;密碼/key 在 encrypted_secret）

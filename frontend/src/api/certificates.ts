@@ -41,6 +41,10 @@ export interface Certificate {
   /** 到期前幾天通知；null＝沿用全域預設 */
   expiry_warn_days: number | null;
   current_is_self_signed: boolean;
+  /** 目前版本的簽發者：完整名稱、CN（沒有 CN 時用 O）、O */
+  current_issuer?: string | null;
+  current_issuer_name?: string | null;
+  current_issuer_org?: string | null;
   current_common_name: string | null;
   current_sans: string[] | null;
   source_type: string;
@@ -120,12 +124,20 @@ export async function downloadVersionFile(certId: string, versionId: string, fmt
   // 伺服器端已記稽核（cert_export）
   saveBlob(filename, res.data as Blob, "application/octet-stream", { source: "certificate", audited: true });
 }
+/** 上傳新版：crt [+ key] [+ chain]，或一個 PFX。key 留空＝沿用目前版本的私鑰（已有版本時）。 */
 export async function uploadVersion(
-  id: string, files: { cert: File; key: File; chain?: File | null }, allowExpired = false,
+  id: string,
+  files: { cert?: File | null; key?: File | null; chain?: File | null; pfx?: File | null; pfxPassword?: string },
+  allowExpired = false,
 ): Promise<CertVersion> {
   const fd = new FormData();
-  fd.append("cert_file", files.cert);
-  fd.append("key_file", files.key);
+  if (files.pfx) {
+    fd.append("pfx_file", files.pfx);
+    if (files.pfxPassword) fd.append("pfx_password", files.pfxPassword);
+  } else {
+    if (files.cert) fd.append("cert_file", files.cert);
+    if (files.key) fd.append("key_file", files.key);
+  }
   if (files.chain) fd.append("chain_file", files.chain);
   fd.append("allow_expired", String(allowExpired));
   const { data } = await apiClient.post(`/api/v1/certificates/${id}/versions`, fd);

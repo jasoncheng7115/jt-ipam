@@ -76,10 +76,20 @@ async def pool_subnet(session: AsyncSession, pool: Any) -> Any:
     return top[0].id if len(top) == 1 else None
 
 
+def _ip_key(ip: str) -> int:
+    try:
+        return int(ipaddress.ip_address(str(ip)))
+    except ValueError:
+        return 0
+
+
 @dataclass
 class PoolGroup:
-    """一個設定的 DHCP 範圍（扣掉排除之後可能被切成好幾段）。欄位名稱跟 DHCPPoolRange 一樣，
-    使用端（pool_subnet、告警）照原本的讀法。start_ip／end_ip 是設定的整段範圍。"""
+    """一個 DHCP 集區：同一個來源、同一個網段底下設定的發放範圍（可能好幾段，每段扣掉排除之後
+    又可能被切開）。欄位名稱跟 DHCPPoolRange 一樣，使用端（pool_subnet、告警）照原本的讀法。
+
+    ranges 是設定的各段範圍、segments 是實際發放的各段；start_ip／end_ip 是第一段的開頭到最後一段的結尾。
+    """
     source_type: str
     source_id: Any
     source_name: str | None
@@ -88,28 +98,51 @@ class PoolGroup:
     end_ip: str
     segments: list[tuple[str, str]] = field(default_factory=list)
     id: Any = None
+    ranges: list[tuple[str, str]] = field(default_factory=list)
+
+    def add(self, seg_start: str, seg_end: str, range_start: str, range_end: str) -> None:
+        self.segments.append((seg_start, seg_end))
+        self.segments.sort(key=lambda s: _ip_key(s[0]))
+        if (range_start, range_end) not in self.ranges:
+            self.ranges.append((range_start, range_end))
+            self.ranges.sort(key=lambda r: _ip_key(r[0]))
+        self.start_ip = self.ranges[0][0]
+        self.end_ip = max((r[1] for r in self.ranges), key=_ip_key)
 
     @property
     def excluded(self) -> int:
         """設定的範圍裡被排除、不發放的位址數。"""
-        whole = _range_size(self.start_ip, self.end_ip)
+        ranges = self.ranges or [(self.start_ip, self.end_ip)]
+        whole = sum(_range_size(a, b) for a, b in ranges)
         return max(0, whole - sum(_range_size(a, b) for a, b in self.segments)) if whole else 0
+
+    def ranges_text(self, sep: str = " - ", join: str = ", ") -> str:
+        return join.join(f"{a}{sep}{b}" for a, b in (self.ranges or [(self.start_ip, self.end_ip)]))
 
 
 def group_pools(rows: list[Any]) -> list[PoolGroup]:
-    """把扣掉排除後切出來的段，依「來源＋子網路＋設定的範圍」合回一個集區（0210 以前的列沒有
-    pool_start，每一段就是自己的範圍，跟以前一樣）。"""
-    groups: dict[tuple[str, str, str, str, str], PoolGroup] = {}
+    """把同一個來源、同一個網段底下的範圍合成一個集區（issue #57）。
+
+    - 扣掉排除後切出來的段，合回設定的範圍（0210；以前的列沒有 pool_start，每一段就是自己的範圍）。
+    - 同一台伺服器、同一個網段設了好幾段範圍（FortiGate 的多個 ip-range、Kea / ISC 一個 subnet 下多個
+      pool）也是同一個集區：伺服器從第一段開始發，第一段一定先滿，逐段算會在整體只用一半時就報快滿。
+    - 來源沒有網段資訊時一段一個：不知道是不是同一個網段，就不合。
+    已知限制：Kea 的 pool 可以限定只發給某類裝置（client-class），那種 pool 真的是各自用完；我們沒有同步
+    這個設定，合併後看不出那一段先滿。
+    """
+    groups: dict[tuple[str, ...], PoolGroup] = {}
     for r in rows:
         start = getattr(r, "pool_start", None) or r.start_ip
         end = getattr(r, "pool_end", None) or r.end_ip
-        key = (r.source_type, str(r.source_id), r.subnet_cidr or "", start, end)
+        subnet = r.subnet_cidr or ""
+        key: tuple[str, ...] = (r.source_type, str(r.source_id), subnet) if subnet else \
+            (r.source_type, str(r.source_id), "", start, end)
         g = groups.get(key)
         if g is None:
             g = groups[key] = PoolGroup(source_type=r.source_type, source_id=r.source_id,
                                         source_name=r.source_name, subnet_cidr=r.subnet_cidr,
                                         start_ip=start, end_ip=end, id=r.id)
-        g.segments.append((r.start_ip, r.end_ip))
+        g.add(r.start_ip, r.end_ip, start, end)
     return list(groups.values())
 
 

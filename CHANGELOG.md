@@ -17,7 +17,26 @@ For units that are not allowed to see red text or problems. Turn it on in War ro
 - Problem data is removed on the server, not just hidden on screen.
 - Only the war room is affected: alerts, notifications, anomaly detection and every other page work as before. The change is audited.
 
+#### Certificate reissue (when a CA problem means replacing every certificate)
+Prompted by a public CA whose intermediate certificates were found non-compliant, so every site certificate it issued had to be reissued. The steps after receiving the new certificate used to be manual; they can now be done in jt-ipam:
+- **Upload a new version without the private key**: once a version exists, leave the key empty to keep the current version's private key (reissue or renewal without a new key). The certificate is checked against the key; a mismatch says plainly that the certificate was issued for a new key.
+- **Import PFX / P12**: the upload dialog has a "PFX / P12" mode that takes the certificate, private key and intermediates; the password only opens the file and is neither stored nor audited. A PFX without a private key also keeps the current version's key.
+- **Filter by issuer**: the certificate list has an Issuer column and an issuer filter, and the text filter matches the issuer too, so when a CA has a problem you see at once what needs replacing.
+- **The Linux agent checks the presented certificate after the change** (agent 0.4.175): after the reload it connects to the given address and checks that the new certificate is presented; if not, the files are put back, the service is reloaded again and the deployment is reported as failed. Before, a passing config test and reload counted as ok even when the service still presented the old certificate (for example another server block using other paths).
+  - Services that host many sites, such as nginx and Apache, are checked only when `DEPLOY_N_VERIFY` is set (or a verify address is filled in when generating the config), so a guessed SNI name cannot roll back a good change.
+  - Proxmox VE / PMG / PBS / PDM, Cockpit and Webmin present one certificate per port and check the local port by default.
+  - When the address was unreachable before the change, nothing is rolled back and the result says "not verified". Mail services use `smtp://` or `imap://` for STARTTLS.
+  - openssl is used when present, otherwise curl reads the certificate (curl 7.88 or later).
+- **Failed deployments raise an alert**: a failed agent reports the new version's fingerprint, so the drift alert never matched it. A failed report now raises the notification, with the reason the agent gave.
+
 ### Fixed
+- Small issues on the certificates page: the Issuer column was too narrow, so an old and a new intermediate of the same CA (differing only in the year at the end) looked identical; with an automatic source the delete button at the right of the actions column was cut off; the agent "Deployed / reported" tooltip only said failed and now shows the agent's reason (for example verify failed, rolled back); seven push steps showed their internal English names (now translated, with a guard test); the issuer filter listed self-signed certificates by host name and now says "Self-signed"; several dialog buttons gained icons.
+- DHCP pool usage (GitHub issue #57): when one server hands out several ranges in the same subnet, each range was counted as its own pool. FortiGate hands out from the first range, so it always fills first and reported 91% with a "pool almost full" notification while the pool as a whole was just over half used. Ranges from the same source in the same subnet are now counted together:
+  - The war room capacity pool card lists every range and shows the combined usage; the "pool almost full" notification also uses the total and names every range.
+  - Several Kea / ISC pools in one subnet (including OPNsense and pfSense) are combined the same way. Without subnet information from the source, each range is still its own pool.
+  - The subnet's Address ranges page still has one row per range.
+  - Known limit: a Kea pool restricted to a client class is combined too, so it is not visible when that range alone fills up.
+  - The notification key changes on upgrade and old keys are cleared; a pool that is over the threshold at that moment is notified once more.
 - Certificate push to firewalls (external review; each point checked against the code). The review's claim that auto push was never scheduled was wrong (the sync timer runs it); everything else was confirmed and fixed:
   - **OPNsense**: a certificate with an intermediate chain was rejected (OPNsense accepts exactly one certificate per import). The intermediates now go into the trust store as CAs (only once), and only the server certificate is sent. A web GUI restart answered with 403 / 404 / 500 used to be recorded as success; now it fails, and only a dropped connection during the restart counts as expected.
   - **Palo Alto**: a commit applied the whole candidate configuration. It now stops when other changes are pending, and with "Commit as admin" filled in it makes a partial commit. A failed commit puts the candidate configuration back; a commit that times out is left alone and reports the job number. With auto commit off the result is "Written, awaiting commit", and nothing is verified or reverted.
