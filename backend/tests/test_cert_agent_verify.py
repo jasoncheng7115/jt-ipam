@@ -67,6 +67,7 @@ class _Tls:
                 return
             try:
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                ctx.minimum_version = ssl.TLSVersion.TLSv1_2
                 ctx.load_cert_chain(self.cert, self.key)
                 with ctx.wrap_socket(conn, server_side=True) as s:
                     s.recv(1)
