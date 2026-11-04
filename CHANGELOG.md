@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
-## [Unreleased]
+## [1.0.19] - 2026-11-04
 
 ### Added
 
@@ -30,6 +30,7 @@ Prompted by a public CA whose intermediate certificates were found non-compliant
 - **Failed deployments raise an alert**: a failed agent reports the new version's fingerprint, so the drift alert never matched it. A failed report now raises the notification, with the reason the agent gave.
 
 ### Fixed
+- IP change impact skipped pfSense NAT: pfSense syncs NAT port forwards when rule sync is on, but the analysis did not count it as a NAT source, so with only pfSense NAT the whole NAT check was skipped and a renumber did not warn about the port forward. pfSense with rule sync on is now a NAT source.
 - Small issues on the certificates page: the Issuer column was too narrow, so an old and a new intermediate of the same CA (differing only in the year at the end) looked identical; with an automatic source the delete button at the right of the actions column was cut off; the agent "Deployed / reported" tooltip only said failed and now shows the agent's reason (for example verify failed, rolled back); seven push steps showed their internal English names (now translated, with a guard test); the issuer filter listed self-signed certificates by host name and now says "Self-signed"; several dialog buttons gained icons.
 - DHCP pool usage (GitHub issue #57): when one server hands out several ranges in the same subnet, each range was counted as its own pool. FortiGate hands out from the first range, so it always fills first and reported 91% with a "pool almost full" notification while the pool as a whole was just over half used. Ranges from the same source in the same subnet are now counted together:
   - The war room capacity pool card lists every range and shows the combined usage; the "pool almost full" notification also uses the total and names every range.

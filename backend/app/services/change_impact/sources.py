@@ -72,7 +72,7 @@ _SPECS: tuple[tuple[str, str, str, tuple[str, ...], str, tuple[str, ...]], ...] 
      ("reservations", "leases", "pools")),
     ("app.models.firewall", "OPNsenseFirewall", "opnsense", ("firewall", "nat", "dhcp"), "sync_interval_seconds",
      ("rules", "aliases", "nat")),
-    ("app.models.pfsense", "PfSenseFirewall", "pfsense", ("firewall", "dhcp"), "sync_interval_seconds",
+    ("app.models.pfsense", "PfSenseFirewall", "pfsense", ("firewall", "nat", "dhcp"), "sync_interval_seconds",
      ("rules", "aliases")),
     ("app.models.fortigate", "FortiGateFirewall", "fortigate", ("firewall", "nat", "dhcp"), "sync_interval_seconds",
      ("rules", "address_objects", "vdom")),
@@ -147,7 +147,9 @@ async def collect_sources(session: AsyncSession, *, now: datetime | None = None,
                 (c == "dhcp" and kind in ("opnsense", "pfsense", "fortigate", "paloalto", "mikrotik", "checkpoint")
                  and not getattr(r, "sync_dhcp", False))
                 or (c == "nat" and kind in ("opnsense", "fortigate", "paloalto", "mikrotik")
-                    and not getattr(r, "sync_nat", False))))
+                    and not getattr(r, "sync_nat", False))
+                # pfSense 的 NAT port forward 跟著「同步規則」一起同步，沒有獨立開關（2026-11-04）
+                or (c == "nat" and kind == "pfsense" and not getattr(r, "sync_rules", False))))
             st = SourceStatus(kind=kind, id=r.id, name=str(getattr(r, "name", "") or kind), categories=eff,
                               last_sync_at=getattr(r, _LAST_SYNC_ATTR.get(kind, "last_sync_at")),
                               last_error=getattr(r, "last_error", None),

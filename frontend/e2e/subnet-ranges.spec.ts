@@ -33,6 +33,18 @@ test("位址範圍：新增、標在位址圖上、重疊被擋、修改、刪�
   const subs = await page.evaluate(async () => (await fetch("/api/v1/subnets?page_size=500", {
     headers: { Authorization: `Bearer ${sessionStorage.getItem("access_token")}` } })).json());
   const sn = subs.items.find((s: any) => s.cidr === "10.20.0.0/24");
+  // 別的 spec 刪掉的位址留下的冷卻期會讓「下一個可用」不是 .100：先清掉這段範圍裡的（2026-11-04）
+  await page.evaluate(async (sid) => {
+    const h = { Authorization: `Bearer ${sessionStorage.getItem("access_token")}`, "Content-Type": "application/json" };
+    const cd = await (await fetch(`/api/v1/addresses/cooldowns/${sid}`, { headers: h })).json();
+    for (const c of cd.items ?? []) {
+      const o = Number(String(c.ip).split(".")[3]);
+      if (o >= 100 && o <= 150) {
+        await fetch(`/api/v1/addresses/cooldowns/${sid}/${c.ip}/clear`, { method: "POST", headers: h,
+          body: JSON.stringify({ reason: "e2e setup" }) });
+      }
+    }
+  }, sn.id);
   await page.goto(`/subnets/${sn.id}`);
   const card = page.locator(".n-card").filter({ hasText: /位址範圍（集區）/ }).first();
   await card.waitFor({ timeout: 20_000 });

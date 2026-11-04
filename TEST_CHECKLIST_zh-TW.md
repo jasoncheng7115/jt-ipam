@@ -966,6 +966,8 @@ guacd 是 RDP 與 VNC 的預設引擎（2026-09-27 起，已安裝的站台由�
 - [ ] **同網段多段 DHCP 範圍算一個集區**（`tests/test_dhcp_pool_multi_range.py`，issue #57）：FortiGate 一個介面設兩段 ip-range（或 Kea 一個 subnet 兩個 pool），
   第一段發滿、第二段還很空 → 戰情室位址容量只有一張集區卡片、兩段範圍各一行、使用率是合計、不報快滿；兩段都快滿才發「集區快用完」，訊息列出兩段；
   子網路「位址範圍」頁仍是兩列；不同網段的範圍各自一張卡片
+- [ ] **IP 變更評估比對 pfSense 的 NAT**（`tests/test_change_impact_pfsense_nat.py`）：只有 pfSense（開同步規則）同步了 port forward、沒有其他 NAT 來源時，
+  改那個位址的評估要列出 NAT 對應、不出現「NAT 未設定」；pfSense 沒開同步規則時照舊是「未設定」
 - [ ] **日期選擇器的按鈕**（`tests/test_date_picker_icons.py`、`frontend/e2e/maintenance.spec.ts`）：打開維護排程、網域、租用設備、電路、IP 變更評估的日期欄位，
   右下「清除」「現在」「確定」都有圖示，月曆從星期日開始
 - [ ] **網域管理**（`tests/test_domains.py`、`frontend/e2e/domains.spec.ts`，客戶許願清單）：「進階 → 網域」新增（大小寫、結尾的點、網址、中文網域都正規化；

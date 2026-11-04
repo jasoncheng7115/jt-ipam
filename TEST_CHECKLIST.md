@@ -1293,6 +1293,8 @@ what a console is allowed to do.
   with two pools), first range full and second mostly free → the war room capacity shows one pool card with each range on its own line, the combined usage and
   no "almost full"; only when both are nearly full does the notification fire, naming both ranges; the subnet Address ranges page still has two rows;
   ranges in different subnets get separate cards
+- [ ] **IP change impact checks pfSense NAT** (`tests/test_change_impact_pfsense_nat.py`): with only pfSense (rule sync on) providing port forwards and no other
+  NAT source, renumbering that address lists the NAT translation and no "NAT not configured" gap; pfSense without rule sync is still "not configured"
 - [ ] **Date picker buttons** (`tests/test_date_picker_icons.py`, `frontend/e2e/maintenance.spec.ts`): open the date pickers on maintenance, domains,
   leased equipment, circuits and IP change assessment; clear / now / confirm have icons and the calendar starts on Sunday
 - [ ] **Domain management** (`tests/test_domains.py`, `frontend/e2e/domains.spec.ts`, customer wishlist): "Advanced > Domains" add (case, trailing

@@ -20,7 +20,9 @@ async function token(request: APIRequestContext): Promise<Record<string, string>
 /** 挑一個這個子網路裡還沒用的位址：隨機挑會撞到樣本或之前留下的位址（409，後面整個失敗） */
 async function freeOctet(request: APIRequestContext, H: Record<string, string>, subnetId: string, from: number, to: number) {
   const r = await (await request.get(`/api/v1/addresses?subnet_id=${subnetId}&page_size=1000`, { headers: H })).json();
-  const used = new Set((r.items ?? []).map((a: any) => Number(String(a.ip).split(".")[3])));
+  // 冷卻中的位址（之前的 e2e 刪掉的）也不能用：以前只看有沒有記錄，挑到冷卻中的就 409（2026-11-04）
+  const cd = await (await request.get(`/api/v1/addresses/cooldowns/${subnetId}`, { headers: H })).json();
+  const used = new Set([...(r.items ?? []), ...(cd.items ?? [])].map((a: any) => Number(String(a.ip).split(".")[3])));
   for (let o = from; o <= to; o++) if (!used.has(o)) return o;
   throw new Error(`10.20.0.${from}-${to} 都被用掉了`);
 }
@@ -72,6 +74,9 @@ test("同 MAC 的位址在線 → 提示並一鍵掛到同一台設備、勾「�
     await expect(page.getByTestId("ip-liveness-from-device-row")).toBeVisible();
   } finally {
     await request.delete(`/api/v1/addresses/${gw.id}`, { headers: H });
+    // 刪掉的位址會進 30 天冷卻期，不清掉的話會擠到別的 spec（subnet-ranges 的「下一個可用」，2026-11-04）
+    await request.post(`/api/v1/addresses/cooldowns/${gw.subnet_id}/${gw.ip}/clear`,
+      { headers: H, data: { reason: "e2e cleanup" } });
     await request.delete(`/api/v1/devices/${dev.id}`, { headers: H });
   }
 });
@@ -107,6 +112,9 @@ test("勾了沒掛設備：表單提醒、燈號是灰色「使用中（不回�
     expect(bg).not.toBe("rgb(239, 68, 68)");
   } finally {
     await request.delete(`/api/v1/addresses/${gw.id}`, { headers: H });
+    // 刪掉的位址會進 30 天冷卻期，不清掉的話會擠到別的 spec（subnet-ranges 的「下一個可用」，2026-11-04）
+    await request.post(`/api/v1/addresses/cooldowns/${gw.subnet_id}/${gw.ip}/clear`,
+      { headers: H, data: { reason: "e2e cleanup" } });
   }
 });
 

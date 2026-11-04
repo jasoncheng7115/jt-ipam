@@ -3,7 +3,7 @@
 發版時請與 frontend/package.json 的 version 一起更新。
 """
 
-__version__ = "1.0.18"
+__version__ = "1.0.19"
 
 # 授權條款（SPDX）。版本資訊頁會顯示它，所以它必須與 `backend/pyproject.toml`、
 # `frontend/package.json` 與根目錄 `LICENSE` 一致 —— 授權改過一次
