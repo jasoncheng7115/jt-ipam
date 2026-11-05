@@ -43,7 +43,8 @@ def _redact(obj: Any) -> Any:
     """A09：避免敏感欄位寫入 audit log。"""
     if isinstance(obj, dict):
         return {
-            k: ("***REDACTED***" if k.lower() in _REDACTED_KEYS else _redact(v))
+            k: ("***REDACTED***" if k.lower() in _REDACTED_KEYS or k.lower().endswith("_api_key")
+                else _redact(v))
             for k, v in obj.items()
         }
     if isinstance(obj, list):

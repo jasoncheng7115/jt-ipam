@@ -715,6 +715,10 @@ DEPLOY_1_BINDING=0.0.0.0:443
 DEPLOY_2_CERT=wildcard-example-com
 DEPLOY_2_PROFILE=store
 
+# 憑證鏈：中繼憑證會自動放進「中繼憑證授權單位」。根憑證預設不裝；
+# 企業自己的私有 CA 才需要加這行，放進「受信任的根憑證授權單位」（公開 CA 的根 Windows 本來就有）：
+#   DEPLOY_2_INSTALL_ROOT=true
+
 # ── 寫成檔案（給會讀 PEM / PFX 的軟體）──
 DEPLOY_3_CERT=wildcard-example-com
 DEPLOY_3_PROFILE=files

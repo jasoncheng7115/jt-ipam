@@ -33,13 +33,16 @@ export async function chat(
 export interface PendingAction { tool: string; args: Record<string, unknown>; title: string; }
 
 // SSE 串流事件 (對齊後端 ai_service.chat_stream)
+/** 回答下方的「前往」按鈕：站內網址，來自畫面地圖工具（不是模型寫的） */
+export interface ChatLink { label: string; href: string }
+
 export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "tool"; name: string }
   | { type: "thinking"; chars: number }
   | { type: "tool_round" }
   | { type: "pending_action"; actions: PendingAction[] }
-  | { type: "done"; answer: string; trace_messages: ChatMessage[]; model?: string | null; elapsed_ms?: number | null; conversation_id?: string; pending_actions?: PendingAction[] }
+  | { type: "done"; answer: string; trace_messages: ChatMessage[]; model?: string | null; elapsed_ms?: number | null; conversation_id?: string; pending_actions?: PendingAction[]; links?: ChatLink[] }
   // 錯誤：一般帳號只有 code（照語系翻）；管理員的 params.reason 是底層原因。detail 是退路文字
   | { type: "error"; detail: string; code?: string; params?: Record<string, unknown> };
 
@@ -130,6 +133,7 @@ export interface ConversationMessage {
   content: string;
   model?: string | null;
   elapsed_ms?: number | null;
+  links?: ChatLink[];
   created_at: string;
 }
 export interface ConversationDetail extends ConversationSummary {

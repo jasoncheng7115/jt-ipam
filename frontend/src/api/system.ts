@@ -181,6 +181,13 @@ export interface LLMConfig {
   // AI 判讀（未授權 IP 判讀／IP 調查／防火牆規則異動解讀）；null＝沿用對話模型
   ai_interpret_model: string | null;
   ai_interpret_num_ctx: number | null;
+  /** 判讀／巡檢自己的 LLM Server；位址空字串＝繼承基本設定（對話＋嵌入）那台 */
+  ai_interpret_provider: string;
+  ai_interpret_url: string;
+  ai_interpret_api_key_set: boolean;
+  ai_audit_provider: string;
+  ai_audit_url: string;
+  ai_audit_api_key_set: boolean;
   // AI 對話允許模型先思考（false＝每一輪都送關閉思考的參數）
   chat_thinking: boolean;
   server_timezone: string;
@@ -206,6 +213,13 @@ export interface LLMConfigPatch {
   ai_audit_num_ctx?: number;
   ai_interpret_model?: string;
   ai_interpret_num_ctx?: number;
+  /** 位址空字串＝回到繼承基本設定（供應商與金鑰一起清掉）；金鑰空字串＝清掉 */
+  ai_interpret_provider?: string;
+  ai_interpret_url?: string;
+  ai_interpret_api_key?: string;
+  ai_audit_provider?: string;
+  ai_audit_url?: string;
+  ai_audit_api_key?: string;
   chat_thinking?: boolean;
 }
 
@@ -246,9 +260,10 @@ export interface OllamaModelsResult {
   error_detail?: ServerMessage;
 }
 
-export async function listOllamaModels(): Promise<OllamaModelsResult> {
+/** role：哪一個用途的 LLM Server（判讀／巡檢可以各接一台，沒設就是基本設定那台） */
+export async function listOllamaModels(role: "chat" | "interpret" | "audit" = "chat"): Promise<OllamaModelsResult> {
   const { data } = await apiClient.get<OllamaModelsResult>(
-    "/api/v1/system/llm/models",
+    "/api/v1/system/llm/models", { params: role === "chat" ? undefined : { role } },
   );
   return data;
 }

@@ -1430,6 +1430,40 @@ def _pending_prompt_text(pending: list[dict[str, Any]]) -> str:
     return "我準備執行以下動作，請確認後再進行：\n" + "\n".join(f"• {t}" for t in titles)
 
 
+_UI_LINK_RE = re.compile(r"/[\w\-/]*(\?tab=[\w-]+)?")
+
+
+def ui_links(convo: list[dict[str, Any]], limit: int = 4) -> list[dict[str, str]]:
+    """這一輪 find_ui_location 給的站內連結 → 對話視窗回答下方的「前往」按鈕（使用者 2026-11-04）。
+
+    連結只取自畫面地圖工具（網址由前端路由決定，不是模型寫的），其他工具的輸出一律不算。
+    `links` 放在工具結果最前面，結果太長被截斷時也還完整。"""
+    out: list[dict[str, str]] = []
+    dec = json.JSONDecoder()
+    for m in convo:
+        if m.get("role") != "tool" or m.get("name") != "find_ui_location":
+            continue
+        blob = m.get("content")
+        if not isinstance(blob, str):
+            continue
+        at = blob.find('"links": [')
+        if at < 0:
+            continue
+        try:
+            arr, _end = dec.raw_decode(blob, at + len('"links": '))
+        except ValueError:
+            continue
+        for x in arr if isinstance(arr, list) else []:
+            href, label = (x.get("href"), x.get("label")) if isinstance(x, dict) else (None, None)
+            if not (isinstance(href, str) and isinstance(label, str) and _UI_LINK_RE.fullmatch(href)) \
+                    or href.startswith("//") or any(y["href"] == href for y in out):
+                continue
+            out.append({"label": label[:80], "href": href})
+            if len(out) >= limit:
+                return out
+    return out
+
+
 async def _run_tool_calls(session: AsyncSession, user: Any, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """執行 LLM 要求的 tool_calls，回傳要 append 進 convo 的 tool 訊息（含 name）。"""
     from app.mcp.tools import TOOLS, IPAMToolError, authorize_tool, call_tool
@@ -1779,7 +1813,8 @@ async def raw_chat(session: AsyncSession, prompt: str, timeout: float | None = N
                    model: str | None = None, force_json: bool = False,
                    max_output_tokens: int | str | None = None, no_thinking: bool = False,
                    num_ctx: int | None = None,
-                   on_chunk: Callable[[str, str], Awaitable[None]] | None = None) -> str:
+                   on_chunk: Callable[[str, str], Awaitable[None]] | None = None,
+                   role: str = "chat") -> str:
     """單次、不帶工具的對話 —— 給 AI 巡檢這類「送一段提示詞、要一段結構化輸出」的用途。
 
     刻意**不掛 IPAM 工具**：巡檢的資料已經由呼叫端依可見範圍取好並放進提示詞裡，
@@ -1796,12 +1831,14 @@ async def raw_chat(session: AsyncSession, prompt: str, timeout: float | None = N
     `no_thinking=True` 關掉思考模式。**思考過程也算在產出額度裡** —— 實測 gemma4 一批
     寫了 10,401 字的思考，結果真正的答案被額度切斷。舊版 Ollama 不認這個欄位，
     被拒絕時會自動退回不帶它重送。
+    `role` 是用途（chat／interpret／audit）：判讀、巡檢可以接自己的 LLM Server 與模型，沒設就繼承對話設定
+    （system_config.role_config）。`model`／`num_ctx` 有給的話再蓋過去。
     `on_chunk(片段, 種類)` 有給就改走串流：一批要跑好幾分鐘，沒有中途訊號的話畫面上
     完全看不出模型是在算還是已經卡死。種類是 "thinking"（思考過程）或 "content"
     （最終輸出）—— 會思考的模型前幾分鐘只吐 thinking，兩者要分開才講得清楚現況。
     """
-    from app.services.system_config import get_llm_config
-    cfg = await get_llm_config(session)
+    from app.services.system_config import get_llm_config, role_config
+    cfg = role_config(await get_llm_config(session), role)
     if not cfg.enabled:
         raise AINotConfigured("LLM is disabled")
     url = chat_url(cfg.url, cfg.provider)
@@ -1855,7 +1892,7 @@ _THINK_PROBE_TOKENS = 64
 _THINK_TAG = re.compile(r"<think>.*?(</think>|$)", re.S | re.I)
 
 
-async def probe_thinking(session: AsyncSession, model: str | None = None) -> dict[str, Any]:
+async def probe_thinking(session: AsyncSession, model: str | None = None, role: str = "chat") -> dict[str, Any]:
     """用 AI 巡檢／判讀同一套「關閉思考」參數問模型一句極短的話，看它照不照做。
 
     伺服器或閘道沒照做時（LiteLLM 沒轉送、舊版 llama.cpp 忽略 reasoning_effort……），症狀只是
@@ -1863,8 +1900,8 @@ async def probe_thinking(session: AsyncSession, model: str | None = None) -> dic
     **回答是空的也算在思考**：有些閘道不把思考內容轉出來，額度被思考用光、正文是空的；只看
     思考欄位的話會誤報成「不會先思考」（jt-doc-tools 實測 LiteLLM 的 ollama/）。
     """
-    from app.services.system_config import get_llm_config
-    cfg = await get_llm_config(session)
+    from app.services.system_config import get_llm_config, role_config
+    cfg = role_config(await get_llm_config(session), role)
     model = model or cfg.chat_model
     out: dict[str, Any] = {"model": model, "ok": False, "thinking": None, "reasoning_chars": 0,
                            "think_tag": False, "empty_answer": False, "answer": "", "seconds": 0.0,
@@ -1907,7 +1944,8 @@ async def probe_thinking(session: AsyncSession, model: str | None = None) -> dic
 
 def interpret_model(cfg: Any) -> str:
     """AI 判讀實際用的模型：有設判讀專用模型就用它，否則沿用對話模型。"""
-    return getattr(cfg, "ai_interpret_model", None) or cfg.chat_model
+    from app.services.system_config import role_config
+    return role_config(cfg, "interpret").chat_model
 
 
 async def interpret_chat(session: AsyncSession, prompt: str, **kw: Any) -> tuple[str, str]:
@@ -1919,8 +1957,7 @@ async def interpret_chat(session: AsyncSession, prompt: str, **kw: Any) -> tuple
     """
     from app.services.system_config import get_llm_config
     cfg = await get_llm_config(session)
-    text = await raw_chat(session, prompt, model=getattr(cfg, "ai_interpret_model", None),
-                          num_ctx=getattr(cfg, "ai_interpret_num_ctx", None), **kw)
+    text = await raw_chat(session, prompt, role="interpret", **kw)
     return text, interpret_model(cfg)
 
 

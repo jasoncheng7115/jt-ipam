@@ -5,6 +5,7 @@ chat-provider-badge.spec.ts
 console-guacd.spec.ts
 llm-chat-thinking.spec.ts
 llm-interpret-model.spec.ts
+llm-role-server.spec.ts
 rdp-engine.spec.ts
 sftp-limit-probe.spec.ts
 sftp-stream-download.spec.ts

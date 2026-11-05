@@ -26,7 +26,8 @@ async def find_ui_location(session: AsyncSession, *, user: User, keywords: list[
     if not kws:
         raise IPAMToolError("keywords is required, e.g. [\"電路\", \"到期\"]")
     try:
-        out = ui_map.search(kws, await user_locale(session, user) or "zh-TW", limit=limit)
+        out = ui_map.search(kws, await user_locale(session, user) or "zh-TW", limit=limit,
+                            is_admin=bool(getattr(user, "is_admin", False)))
     except (FileNotFoundError, ValueError) as exc:
         # 前端原始碼讀不到（理論上安裝與升級都會有）：明講，不讓模型自己編路徑
         raise IPAMToolError(f"UI map unavailable on this server ({type(exc).__name__})") from exc
@@ -42,10 +43,11 @@ UI_TOOLS: dict[str, dict[str, Any]] = {
         "fn": find_ui_location,
         "description": (
             "Find WHERE something is in the jt-ipam web UI (menu path, tab, exact label of a field / option / "
-            "button / column / setting) in the user's language. Use for any 'where is / how do I get to / where "
+            "button / column / setting). Use for any 'where is / how do I get to / where "
             "do I set' question and before saying jt-ipam lacks a field. Pass several keywords incl. synonyms and"
             " the object name; a page name also returns all its fields (map 申請日 → 開通日). admin_only = admins only;"
-            " open_a_row = open a record from that list; shown_when = appears after that integration is set up."),
+            " open_a_row = open a record from that list; shown_when = appears after that integration is set up."
+            " Never write URLs: `links` become buttons."),
         "parameters": {"type": "object", "properties": {
             "keywords": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 12,
                          "description": "Words to look for in menu items, tabs and field labels (any language)"},

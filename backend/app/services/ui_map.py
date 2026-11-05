@@ -101,6 +101,7 @@ class Element:
     label: Label
     tabs: tuple[Tab, ...] = ()
     kind_ctx: str | None = None   # 表單依「哪一種資料」切換時（例如 createKind === 'circuit'）
+    name: str | None = None       # 頁籤本身的 name（kind == "tab"）：頁面支援 ?tab= 時連結帶上它
 
 
 @dataclass
@@ -111,6 +112,8 @@ class Page:
     condition: str | None = None  # integration:<名稱> / setting:<名稱>
     via_row: bool = False         # 詳細頁：從清單點進去
     component: str | None = None
+    path: str | None = None       # 網址（詳細頁是它的清單頁）；含參數的路由沒有
+    tab_query: bool = False       # 頁面讀 ?tab= 切到指定頁籤
     elements: list[Element] = field(default_factory=list)
 
 
@@ -189,7 +192,7 @@ def _parse_component(path: Path) -> _Parsed:
                             owner["tab"] = Tab(owner["tab"].name, lab)
                             parent_tabs = tuple(f["tab"] for f in stack if f.get("tab") is not None
                                                 and f is not owner)
-                            elements.append(Element("tab", lab, parent_tabs, kind_ctx()))
+                            elements.append(Element("tab", lab, parent_tabs, kind_ctx(), owner["tab"].name))
                     elif cap in ("option", "section", "button"):
                         lab = _first_t(content)
                         if lab:
@@ -215,7 +218,7 @@ def _parse_component(path: Path) -> _Parsed:
                                _label_from_attr(attrs, "tab"))
             frame["literals"] = set()
             if frame["tab"].label is not None:
-                elements.append(Element("tab", frame["tab"].label, open_tabs(), kind_ctx()))
+                elements.append(Element("tab", frame["tab"].label, open_tabs(), kind_ctx(), frame["tab"].name))
         elif low == "template":
             if re.search(r"(?:^|\s)(?:#tab|v-slot:tab)\b", attrs):
                 owner = next((f for f in reversed(stack) if f.get("tab") is not None), None)
@@ -293,8 +296,12 @@ def _routes() -> dict[str, dict[str, Any]]:
         if not m:
             continue
         mode = re.search(r'props:\s*\{\s*mode:\s*"(\w+)"', line)
+        pm = re.search(r'path:\s*"([^"]*)"', line)
+        path = None
+        if pm and ":" not in pm.group(1):
+            path = pm.group(1) if pm.group(1).startswith("/") else "/" + pm.group(1)
         out[m.group(1)] = {"view": m.group(2), "mode": mode.group(1) if mode else None,
-                           "admin": "admin: true" in line}
+                           "admin": "admin: true" in line, "path": path}
     return out
 
 
@@ -385,6 +392,13 @@ def _elements_for(view: str, mode: str | None) -> list[Element]:
     return out
 
 
+def _reads_tab_query(view: str) -> bool:
+    try:
+        return "route.query.tab" in (FE / "views" / view).read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 @lru_cache(maxsize=1)
 def build() -> tuple[list[Page], dict[str, dict[str, Any]]]:
     """(所有頁面, 三種語言的字串)。讀不到前端原始碼時丟 FileNotFoundError。"""
@@ -396,14 +410,18 @@ def build() -> tuple[list[Page], dict[str, dict[str, Any]]]:
         info = routes.get(route)
         page = Page(route=route, menu=path, admin=admin or bool(info and info["admin"]), condition=cond,
                     component=info["view"] if info else None,
-                    elements=_elements_for(info["view"], info["mode"]) if info else [])
+                    elements=_elements_for(info["view"], info["mode"]) if info else [],
+                    path=info["path"] if info else None,
+                    tab_query=bool(info) and not info["mode"] and _reads_tab_query(info["view"]))
         pages.append(page)
         menu_of.setdefault(route, page)
     for route, parent in DETAIL_PARENTS.items():
         info, par = routes.get(route), menu_of.get(parent)
         if info and par:
+            # 詳細頁要先選一筆，連結給它的清單頁
             pages.append(Page(route=route, menu=par.menu, admin=par.admin or info["admin"], condition=par.condition,
-                              via_row=True, component=info["view"], elements=_elements_for(info["view"], None)))
+                              via_row=True, component=info["view"], elements=_elements_for(info["view"], None),
+                              path=par.path))
     return pages, strings
 
 
@@ -419,11 +437,14 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", "", s).casefold()
 
 
-def search(keywords: list[str], locale: str = "zh-TW", limit: int = 20) -> dict[str, Any]:
+def search(keywords: list[str], locale: str = "zh-TW", limit: int = 20, *, is_admin: bool = False) -> dict[str, Any]:
     """用關鍵字找功能／頁籤／欄位在哪裡。關鍵字可以混用三種語言；回答用 `locale` 的文字。
 
     命中頁面名稱（選單項目）時另外列出那一頁所有的頁籤與欄位：使用者用的詞常常跟畫面不一樣
-    （問「申請日」，畫面叫「開通日」），給整頁欄位讓模型自己對。"""
+    （問「申請日」，畫面叫「開通日」），給整頁欄位讓模型自己對。
+
+    每筆另有 `link`（站內網址，頁面支援時帶 ?tab=）讓對話視窗顯示「前往」按鈕；管理員限定的頁面
+    一般帳號不給連結（點了也只會被擋）。`links` 是整理好、去重的前幾個（放在最前面，結果被截斷也還在）。"""
     loc = locale if locale in LOCALES else "zh-TW"
     pages, strings = build()
     kws = [_norm(k) for k in keywords if k and _norm(k)]
@@ -454,8 +475,23 @@ def search(keywords: list[str], locale: str = "zh-TW", limit: int = 20) -> dict[
     def tabs_of(el: Element) -> list[str]:
         return [x for x in (_text(t.label, strings[loc], loc) for t in el.tabs) if x]
 
-    def where(p: Page, tabs: list[str]) -> dict[str, Any]:
+    def link_of(p: Page, tab_name: str | None) -> str | None:
+        if not p.path or (p.admin and not is_admin):
+            return None
+        if tab_name and p.tab_query and not p.via_row and re.fullmatch(r"[\w-]+", tab_name):
+            return f"{p.path}?tab={tab_name}"
+        return p.path
+
+    def top_tab(el: Element) -> str | None:
+        if el.tabs:
+            return el.tabs[0].name
+        return el.name if el.kind == "tab" else None
+
+    def where(p: Page, tabs: list[str], tab_name: str | None = None) -> dict[str, Any]:
         d: dict[str, Any] = {"menu": path_of(p), "tabs": tabs, "admin_only": p.admin}
+        link = link_of(p, tab_name)
+        if link:
+            d["link"] = link
         if p.via_row:
             d["open_a_row"] = True          # 詳細頁：在清單點某一筆進去
         if p.condition:
@@ -480,7 +516,7 @@ def search(keywords: list[str], locale: str = "zh-TW", limit: int = 20) -> dict[
                 continue
             seen.add(sig)
             hits.append((s + (1 if el.kind in ("field", "option", "tab") else 0),
-                         {"label": label, "type": el.kind, **where(p, tabs)}))
+                         {"label": label, "type": el.kind, **where(p, tabs, top_tab(el))}))
     hits.sort(key=lambda x: -x[0])
     page_hits.sort(key=lambda x: -x[0])
 
@@ -498,9 +534,22 @@ def search(keywords: list[str], locale: str = "zh-TW", limit: int = 20) -> dict[
             elif el.kind in ("field", "option") and t not in fields:
                 fields.append(t)
         page_out.append({**where(p, []), "page_tabs": tabs_all[:30], "fields": fields[:80]})
+    matches = [h for _s, h in hits[: max(1, min(int(limit), 60))]]
+    links: list[dict[str, str]] = []
+    for item in [*page_out, *matches]:
+        href = item.get("link")
+        if not href or any(x["href"] == href for x in links):
+            continue
+        name = item["menu"][-1] if item["menu"] else href
+        if "?tab=" in href:
+            tab_label = item["tabs"][0] if item["tabs"] else item.get("label")
+            if tab_label:
+                name = f"{name} › {tab_label}"
+        links.append({"label": name, "href": href})
     return {
+        "links": links[:6],
         "locale": loc,
-        "matches": [h for _s, h in hits[: max(1, min(int(limit), 60))]],
+        "matches": matches,
         "pages": page_out,
         "types": {"field": "form field (in the create/edit dialog or settings form)",
                   "option": "checkbox / radio option", "choice": "choice in a drop-down",

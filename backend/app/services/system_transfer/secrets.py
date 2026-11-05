@@ -154,7 +154,9 @@ ENVELOPE_SECRETS: dict[str, tuple[str, str, Callable[[Any, str], bytes]]] = {
 # ─────────────────────────── 4. system_settings 內嵌機密 ───────────────────────────
 # key -> {enc_field: aad_bytes}；均為 "v1:b64nonce:b64ct" 格式（除 phpipam 為 b64 pair）
 _SETTINGS_V1: dict[str, dict[str, bytes]] = {
-    "llm": {"mcp_api_key_enc": b"llm:mcp_api_key", "api_key_enc": b"llm:api_key"},
+    # 判讀／巡檢自己的 LLM Server 金鑰（2026-11-05）：各用各的 AAD，見 system_config._role_key_aad
+    "llm": {"mcp_api_key_enc": b"llm:mcp_api_key", "api_key_enc": b"llm:api_key",
+            "ai_interpret_api_key_enc": b"llm:ai_interpret_api_key", "ai_audit_api_key_enc": b"llm:ai_audit_api_key"},
     "ldap": {"bind_password_enc": b"ldap:bind_password"},
     "oidc": {"client_secret_enc": b"oidc:client_secret"},
     "saml": {"sp_private_key_enc": b"saml:sp_private_key"},

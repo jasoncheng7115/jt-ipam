@@ -1095,7 +1095,8 @@
     "phase_composing": "Working through the results…",
     "phase_answering": "Writing the answer…",
     "phase_round": "query round {n}",
-    "phase_elapsed": "{n}s elapsed"
+    "phase_elapsed": "{n}s elapsed",
+    "go_to": "Go to"
   },
   "perm": {
     "title": "Permissions",
@@ -4375,7 +4376,11 @@
     "index_nothing": "There is nothing to index yet (subnet, IP and device descriptions are empty).",
     "mcp_key_last_used": "Last used {time} ({ip})",
     "mcp_key_never_used": "Not used by any client yet",
-    "mcp_key_rotate_in_use": "An MCP client used this key at {time} ({ip}); regenerating disconnects it at once until the client gets the new key."
+    "mcp_key_rotate_in_use": "An MCP client used this key at {time} ({ip}); regenerating disconnects it at once until the client gets the new key.",
+    "role_server_separate": "Use a different LLM server for this",
+    "role_server_inherit": "Uses the LLM server from the basic settings ({url}) with its provider and key.",
+    "role_server_url_hint": "Clear it to go back to the basic settings' LLM server; the provider and key here are cleared too.",
+    "role_server_model_needed": "Pick a model on this LLM server. Without one, the chat model's name ({model}) is used, which this server may not have."
   },
   "rack_diagram": {
     "empty": "No devices in this rack",

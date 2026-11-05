@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -115,6 +115,14 @@ class LLMConfig:
     # —— 適合的模型不一定同一個。
     ai_interpret_model: str | None = None
     ai_interpret_num_ctx: int | None = None
+    # 判讀／巡檢各自的 LLM Server（使用者 2026-11-05）。位址留空＝繼承對話的供應商、位址與金鑰；
+    # 有填位址才用自己的供應商與金鑰（金鑰明文只在程序內，儲存是密文）。見 role_config。
+    ai_interpret_provider: str | None = None
+    ai_interpret_url: str | None = None
+    ai_interpret_api_key: str | None = None
+    ai_audit_provider: str | None = None
+    ai_audit_url: str | None = None
+    ai_audit_api_key: str | None = None
     # AI 對話允不允許模型先思考。預設允許（畫面顯示「思考中」，與以前相同）；關掉時每一輪都送關閉思考的
     # 參數 —— 接會思考的模型、尤其經過 LiteLLM 這類閘道時，回答快很多。巡檢與判讀一律關閉、不看這個
     chat_thinking: bool = True
@@ -123,6 +131,28 @@ class LLMConfig:
 _MCP_AAD = b"llm:mcp_api_key"
 # LLM 供應商金鑰用自己的 AAD：兩把金鑰用途不同，密文不該能互換位置使用。
 _LLM_KEY_AAD = b"llm:api_key"
+#: 判讀／巡檢可以各自接一台 LLM Server；金鑰也各用各的 AAD
+LLM_ROLES = ("interpret", "audit")
+
+
+def _role_key_aad(role: str) -> bytes:
+    return f"llm:ai_{role}_api_key".encode()
+
+
+def role_config(cfg: LLMConfig, role: str) -> LLMConfig:
+    """某個用途實際用的 LLM 連線設定：chat（對話＋嵌入）、interpret（AI 判讀）、audit（AI 巡檢）。
+
+    判讀／巡檢沒填自己的位址＝繼承對話的供應商、位址與金鑰；模型與上下文長度沒設也繼承。
+    回傳一份新的 LLMConfig（chat_model／num_ctx 換成這個用途的），送請求的程式不用分辨用途。"""
+    if role not in LLM_ROLES:
+        return cfg
+    model = getattr(cfg, f"ai_{role}_model") or cfg.chat_model
+    num_ctx = getattr(cfg, f"ai_{role}_num_ctx") or cfg.num_ctx
+    url = getattr(cfg, f"ai_{role}_url")
+    if url:
+        return replace(cfg, provider=getattr(cfg, f"ai_{role}_provider") or "ollama", url=url,
+                       api_key=getattr(cfg, f"ai_{role}_api_key"), chat_model=model, num_ctx=num_ctx)
+    return replace(cfg, chat_model=model, num_ctx=num_ctx)
 
 
 def _enc(plain: str, aad: bytes) -> str:
@@ -240,6 +270,14 @@ async def get_llm_config(session: AsyncSession) -> LLMConfig:
                 cfg.ai_interpret_num_ctx = n if n > 0 else None
             except (ValueError, TypeError):
                 pass
+        for role in LLM_ROLES:
+            if v.get(f"ai_{role}_url"):
+                setattr(cfg, f"ai_{role}_url", str(v[f"ai_{role}_url"]))
+                setattr(cfg, f"ai_{role}_provider",
+                        str(v.get(f"ai_{role}_provider")) if v.get(f"ai_{role}_provider") in ("ollama", "openai")
+                        else "ollama")
+                if v.get(f"ai_{role}_api_key_enc"):
+                    setattr(cfg, f"ai_{role}_api_key", _dec(str(v[f"ai_{role}_api_key_enc"]), _role_key_aad(role)))
         if isinstance(v.get("ai_audit_times"), list):
             times = normalize_times(v["ai_audit_times"])
             if times:
@@ -285,6 +323,12 @@ async def set_llm_config(
     chat_thinking: bool | None = None,
     provider: str | None = None,
     api_key: str | None = None,
+    ai_interpret_provider: str | None = None,
+    ai_interpret_url: str | None = None,
+    ai_interpret_api_key: str | None = None,
+    ai_audit_provider: str | None = None,
+    ai_audit_url: str | None = None,
+    ai_audit_api_key: str | None = None,
     updated_by_user_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     row = await session.get(SystemSetting, LLM_KEY)
@@ -335,6 +379,23 @@ async def set_llm_config(
         key = api_key.strip()
         current.pop("api_key", None)          # 順手清掉可能存在的舊明文欄位
         current["api_key_enc"] = _enc(key, _LLM_KEY_AAD) if key else None
+    # 判讀／巡檢自己的 LLM Server。位址清成空字串＝回到繼承對話設定，供應商與金鑰一起清掉
+    # （用不到的金鑰不要留著）；金鑰 None＝不動、空字串＝清掉，同對話的金鑰
+    roles = {"interpret": (ai_interpret_provider, ai_interpret_url, ai_interpret_api_key),
+             "audit": (ai_audit_provider, ai_audit_url, ai_audit_api_key)}
+    for role, (r_provider, r_url, r_key) in roles.items():
+        if r_provider in ("ollama", "openai"):
+            current[f"ai_{role}_provider"] = r_provider
+        if r_key is not None:
+            k = r_key.strip()
+            current[f"ai_{role}_api_key_enc"] = _enc(k, _role_key_aad(role)) if k else None
+        if r_url is not None:
+            u = str(r_url).strip().rstrip("/")
+            if u:
+                current[f"ai_{role}_url"] = u
+            else:
+                for suffix in ("url", "provider", "api_key_enc"):
+                    current.pop(f"ai_{role}_{suffix}", None)
     if timeout is not None: current["timeout"] = float(timeout)
     if num_ctx is not None: current["num_ctx"] = int(num_ctx) if int(num_ctx) > 0 else None
     if mcp_external_enabled is not None: current["mcp_external_enabled"] = bool(mcp_external_enabled)

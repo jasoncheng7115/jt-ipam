@@ -8,30 +8,29 @@ an OWASP ZAP baseline scan with zero new findings before it is published.
 
 ## Supported versions
 
-| Version | Support |
-|---|---|
-| `0.6.x` (current) | Fixes and security fixes |
-| `0.5.x` | Security fixes only |
-| `0.4.x` and older | Unsupported; please upgrade |
-
-Releases are tagged (`vX.Y.Z`) from `v0.6.8` onwards. Earlier versions were published
-without tags; if you are running one, upgrade rather than pin to it.
-
-Because releases are frequent, "supported" means the newest patch of that line:
-a fix is delivered as a new patch release, not as a backport onto an older patch.
+Only the latest release receives security fixes; please upgrade before reporting.
+Releases are frequent and a fix is delivered as a new release, not as a backport onto an
+older one. Releases are tagged (`vX.Y.Z`) from `v0.6.8` onwards.
 
 ## Reporting a vulnerability
 
-**Do not open a public issue for security problems.**
+**Please do not open a public issue.**
 
-Please report privately via one of:
+- GitHub: use **Report a vulnerability** on the [Security tab](https://github.com/jasoncheng7115/jt-ipam/security)
+  (private vulnerability reporting)
+- Email: service@jason.tools
 
-- GitHub: open a [private security advisory](https://github.com/jasoncheng7115/jt-ipam/security/advisories/new)
-- Email: the maintainer address listed on the repository profile
+Include the affected version, reproduction steps and impact. We aim to acknowledge within
+3 business days, and for confirmed issues to release a fix and publish a GitHub Security
+Advisory within 7 days.
 
-Include affected version, reproduction steps, and impact. We aim to acknowledge
-within a few business days and will coordinate a fix and disclosure timeline with
-you.
+## Security advisories
+
+Published advisories: https://github.com/jasoncheng7115/jt-ipam/security/advisories
+
+An advisory is published for every exploitable issue fixed in a release, after the fixed
+release is out. Pure hardening and dependency upgrades that do not affect jt-ipam are listed
+in the release notes only.
 
 ## Scope highlights
 

@@ -45,6 +45,13 @@
     # store  Import into LocalMachine\My only. For services you point at a thumbprint
     #        yourself (Exchange, RD Gateway, third-party apps).
     #
+    # Chain (every profile that imports into a store): intermediate CA certificates in the
+    # bundle go to LocalMachine\CA ("Intermediate Certification Authorities") automatically.
+    # The root goes to LocalMachine\Root ("Trusted Root Certification Authorities") only with
+    #        DEPLOY_1_INSTALL_ROOT=true
+    #        Adding a trusted root changes what this host trusts, so it is off by default; it is
+    #        needed only for a private / enterprise CA (public CA roots ship with Windows).
+    #
     # files  Write certificate files to paths you choose, then run an optional command.
     #        DEPLOY_1_FULLCHAIN=C:\apps\ssl\site.pem   DEPLOY_1_KEY=C:\apps\ssl\site.key
     #        DEPLOY_1_CRT=  DEPLOY_1_CHAIN=  DEPLOY_1_COMBINED=  DEPLOY_1_PFX=
@@ -66,7 +73,7 @@ param(
     [switch] $Help
 )
 
-$AGENT_VERSION = "1.1.1"
+$AGENT_VERSION = "1.2.0"
 
 # Public key (RSA) that signs this script: self-update only installs a copy whose signature verifies, so
 # neither a fake server nor a compromised one can push a script that runs as SYSTEM.
@@ -255,18 +262,110 @@ function Invoke-JtText { param([string] $Url) return [Text.Encoding]::UTF8.GetSt
 function Import-JtCertificate {
     <# Import a PKCS#12 blob into LocalMachine\My straight from memory and return its
        thumbprint. Deliberately never writes the PFX to disk: it holds the private key, and a
-       temp file would leave it readable on the filesystem until the file is cleaned up. #>
-    param([byte[]] $Pfx, [string] $Password, [string] $StoreName = "My")
+       temp file would leave it readable on the filesystem until the file is cleaned up.
+       The whole bundle is read: the certificate with the private key goes to $StoreName, the
+       rest of the chain to the CA stores (Install-JtChain). Taking only one certificate left the
+       intermediates out, and IIS may then not send them -- clients see an incomplete chain. #>
+    param([byte[]] $Pfx, [string] $Password, [string] $StoreName = "My", [string] $Cert = "",
+          [bool] $InstallRoot = $false)
     $flags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::MachineKeySet -bor `
              [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor `
              [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable
-    $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($Pfx, $Password, $flags)
+    $all = [Security.Cryptography.X509Certificates.X509Certificate2Collection]::new()
+    $all.Import($Pfx, $Password, $flags)
+    $leaf = $null
+    foreach ($c in $all) { if ($c.HasPrivateKey) { $leaf = $c; break } }
+    if (-not $leaf) { throw "the bundle from jt-ipam has no certificate with a private key" }
     # StoreName is normally "My". A domain controller serving LDAPS reads its certificate
     # from the service store "NTDS\My" instead -- putting it in LocalMachine\My does nothing.
     $store = [Security.Cryptography.X509Certificates.X509Store]::new($StoreName, "LocalMachine")
     $store.Open("ReadWrite")
-    try { $store.Add($cert) } finally { $store.Close() }
-    return $cert.Thumbprint
+    try { $store.Add($leaf) } finally { $store.Close() }
+    Install-JtChain -Certs $all -LeafThumbprint $leaf.Thumbprint -InstallRoot $InstallRoot -Cert $Cert
+    $check = Test-JtChain -Leaf $leaf -Bundle $all
+    Write-Log "[$Cert/chain] $check"
+    if ($Cert) {
+        $script:JtChainNote[$Cert] = (@($script:JtChainNote[$Cert], $check) | Where-Object { $_ }) -join "; "
+    }
+    return $leaf.Thumbprint
+}
+
+function Test-JtChain {
+    <# Build the chain the way Windows (and IIS, which sends intermediates from these stores) will,
+       and say in one line whether it is complete and ends at a trusted root. Revocation is not
+       checked: the host may have no internet access, and that is a different question. #>
+    param([Security.Cryptography.X509Certificates.X509Certificate2] $Leaf,
+          [Security.Cryptography.X509Certificates.X509Certificate2Collection] $Bundle = $null)
+    $chain = [Security.Cryptography.X509Certificates.X509Chain]::new($true)
+    $chain.ChainPolicy.RevocationMode = [Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
+    try {
+        $ok = $chain.Build($Leaf)
+        $n = $chain.ChainElements.Count
+        $top = if ($n -gt 0) { $chain.ChainElements[$n - 1].Certificate.Subject -replace '^.*?CN=([^,]+).*$', '$1' } else { "" }
+        if ($ok) { return "chain verified ($n certificates, trusted root '$top')" }
+        $flags = @($chain.ChainStatus | ForEach-Object { $_.Status.ToString() })
+        if ($flags -match "PartialChain") {
+            # Windows says "partial" both when an intermediate is missing and when the root is
+            # nowhere on the host. A root that came in the bundle but was not installed
+            # (INSTALL_ROOT off) is the second case -- saying "intermediate missing" would send
+            # the admin looking for the wrong certificate.
+            $issuer = if ($n -gt 0) { $chain.ChainElements[$n - 1].Certificate.Issuer } else { $Leaf.Issuer }
+            $issuerName = $issuer -replace '^.*?CN=([^,]+).*$', '$1'
+            if ($Bundle) {
+                foreach ($c in $Bundle) {
+                    if ($c.Subject -eq $issuer -and $c.Subject -eq $c.Issuer) {
+                        return "CHAIN NOT TRUSTED: root '$issuerName' came with the certificate but is not installed (private CA: set DEPLOY_<N>_INSTALL_ROOT=true)"
+                    }
+                }
+            }
+            return "CHAIN INCOMPLETE: no certificate for issuer '$issuerName' on this host (an intermediate or the root is missing; upload the full chain to jt-ipam)"
+        }
+        if ($flags -match "UntrustedRoot") { return "CHAIN NOT TRUSTED: root '$top' is not trusted on this host (private CA: set DEPLOY_<N>_INSTALL_ROOT=true)" }
+        if ($flags -match "NotTimeValid") { return "CHAIN INVALID: a certificate in the chain is expired or not yet valid" }
+        return "CHAIN INVALID: " + ($flags -join ", ")
+    } finally { $chain.Reset() }
+}
+
+function Install-JtChain {
+    <# Put the CA certificates that came with the server certificate where Windows looks for them:
+       intermediates (CA, not self-signed) -> LocalMachine\CA, always -- that store only completes
+       chains, it makes the host trust nothing new. The root (self-signed CA) -> LocalMachine\Root
+       only with DEPLOY_<N>_INSTALL_ROOT=true: a trusted root changes what this host trusts, and doing
+       it by default would let a compromised server plant a root on every Windows host.
+       Certificates that are not CAs are left alone; ones already in the store are not added again. #>
+    param([Security.Cryptography.X509Certificates.X509Certificate2Collection] $Certs,
+          [string] $LeafThumbprint, [bool] $InstallRoot, [string] $Cert = "")
+    $notes = [System.Collections.ArrayList]::new()
+    foreach ($c in $Certs) {
+        if ($c.Thumbprint -eq $LeafThumbprint -or $c.HasPrivateKey) { continue }
+        $isCa = $false
+        foreach ($ext in $c.Extensions) {
+            if ($ext -is [Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]) {
+                $isCa = $ext.CertificateAuthority
+            }
+        }
+        if (-not $isCa) { continue }
+        $selfSigned = ($c.Subject -eq $c.Issuer)
+        $name = ($c.Subject -replace '^.*?CN=([^,]+).*$', '$1')
+        if ($selfSigned -and -not $InstallRoot) {
+            $null = $notes.Add("root '$name' not installed (INSTALL_ROOT is off)")
+            continue
+        }
+        $target = if ($selfSigned) { "Root" } else { "CA" }
+        $store = [Security.Cryptography.X509Certificates.X509Store]::new($target, "LocalMachine")
+        $store.Open("ReadWrite")
+        try {
+            $found = $store.Certificates.Find("FindByThumbprint", $c.Thumbprint, $false)
+            if ($found.Count -gt 0) {
+                $null = $notes.Add("'$name' already in LocalMachine\$target")
+            } else {
+                $store.Add($c)
+                $null = $notes.Add("'$name' added to LocalMachine\$target")
+                Write-Log "[$Cert/chain] '$name' added to LocalMachine\$target"
+            }
+        } finally { $store.Close() }
+    }
+    if ($Cert) { $script:JtChainNote[$Cert] = ($notes -join "; ") }
 }
 
 function Remove-JtCertificate {
@@ -369,9 +468,15 @@ function Set-HttpSysCertificate {
 
 $script:ReportLines = New-Object Collections.ArrayList
 
+$script:JtChainNote = @{}
+
 function Add-Report {
     param([string] $Cert, [string] $Profile, [string] $Status,
           [string] $Fingerprint, [string] $NotAfter, [string] $Message = "")
+    # 這次匯入時憑證鏈放到哪裡（Install-JtChain 記的），一起回報
+    if ($Status -eq "ok" -and $script:JtChainNote.ContainsKey($Cert) -and $script:JtChainNote[$Cert]) {
+        $Message = if ($Message) { "$Message; chain: $($script:JtChainNote[$Cert])" } else { "chain: $($script:JtChainNote[$Cert])" }
+    }
     $msg = ($Message -replace "`t", " ") -replace "`r?`n", " "
     $dry = if ($DryRun) { "1" } else { "0" }
     $null = $script:ReportLines.Add(("{0}`t{1}`t{2}`t{3}`t{4}`t{5}`t{6}" -f `
@@ -476,7 +581,7 @@ function Invoke-DeployIis {
     Write-Dbg "registered on $($parts.Key): $(if ($old) { $old } else { '(nothing)' })"
 
     $bundle = Get-CertificatePfx -Cert $Cert
-    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password
+    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password -Cert $Cert -InstallRoot (Test-CfgTrue (Get-Cfg $D "INSTALL_ROOT" "false"))
     Write-Log "[$Cert/iis] imported into LocalMachine\My ($thumb)"
 
     if ($old -eq $thumb) {
@@ -588,7 +693,7 @@ function Invoke-DeployWinrm {
 
     $old = Get-ServedThumbprint -TargetHost $probeHost -Port $port -SniHost $probeHost
     $bundle = Get-CertificatePfx -Cert $Cert
-    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password
+    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password -Cert $Cert -InstallRoot (Test-CfgTrue (Get-Cfg $D "INSTALL_ROOT" "false"))
     Write-Log "[$Cert/winrm] imported into LocalMachine\My ($thumb)"
     if ($old -eq $thumb) {
         Add-Report $Cert "winrm" "ok" $Fingerprint $NotAfter "already in use on :$port"
@@ -656,7 +761,7 @@ function Invoke-DeployRdp {
     $old = $ts.SSLCertificateSHA1Hash
 
     $bundle = Get-CertificatePfx -Cert $Cert
-    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password
+    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password -Cert $Cert -InstallRoot (Test-CfgTrue (Get-Cfg $D "INSTALL_ROOT" "false"))
     Write-Log "[$Cert/rdp] imported into LocalMachine\My ($thumb)"
     if ($old -eq $thumb) {
         Add-Report $Cert "rdp" "ok" $Fingerprint $NotAfter "already in use"
@@ -707,7 +812,7 @@ function Invoke-DeployStore {
     }
     $storeName = Get-Cfg $D "STORE" "My"
     $bundle = Get-CertificatePfx -Cert $Cert
-    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password -StoreName $storeName
+    $thumb = Import-JtCertificate -Pfx $bundle.Bytes -Password $bundle.Password -StoreName $storeName -Cert $Cert -InstallRoot (Test-CfgTrue (Get-Cfg $D "INSTALL_ROOT" "false"))
     Write-Log "[$Cert/store] imported into LocalMachine\$storeName ($thumb)"
 
     # Once the certificate is in NTDS\My the domain controller still has to be told, or it

@@ -23,6 +23,7 @@ import type { Subnet } from "@/types";
 import { SettingsIcon, RefreshIcon, ToolsIcon, KeyIcon, CopyIcon, EyeIcon, EyeOffIcon, AnomalyIcon, PlusIcon, DeleteIcon, TestIcon } from "@/icons";
 import { apiErrMsg } from "@/api/client";
 import { fmtDate, fmtDateTime } from "@/utils/datetime";
+import LlmRoleServer from "@/components/LlmRoleServer.vue";
 
 const { t, te } = useI18n();
 const msg = useMessage();
@@ -59,19 +60,43 @@ const chatModelOptions = computed(() =>
     ...o,
     disabled: isEmbedModel(o.value) && o.value !== llm.value?.chat_model,
   })));
-// 巡檢模型下拉：同樣排除嵌入模型；清空＝沿用對話模型（不是「沒有模型」）
-const auditModelOptions = computed(() =>
-  modelOptions.value.map((o) => ({
-    ...o,
-    disabled: isEmbedModel(o.value) && o.value !== llm.value?.ai_audit_model,
-  })));
+// 判讀／巡檢可以接自己的 LLM Server（2026-11-05）：有自己的位址時，模型清單要問那一台
+type Role = "interpret" | "audit";
+const roleModels = ref<Record<Role, OllamaModel[]>>({ interpret: [], audit: [] });
+const roleModelsLoading = ref<Record<Role, boolean>>({ interpret: false, audit: false });
+const roleModelsError = ref<Record<Role, string | null>>({ interpret: null, audit: null });
+const hasOwnServer = (role: Role) => !!llm.value?.[`ai_${role}_url`];
 
-// 判讀模型下拉：同上；清空＝沿用對話模型
-const interpretModelOptions = computed(() =>
-  modelOptions.value.map((o) => ({
-    ...o,
-    disabled: isEmbedModel(o.value) && o.value !== llm.value?.ai_interpret_model,
-  })));
+async function loadRoleModels(role: Role) {
+  if (!hasOwnServer(role)) { roleModels.value[role] = []; roleModelsError.value[role] = null; return; }
+  roleModelsLoading.value[role] = true;
+  roleModelsError.value[role] = null;
+  try {
+    const res = await listOllamaModels(role);
+    roleModels.value[role] = res.models;
+    if (res.error_detail || res.error) roleModelsError.value[role] = srvText(res.error_detail, res.error ?? "");
+  } catch (e: any) {
+    roleModelsError.value[role] = e?.response?.data?.detail ?? String(e);
+  } finally {
+    roleModelsLoading.value[role] = false;
+  }
+}
+
+// 判讀／巡檢的模型下拉：排除嵌入模型；清空＝沿用（對話模型或那台的預設，見提示）
+function roleModelOptions(role: Role) {
+  const current = llm.value?.[`ai_${role}_model`] ?? null;
+  const base = hasOwnServer(role)
+    ? roleModels.value[role].map((m) => ({
+      label: m.parameter_size ? `${m.name} (${m.parameter_size})` : m.name, value: m.name }))
+    : modelOptions.value;
+  const opts = base.map((o) => ({ ...o, disabled: isEmbedModel(o.value) && o.value !== current }));
+  if (current && !opts.find((o) => o.value === current)) {
+    opts.push({ label: t("llm_settings.model_not_found", { model: current }), value: current, disabled: false });
+  }
+  return opts;
+}
+const auditModelOptions = computed(() => roleModelOptions("audit"));
+const interpretModelOptions = computed(() => roleModelOptions("interpret"));
 
 // 巡檢範圍。存的是每個子網路的 ai_audit_enabled 欄位（跟子網路編輯頁同一個），
 // 不是另外存一份清單 —— 存兩份遲早會出現「這裡看是開的、那裡看是關的」。
@@ -230,7 +255,10 @@ async function load() {
   try { llm.value = await getLLMConfig(); }
   catch (e) { msg.error(apiErrMsg(e)); }
   // 未啟用連接時不要自動去抓清單（否則會冒出「無法連上 LLM 伺服器」錯誤）
-  if (llm.value?.enabled) { void loadModels(); void doCheckEmbedding(); void loadIndexStatus(); }
+  if (llm.value?.enabled) {
+    void loadModels(); void doCheckEmbedding(); void loadIndexStatus();
+    void loadRoleModels("interpret"); void loadRoleModels("audit");
+  }
 }
 
 // URL 改了也重新拉 model 清單 (換 LLM 伺服器時可能不同)；僅在已啟用時
@@ -253,6 +281,10 @@ function patch(p: LLMConfigPatch) {
       llm.value = await patchLLMConfig(p);
       // 換了嵌入模型：既有向量是舊模型的，索引狀態要跟著變成「建議重建」
       if ("embedding_model" in p) void loadIndexStatus();
+      // 判讀／巡檢換了 LLM Server：模型清單要重問那一台
+      for (const role of ["interpret", "audit"] as const) {
+        if ([`ai_${role}_url`, `ai_${role}_provider`, `ai_${role}_api_key`].some((x) => x in p)) void loadRoleModels(role);
+      }
       msg.success(t("common.saved"));
     } catch (e) {
       msg.error(apiErrMsg(e));
@@ -535,12 +567,23 @@ onMounted(() => { void load(); void loadTools(); void loadSubnets(); });
     </template>
     <p class="hint" style="margin: 0 0 14px">{{ t("llm_settings.interpret_scope") }}</p>
     <n-space vertical :size="14">
+      <LlmRoleServer role="interpret" :llm="llm" @patch="patch" />
       <div>
-        <label>{{ t("llm_settings.interpret_model") }}</label>
+        <n-space align="center" style="margin-bottom: 4px">
+          <label style="margin: 0">{{ t("llm_settings.interpret_model") }}</label>
+          <n-button v-if="hasOwnServer('interpret')" text size="tiny" :loading="roleModelsLoading.interpret"
+                    @click="loadRoleModels('interpret')">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>
+            {{ t("llm_settings.reload_list") }}
+          </n-button>
+          <span v-if="roleModelsError.interpret" style="color: var(--err-color, #e88080); font-size: 11px;">
+            {{ t("llm_settings.ollama_unreachable", { err: roleModelsError.interpret.slice(0, 80) }) }}
+          </span>
+        </n-space>
         <n-select
           :value="llm.ai_interpret_model"
           :options="interpretModelOptions"
-          :loading="modelsLoading"
+          :loading="hasOwnServer('interpret') ? roleModelsLoading.interpret : modelsLoading"
           :placeholder="t('llm_settings.audit_model_inherit', { model: llm.chat_model })"
           clearable
           filterable
@@ -548,6 +591,10 @@ onMounted(() => { void load(); void loadTools(); void loadSubnets(); });
           data-testid="interpret-model"
           @update:value="(v: string | null) => patch({ ai_interpret_model: v ?? '' })"
         />
+        <p v-if="hasOwnServer('interpret') && !llm.ai_interpret_model" class="hint" style="color: #f0a020"
+           data-testid="interpret-model-needed">
+          {{ t("llm_settings.role_server_model_needed", { model: llm.chat_model }) }}
+        </p>
         <p class="hint">{{ t("llm_settings.interpret_model_hint") }}</p>
       </div>
       <div>
@@ -579,12 +626,23 @@ onMounted(() => { void load(); void loadTools(); void loadSubnets(); });
         <span style="margin-left:10px">{{ t("llm_settings.audit_enabled") }}</span>
         <p class="hint">{{ t("llm_settings.audit_enabled_hint") }}</p>
       </div>
+      <LlmRoleServer role="audit" :llm="llm" :disabled="!llm.ai_audit_enabled" @patch="patch" />
       <div>
-        <label>{{ t("llm_settings.audit_model") }}</label>
+        <n-space align="center" style="margin-bottom: 4px">
+          <label style="margin: 0">{{ t("llm_settings.audit_model") }}</label>
+          <n-button v-if="hasOwnServer('audit')" text size="tiny" :loading="roleModelsLoading.audit"
+                    @click="loadRoleModels('audit')">
+            <template #icon><n-icon><RefreshIcon /></n-icon></template>
+            {{ t("llm_settings.reload_list") }}
+          </n-button>
+          <span v-if="roleModelsError.audit" style="color: var(--err-color, #e88080); font-size: 11px;">
+            {{ t("llm_settings.ollama_unreachable", { err: roleModelsError.audit.slice(0, 80) }) }}
+          </span>
+        </n-space>
         <n-select
           :value="llm.ai_audit_model"
           :options="auditModelOptions"
-          :loading="modelsLoading"
+          :loading="hasOwnServer('audit') ? roleModelsLoading.audit : modelsLoading"
           :disabled="!llm.ai_audit_enabled"
           :placeholder="t('llm_settings.audit_model_inherit', { model: llm.chat_model })"
           clearable
@@ -592,6 +650,10 @@ onMounted(() => { void load(); void loadTools(); void loadSubnets(); });
           style="width: 100%"
           @update:value="(v: string | null) => patch({ ai_audit_model: v ?? '' })"
         />
+        <p v-if="hasOwnServer('audit') && !llm.ai_audit_model" class="hint" style="color: #f0a020"
+           data-testid="audit-model-needed">
+          {{ t("llm_settings.role_server_model_needed", { model: llm.chat_model }) }}
+        </p>
         <p class="hint">{{ t("llm_settings.audit_model_hint") }}</p>
       </div>
       <div>

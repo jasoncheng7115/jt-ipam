@@ -89,3 +89,78 @@ async def test_tool_uses_the_users_locale(db_session, admin_user) -> None:
     assert out["locale"] in ui_map.LOCALES
     assert any(m["label"] == "合約到期" for m in out["matches"])
     assert "find_ui_location" in UTILITY_TOOLS, "不碰資料：沒有任何權限的帳號也可以問功能在哪"
+
+
+# ── 可點的頁面連結（使用者 2026-11-04「直接給點選連結」）───────────────────────
+# 連結由地圖決定（不是模型寫的網址）；管理員限定的頁面不給一般帳號連結；詳細頁連到清單；
+# 頁面支援 ?tab= 時連到那個頁籤。
+
+def test_pages_carry_an_in_app_link() -> None:
+    page = ui_map.search(["電路"], "zh-TW", is_admin=False)["pages"][0]
+    assert page["link"] == "/advanced/circuits", page
+    sa = ui_map.search(["掃描代理"], "zh-TW", is_admin=True)["pages"][0]
+    assert sa["link"] == "/scan-agents"
+
+
+def test_admin_pages_get_no_link_for_other_users() -> None:
+    sa = ui_map.search(["掃描代理"], "zh-TW", is_admin=False)["pages"][0]
+    assert sa["admin_only"] is True and "link" not in sa, "看不到的頁面不給連結（點了也只會被擋）"
+
+
+def test_a_tab_links_to_the_tab_when_the_page_supports_it() -> None:
+    m = next(m for m in ui_map.search(["跳板主機"], "zh-TW", is_admin=True)["matches"]
+             if m["type"] == "tab" and m["menu"][-1] == "掃描代理")
+    assert m["link"] == "/scan-agents?tab=jump"
+
+
+def test_detail_page_matches_link_to_the_list() -> None:
+    m = next(m for m in ui_map.search(["上線狀態跟著所屬設備"], "zh-TW", is_admin=True)["matches"]
+             if m.get("open_a_row"))
+    assert m["link"] in ("/addresses", "/subnets"), m
+
+
+def test_ui_links_come_only_from_the_ui_map_tool() -> None:
+    import json
+
+    from app.services.ai import ui_links
+    out = ui_map.search(["掃描代理", "跳板主機"], "zh-TW", is_admin=True)
+    convo = [
+        {"role": "user", "content": "掃描代理在哪"},
+        {"role": "tool", "name": "list_subnets", "content": json.dumps({"link": "/evil", "label": "x"})},
+        {"role": "tool", "name": "find_ui_location", "content": json.dumps(out, ensure_ascii=False)},
+        {"role": "tool", "name": "find_ui_location", "content": json.dumps({"error": "boom"})},
+    ]
+    links = ui_links(convo)
+    assert links and len(links) <= 4
+    assert links[0] == {"label": "掃描代理", "href": "/scan-agents"}
+    assert all(x["href"].startswith("/") and not x["href"].startswith("//") for x in links)
+    assert "/evil" not in {x["href"] for x in links}, "別的工具的輸出不可以變成連結"
+    assert len({x["href"] for x in links}) == len(links), "同一個連結只出現一次"
+
+
+async def test_chat_stream_sends_the_links_and_history_keeps_them(client, auth_headers, monkeypatch) -> None:
+    import json
+
+    from app.api.v1.endpoints import ai as ai_ep
+    from app.services import system_config
+    from app.services.system_config import LLMConfig
+
+    async def _cfg(_s):
+        return LLMConfig(enabled=True, url="http://llm.example.test:11434", embedding_model="e", chat_model="m",
+                         timeout=30.0)
+    monkeypatch.setattr(system_config, "get_llm_config", _cfg)
+    found = ui_map.search(["掃描代理"], "zh-TW", is_admin=True)
+
+    async def fake_stream(*a, **kw):
+        yield {"type": "done", "answer": "在「管理 › 掃描代理」。", "model": "m", "elapsed_ms": 10,
+               "trace_messages": [{"role": "tool", "name": "find_ui_location",
+                                   "content": json.dumps(found, ensure_ascii=False)}]}
+    monkeypatch.setattr(ai_ep.ai_service, "chat_stream", fake_stream)
+
+    r = await client.post("/api/v1/ai/chat/stream", headers=auth_headers,
+                          json={"messages": [{"role": "user", "content": "掃描代理在哪"}]})
+    done = [json.loads(x[6:]) for x in r.text.splitlines() if x.startswith("data: ")][-1]
+    assert done["links"][0] == {"label": "掃描代理", "href": "/scan-agents"}
+    conv = (await client.get(f"/api/v1/ai/chat/conversations/{done['conversation_id']}", headers=auth_headers)).json()
+    assert conv["messages"][-1]["links"][0]["href"] == "/scan-agents", "重新打開對話也看得到按鈕"
+    assert conv["messages"][0]["links"] == [], "使用者的訊息沒有連結"

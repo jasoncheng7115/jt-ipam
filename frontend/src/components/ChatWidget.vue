@@ -21,12 +21,12 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
   chatStream, confirmAction, listMyConversations, getConversation, deleteConversation, getModelInfo,
-  type ChatMessage, type ChatPageContext, type ConversationSummary, type ModelInfo, type PendingAction,
+  type ChatLink, type ChatMessage, type ChatPageContext, type ConversationSummary, type ModelInfo, type PendingAction,
 } from "@/api/chat";
 import { fmtRelative, fmtDateTime } from "@/utils/datetime";
 import { BubbleStar } from "@iconoir/vue";
 import { humanToolName } from "@/utils/toolLabel";
-import { CancelIcon, SendIcon, ChatHistoryIcon, ToolsIcon, RefreshIcon, WarnIcon, ExpandIcon, ReduceIcon } from "@/icons";
+import { CancelIcon, SendIcon, ChatHistoryIcon, ToolsIcon, RefreshIcon, WarnIcon, ExpandIcon, ReduceIcon, GoToIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import { renderMarkdown } from "@/utils/markdown";
 import { aiErrText } from "@/utils/wsError";
@@ -51,9 +51,16 @@ const pageContext = computed<ChatPageContext>(() => {
 type ChatRef = { type: string; id: string; label: string };
 type UiMessage = ChatMessage & {
   model?: string | null; elapsedMs?: number | null; ts?: string | null; refs?: ChatRef[];
+  links?: ChatLink[];                 // 「功能在哪」的站內頁面連結（後端從畫面地圖工具取，存在對話歷程）
   pendingActions?: PendingAction[];   // AI 想執行的異動，待使用者確認
   actionDone?: string;                // 確認後的結果摘要（已執行）
 };
+
+// 「功能在哪」的頁面連結：只走站內路由（後端已限定格式，這裡再擋一次 // 開頭的外部網址）
+function goLink(href: string) {
+  if (!href.startsWith("/") || href.startsWith("//")) return;
+  void router.push(href);
+}
 
 // 從工具呼叫結果（trace）擷取被提到的物件 → 答案下方給可點連結
 function extractRefs(trace: ChatMessage[] | undefined): ChatRef[] {
@@ -261,6 +268,7 @@ async function send() {
             elapsedMs: ev.elapsed_ms ?? (Date.now() - startTs),
             ts: new Date().toISOString(),
             refs: extractRefs(ev.trace_messages),
+            links: ev.links ?? [],
           });
           trace.value = ev.trace_messages;
           if (ev.conversation_id) conversationId.value = ev.conversation_id;
@@ -363,6 +371,7 @@ async function openConversation(id: string) {
       model: m.model,
       elapsedMs: m.elapsed_ms,
       ts: m.created_at,
+      links: m.links ?? [],
     }));
     conversationId.value = conv.id;
     showHistory.value = false;
@@ -485,6 +494,12 @@ async function removeConversation(id: string) {
             <span class="msg-refs__label">{{ t("chat.related") }}</span>
             <n-tag v-for="r in m.refs" :key="r.type + r.id" size="small" type="info"
                    style="cursor: pointer" @click="goRef(r)">{{ r.label }}</n-tag>
+          </div>
+          <div v-if="m.role === 'assistant' && m.links && m.links.length" class="msg-refs" data-testid="chat-links">
+            <span class="msg-refs__label">{{ t("chat.go_to") }}</span>
+            <n-button v-for="l in m.links" :key="l.href" size="tiny" secondary type="primary" @click="goLink(l.href)">
+              <template #icon><n-icon><GoToIcon /></n-icon></template>{{ l.label }}
+            </n-button>
           </div>
           <div v-if="m.ts || m.model || m.elapsedMs != null" class="msg-meta">
             <span v-if="m.ts">{{ fmtDateTime(m.ts) }}</span>

@@ -323,6 +323,7 @@ export const UploadIcon = Upload;
 export const NewFolderIcon = FolderPlus;
 export const FilterIcon = Filter;
 export const MoveIcon = ArrowRight;   // 搬移到其他目錄
+export const GoToIcon = ArrowRight;   // AI 對話回答下方的「前往」頁面按鈕
 export const UpLevelIcon = ArrowUp;   // 回上一層目錄
 export const UnregisteredIcon = HelpCircle;   // 自動收錄、未經登記的位址
 export const PasteIcon = PasteClipboard;

@@ -138,6 +138,8 @@ async def chat(
         },
         request_id=getattr(request.state, "request_id", None),
     )
+    # 回答下方的「前往」按鈕：只取自畫面地圖工具的結果（網址由前端路由決定，不是模型寫的）
+    links = ai_service.ui_links(result.get("messages") or [])
     # 持久化這一輪對話（每位 user 看自己的）
     conv = await ai_chat_store.save_turn(
         session,
@@ -147,6 +149,7 @@ async def chat(
         assistant_text=result.get("answer") or "",
         model=result.get("model"),
         elapsed_ms=result.get("elapsed_ms"),
+        links=links,
     )
     await session.commit()
     return {
@@ -156,6 +159,7 @@ async def chat(
         "elapsed_ms": result.get("elapsed_ms"),
         "conversation_id": str(conv.id),
         "pending_actions": result.get("pending_actions", []),
+        "links": links,
     }
 
 
@@ -253,6 +257,9 @@ async def chat_stream(
                     continue
                 if ev.get("type") == "done":
                     iterations = len(ev.get("trace_messages") or [])
+                    # 回答下方的「前往」按鈕：只取自畫面地圖工具的結果
+                    links = ai_service.ui_links(ev.get("trace_messages") or [])
+                    ev = {**ev, "links": links}
                     # 存紀錄失敗不可以把回答吃掉（2026-10-13：模型其實答好了，存檔失敗讓整段變成錯誤、畫面空白）
                     try:
                         conv = await ai_chat_store.save_turn(
@@ -263,6 +270,7 @@ async def chat_stream(
                             assistant_text=ev.get("answer") or "",
                             model=ev.get("model"),
                             elapsed_ms=ev.get("elapsed_ms"),
+                            links=links,
                         )
                         ev = {**ev, "conversation_id": str(conv.id)}
                     except Exception:
@@ -329,16 +337,18 @@ async def thinking_check(
     AI 巡檢與判讀一律送這組參數；伺服器或閘道沒照做時只會「很慢」或答案被思考吃掉，
     不會報錯 —— 這支把它問出來（見 ai_service.probe_thinking）。同一個模型只問一次。
     """
-    from app.services.system_config import get_llm_config
+    from app.services.system_config import get_llm_config, role_config
     cfg = await get_llm_config(session)
-    roles: list[tuple[str, str]] = []
-    for role, model in (("chat", cfg.chat_model), ("audit", getattr(cfg, "ai_audit_model", None)),
-                        ("interpret", getattr(cfg, "ai_interpret_model", None))):
-        if model and model not in {m for _, m in roles}:
-            roles.append((role, model))
+    # 判讀／巡檢可以接自己的 LLM Server：同一台、同一個模型只問一次（同名模型在不同 server 上要各問）
+    seen: set[tuple[str, str, str]] = set()
     results = []
-    for role, model in roles:
-        results.append({"role": role, **await ai_service.probe_thinking(session, model)})
+    for role in ("chat", "audit", "interpret"):
+        rc = role_config(cfg, role)
+        key = (rc.provider, rc.url, rc.chat_model)
+        if not rc.chat_model or key in seen:
+            continue
+        seen.add(key)
+        results.append({"role": role, **await ai_service.probe_thinking(session, role=role)})
     return {"results": results}
 
 
@@ -409,6 +419,7 @@ async def get_conversation_detail(
             {
                 "role": m.role, "content": m.content,
                 "model": m.model, "elapsed_ms": m.elapsed_ms,
+                "links": m.links or [],
                 "created_at": m.created_at,
             }
             for m in msgs

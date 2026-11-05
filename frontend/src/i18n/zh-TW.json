@@ -1095,7 +1095,8 @@
     "phase_composing": "整理查到的資料…",
     "phase_answering": "產生回答中…",
     "phase_round": "第 {n} 輪查詢",
-    "phase_elapsed": "已 {n} 秒"
+    "phase_elapsed": "已 {n} 秒",
+    "go_to": "前往"
   },
   "perm": {
     "title": "權限指派",
@@ -4375,7 +4376,11 @@
     "index_nothing": "還沒有任何說明可以索引（子網路、IP、裝置的說明欄都是空的）。",
     "mcp_key_last_used": "最後使用 {time}（{ip}）",
     "mcp_key_never_used": "尚未有用戶端使用",
-    "mcp_key_rotate_in_use": "這把金鑰 {time} 還有 MCP 用戶端在用（{ip}），重新產生後它會立即斷線，要到用戶端換成新金鑰。"
+    "mcp_key_rotate_in_use": "這把金鑰 {time} 還有 MCP 用戶端在用（{ip}），重新產生後它會立即斷線，要到用戶端換成新金鑰。",
+    "role_server_separate": "這個用途使用不同的 LLM Server",
+    "role_server_inherit": "沿用基本設定的 LLM Server（{url}）與它的供應商、金鑰。",
+    "role_server_url_hint": "清空就回到沿用基本設定的 LLM Server，這裡的供應商與金鑰會一起清掉。",
+    "role_server_model_needed": "請選這台 LLM Server 上的模型。沒選的話會用對話模型的名稱（{model}），這台不一定有。"
   },
   "rack_diagram": {
     "empty": "此機櫃尚無裝置",

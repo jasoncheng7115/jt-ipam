@@ -125,7 +125,7 @@ SOL が中継するのはホストの**シリアルポート**だけなので、
 
 ## セキュリティ（OWASP Top 10:2025）
 
-セキュリティは初日からの要件です。すべてのモジュールと PR を **OWASP Top 10:2025** に照らして確認しています。[`SECURITY_ja.md`](SECURITY_ja.md) を参照してください。ISO/IEC 27001:2022 と ISO/IEC 42001:2023 の根拠として使える管理策と、導入組織が自ら行うことは [`docs/COMPLIANCE_ja.md`](docs/COMPLIANCE_ja.md) を参照してください。
+セキュリティは初日からの要件です。すべてのモジュールと PR を **OWASP Top 10:2025** に照らして確認しています。[`SECURITY_ja.md`](SECURITY_ja.md) を参照してください。**セキュリティの問題はそこに書かれた方法で非公開で報告してください**（Security タブの「Report a vulnerability」または service@jason.tools）。公開の issue には書かないでください。公開済みのアドバイザリは [Security advisories](https://github.com/jasoncheng7115/jt-ipam/security/advisories) にあります。ISO/IEC 27001:2022 と ISO/IEC 42001:2023 の根拠として使える管理策と、導入組織が自ら行うことは [`docs/COMPLIANCE_ja.md`](docs/COMPLIANCE_ja.md) を参照してください。
 
 - **TLS は必須**：nginx のリバースプロキシで終端する（`BACKEND_TLS_MODE=nginx`）か、uvicorn が自己署名証明書で直接提供する（`BACKEND_TLS_MODE=direct`）かのどちらかを選びます
 - A01：既定で拒否の RBAC と、オブジェクト単位の判定（上記）

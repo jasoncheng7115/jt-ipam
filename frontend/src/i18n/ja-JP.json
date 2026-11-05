@@ -1095,7 +1095,8 @@
     "phase_composing": "結果を整理しています…",
     "phase_answering": "回答を作成しています…",
     "phase_round": "問い合わせ {n} 回目",
-    "phase_elapsed": "経過 {n} 秒"
+    "phase_elapsed": "経過 {n} 秒",
+    "go_to": "移動"
   },
   "perm": {
     "title": "権限",
@@ -4375,7 +4376,11 @@
     "index_nothing": "インデックスする説明がまだありません（サブネット・IP・デバイスの説明が空です）。",
     "mcp_key_last_used": "最終使用 {time}（{ip}）",
     "mcp_key_never_used": "まだどのクライアントも使用していません",
-    "mcp_key_rotate_in_use": "このキーは {time} に MCP クライアントが使用しています（{ip}）。再生成すると即座に切断され、クライアントに新しいキーを設定するまで使えません。"
+    "mcp_key_rotate_in_use": "このキーは {time} に MCP クライアントが使用しています（{ip}）。再生成すると即座に切断され、クライアントに新しいキーを設定するまで使えません。",
+    "role_server_separate": "この用途に別の LLM サーバーを使う",
+    "role_server_inherit": "基本設定の LLM サーバー（{url}）とそのプロバイダー・キーを使います。",
+    "role_server_url_hint": "空にすると基本設定の LLM サーバーに戻り、ここのプロバイダーとキーも消去されます。",
+    "role_server_model_needed": "この LLM サーバーのモデルを選んでください。選ばないと会話モデルの名前（{model}）が使われますが、このサーバーにあるとは限りません。"
   },
   "rack_diagram": {
     "empty": "このラックに機器はありません",

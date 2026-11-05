@@ -32,6 +32,7 @@ async def save_turn(
     assistant_text: str,
     model: str | None = None,
     elapsed_ms: int | None = None,
+    links: list[dict[str, str]] | None = None,
 ) -> AIChatConversation:
     """存一輪對話；回傳（新建或既有的）conversation。"""
     conv: AIChatConversation | None = None
@@ -50,7 +51,7 @@ async def save_turn(
     ))
     session.add(AIChatMessage(
         conversation_id=conv.id, role="assistant", content=assistant_text,
-        model=model, elapsed_ms=elapsed_ms,
+        model=model, elapsed_ms=elapsed_ms, links=links or None,
     ))
     # 觸碰 updated_at（onupdate 只在欄位變更時才動，這裡明確標記活動時間）
     conv.updated_at = datetime.now(UTC)

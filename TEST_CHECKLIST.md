@@ -1300,6 +1300,19 @@ what a console is allowed to do.
   a wrong `JT_IPAM_PIN` in the config makes the agent fail without the server ever receiving its key, and the console relay cannot open either; an old scan agent
   (`JT_IPAM_INSECURE=1` in its config) runs the "Already installed" command → no key needed, becomes "Pinned", subnets and relay settings kept; re-running with
   "Verify with system CAs" clears the fingerprint from the config; self-update: a new version with a bad signature logs "SIGNATURE CHECK FAILED" and is not installed
+- [ ] **AI chat "Go to" buttons** (`tests/test_ui_map.py`, `e2e/chat-page-links.spec.ts`): ask "where are the scan agents" → a "Go to Scan agents" button under the answer opens
+  that page; ask about jump hosts → the button opens the jump hosts tab on the scan agents page; ask about a field that only exists on a detail page → the button opens the
+  list; a regular account asking about an admin-only page gets the location but no button; reopening the conversation from the history shows the buttons again
+- [ ] **Interpretation and audit on other LLM servers** (`tests/test_llm_role_servers.py`, `e2e/llm-role-server.spec.ts`): after an upgrade both cards have the switch off and
+  interpretation and audit still use the chat server; turning on "Use a different LLM server for this" for interpretation and entering another URL → the model list comes from that
+  server and a hint shows while no model is picked; run "AI interpretation" on an unauthorized IP → the request goes to that server and the result names its model; an OpenAI-compatible
+  endpoint with a key → the page only says it is set and the audit log shows REDACTED; audit on another server and a manual run → it uses that server; turning the switch off → back
+  to the basic settings, still off after a reload; the thinking check lists each server; after a system export and import on
+  another host the interpretation and audit keys still work
+- [ ] **Windows agent certificate chain** (`tests/test_cert_agent_win_chain.py`; real Windows host): upload a p12 with root, intermediate and server certificates and deploy it to
+  Windows (iis or store) → the server certificate is in Local Computer › Personal with its key, the intermediate in "Intermediate Certification Authorities", the root not in
+  "Trusted Root" and the sync result says "root … not installed"; a second sync adds nothing twice; with `DEPLOY_<N>_INSTALL_ROOT=true` the root goes to "Trusted Root";
+  the chain check in the sync result: without INSTALL_ROOT "root … came with the certificate but is not installed", with it "chain verified", server certificate only "CHAIN INCOMPLETE" naming the missing issuer
 - [ ] **Several DHCP ranges in one subnet are one pool** (`tests/test_dhcp_pool_multi_range.py`, issue #57): a FortiGate interface with two ip-ranges (or a Kea subnet
   with two pools), first range full and second mostly free → the war room capacity shows one pool card with each range on its own line, the combined usage and
   no "almost full"; only when both are nearly full does the notification fire, naming both ranges; the subnet Address ranges page still has two rows;

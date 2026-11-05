@@ -6,6 +6,20 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 
 ## [Unreleased]
 
+### Added
+- **The Windows certificate agent puts the chain in the right stores** (a customer asked: a p12 with root, intermediate and server certificates still had to be sorted by hand on Windows Server). Only the server certificate used to be installed; the intermediate and root stayed in the bundle, so IIS might not send the intermediate and clients saw an incomplete chain.
+  - Intermediate certificates go to "Intermediate Certification Authorities" automatically; ones already there are not added again, and certificates that are not CAs are left alone.
+  - The root is not installed by default: `DEPLOY_<N>_INSTALL_ROOT=true` in the deployment puts it in "Trusted Root Certification Authorities". A trusted root changes what the host trusts and is only needed for a private enterprise CA.
+  - **The chain is verified after deployment**: the agent builds it the way Windows does (IIS sends intermediates from the same stores), and the sync result says "verified", "incomplete (with the missing issuer)", "root came with the certificate but is not installed" or "expired".
+  - The sync result says where each certificate went. Windows agent 1.2.0 (updates itself).
+- **AI interpretation and AI audit can each use their own LLM server** (a user request). The three uses used to share one LLM server and could only pick different models.
+  - The interpretation and audit cards in Admin › LLM / AI have "Use a different LLM server for this"; turned on, they take a provider, URL and key, and the model list comes from that server.
+  - Turned off they use the basic settings' server (chat and embedding), so upgraded installs behave as before; turning it off clears that URL, provider and key.
+  - Keys are stored encrypted, the page only shows that one is set and the audit log never has it in clear text; the thinking check covers each server.
+- **AI chat answers to "where is this feature" come with "Go to" buttons** (a user asked whether the chat could give a link to click). The buttons sit under the answer and switch to that page in the app; when the page supports it they open the matching tab, and a detail page links to its list.
+  - The links come from the UI map, not from URLs the model writes; pages the account cannot open get no button.
+  - They are saved in the chat history, so reopening a conversation shows them again.
+
 ### Security
 - **Certificate agents make sure they talk to the real jt-ipam** (a user asked "what if someone poses as the jt-ipam certificate server"). The install commands used to turn TLS verification off (`curl -k`, `JT_IPAM_INSECURE`), so anyone who could intercept the traffic could pose as jt-ipam, take the agent key, or push a "new agent" that the host runs as root / SYSTEM.
   - **The install command pins the jt-ipam certificate**: the page reads the certificate this jt-ipam actually presents (connecting to itself only) and puts its fingerprint in the command. Linux uses curl's `--pinnedpubkey`, Windows compares the certificate's SHA-256; it is written to the agent config and checked on every connection, which stops before the key is sent when it does not match. Works with a self-signed certificate.

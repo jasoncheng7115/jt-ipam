@@ -972,6 +972,17 @@ guacd 是 RDP 與 VNC 的預設引擎（2026-09-27 起，已安裝的站台由�
   帶 `--pinnedpubkey` 與 `JT_IPAM_PIN`、不帶 `JT_IPAM_INSECURE=1`；裝好後清單「伺服器驗證」顯示「釘選」；把設定檔的 `JT_IPAM_PIN` 改錯 → 代理連不上、伺服器收不到金鑰，
   主控台中繼也開不起來；舊掃描代理（設定檔有 `JT_IPAM_INSECURE=1`）在主機上執行「已安裝的主機」那行指令 → 不用金鑰、改成「釘選」、子網路與中繼設定不變；
   選「用系統 CA 驗證」重跑 → 設定檔的指紋清掉；自我更新：伺服器送的新版簽章不對 → 日誌「SIGNATURE CHECK FAILED」、代理沒被換掉
+- [ ] **AI 對話「前往」按鈕**（`tests/test_ui_map.py`、`e2e/chat-page-links.spec.ts`）：問「掃描代理在哪」→ 回答下方有「前往 掃描代理」，點了切到掃描代理頁；
+  問「跳板主機在哪」→ 按鈕切到掃描代理頁的跳板主機頁籤；問詳細頁才有的欄位 → 按鈕連到清單頁；一般帳號問管理員限定的頁面 → 照樣說明位置但沒有按鈕；
+  從對話歷程重新打開這段對話 → 按鈕還在
+- [ ] **判讀、巡檢接不同的 LLM Server**（`tests/test_llm_role_servers.py`、`e2e/llm-role-server.spec.ts`）：既有安裝升級後兩張卡片的開關是關的、判讀與巡檢照樣用對話那台；
+  判讀打開「這個用途使用不同的 LLM Server」、填另一台的位址 → 模型下拉改列那一台的模型、沒選模型時有提示；按一次未授權 IP 的「AI 判讀」→ 請求送到那一台、結果標出那一台的模型；
+  選 OpenAI 相容端點並填金鑰 → 畫面只顯示「已設定」，稽核紀錄裡是 REDACTED；巡檢接另一台後手動跑一次巡檢 → 用那一台；關掉開關 → 回到沿用基本設定，重新整理後仍是關的；
+  思考檢查列出每一台；系統匯出再匯入到另一台後，判讀／巡檢的金鑰照樣能用
+- [ ] **Windows 代理的憑證鏈**（`tests/test_cert_agent_win_chain.py`；Windows 實機）：上傳含根、中繼、伺服器三張的 p12，派送到 Windows（iis 或 store）→
+  伺服器憑證在「本機電腦 › 個人」且有私鑰、中繼憑證在「中繼憑證授權單位」、根憑證不在「受信任的根」，同步結果寫「root … not installed」；
+  再同步一次不會重複加入；部署設定加 `DEPLOY_<N>_INSTALL_ROOT=true` 後根憑證進「受信任的根」；
+  同步結果的鏈驗證：沒開 INSTALL_ROOT 寫「root … came with the certificate but is not installed」、開了寫「chain verified」、只上傳伺服器憑證寫「CHAIN INCOMPLETE」並點名缺的發行者
 - [ ] **同網段多段 DHCP 範圍算一個集區**（`tests/test_dhcp_pool_multi_range.py`，issue #57）：FortiGate 一個介面設兩段 ip-range（或 Kea 一個 subnet 兩個 pool），
   第一段發滿、第二段還很空 → 戰情室位址容量只有一張集區卡片、兩段範圍各一行、使用率是合計、不報快滿；兩段都快滿才發「集區快用完」，訊息列出兩段；
   子網路「位址範圍」頁仍是兩列；不同網段的範圍各自一張卡片

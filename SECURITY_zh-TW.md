@@ -7,29 +7,25 @@
 
 ## 支援版本
 
-| 版本 | 支援範圍 |
-|---|---|
-| `0.6.x`（目前） | 一般修正與安全修補 |
-| `0.5.x` | 僅安全修補 |
-| `0.4.x` 以前 | 不再維護，請升級 |
-
-自 `v0.6.8` 起每個版本都會打 tag（`vX.Y.Z`）。更早的版本沒有 tag；若您正在使用，
-建議升級而不是釘在那個版本上。
-
-由於發版頻繁，「支援」指的是該系列**最新的修補版**：修正會以新的修補版發布，
-不會回頭補進舊的修補版。
+只有最新版會收到安全修補，回報前請先升級。發版頻繁，修正會以新版發布，不會回頭補進舊版。
+自 `v0.6.8` 起每個版本都會打 tag（`vX.Y.Z`）。
 
 ## 回報漏洞
 
-**請勿為安全問題開公開 issue。**
+**請勿開公開 issue。**
 
-請透過以下任一管道私下回報:
+- GitHub：到 [Security 分頁](https://github.com/jasoncheng7115/jt-ipam/security)按「Report a vulnerability」（私下通報）
+- Email：service@jason.tools
 
-- GitHub:開立[私密安全通報（private security advisory）](https://github.com/jasoncheng7115/jt-ipam/security/advisories/new)
-- Email:儲存庫個人檔案上列出的維護者信箱
+請附上受影響版本、重現步驟與影響範圍。我們會在 3 個工作天內回覆；確認的問題以 7 天內釋出修正版、
+並發布 GitHub 安全公告（Security Advisory）為目標。
 
-請附上受影響版本、重現步驟與影響範圍。我們會在數個工作日內回覆,並與您協調修補與
-揭露的時程。
+## 安全公告
+
+已發布的公告：https://github.com/jasoncheng7115/jt-ipam/security/advisories
+
+每個已在新版修正、實際可被利用的問題都會發一則公告，在修正版釋出之後公開。純加強與不影響 jt-ipam 的
+相依套件升級只寫在版本說明。
 
 ## 重點範圍
 

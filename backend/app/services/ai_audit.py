@@ -791,8 +791,9 @@ async def _analyze(
 
         await _emit("analyzing", i - 1, total, batch=i, found=len(items))
         try:
+            # role="audit"：巡檢可以接自己的 LLM Server 與模型，沒設就繼承對話設定
             raw = await raw_chat(session, prompt + data_block(payload), timeout=AUDIT_TIMEOUT,
-                                 model=cfg.ai_audit_model, force_json=True,
+                                 role="audit", model=cfg.ai_audit_model, force_json=True,
                                  max_output_tokens="auto", no_thinking=True,
                                  num_ctx=cfg.ai_audit_num_ctx,
                                  on_chunk=_on_chunk if want_progress else None)

@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -51,6 +51,8 @@ class AIChatMessage(Base, UUIDPrimaryKeyMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str | None] = mapped_column(String(128))
     elapsed_ms: Mapped[int | None] = mapped_column(Integer)
+    # 回答下方的「前往」按鈕（[{label, href}]，來自畫面地圖工具；0239）
+    links: Mapped[list | None] = mapped_column(JSONB)
     # clock_timestamp()（非 now()）：同一 transaction 內逐列遞增，保證同回合 user→assistant
     # 與跨回合的訊息排序正確（now() 是 transaction 級時間，整批會相同）
     created_at: Mapped[datetime] = mapped_column(

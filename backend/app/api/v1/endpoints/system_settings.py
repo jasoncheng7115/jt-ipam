@@ -999,6 +999,13 @@ class LLMConfigOut(StrictModel):
     # AI 判讀（未授權 IP 判讀／IP 調查／防火牆規則異動解讀）；None＝沿用對話模型
     ai_interpret_model: str | None = None
     ai_interpret_num_ctx: int | None = None
+    # 判讀／巡檢自己的 LLM Server；位址空字串＝繼承對話設定。金鑰只回「有沒有設」
+    ai_interpret_provider: str = "ollama"
+    ai_interpret_url: str = ""
+    ai_interpret_api_key_set: bool = False
+    ai_audit_provider: str = "ollama"
+    ai_audit_url: str = ""
+    ai_audit_api_key_set: bool = False
     chat_thinking: bool = True           # AI 對話允許模型先思考（False＝送關閉思考的參數）
     server_timezone: str = ""            # 排程時刻是照這個時區算的，UI 要講清楚
 
@@ -1031,6 +1038,14 @@ class LLMConfigPatch(StrictModel):
     # AI 判讀專用模型／上下文長度；空字串／0 ＝清掉，回去沿用對話模型
     ai_interpret_model: Annotated[str | None, Field(max_length=128)] = None
     ai_interpret_num_ctx: Annotated[int | None, Field(ge=0, le=131072)] = None
+    # 判讀／巡檢自己的 LLM Server：位址空字串＝回到繼承對話設定（供應商與金鑰一起清掉）；
+    # 金鑰空字串＝清掉、沒帶＝不動
+    ai_interpret_provider: Literal["ollama", "openai"] | None = None
+    ai_interpret_url: Annotated[str | None, Field(min_length=0, max_length=512)] = None
+    ai_interpret_api_key: Annotated[str | None, Field(min_length=0, max_length=512)] = None
+    ai_audit_provider: Literal["ollama", "openai"] | None = None
+    ai_audit_url: Annotated[str | None, Field(min_length=0, max_length=512)] = None
+    ai_audit_api_key: Annotated[str | None, Field(min_length=0, max_length=512)] = None
     chat_thinking: bool | None = None
 
 
@@ -1062,6 +1077,12 @@ def _llm_out(cfg: Any, usage: tuple[Any, Any] = (None, None)) -> LLMConfigOut:
         ai_audit_num_ctx=cfg.ai_audit_num_ctx,
         ai_interpret_model=cfg.ai_interpret_model,
         ai_interpret_num_ctx=cfg.ai_interpret_num_ctx,
+        ai_interpret_provider=cfg.ai_interpret_provider or "ollama",
+        ai_interpret_url=cfg.ai_interpret_url or "",
+        ai_interpret_api_key_set=bool(cfg.ai_interpret_api_key),
+        ai_audit_provider=cfg.ai_audit_provider or "ollama",
+        ai_audit_url=cfg.ai_audit_url or "",
+        ai_audit_api_key_set=bool(cfg.ai_audit_api_key),
         chat_thinking=cfg.chat_thinking,
         server_timezone=_server_tz(),
     )
@@ -1105,6 +1126,12 @@ async def patch_llm(
         ai_audit_num_ctx=changes.get("ai_audit_num_ctx"),
         ai_interpret_model=changes.get("ai_interpret_model"),
         ai_interpret_num_ctx=changes.get("ai_interpret_num_ctx"),
+        ai_interpret_provider=changes.get("ai_interpret_provider"),
+        ai_interpret_url=changes.get("ai_interpret_url"),
+        ai_interpret_api_key=changes.get("ai_interpret_api_key"),
+        ai_audit_provider=changes.get("ai_audit_provider"),
+        ai_audit_url=changes.get("ai_audit_url"),
+        ai_audit_api_key=changes.get("ai_audit_api_key"),
         chat_thinking=changes.get("chat_thinking"),
         updated_by_user_id=user.id,
     )
@@ -1182,14 +1209,17 @@ async def rotate_mcp_key(
 async def list_ollama_models(
     _user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
+    role: Literal["chat", "interpret", "audit"] = "chat",
 ) -> dict[str, Any]:
     """列出 LLM 端點上可用的模型清單（給設定頁的下拉選用）。
 
     Ollama 走 `/api/tags`、OpenAI 相容走 `/v1/models` —— 兩者的回應結構也不同。
+    `role` 指定哪一個用途的 LLM Server（判讀／巡檢可以各接一台，沒設就是對話那台）。
     """
     from app.services import ai as ai_mod
+    from app.services.system_config import role_config
 
-    cfg = await get_llm_config(session)
+    cfg = role_config(await get_llm_config(session), role)
     provider = getattr(cfg, "provider", "ollama") or "ollama"
     url = ai_mod.models_url(cfg.url, provider)
     headers = ai_mod.auth_headers(provider, getattr(cfg, "api_key", None))
