@@ -111,6 +111,10 @@ export interface DNSCompareGroup {
   zones: string[];
   /** 比對哪些紀錄類型（預設 A、AAAA、PTR） */
   compare_types: string[];
+  /** 排除 DHCP 範圍（預設不勾）、不比對的 FQDN（可用 *.example.com）、不比對的 IP／CIDR／起-迄 */
+  exclude_dhcp_ranges: boolean;
+  excluded_names: string[];
+  excluded_ips: string[];
 }
 
 export interface DNSCompareGroupInput {
@@ -121,6 +125,9 @@ export interface DNSCompareGroupInput {
   server_ids?: string[];
   excluded_zones?: string[];
   compare_types?: string[];
+  exclude_dhcp_ranges?: boolean;
+  excluded_names?: string[];
+  excluded_ips?: string[];
 }
 
 /** 比對群組可以選的紀錄類型（與後端 dns_compare.COMPARE_TYPES 同順序） */

@@ -110,6 +110,8 @@ class DeviceRead(DeviceBase):
     ip: str | None = None   # 由 endpoint 解析 primary_ip_id 後填入（清單顯示用）
     ip_address_id: str | None = None   # 有對應的 IPAddress → IP 欄可點進該位址
     ip_match_id: str | None = None   # 有相符但未連結的 IPAddress → 可一鍵關聯
+    # 裝置群組（堆疊／HA／叢集）：{id, name, kind, role, order, member_count, representative}
+    group: dict[str, Any] | None = None
     # 這台是虛擬機還是實體機。**推導而非欄位**：虛擬機清單本來就是各平台同步進來的，
     # 多開一個欄位只會多一份要人維護、而且會過期的真相。名稱對得到 virtual_machines
     # 就是虛擬 —— 與關係圖用來接 VM 的判斷同一套。

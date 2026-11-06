@@ -330,6 +330,17 @@ async def _valid_group_id(session: AsyncSession, gid: uuid.UUID | None) -> uuid.
     return gid
 
 
+def _exclusions_or_422(names: list[str] | None, ips: list[str] | None) -> tuple[list[str] | None, list[str] | None]:
+    """排除的名稱與 IP 正規化；看不懂的項目回 422（說出是哪一項）。None＝沒帶，不動。"""
+    from app.services.dns_compare import BadExclusion, normalize_ip_list, normalize_name_list
+    try:
+        return (normalize_name_list(names) if names is not None else None,
+                normalize_ip_list(ips) if ips is not None else None)
+    except BadExclusion as exc:
+        raise HTTPException(422, detail=ui_detail(
+            "dns_compare_bad_exclusion", f"Not a valid name, IP, CIDR or range: {exc.entry}", entry=exc.entry)) from exc
+
+
 async def _group_out(session: AsyncSession, g: DNSCompareGroup, counts: dict[uuid.UUID, int] | None = None
                      ) -> DNSCompareGroupRead:
     from app.services.dns_compare import diff_counts
@@ -429,10 +440,12 @@ async def create_compare_group(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DNSCompareGroupRead:
     from app.services.dns_compare import normalize_zone_list
+    names, ips = _exclusions_or_422(payload.excluded_names, payload.excluded_ips)
     g = DNSCompareGroup(name=payload.name.strip(), description=payload.description,
                      notify_enabled=payload.notify_enabled, grace_minutes=payload.grace_minutes,
                      excluded_zones=normalize_zone_list(payload.excluded_zones),
-                     compare_types=list(payload.compare_types))
+                     compare_types=list(payload.compare_types),
+                     exclude_dhcp_ranges=payload.exclude_dhcp_ranges, excluded_names=names or [], excluded_ips=ips or [])
     session.add(g)
     try:
         await session.flush()
@@ -444,7 +457,9 @@ async def create_compare_group(
     await append_audit(session, object_type="dns_compare_group", object_id=str(g.id), action="create",
                        diff={"name": g.name, "grace_minutes": g.grace_minutes, "notify_enabled": g.notify_enabled,
                              "members": members["added"], "excluded_zones": g.excluded_zones,
-                             "compare_types": g.compare_types}, **_audit_kw(user, request))
+                             "compare_types": g.compare_types, "exclude_dhcp_ranges": g.exclude_dhcp_ranges,
+                             "excluded_names": g.excluded_names, "excluded_ips": g.excluded_ips},
+                       **_audit_kw(user, request))
     await session.commit()
     await session.refresh(g)
     if len(members["added"]) >= 2:
@@ -476,6 +491,14 @@ async def update_compare_group(
         if zones != list(g.excluded_zones or []):
             diff["excluded_zones"] = {"from": list(g.excluded_zones or []), "to": zones}
             g.excluded_zones = zones
+    names, ips = _exclusions_or_422(payload.excluded_names, payload.excluded_ips)
+    for field, new in (("excluded_names", names), ("excluded_ips", ips)):
+        if new is not None and new != list(getattr(g, field) or []):
+            diff[field] = {"from": list(getattr(g, field) or []), "to": new}
+            setattr(g, field, new)
+    if payload.exclude_dhcp_ranges is not None and payload.exclude_dhcp_ranges != g.exclude_dhcp_ranges:
+        diff["exclude_dhcp_ranges"] = {"from": g.exclude_dhcp_ranges, "to": payload.exclude_dhcp_ranges}
+        g.exclude_dhcp_ranges = payload.exclude_dhcp_ranges
     if payload.compare_types is not None and payload.compare_types != list(g.compare_types or []):
         # 新勾的類型要等各台下一次拉取才有資料（dns_sync 依群組設定存）；拿掉的類型下一次拉取會清掉
         diff["compare_types"] = {"from": list(g.compare_types or []), "to": payload.compare_types}
@@ -489,7 +512,7 @@ async def update_compare_group(
         raise HTTPException(409, detail=ui_detail("dns_compare_group_name_taken", "DNS comparison group name already exists")
                             ) from exc
     await session.refresh(g)
-    if "members" in diff or "excluded_zones" in diff or "compare_types" in diff:
+    if diff.keys() & {"members", "excluded_zones", "compare_types", "excluded_names", "excluded_ips", "exclude_dhcp_ranges"}:
         await _recheck(session, g)
     return await _group_out(session, g)
 

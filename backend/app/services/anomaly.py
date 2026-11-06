@@ -957,6 +957,8 @@ async def detect_mac_flapping(
                                 in_values(IPAddress.ip, set(candidates)))
     )).scalars().all()
     known = {str(r.ip).split("/")[0]: r for r in ip_rows}
+    # 裝置群組的共用 IP：在成員網卡之間換（HA 切換、堆疊換主機）不算漂移 —— 成員的 MAC 不計入
+    group_macs = await _group_member_macs(session, {r.device_group_id for r in ip_rows if r.device_group_id})
     all_macs = {m for macs in candidates.values() for m in macs}
     by_prefix = await vendor_map(session, list(all_macs))
     vendors = {m: by_prefix.get(mac_prefix(m) or "") for m in all_macs}
@@ -968,6 +970,11 @@ async def detect_mac_flapping(
             continue
         suspects = classify_suspects(macs, vendors)
         good = [m for m, why in suspects.items() if why is None]
+        if row.device_group_id and group_macs.get(row.device_group_id):
+            members = group_macs[row.device_group_id]
+            # 只在成員之間換：整個算正常；有成員以外的 MAC 才算，而且成員們只算一個
+            others = [m for m in good if m not in members]
+            good = others + ([next(m for m in good if m in members)] if len(others) < len(good) else [])
         if len(good) < min_macs:
             continue
         macs_sorted = sorted(macs.items(), key=lambda kv: kv[1].last or datetime.min.replace(tzinfo=UTC),
@@ -2151,6 +2158,30 @@ async def _vendor_mismatch_links(session: AsyncSession) -> dict[str, dict[str, A
     return out
 
 
+async def _group_member_macs(session: AsyncSession, group_ids: set[Any]) -> dict[Any, set[str]]:
+    """裝置群組 → 所有成員的網卡 MAC（成員 IP 記錄的 MAC＋成員的埠），正規化後。"""
+    from app.models.device import Device as _Device
+    from app.models.physical import DevicePort
+    from app.services.arp_evidence import normalize
+    group_ids = {g for g in group_ids if g}
+    if not group_ids:
+        return {}
+    members = dict((await session.execute(select(_Device.id, _Device.group_id).where(
+        in_values(_Device.group_id, group_ids)))).all())
+    out: dict[Any, set[str]] = defaultdict(set)
+    if not members:
+        return out
+    for did, mac in (await session.execute(select(IPAddress.device_id, IPAddress.mac).where(
+            in_values(IPAddress.device_id, set(members)), IPAddress.mac.is_not(None)))).all():
+        if (m := normalize(str(mac))) is not None:
+            out[members[did]].add(m)
+    for did, mac in (await session.execute(select(DevicePort.device_id, DevicePort.mac_address).where(
+            in_values(DevicePort.device_id, set(members)), DevicePort.mac_address.is_not(None)))).all():
+        if (m := normalize(str(mac))) is not None:
+            out[members[did]].add(m)
+    return out
+
+
 async def _drop_own_nic_flips(session: AsyncSession, rows: list[Any]) -> list[Any]:
     """拿掉「目前的 MAC 還是這台裝置自己的網卡」的：關聯之後 MAC 只是在自己幾張網卡之間換（ARP flux）。
 
@@ -2173,6 +2204,11 @@ async def _drop_own_nic_flips(session: AsyncSession, rows: list[Any]) -> list[An
             in_values(DevicePort.device_id, dev_ids), DevicePort.mac_address.is_not(None)))).all():
         if (m := normalize(str(mac))) is not None:
             known[did].add((None, m))
+    # 裝置群組（堆疊／HA）：共用 IP 換到另一台成員的網卡是正常的（HA 切換、堆疊換主機）→ 整組成員的 MAC 都算自己的
+    from app.models.device import Device as _Device
+    group_of = dict((await session.execute(select(_Device.id, _Device.group_id).where(
+        in_values(_Device.id, dev_ids), _Device.group_id.is_not(None)))).all())
+    group_macs = await _group_member_macs(session, set(group_of.values()))
     linked = {r[0]: r[6] for r in rows}
     at_link: dict[Any, str] = {}
     for iid, old, new, at in (await session.execute(
@@ -2188,6 +2224,8 @@ async def _drop_own_nic_flips(session: AsyncSession, rows: list[Any]) -> list[An
     for r in rows:
         iid, cur, did = r[0], normalize(str(r[3])) if r[3] else None, r[4]
         own = {m for other, m in known[did] if other != iid} | ({at_link[iid]} if iid in at_link else set())
+        if did in group_of:
+            own |= group_macs.get(group_of[did], set())
         if cur is None or cur not in own:
             out.append(r)
     return out

@@ -7,6 +7,17 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 ## [Unreleased]
 
 ### Added
+- **"Probe" button next to the domain name when adding a domain** (a user request). It looks the domain up in RDAP and DNS and fills the fields that are still empty: registrar and its website, DNS hosting (from the name servers), expiry date, and the services the domain is bound to (mail provider from MX, website, SPF, DMARC). Filled fields are left alone and nothing is saved until you press Save. For a top-level domain without RDAP (.io and others), the DNS part is still filled in.
+- **Device groups: stacks, HA pairs and clusters** (a customer: two N2048P switches in one stack could not be marked as one unit, and the stack management IP could only belong to one of them). Each member stays its own device (rack position, ports, serial); the group ties them together.
+  - **Devices › Groups tab** (admins create and edit): type (stack, HA active / passive, HA active / active, cluster), members with role and order, a representative device and the IPs the whole group shares.
+  - **Shared IPs** (stack management IP, HA virtual IP) are kept on the group and attached to the representative. The IP form has "Share with group" and locks the device field; setting another device from the IP form, the device form, a device import or a sync is refused or put back.
+  - **Rack diagram**: members in the same rack get one bracket in the group colour labelled "name 2/3"; clicking it lists the members and "N more in rack B", which switches to that rack. Exports and the public embedded SVG draw the same bracket.
+  - The device list has a Group column, the device detail a "Device group" card, the IP detail shows "Shared by group", and the topology joins members with a line labelled with the group name.
+  - Change impact does not count a shared IP as affected while another member is still up; anomaly detection does not report a shared IP moving between members' MACs. Groups come along in system export / import, and the AI tools return them.
+- **DNS comparison groups can leave out DHCP ranges and names or IPs you list** (a user request).
+  - "Exclude DHCP ranges" is off by default; when ticked, records whose IP falls in a subnet address range with purpose DHCP are not compared (including ranges created automatically from integrations). Names registered by DHCP are often on one server but not yet on another.
+  - "Names not compared" and "IPs not compared" are set by the admin: an FQDN or `*.example.com` for every name below it; an IP, a CIDR or a `start-end` range. A / AAAA use the record's IP, PTR the address of the reverse name and the name it points to.
+  - The group is compared again as soon as you save; an entry that cannot be read is named in the error.
 - **The Windows certificate agent puts the chain in the right stores** (a customer asked: a p12 with root, intermediate and server certificates still had to be sorted by hand on Windows Server). Only the server certificate used to be installed; the intermediate and root stayed in the bundle, so IIS might not send the intermediate and clients saw an incomplete chain.
   - Intermediate certificates go to "Intermediate Certification Authorities" automatically; ones already there are not added again, and certificates that are not CAs are left alone.
   - The root is not installed by default: `DEPLOY_<N>_INSTALL_ROOT=true` in the deployment puts it in "Trusted Root Certification Authorities". A trusted root changes what the host trusts and is only needed for a private enterprise CA.
@@ -33,6 +44,10 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
   - The lists have a "Server check" column. Re-running the scan agent installer now keeps the key and other settings from the config file: on an installed host the "Already installed" command in the install guide adds the pin without rotating the key.
 
 ### Fixed
+- AI chat answers sometimes showed LaTeX such as `$\rightarrow$` instead of an arrow (a menu path written as "Advanced $\rightarrow$ Circuits"). Common LaTeX symbols are now shown as the character (→, ⇒, ×, ≥ …) outside code, and the model is told to write menu paths with › as the UI map gives them.
+- Searching devices by IP found nothing: the device search only looked at name, model, serial and description. It now also matches FQDN and the IPs linked to the device (only IPs you can see), on the Devices page and in the device group member picker. The Devices page no longer filters the server results again in the browser, which hid devices matched by a non-primary IP, and a `?q=` link now searches the server instead of only the first page.
+- Racks shown side by side as separate cards: "Switch to rear" in the other-side hint did nothing (a customer: it worked for a single rack only). The merged card already handled it; the separate cards now switch the whole row too.
+- The dashboard "IP indicator" card left a large blank area at the bottom when the "IP usage" card next to it was taller; its content now fills the card.
 - Copying a certificate agent install command by selecting it lost the line breaks, which broke it in PowerShell; the line breaks are kept now.
 - The docs site top bar wrapped to two lines in English and Japanese, breaking the logo too. It now measures the bar and moves the links into the menu when they do not fit; the bar may be wider than the content and three English labels are shorter.
 - Some docs titles and code comments were not translated and showed the same Chinese or Japanese text in every language (three integration guide card titles, a talk title, about a dozen troubleshooting comments and more). They now switch with the language, with a guard test.
@@ -695,6 +710,8 @@ The data in scope is turned into short briefings typed out on the TV.
 - IP addresses page: the column picker now offers every column the subnet page's IP table has (DHCP, vendor, device, description, last seen, days offline were missing), and the new columns sort on the server like the rest. Both pages now share one implementation of these cells. IP change log: the IP links to its detail page (plain text once the IP is deleted), and every column header except Change sorts on the server (the page is paged on the server, so sorting only the visible page would have been wrong); IP sorts by address value.
 
 ## [1.0.6] - 2026-10-10
+
+**Security advisories** (published 2026-11-05): [GHSA-v76m-fp5q-f7jr](https://github.com/jasoncheng7115/jt-ipam/security/advisories/GHSA-v76m-fp5q-f7jr)
 
 ### Security
 - Scan agents: an agent with no assigned subnets can no longer update any IP. The report endpoint used to filter by subnet only when the agent had some, so an agent without any skipped the filter entirely and could change the MAC, OS, hostname and last-seen time of any IP. The response's `skipped_no_subnet` says how many results were skipped. The endpoints of all three agent types (scan, certificate, RustDesk) are also rate limited per agent (1,200 requests a minute by default; allowed through when Redis is unreachable).
@@ -1456,6 +1473,8 @@ The data in scope is turned into short briefings typed out on the TV.
 
 ## [0.6.59] - 2026-10-01
 
+**Security advisories** (published 2026-11-05): [GHSA-vp8w-xfgq-69rh](https://github.com/jasoncheng7115/jt-ipam/security/advisories/GHSA-vp8w-xfgq-69rh), [GHSA-px84-gq6c-8w22](https://github.com/jasoncheng7115/jt-ipam/security/advisories/GHSA-px84-gq6c-8w22)
+
 Security fixes from a CodeQL review: outbound requests could reach the server itself through IPv4-mapped
 IPv6 addresses, the address check now happens at connect time (no DNS rebinding window), redirects no longer carry
 integration tokens to another host, and ordinary accounts get error codes instead of raw AI errors. LibreNMS can now
@@ -1760,6 +1779,8 @@ sync paths, anomaly detection and every page in a real browser.
 - OUI search without criteria returned 500 instead of 400.
 
 ## [0.6.54] - 2026-09-29
+
+**Security advisories** (published 2026-11-05): [GHSA-p979-6ff6-rf28](https://github.com/jasoncheng7115/jt-ipam/security/advisories/GHSA-p979-6ff6-rf28)
 
 ### Added
 - **Recog fingerprint database for the IP probe (optional).** The probe now matches what hosts say about
@@ -5181,6 +5202,8 @@ Found by running the new Windows agent against a real Windows 11 + IIS host, not
 - No install/upgrade changes and no migration.
 
 ## [0.5.116] - 2026-07-30
+
+**Security advisories** (published 2026-11-05): [GHSA-75w9-p7q7-7c25](https://github.com/jasoncheng7115/jt-ipam/security/advisories/GHSA-75w9-p7q7-7c25), [GHSA-m2gg-gf9p-v54p](https://github.com/jasoncheng7115/jt-ipam/security/advisories/GHSA-m2gg-gf9p-v54p)
 
 ### Security
 - **API token `scopes` are now actually enforced.** The column existed and could be set, but **nothing in the codebase ever read it**: a token created with `scopes: ["read"]` could still delete subnets, because tokens simply inherited their owner's full RBAC permissions. A read-only token now gets `403` on `POST`/`PATCH`/`PUT`/`DELETE`, enforced at all three places that accept a `jt_` token: the REST API, the phpIPAM compatibility layer, and MCP (which reuses its existing read-only mode, since JSON-RPC is always `POST`).

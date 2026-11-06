@@ -33,7 +33,7 @@ import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 import { useExportBusy } from "@/composables/useExportBusy";
 import { useFillHeight } from "@/composables/usePageFill";
 import { saveBlob } from "@/utils/saveFile";
-import { assignOwners, gridPositions, multiHomed, nodeLabels, packRows, ringPositions, segmentsFor } from "@/utils/topologyLayout";
+import { assignOwners, deviceGroupLinks, gridPositions, multiHomed, nodeLabels, packRows, ringPositions, segmentsFor } from "@/utils/topologyLayout";
 
 cytoscape.use(coseBilkent as any);
 
@@ -118,6 +118,10 @@ const FIELD_LABELS = computed<Record<string, string>>(() => ({
   cluster: t("topology.field_cluster"),
   vcpus: "vCPU",
   memory_mb: t("topology.field_memory"),
+  group_name: t("device_groups.group"),
+  group_kind: t("device_groups.kind"),
+  group_role: t("device_groups.role"),
+  group_order: t("device_groups.order"),
 }));
 const EVIDENCE_LABELS = computed<Record<string, string>>(() => ({
   asserted: t("topology.ev_asserted"),
@@ -155,6 +159,7 @@ const KIND_LABELS = computed<Record<string, string>>(() => ({
   l2: t("topology.kind_l2"),
   l2_uplink: t("topology.kind_l2_uplink"),
   vm_host: t("topology.kind_vm_host"),
+  device_group: t("device_groups.title"),
 }));
 // 內部欄位不顯示給使用者看
 const HIDDEN_FIELDS = new Set([
@@ -165,6 +170,8 @@ const HIDDEN_FIELDS = new Set([
   // 分層版面自己的欄位：接入資訊另外排在最上面（selectedRows）
   "dlabel", "parent", "isGroup", "pending", "own", "owner_switch", "owner_port", "owner_direct", "also_learned",
   "multi_homed", "switches",
+  // 裝置群組：id 是內部值；群組連線的名稱已經畫在線上
+  "group_id",
 ]);
 
 function displayValue(key: string, val: any): string {
@@ -176,6 +183,8 @@ function displayValue(key: string, val: any): string {
   // 直連與否是這條線最重要的一件事，不能只印 true/false
   if (key === "direct") return val ? t("topology.direct_yes") : t("topology.direct_no");
   if (key === "evidence") return EVIDENCE_LABELS.value[String(val)] ?? String(val);
+  if (key === "group_kind") return t(`device_groups.kind_${val}`);
+  if (key === "group_role") return t(`device_groups.role_${val}`);
   if (key === "status") {
     if (val === "up") return t("topology.status_up");
     if (val === "down") return t("topology.status_down");
@@ -390,6 +399,7 @@ const EDGE_STYLE: Record<string, { color: string; width: number; dash: string }>
   wireless: { color: "#3b82f6", width: 2, dash: "6,4" },
   vpn: { color: "#9333ea", width: 4, dash: "10,5" },
   l3: { color: "#0ea5e9", width: 1.5, dash: "5,3" },
+  device_group: { color: "#d9822b", width: 5, dash: "" },
 };
 function dlBlob(blob: Blob, name: string) {
   saveBlob(name, blob, blob.type, { source: "topology", rows: cy ? cy.nodes().length : 0 });
@@ -768,7 +778,10 @@ function render(data: TopologyData) {
         (i, n) => t("topology.same_name", { i, n }));
       grouped = { ...grouped, nodes: grouped.nodes.map((n) => (labels.has(n.data.id)
         ? { data: { ...n.data, dlabel: labels.get(n.data.id) } } : n)) as never };
-      return [...grouped.nodes, ...grouped.edges];
+      // 裝置群組（堆疊／HA）：同組成員之間一條粗線，標群組名稱。是人工設定的，算「已確認」
+      const groupLinks = deviceGroupLinks((grouped.nodes as { data: any }[]).filter((n) => !n.data.isGroup)
+        .map((n) => n.data)).map((l) => ({ data: { ...l, evidence: "asserted" } }));
+      return [...grouped.nodes, ...grouped.edges, ...groupLinks];
     })(),
     style: [
       {
@@ -999,6 +1012,14 @@ function render(data: TopologyData) {
           "text-margin-y": -4,
           padding: "20px" as any,
         },
+      },
+      {
+        // 裝置群組（堆疊／HA／叢集）：成員之間一條粗的橘線，像堆疊線；線上標群組名稱
+        selector: 'edge[kind = "device_group"]',
+        style: { "line-color": "#d9822b", width: 5, "line-opacity": 0.85, "curve-style": "straight",
+                 label: "data(label)", "font-size": 10, "font-weight": "bold", color: isDark() ? "#fbbf77" : "#9a4f0c",
+                 "text-rotation": "autorotate" as any, "text-background-color": isDark() ? "#1f2937" : "#ffffff",
+                 "text-background-opacity": 0.85, "text-background-padding": "2px" as any },
       },
       {
         // 交換器 → 自己的接入群組：一條線代表整組。整組都是直連的埠才畫實線，否則是 FDB 推導（虛線）
@@ -1600,6 +1621,7 @@ onUnmounted(() => {
       <!-- 雙接群組：兩台交換器各拉一條線到同一個框（10-23） -->
       <span class="lg"><svg width="30" height="14"><line x1="3" y1="0" x2="12" y2="8" stroke="#14b8a6" stroke-width="1.6" stroke-dasharray="3,2"/><line x1="27" y1="0" x2="18" y2="8" stroke="#14b8a6" stroke-width="1.6" stroke-dasharray="3,2"/><rect x="8" y="8" width="14" height="5" rx="1.5" fill="none" stroke="#14b8a6" stroke-dasharray="2,1.5"/></svg>{{ t("topology.legend_multi") }}</span>
       <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#9333ea" stroke-width="3" stroke-dasharray="8,4"/></svg>{{ t("topology.legend_vpn") }}</span>
+      <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#d9822b" stroke-width="5"/></svg>{{ t("device_groups.title") }}</span>
       <span class="lg muted">{{ t("topology.layered_hint") }}</span>
     </div>
     <div v-else class="topo-legend">
@@ -1612,6 +1634,7 @@ onUnmounted(() => {
       <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#14b8a6" stroke-width="1.6" stroke-dasharray="5,3"/></svg>{{ t("topology.kind_l2_behind") }}</span>
       <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#0d9488" stroke-width="3.5"/></svg>{{ t("topology.kind_l2_uplink") }}</span>
       <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#a78bfa" stroke-width="1.2"/></svg>{{ t("topology.kind_vm_host") }}</span>
+      <span class="lg"><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#d9822b" stroke-width="5"/></svg>{{ t("device_groups.title") }}</span>
       <span class="lg lg-sep"></span>
       <span class="lg lg-head">{{ t("topology.legend_nodes") }}</span>
       <span class="lg clickable" :class="{ off: isGroupOff('firewall') }" @click="toggleGroup('firewall')"><i class="dot" style="background:#ef4444"></i>{{ t("topology.type_firewall") }}</span>

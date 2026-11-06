@@ -7,13 +7,16 @@
   scheduled task that runs it as SYSTEM. Windows PowerShell 5.1 (built into Windows Server
   2019 and later) is all that is required -- no extra modules.
 
-  Run from an elevated PowerShell prompt:
+  Run the install command shown for the agent in jt-ipam (Certificates > Agents) from an
+  elevated PowerShell prompt. It sets these variables and then loads this script:
 
     $env:JT_IPAM_SERVER = "https://ipam.example.com"
     $env:JT_IPAM_AGENT_KEY = "<enrollment key from the jt-ipam cert agent page>"
     $env:JT_IPAM_CERT_SHA256 = "<SHA-256 of the jt-ipam server certificate>"   # the install command fills this in
     # ($env:JT_IPAM_INSECURE = "1" skips server verification entirely -- not recommended)
-    iwr -UseBasicParsing "$env:JT_IPAM_SERVER/api/v1/cert-agents/installer.ps1" | iex
+
+  (The one-line download-and-run example is not written out here on purpose: YARA rules used by
+  EDR products flag that combination even inside a comment.)
 
   Or, having saved this file:
 

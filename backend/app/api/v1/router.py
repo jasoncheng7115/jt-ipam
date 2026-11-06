@@ -25,6 +25,7 @@ from app.api.v1.endpoints import (
     custom_fields,
     customers,
     dashboard,
+    device_groups,
     device_import,
     devices,
     dhcp,
@@ -148,6 +149,7 @@ api_v1_router.include_router(vrfs.router)
 # device_import 要在 devices 之前：`/devices/import-template` 不能被 `/devices/{device_id}` 吃掉
 api_v1_router.include_router(device_import.router)
 api_v1_router.include_router(devices.router)
+api_v1_router.include_router(device_groups.router)
 api_v1_router.include_router(locations.router)
 api_v1_router.include_router(nat.router)
 api_v1_router.include_router(scan.router)

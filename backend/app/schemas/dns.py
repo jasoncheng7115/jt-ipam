@@ -143,6 +143,10 @@ class DNSCompareGroupCreate(StrictModel):
     excluded_zones: Annotated[list[Annotated[str, Field(max_length=253)]], Field(max_length=500)] = []
     #: 比對哪些紀錄類型（預設 A、AAAA、PTR；可另選 CNAME、MX、TXT、NS、SRV、CAA）
     compare_types: Annotated[list[Annotated[str, Field(max_length=8)]], Field(max_length=20)] = ["A", "AAAA", "PTR"]
+    #: 排除 DHCP 範圍（預設不勾）、不比對的 FQDN（可用 *.example.com）、不比對的 IP／CIDR／起-迄
+    exclude_dhcp_ranges: bool = False
+    excluded_names: Annotated[list[Annotated[str, Field(max_length=255)]], Field(max_length=1000)] = []
+    excluded_ips: Annotated[list[Annotated[str, Field(max_length=100)]], Field(max_length=1000)] = []
 
     @field_validator("compare_types")
     @classmethod
@@ -159,6 +163,9 @@ class DNSCompareGroupUpdate(StrictModel):
     server_ids: list[uuid.UUID] | None = None
     excluded_zones: Annotated[list[Annotated[str, Field(max_length=253)]] | None, Field(max_length=500)] = None
     compare_types: Annotated[list[Annotated[str, Field(max_length=8)]] | None, Field(max_length=20)] = None
+    exclude_dhcp_ranges: bool | None = None
+    excluded_names: Annotated[list[Annotated[str, Field(max_length=255)]] | None, Field(max_length=1000)] = None
+    excluded_ips: Annotated[list[Annotated[str, Field(max_length=100)]] | None, Field(max_length=1000)] = None
 
     @field_validator("compare_types")
     @classmethod
@@ -191,6 +198,9 @@ class DNSCompareGroupRead(StrictModel):
     diff_count: int = 0
     excluded_zones: list[str] = []
     compare_types: list[str] = ["A", "AAAA", "PTR"]
+    exclude_dhcp_ranges: bool = False
+    excluded_names: list[str] = []
+    excluded_ips: list[str] = []
     #: 成員拉回來的 zone（正規化、排序）：給「不比對的 zone」選單用
     zones: list[str] = []
 

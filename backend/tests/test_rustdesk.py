@@ -894,11 +894,14 @@ async def test_same_device_hint_does_not_reveal_ips_the_user_cannot_see(client, 
 
 # ── 受控端 Key 設錯：代理從 hbbr／hbbs 日誌看到 invalid key ─────────────────────────
 
+# 基準只取一次：每次呼叫都重取「現在」的話，寫日誌與比對之間剛好跨秒就差 1 秒（2026-11-06 全套測試抓到）
+_T8_BASE = (datetime.now(UTC) - timedelta(days=1)).replace(microsecond=0)
+
+
 def _t8(minutes: int) -> str:
     """日誌時間（+08:00）：以「昨天這個時候」為基準加減分鐘。不可寫死日期 —— key 問題只算 30 天內的，
     寫死 2026-10-05 的版本在 11-04 起就整批失敗（2026-11-04）。"""
-    base = (datetime.now(UTC) - timedelta(days=1)).replace(microsecond=0)
-    return (base + timedelta(minutes=minutes)).astimezone(timezone(timedelta(hours=8))).isoformat()
+    return (_T8_BASE + timedelta(minutes=minutes)).astimezone(timezone(timedelta(hours=8))).isoformat()
 
 
 def _kc(fails=(), ok=(), logs=None) -> dict:

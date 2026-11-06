@@ -183,3 +183,28 @@ export function packRows(items: { id: string; w: number; h: number }[], gap: num
   }
   return out;
 }
+
+/**
+ * 裝置群組（堆疊／HA／叢集，2026-11-05）：同組的成員依序號串成一條鏈，像堆疊線或 HA 心跳線。
+ * 不用複合框：以交換器為中心的版面是自己排座標的，框住兩台不相鄰的交換器會蓋到中間別台。
+ * 圖上只看得到一台成員時不畫（另一台可能沒有權限或不在這個範圍）。
+ */
+export interface GroupNode { id: string; label?: string | null; group_id?: string | null; group_name?: string | null;
+  group_kind?: string | null; group_order?: number | null }
+export interface GroupLink { id: string; source: string; target: string; kind: "device_group"; group_id: string;
+  group_kind: string | null; label: string }
+export function deviceGroupLinks(nodes: GroupNode[]): GroupLink[] {
+  const by = new Map<string, GroupNode[]>();
+  for (const n of nodes) if (n.group_id) (by.get(n.group_id) ?? by.set(n.group_id, []).get(n.group_id)!).push(n);
+  const out: GroupLink[] = [];
+  for (const [gid, members] of by) {
+    if (members.length < 2) continue;
+    members.sort((a, b) => (a.group_order ?? 1e9) - (b.group_order ?? 1e9)
+      || String(a.label ?? a.id).localeCompare(String(b.label ?? b.id)));
+    for (let i = 1; i < members.length; i++) {
+      out.push({ id: `dgrp:${gid}:${i}`, source: members[i - 1].id, target: members[i].id, kind: "device_group",
+                 group_id: gid, group_kind: members[i].group_kind ?? null, label: members[i].group_name ?? "" });
+    }
+  }
+  return out;
+}

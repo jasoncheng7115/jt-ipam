@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignOwners, gridPositions, multiHomed, nodeLabels, packRows, ringPositions, segmentsFor } from "../topologyLayout";
+import { assignOwners, deviceGroupLinks, gridPositions, multiHomed, nodeLabels, packRows, ringPositions, segmentsFor } from "../topologyLayout";
 
 describe("主機歸屬哪一台交換器（接入群組）", () => {
   it("直連的埠優先；兩邊都學到的另一條只算待確認，不當成雙接", () => {
@@ -124,5 +124,22 @@ describe("依子網路排版：同網段靠近、不同網段拉開", () => {
     // 超過寬度才換列
     expect(pos.get("a")!.y).toBe(pos.get("b")!.y);
     expect(pos.get("c")!.y).toBeGreaterThan(pos.get("a")!.y);
+  });
+});
+
+describe("裝置群組（堆疊／HA）在拓樸圖上的連線", () => {
+  const n = (id: string, gid: string | null, order: number | null, label = id) =>
+    ({ id, label, group_id: gid, group_name: gid ? `G-${gid}` : null, group_kind: "stack", group_order: order });
+
+  it("同一群組的成員依序號串成一條鏈，標群組名稱；只有一台在圖上就不畫", () => {
+    const links = deviceGroupLinks([n("b", "g1", 2), n("a", "g1", 1), n("c", "g1", 3), n("x", null, null), n("solo", "g2", 1)]);
+    expect(links.map((l) => [l.source, l.target])).toEqual([["a", "b"], ["b", "c"]]);
+    expect(links[0]).toMatchObject({ kind: "device_group", group_id: "g1", label: "G-g1" });
+    expect(new Set(links.map((l) => l.id)).size).toBe(2);
+  });
+
+  it("沒有序號的排在有序號的後面，再依名稱", () => {
+    const links = deviceGroupLinks([n("z", "g1", null, "sw-z"), n("y", "g1", null, "sw-a"), n("w", "g1", 1)]);
+    expect(links.map((l) => [l.source, l.target])).toEqual([["w", "y"], ["y", "z"]]);
   });
 });

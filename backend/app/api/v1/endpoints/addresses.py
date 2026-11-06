@@ -387,6 +387,8 @@ async def list_addresses(
         it.subnet_scan_enabled = scan_map.get(r.subnet_id)
         if r.device_id:
             it.device_name = dev_map.get(r.device_id)
+    # 共用給裝置群組的 IP：設備欄顯示群組名稱
+    await _fill_group_names(session, items, rows)
     # 特殊角色旗標（閘道 / DHCP 範圍 / DHCP 伺服器）→ 清單視覺化
     await _enrich_special_flags(session, items, rows)
     total = int(await session.scalar(count_stmt) or 0)
@@ -804,6 +806,19 @@ async def _seen_integrations(session: AsyncSession) -> dict[str, bool]:
             for key, model in (("librenms", LibreNMSInstance), ("adguard", AdGuardInstance))}
 
 
+async def _fill_group_names(session: AsyncSession, items: list[Any], rows: list[Any]) -> None:
+    """共用給裝置群組的 IP 帶上群組名稱（設備欄顯示「群組（共用）」；設備欄本身是群組的代表裝置）。"""
+    gids = {r.device_group_id for r in rows if getattr(r, "device_group_id", None)}
+    if not gids:
+        return
+    from app.models.device_group import DeviceGroup
+    names = dict((await session.execute(
+        select(DeviceGroup.id, DeviceGroup.name).where(in_values(DeviceGroup.id, list(gids))))).all())
+    for it, r in zip(items, rows, strict=False):
+        if getattr(r, "device_group_id", None):
+            it.device_group_name = names.get(r.device_group_id)
+
+
 @router.get("/{address_id}", response_model=IPAddressRead)
 async def get_address(
     address_id: uuid.UUID,
@@ -816,6 +831,7 @@ async def get_address(
     await _require_subnet_perm(session, user, obj.subnet_id, "read")
     out = IPAddressRead.model_validate(obj)
     out.mac_vendor = await vendor_for_mac(session, obj.mac)
+    await _fill_group_names(session, [out], [obj])
     # 閘道／DHCP 範圍／固定分配明細／排除區間：跟清單同一套推導（以前詳細資料沒有，兩邊標示不一致）
     await _enrich_special_flags(session, [out], [obj])
     # 虛擬化對應：IP 或 MAC 命中 VM 網卡 → 標示為虛擬機（顯示用，不寫回資料）

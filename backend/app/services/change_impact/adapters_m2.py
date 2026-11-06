@@ -312,14 +312,20 @@ async def workloads(ctx: Ctx) -> None:
 # ─────────────────── 服務 ───────────────────
 
 async def _device_ip_status(ctx: Ctx) -> None:
-    """停機或網路斷掉的裝置，它名下的 IP 跟著同一個狀態（服務常以 IP 登錄依賴）。"""
+    """停機或網路斷掉的裝置，它名下的 IP 跟著同一個狀態（服務常以 IP 登錄依賴）。
+
+    裝置群組的共用 IP：整組成員都在這次受影響的裝置裡才算（停一台堆疊成員，管理 IP 還在）。"""
     devs = {r.split(":", 1)[1]: st for r, st in ctx.status.items() if r.startswith("device:")}
     if not devs:
         return
     for ip_id, dev in (await ctx.session.execute(text("""
-        SELECT id, device_id FROM ip_addresses WHERE device_id = ANY(CAST(:ids AS uuid[]))
+        SELECT a.id, a.device_id FROM ip_addresses a WHERE a.device_id = ANY(CAST(:ids AS uuid[]))
+          AND NOT EXISTS (SELECT 1 FROM devices m WHERE m.group_id = a.device_group_id
+                          AND NOT (m.id = ANY(CAST(:ids AS uuid[]))))
         UNION
-        SELECT primary_ip_id, id FROM devices WHERE id = ANY(CAST(:ids AS uuid[])) AND primary_ip_id IS NOT NULL
+        SELECT d.primary_ip_id, d.id FROM devices d WHERE d.id = ANY(CAST(:ids AS uuid[])) AND d.primary_ip_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM ip_addresses a JOIN devices m ON m.group_id = a.device_group_id
+                          WHERE a.id = d.primary_ip_id AND NOT (m.id = ANY(CAST(:ids AS uuid[]))))
     """), {"ids": list(devs)})).all():
         _mark(ctx, _ref("ip", ip_id), devs[str(dev)])
 

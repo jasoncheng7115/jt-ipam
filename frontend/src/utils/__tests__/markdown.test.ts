@@ -71,3 +71,15 @@ describe("renderInlineMarkdown", () => {
     expect(renderInlineMarkdown("<img src=x onerror=alert(1)>")).not.toContain("<img");
   });
 });
+
+describe("模型寫的 LaTeX 符號（使用者 2026-11-06：路徑寫成「進階 $\\rightarrow$ 電路」）", () => {
+  it("常見的箭頭與符號轉成文字，不再原樣顯示", () => {
+    expect(renderMarkdown("路徑：**進階** $\\rightarrow$ **電路**")).toBe("<p>路徑：<strong>進階</strong> → <strong>電路</strong></p>");
+    expect(renderInlineMarkdown("A $\\to$ B $ \\Rightarrow $ C $\\times$ 2 $\\geq$ 1")).toBe("A → B ⇒ C × 2 ≥ 1");
+  });
+  it("程式碼裡的、不認得的命令、一般的錢字號都不動", () => {
+    expect(renderInlineMarkdown("`$\\rightarrow$`")).toBe("<code>$\\rightarrow$</code>");
+    expect(renderInlineMarkdown("$\\frac$")).toBe("$\\frac$");
+    expect(renderInlineMarkdown("$5 and $10")).toBe("$5 and $10");
+  });
+});

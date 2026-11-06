@@ -30,11 +30,18 @@ async def check_placement(session: AsyncSession, obj: Any, *, exclude_device_id:
 
 
 async def link_primary_ip(session: AsyncSession, obj: Any) -> None:
-    """主要 IP 的 device_id 指回這台裝置。"""
+    """主要 IP 的 device_id 指回這台裝置。
+
+    裝置群組的共用 IP：只有成員能把它設成主要 IP，而且 IP 仍屬群組、設備欄維持代表裝置；
+    不是成員就丟 GroupError（409 ip_owned_by_group）。"""
     if not obj.primary_ip_id:
         return
     from app.models.address import IPAddress
     pip = await session.get(IPAddress, obj.primary_ip_id)
+    if pip is not None and pip.device_group_id is not None:
+        from app.services.device_groups import check_ip_device
+        await check_ip_device(session, pip, obj.id)
+        return
     if pip is not None and pip.device_id != obj.id:
         pip.device_id = obj.id
 

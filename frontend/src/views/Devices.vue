@@ -3,14 +3,14 @@ import { useAuthStore } from "@/stores/auth";
 import { RACK_SLOTS, WIDTH_PARTS, spanFor, slotFor, partsFor, posFor, usesLevels,
   rackPickRows, rackRowIsTop, slotBoxPct, slotWhere } from "@/utils/rackSlots";
 const _authBtn = useAuthStore();
-import { computed, h, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { trackTask } from "@/composables/useTaskTracker";
 import { apiClient, apiErrMsg } from "@/api/client";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
-  NInput, NInputNumber, NInputGroup, NSelect, NPopconfirm, NTag, NTooltip, NSpin,
+  NInput, NInputNumber, NInputGroup, NSelect, NPopconfirm, NTag, NTooltip, NSpin, NTabs, NTabPane,
   useMessage, type DataTableColumns, type DataTableRowKey,
 } from "naive-ui";
 import {
@@ -21,8 +21,9 @@ import { getRackDiagram, type RackDiagram } from "@/api/racks";
 import { resolveRackLocation } from "@/utils/rackLocation";
 import {
   DevicesIcon, PlusIcon, EditIcon, UploadIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, EyeIcon, LinkIcon, RacksIcon,
-  SnmpIcon,
+  SnmpIcon, GroupIcon,
 } from "@/icons";
+import DeviceGroupsPanel from "@/components/DeviceGroupsPanel.vue";
 import { cmpNatural } from "@/utils/sort";
 import { useIpOptions } from "@/composables/useIpOptions";
 import { listSubnets } from "@/api/subnets";
@@ -61,8 +62,9 @@ async function doBulkDelete() {
 const { t } = useI18n();
 const msg = useMessage();
 const rows = ref<Device[]>([]);
-import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
-const { query: filterQ, filtered: filteredRows } = useTableQuickFilter(rows);
+// 搜尋全交給伺服器（名稱、FQDN、型號、序號、說明與連到這台的 IP）。以前另外在前端再過濾一次已載入的資料，
+// 只比對畫面上的欄位，於是靠「非主要 IP」命中的裝置被前端濾掉：用 IP 找不到（使用者 2026-11-06）
+const filterQ = ref("");
 // 伺服器端有多少筆（不是已載入的筆數）。畫面只載一頁，兩者不一樣時要講出來，
 // 否則使用者會以為看到的就是全部 —— 客戶回報「新增的裝置看不到也搜不到」正是這個。
 const totalOnServer = ref(0);
@@ -414,9 +416,9 @@ const { visibleKeys, setVisible, reset, order, setOrder, orderColumns } = useCol
   // 全部可選欄位 / 預設顯示的欄位。**新增欄位要兩份都加** —— 只加到 catCols 的話，
   // 欄位存在卻不在預設清單裡，使用者得自己去「欄位」勾才看得到（真實瀏覽器巡檢抓到）。
   ["name", "ip", "fqdn", "type", "is_virtual", "vendor", "model", "location_id", "rack_id",
-   "customer_id", "actions"],
+   "group", "customer_id", "actions"],
   ["name", "ip", "type", "is_virtual", "vendor", "model", "location_id", "rack_id",
-   "customer_id", "actions"],
+   "group", "customer_id", "actions"],
 );
 const columnPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
@@ -428,6 +430,7 @@ const columnPickerItems = computed(() => [
   { key: "model", label: t("cols.model") },
   { key: "location_id", label: t("cols.location") },
   { key: "rack_id", label: t("cols.rack") },
+  { key: "group", label: t("device_groups.group") },
   { key: "customer_id", label: t("cols.unit") },
   { key: "actions", label: t("cols.actions") },
 ]);
@@ -532,6 +535,21 @@ const allCols = computed<DataTableColumns<Device>>(() => [
     },
   }, (r: Device) => racks.value.find((x) => x.id === r.rack_id)?.name ?? ""),
   withExportValue({
+    // 裝置群組：名稱＋角色／序號（「N2048P-stack · 主控 #1」），點了帶去群組頁籤
+    title: t("device_groups.group"), key: "group", width: 170, ellipsis: { tooltip: true },
+    render: (r: Device) => {
+      const g = r.group;
+      if (!g) return "—";
+      const meta = [g.role ? t(`device_groups.role_${g.role}`) : "", g.order ? `#${g.order}` : ""].filter(Boolean).join(" ");
+      return h("a", { href: "#", "data-testid": "device-group-cell",
+        onClick: (e: MouseEvent) => { e.preventDefault(); e.stopPropagation();
+          // 只改網址，頁籤由 watch(route.query.tab) 跟上 —— 群組面板掛上時就讀得到 ?group=
+          void router.replace({ query: { ...route.query, tab: "groups", group: g.id } }); } },
+        meta ? `${g.name} · ${meta}` : g.name);
+    },
+    sorter: (a: Device, b: Device) => (a.group?.name ?? "").localeCompare(b.group?.name ?? ""),
+  }, (r: Device) => r.group?.name ?? ""),
+  withExportValue({
     title: t("nav.customers"), key: "customer_id", width: 160,
     ellipsis: { tooltip: true },
     render: (r) => links.customer(r.customer_id, customerLabelFor(r.customer_id)),
@@ -561,13 +579,23 @@ const cols = computed<DataTableColumns<Device>>(() =>
 
 import { useRoute } from "vue-router";
 const route = useRoute();
+// 頁籤跟著網址走：機櫃圖的「管理群組」帶 ?tab=groups 進來；切換時也寫回網址，重新整理還在同一頁籤
+const tab = ref<"devices" | "groups">(route.query.tab === "groups" ? "groups" : "devices");
+watch(tab, (v) => {
+  if ((route.query.tab === "groups") === (v === "groups")) return;
+  const q = { ...route.query };
+  if (v === "groups") q.tab = "groups"; else { delete q.tab; delete q.group; }
+  void router.replace({ query: q });
+});
+watch(() => route.query.tab, (v) => { tab.value = v === "groups" ? "groups" : "devices"; });
 onMounted(async () => {
   void loadSubnetOptions();
+  // 從別處帶關鍵字進來（例如 AI 巡檢的依據資料點裝置名稱、找不到精確裝置時的退路）——
+  // 沒有這段的話，連結會把人帶到未篩選的整份清單，等於什麼都沒做。要在第一次載入**之前**設好，
+  // 才會走伺服器端搜尋（以前載完才設，只在第一頁裡找）
+  if (typeof route.query.q === "string" && route.query.q) filterQ.value = route.query.q;
   await refresh();
   void ensureCustomersLoaded();
-  // 從別處帶關鍵字進來（例如 AI 巡檢的依據資料點裝置名稱、找不到精確裝置時的退路）——
-  // 沒有這段的話，連結會把人帶到未篩選的整份清單，等於什麼都沒做
-  if (typeof route.query.q === "string" && route.query.q) filterQ.value = route.query.q;
   // 從裝置細節頁帶 ?edit=<id> 進來 → 直接開該裝置的編輯
   const editId = route.query.edit as string | undefined;
   if (editId) {
@@ -588,6 +616,12 @@ onMounted(async () => {
         <span>{{ t("nav.devices") }}</span>
       </n-space>
     </template>
+    <!-- 裝置群組（堆疊／HA／叢集，2026-11-05）放在第二個頁籤，跟 VLAN 頁的做法一樣 -->
+    <n-tabs v-model:value="tab" type="line" data-testid="devices-tabs">
+    <n-tab-pane name="devices">
+      <template #tab>
+        <span class="tab-label"><n-icon :size="16"><DevicesIcon /></n-icon>{{ t("device_groups.tab_devices") }}</span>
+      </template>
     <n-space style="margin-bottom: 12px" align="center">
       <n-input v-model:value="filterQ" :placeholder="t('devices.search_ph')" clearable
                style="width: 220px" @update:value="onFilterInput" />
@@ -643,7 +677,7 @@ onMounted(async () => {
                     :device-ids="checkedKeys.map((k) => String(k))" @done="refresh" />
     <n-data-table
       :columns="cols"
-      :data="filteredRows"
+      :data="rows"
       :loading="loading"
       :bordered="false"
       :scroll-x="1180"
@@ -660,6 +694,14 @@ onMounted(async () => {
         },
       })"
     />
+    </n-tab-pane>
+    <n-tab-pane name="groups" display-directive="if">
+      <template #tab>
+        <span class="tab-label" data-testid="devices-tab-groups"><n-icon :size="16"><GroupIcon /></n-icon>{{ t("device_groups.tab_groups") }}</span>
+      </template>
+      <DeviceGroupsPanel />
+    </n-tab-pane>
+    </n-tabs>
 
     <n-modal v-model:show="show" preset="card" style="width: 540px">
       <template #header>
@@ -795,6 +837,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.tab-label { display: inline-flex; align-items: center; gap: 6px; }
 /* 佔寬的「幾分之一 + 第幾格」要併在同一列 */
 .slot-pair { display: flex; gap: 6px; width: 100%; }
 /* 左邊只放「1/2」這種短字串，右邊要放「第 3 格（由下往上）」——

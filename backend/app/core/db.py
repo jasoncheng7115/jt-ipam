@@ -69,3 +69,8 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         except Exception:
             await session.rollback()
             raise
+
+
+# 裝置群組的共用 IP 安全網（存檔時把被改走的共用 IP 改回代表裝置）：掛在這裡，API、同步程序、CLI
+# 只要碰資料庫就一定載入（services/device_groups）
+import app.services.device_groups  # noqa: E402,F401

@@ -147,6 +147,9 @@ async def update_address_checked(
         require_visible,
     )
     require_admin_for_infra(user, changes, obj)
+    # 裝置群組的共用 IP（方案 B）：指派／退出群組只有管理員；共用 IP 不能被指給群組以外的設備
+    if "device_group_id" in changes or ("device_id" in changes and obj.device_group_id):
+        await _apply_device_group(session, user, obj, changes)
     if "customer_id" in changes and changes["customer_id"] != obj.customer_id:
         await require_move(session, user, object_type="ip", object_id=obj.id,
                            dest_type="customer", dest_id=changes["customer_id"])
@@ -222,3 +225,29 @@ async def update_address_checked(
             session, ip=obj, source="manual", actor_user_id=str(user.id),
         )
     return before, changes
+
+
+async def _apply_device_group(session: AsyncSession, user: Any, obj: Any, changes: dict[str, Any]) -> None:
+    from app.models.device_group import DeviceGroup
+    from app.services.device_groups import GroupError, check_ip_device
+    if "device_group_id" in changes:
+        if not getattr(user, "is_admin", False):
+            raise HTTPException(status_code=403, detail=ui_detail(
+                "device_group_admin_only", "Only administrators can share an IP with a device group"))
+        gid = changes.pop("device_group_id")
+        if gid is None:
+            obj.device_group_id = None                  # 退出群組：設備欄留在原本的代表裝置上
+        else:
+            g = await session.get(DeviceGroup, gid)
+            if g is None:
+                raise HTTPException(status_code=404, detail=ui_detail("device_group_not_found", "Device group not found"))
+            obj.device_group_id = g.id
+            if g.representative_id is not None and g.representative_id != obj.device_id:
+                changes["device_id"] = g.representative_id
+                return
+    if "device_id" in changes and obj.device_group_id:
+        try:
+            await check_ip_device(session, obj, changes["device_id"])
+        except GroupError as exc:
+            raise HTTPException(status_code=exc.status, detail=ui_detail(exc.code, str(exc), **exc.params)) from exc
+        changes.pop("device_id")                        # 成員：IP 仍屬群組，設備欄維持代表裝置

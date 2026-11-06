@@ -128,11 +128,18 @@ export function staleDaysLabel(t: T, r: IPAddress): string {
 }
 
 /** 裝置欄：連到裝置詳細頁；沒有綁裝置顯示「—」。 */
-export function renderDeviceLink(r: IPAddress, open: (id: string) => void): VNodeChild {
+/** 裝置欄。共用給裝置群組的 IP（堆疊管理 IP、HA 虛擬 IP）在名稱旁標「群組共用」，滑過顯示群組名稱 */
+export function renderDeviceLink(r: IPAddress, open: (id: string) => void, t?: T): VNodeChild {
   if (!r.device_id) return "—";
-  return h("a", {
+  const link = h("a", {
     href: "#",
     style: "color: var(--primary-color, #18a058); text-decoration: none;",
     onClick: (e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); open(r.device_id as string); },
   }, r.device_name || (String(r.device_id).slice(0, 8) + "…"));
+  if (!r.device_group_name || !t) return link;
+  return h("span", { style: "display:inline-flex;align-items:center;gap:4px;max-width:100%" }, [
+    link,
+    h(NTag, { size: "tiny", type: "info", bordered: false, title: t("device_groups.ip_shared_by", { name: r.device_group_name }) },
+      { default: () => t("device_groups.shared_tag") }),
+  ]);
 }

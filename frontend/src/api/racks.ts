@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/client";
+import type { RackGroupInfo } from "@/utils/rackGroups";
 
 /** 機架型態。以 U 計：rack / industrial / lackrack；其餘以「層」計。 */
 export type RackKind = "rack" | "industrial" | "shelf" | "wire_shelf" | "wood_shelf"
@@ -19,6 +20,8 @@ export interface RackDeviceSlot {
   primary_ip: string | null;
   rack_face?: "front" | "rear" | null;
   rack_side?: "full" | "left" | "right";
+  /** 裝置群組（堆疊／HA／叢集）：機櫃圖用同色括線把同組成員框起來 */
+  group?: RackGroupInfo | null;
 }
 
 export interface RackDiagram {

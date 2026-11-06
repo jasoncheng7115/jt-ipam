@@ -267,3 +267,55 @@ test("比對群組表格：短欄依內容縮小，剩下的空間給長欄，�
   expect(scroll, "1440 寬的畫面不該需要左右捲動").toBeLessThanOrEqual(2);
   if (process.env.E2E_SHOTS_DIR) await page.getByTestId("dns-compare-groups").screenshot({ path: `${process.env.E2E_SHOTS_DIR}/cg-table.png` });
 });
+
+test("排除：DHCP 範圍勾選框、不比對的名稱與 IP（使用者 2026-11-05）", async ({ page, request }) => {
+  await login(page);
+  await page.goto("/dns");
+  const name = `e2e-ex-${Date.now().toString(36)}`;
+  await page.getByTestId("dns-cg-create").click();
+  const m = page.getByTestId("dns-cg-modal");
+  await m.getByTestId("dns-cg-name").locator("input").fill(name);
+  await expect(m.getByTestId("dns-cg-ex-dhcp")).toHaveAttribute("aria-checked", "false");   // 預設不勾
+  await m.getByTestId("dns-cg-ex-dhcp").click();
+  // 多選標籤欄位：點一下才出現輸入框，打完按 Enter 加入
+  await m.getByTestId("dns-cg-ex-names").click();
+  await page.keyboard.type("*.lab.corp.example"); await page.keyboard.press("Enter");
+  await m.getByTestId("dns-cg-ex-ips").click();
+  await page.keyboard.type("198.51.100.100-198.51.100.199"); await page.keyboard.press("Enter");
+  await page.keyboard.type("not-an-ip"); await page.keyboard.press("Enter");
+  const bad = page.waitForResponse((r) => r.url().endsWith("/api/v1/dns/compare-groups") && r.request().method() === "POST");
+  await m.getByTestId("dns-cg-save").click();
+  expect((await bad).status()).toBe(422);
+  await expect(page.locator(".n-message")).toContainText("看不懂的排除項目：not-an-ip");
+  // 拿掉錯的那個再存
+  await m.getByTestId("dns-cg-ex-ips").locator(".n-tag", { hasText: "not-an-ip" }).locator(".n-tag__close").click();
+  const ok = page.waitForResponse((r) => r.url().endsWith("/api/v1/dns/compare-groups") && r.request().method() === "POST");
+  await m.getByTestId("dns-cg-save").click();
+  const body = (await ok).request().postDataJSON();
+  expect(body.exclude_dhcp_ranges).toBe(true);
+  expect(body.excluded_names).toEqual(["*.lab.corp.example"]);
+  expect(body.excluded_ips).toEqual(["198.51.100.100-198.51.100.199"]);
+
+  const row = page.getByTestId("dns-compare-groups").locator("tr", { hasText: name });
+  await row.getByRole("button", { name: "編輯" }).click();
+  await expect(m.getByTestId("dns-cg-ex-dhcp")).toHaveAttribute("aria-checked", "true");
+  await expect(m.getByTestId("dns-cg-ex-names")).toContainText("*.lab.corp.example");
+  await expect(m.getByTestId("dns-cg-ex-ips")).toContainText("198.51.100.100-198.51.100.199");
+  await page.keyboard.press("Escape");
+
+  // 實際效果：樣本群組裡只在 ns1 的 legacy，排除後不再是差異；測完還原
+  const token = await page.evaluate(() => sessionStorage.getItem("access_token"));
+  const H = { Authorization: `Bearer ${token}` };
+  const groups = await (await request.get("/api/v1/dns/compare-groups", { headers: H })).json();
+  const all = Array.isArray(groups) ? groups : groups.items;
+  const sample = all.find((g: { name: string }) => g.name === "e2e-dns-group");
+  const tmp = all.find((g: { name: string }) => g.name === name);
+  try {
+    await request.patch(`/api/v1/dns/compare-groups/${sample.id}`, { headers: H, data: { excluded_names: ["legacy.corp.example"] } });
+    const diffs = await (await request.get(`/api/v1/dns/compare-groups/${sample.id}/diffs`, { headers: H })).json();
+    expect(diffs.filter((d: { name: string }) => d.name.startsWith("legacy."))).toHaveLength(0);
+  } finally {
+    await request.patch(`/api/v1/dns/compare-groups/${sample.id}`, { headers: H, data: { excluded_names: [] } });
+    await request.delete(`/api/v1/dns/compare-groups/${tmp.id}`, { headers: H });
+  }
+});

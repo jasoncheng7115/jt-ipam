@@ -49,6 +49,7 @@ import { virtTagText } from "@/utils/virt";
 import { useChangeLogDim } from "@/composables/useChangeLogDim";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { getDevice, listDevices, type Device } from "@/api/basic";
+import { listDeviceGroups } from "@/api/deviceGroups";
 import { getAddressRelations, type RelationNode } from "@/api/relations";
 import { listDhcpRanges } from "@/api/integrations";
 import { logRustDeskLocalOpen } from "@/api/rustdeskWeb";
@@ -90,6 +91,18 @@ function deviceLabel(id: string | null | undefined): string {
 }
 const deviceOptions = computed(() =>
   devices.value.map((d) => ({ label: d.name, value: d.id })));
+
+// 共用給裝置群組的選項：只有管理員看得到這個欄位，所以只有管理員才去載
+const groupOptions = ref<{ label: string; value: string }[]>([]);
+let groupsLoaded = false;
+async function ensureGroupsLoaded() {
+  if (groupsLoaded || !auth.me?.is_admin) return;
+  groupsLoaded = true;
+  try {
+    groupOptions.value = (await listDeviceGroups()).map((g) => ({
+      label: `${g.name} · ${t(`device_groups.kind_${g.kind}`)}`, value: g.id }));
+  } catch { groupsLoaded = false; }
+}
 
 // DHCP 發放範圍：標示本 IP 是否落在某 DHCP 主機的動態集區內
 interface DhcpInfo { server: string; source: string; start: string; end: string; }
@@ -382,6 +395,7 @@ onMounted(() => {
   void loadSuggestion();
   void loadSameMac();
   void ensureDeviceLoaded(props.address?.device_id);
+  void ensureGroupsLoaded();
   const el = (rootEl.value?.$el ?? rootEl.value) as HTMLElement | undefined;
   if (el instanceof HTMLElement) {
     cro = new ResizeObserver(() => { consoleCompact.value = el.clientWidth < 900; });
@@ -408,6 +422,8 @@ interface FormState {
   jump_host_id: string | null;
   console_agent_id: string | null;
   device_id: string | null;
+  /** 共用給裝置群組（堆疊管理 IP、HA 虛擬 IP）：設了之後裝置欄跟著群組的代表裝置，不能在這裡改 */
+  device_group_id: string | null;
   hostname_source_pin: string;  // "" = 自動 (跟全域優先序)
   ssh_enabled: boolean;
   sftp_enabled: boolean;
@@ -445,6 +461,7 @@ function emptyForm(): FormState {
     jump_host_id: null,
     console_agent_id: null,
     device_id: null,
+    device_group_id: null,
     hostname_source_pin: "",
     ssh_enabled: false,
     sftp_enabled: false,
@@ -548,6 +565,7 @@ function fromAddress(a: IPAddress): FormState {
     jump_host_id: a.jump_host_id ?? null,
     console_agent_id: a.console_agent_id ?? null,
     device_id: (a as any).device_id ?? null,
+    device_group_id: a.device_group_id ?? null,
     hostname_source_pin: a.hostname_source_pin ?? "",
     ssh_enabled: !!a.ssh_enabled,
     sftp_enabled: !!a.sftp_enabled,
@@ -996,6 +1014,11 @@ async function save() {
       is_dhcp_server: form.value.is_dhcp_server,
       liveness_from_device: form.value.liveness_from_device,
     };
+    // 裝置群組：只有管理員能改、而且只在真的改了才送（一般使用者送了會被 403 擋下整筆）。
+    // 共用給群組的 IP，裝置欄由後端跟著代表裝置走，這裡不送。
+    if (auth.me?.is_admin && (form.value.device_group_id ?? null) !== (props.address.device_group_id ?? null))
+      payload.device_group_id = form.value.device_group_id ?? null;
+    if (form.value.device_group_id) delete payload.device_id;
     const updated = await updateAddress(props.address?.id, payload);
     hostnameSourcesLoaded.value = false;  // 重新整理來源/有效 hostname
     msg.success(t("common.ok"));
@@ -1360,6 +1383,10 @@ async function remove() {
               {{ deviceLabel(props.address?.device_id) }}
             </a>
             <span v-else>—</span>
+            <n-tag v-if="props.address?.device_group_name" size="tiny" type="info" :bordered="false"
+                   style="margin-left: 6px" data-testid="ip-group-shared-tag">
+              {{ t("device_groups.ip_shared_by", { name: props.address.device_group_name }) }}
+            </n-tag>
           </n-descriptions-item>
           <!-- 上線狀態與最後回報在「各來源最後出現」、主機名稱在「主機名稱來源」，這裡不重複（使用者要求） -->
           <n-descriptions-item
@@ -1752,8 +1779,9 @@ async function remove() {
                                :subnet-id="address?.subnet_id ?? createContext?.subnet_id ?? null" inherit />
           <n-form-item :label="t('nav.devices')">
             <n-space vertical :size="4" style="width: 100%">
-              <n-select v-model:value="form.device_id" :options="deviceOptions"
-                        :placeholder="t('common.not_specified')" clearable filterable />
+              <n-select v-model:value="form.device_id" :options="deviceOptions" :disabled="!!form.device_group_id"
+                        :placeholder="t('common.not_specified')" clearable filterable data-testid="ip-device-select" />
+              <div v-if="form.device_group_id" class="sug-note" data-testid="ip-group-locked">{{ t("device_groups.ip_group_locked") }}</div>
               <n-button v-if="matchingDevice" size="tiny" dashed type="primary"
                         @click="linkMatchingDevice">
                 <template #icon><n-icon><LinkIcon /></n-icon></template>
@@ -1792,6 +1820,13 @@ async function remove() {
                   </n-checkbox-group>
                 </template>
               </template>
+            </n-space>
+          </n-form-item>
+          <n-form-item v-if="auth.me?.is_admin && !isCreate" :label="t('device_groups.ip_group_field')">
+            <n-space vertical :size="4" style="width: 100%">
+              <n-select v-model:value="form.device_group_id" :options="groupOptions" clearable filterable
+                        :placeholder="t('common.not_specified')" data-testid="ip-group-select" />
+              <div class="sug-note">{{ t("device_groups.ip_group_hint") }}</div>
             </n-space>
           </n-form-item>
           <n-form-item :label="t('scan_probes.excluded')">

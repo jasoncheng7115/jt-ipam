@@ -50,6 +50,7 @@ from app.models.checkpoint_gaia import CheckPointDhcpSubnet, CheckPointGaiaTarge
 from app.models.custom_field import CustomFieldDefinition
 from app.models.customer import Customer
 from app.models.device import Device
+from app.models.device_group import DeviceGroup
 from app.models.dhcp import DHCPExclusion, DHCPPoolRange
 from app.models.dhcp_sighting import DHCPSighting
 from app.models.dhcp_standalone import IscDhcpServer, KeaDhcpServer
@@ -175,6 +176,7 @@ __all__ = [
     "DNSServer",
     "DNSZone",
     "Device",
+    "DeviceGroup",
     "DevicePort",
     "DevicePowerPort",
     "DeviceVLAN",

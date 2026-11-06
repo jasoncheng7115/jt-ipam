@@ -24,6 +24,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import false as sa_false
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,6 +50,13 @@ class DNSCompareGroup(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: 不比對的 zone（正規化後的名稱；空＝全部都比）：主從只複寫部分 zone、或某台另外放自己的 zone 時用（0204）
     excluded_zones: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    #: 勾了之後，對應 IP 落在 DHCP 範圍（子網路位址範圍裡用途為 DHCP 的）內的紀錄不比對（0240，預設不勾）：
+    #: DHCP 動態登記的名稱本來就會一台有、一台還沒有，或租約到期後只剩一台
+    exclude_dhcp_ranges: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false(), nullable=False)
+    #: 不比對的 FQDN（正規化：小寫、無結尾點；`*.example.com` 只比對底下的名稱，不含 example.com 本身）
+    excluded_names: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
+    #: 不比對的 IP、CIDR 或「起-迄」範圍（A／AAAA 看紀錄的 IP，PTR 從反解名稱算回 IP）
+    excluded_ips: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]", nullable=False)
     #: 比對哪些紀錄類型（0214，預設 A／AAAA／PTR）：勾了其他類型，成員拉取時那些類型也會存下來（dns_sync）
     compare_types: Mapped[list[str]] = mapped_column(
         JSONB, default=lambda: ["A", "AAAA", "PTR"], server_default='["A", "AAAA", "PTR"]', nullable=False)

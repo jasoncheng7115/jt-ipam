@@ -114,6 +114,9 @@ export interface IPAddress {
   mac: string | null;
   owner: string | null;
   device_id: string | null;
+  /** 共用給裝置群組（堆疊管理 IP、HA 虛擬 IP）：device_id 跟著群組的代表裝置，只能在群組設定改 */
+  device_group_id?: string | null;
+  device_group_name?: string | null;
   switch_port: string | null;
   exclude_from_ping: boolean;
   /** 上線狀態跟著所屬設備（多 LAN 路由器的閘道不回 ping 但在用） */

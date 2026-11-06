@@ -570,6 +570,15 @@ watch(selected, (v) => {
   else diagram.value = null;
 });
 
+// 已經在機櫃頁時再帶 ?rack= 過來（機櫃圖上群組的「另有 N 台在機櫃 B」）：元件不會重新掛載，
+// onMounted 那段不會再跑，要另外跟著網址切過去
+watch(() => route.query.rack, (v) => {
+  const id = typeof v === "string" ? v : "";
+  if (!id || id === selected.value || !rows.value.some((x) => x.id === id)) return;
+  roomId.value = null;
+  selected.value = id;
+});
+
 // 合併卡圖形匯出沿用全域「機櫃名稱對齊」偏好（與 RackDiagram 一致）
 const mergedNameAlign = ref<RackNameAlign>("left");
 
@@ -910,7 +919,8 @@ function doMergedExport(key: string) {
               <rack-diagram v-for="d in roomDiagrams" :key="d.rack_id" :diagram="d"
                             :show-legend="false" :editable="isAdmin" :floor-align-to="maxRoomU"
                             :face="mergedFace" :shared-zoom="roomZoom"
-                            @measured="onRackMeasured" @pick-empty="onPickEmpty" />
+                            @measured="onRackMeasured" @update:face="mergedFace = $event"
+                            @pick-empty="onPickEmpty" />
             </div>
             <!-- 整排機櫃共用一個圖例（不用每櫃都重複） -->
             <div class="rack-legend-shared">

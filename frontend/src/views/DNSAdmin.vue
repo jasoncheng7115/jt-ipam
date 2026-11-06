@@ -291,12 +291,13 @@ function statusType(s: DNSCompareStatus | null | undefined): "success" | "error"
 }
 interface GroupForm {
   name: string; description: string; notify_enabled: boolean; grace_minutes: number; server_ids: string[]; excluded_zones: string[]
-  compare_types: string[]
+  compare_types: string[]; exclude_dhcp_ranges: boolean; excluded_names: string[]; excluded_ips: string[]
 }
 const groupShow = ref(false);
 const groupEditing = ref<string | null>(null);
 const groupForm = ref<GroupForm>({ name: "", description: "", notify_enabled: true, grace_minutes: 30, server_ids: [], excluded_zones: [],
-                                   compare_types: [...DNS_COMPARE_DEFAULT_TYPES] });
+                                   compare_types: [...DNS_COMPARE_DEFAULT_TYPES], exclude_dhcp_ranges: false,
+                                   excluded_names: [], excluded_ips: [] });
 // 「不比對的 zone」選單：目前選的成員拉回來的 zone＋已經排除的；也可以直接輸入。
 // 跟著表單上的成員走（以前只讀存檔後群組的 zones：新增時選了成員也沒得選，使用者 2026-10-14）
 const memberZones = ref<string[]>([]);
@@ -321,7 +322,8 @@ const zoneOptions = computed(() =>
 function openGroupCreate() {
   groupEditing.value = null;
   groupForm.value = { name: "", description: "", notify_enabled: true, grace_minutes: 30, server_ids: [], excluded_zones: [],
-                      compare_types: [...DNS_COMPARE_DEFAULT_TYPES] };
+                      compare_types: [...DNS_COMPARE_DEFAULT_TYPES], exclude_dhcp_ranges: false,
+                      excluded_names: [], excluded_ips: [] };
   groupShow.value = true;
 }
 function openGroupEdit(g: DNSCompareGroup) {
@@ -329,7 +331,9 @@ function openGroupEdit(g: DNSCompareGroup) {
   groupForm.value = { name: g.name, description: g.description ?? "", notify_enabled: g.notify_enabled,
                       grace_minutes: g.grace_minutes, server_ids: g.members.map((m) => m.id),
                       excluded_zones: [...(g.excluded_zones ?? [])],
-                      compare_types: [...(g.compare_types?.length ? g.compare_types : DNS_COMPARE_DEFAULT_TYPES)] };
+                      compare_types: [...(g.compare_types?.length ? g.compare_types : DNS_COMPARE_DEFAULT_TYPES)],
+                      exclude_dhcp_ranges: !!g.exclude_dhcp_ranges,
+                      excluded_names: [...(g.excluded_names ?? [])], excluded_ips: [...(g.excluded_ips ?? [])] };
   groupShow.value = true;
 }
 async function submitGroup() {
@@ -761,6 +765,30 @@ systemctl restart univention-directory-manager-rest</pre>
                     multiple filterable tag clearable
                     :placeholder="t('dns_admin.cg_excluded_ph')" data-testid="dns-cg-excluded" />
           <span style="font-size:11px;opacity:.7">{{ t("dns_admin.cg_excluded_hint") }}</span>
+        </n-space>
+      </n-form-item>
+      <n-form-item :label="t('dns_admin.cg_ex_dhcp')">
+        <n-space vertical :size="2" style="width: 100%">
+          <n-checkbox v-model:checked="groupForm.exclude_dhcp_ranges" data-testid="dns-cg-ex-dhcp">
+            {{ t("dns_admin.cg_ex_dhcp_label") }}
+          </n-checkbox>
+          <span style="font-size:11px;opacity:.7">{{ t("dns_admin.cg_ex_dhcp_hint") }}</span>
+        </n-space>
+      </n-form-item>
+      <n-form-item :label="t('dns_admin.cg_ex_names')">
+        <n-space vertical :size="2" style="width: 100%">
+          <n-select v-model:value="groupForm.excluded_names" :options="[]" multiple filterable tag clearable
+                    :show-arrow="false" :show="false"
+                    :placeholder="t('dns_admin.cg_ex_names_ph')" data-testid="dns-cg-ex-names" />
+          <span style="font-size:11px;opacity:.7">{{ t("dns_admin.cg_ex_names_hint") }}</span>
+        </n-space>
+      </n-form-item>
+      <n-form-item :label="t('dns_admin.cg_ex_ips')">
+        <n-space vertical :size="2" style="width: 100%">
+          <n-select v-model:value="groupForm.excluded_ips" :options="[]" multiple filterable tag clearable
+                    :show-arrow="false" :show="false"
+                    :placeholder="t('dns_admin.cg_ex_ips_ph')" data-testid="dns-cg-ex-ips" />
+          <span style="font-size:11px;opacity:.7">{{ t("dns_admin.cg_ex_ips_hint") }}</span>
         </n-space>
       </n-form-item>
       <n-form-item :label="t('dns_admin.cg_notify')">

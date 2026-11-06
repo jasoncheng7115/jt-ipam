@@ -325,38 +325,43 @@ onMounted(() => { void load(); void loadPins(); });
              以前是全部加總的一個圓環，只要有一個 /8 就永遠接近 0%，網段一多就沒有用途 -->
         <DashboardSubnetUsage class="row-card" />
 
-        <!-- 狀態指示燈 -->
-        <n-card class="row-card">
+        <!-- 狀態指示燈。跟左邊 IP 使用率同一列、會被拉成一樣高：內容要填滿卡片（三列平均分布、進度條與來源
+             說明在底部），不然下面空一大片（使用者 2026-11-05） -->
+        <n-card class="row-card indicator-card">
           <template #header>
             <CardTitle :icon="LiveIcon" :text="t('dashboard.card_indicator')" />
           </template>
-          <n-space vertical :size="16">
-            <div class="indicator-row">
-              <span class="dot dot-on"></span>
-              <span class="indicator-label">{{ t("dashboard.status_online") }}</span>
-              <span class="indicator-value">{{ data.status.online }}</span>
+          <div class="indicator-body">
+            <div class="indicator-rows">
+              <div class="indicator-row">
+                <span class="dot dot-on"></span>
+                <span class="indicator-label">{{ t("dashboard.status_online") }}</span>
+                <span class="indicator-value">{{ data.status.online }}</span>
+              </div>
+              <div class="indicator-row">
+                <span class="dot dot-off"></span>
+                <span class="indicator-label">{{ t("dashboard.status_offline") }}</span>
+                <span class="indicator-value">{{ data.status.offline }}</span>
+              </div>
+              <div class="indicator-row">
+                <span class="dot dot-unknown"></span>
+                <span class="indicator-label">{{ t("dashboard.status_unknown") }}</span>
+                <span class="indicator-value">{{ data.status.unknown }}</span>
+              </div>
             </div>
-            <div class="indicator-row">
-              <span class="dot dot-off"></span>
-              <span class="indicator-label">{{ t("dashboard.status_offline") }}</span>
-              <span class="indicator-value">{{ data.status.offline }}</span>
+            <div class="indicator-foot">
+              <n-progress
+                v-if="statusTotal > 0"
+                :percentage="(data.status.online / statusTotal) * 100"
+                :show-indicator="false"
+                status="success"
+                type="line"
+              />
+              <p style="font-size: 12px; opacity: 0.7; margin: 0">
+                {{ indicatorSourceText }}
+              </p>
             </div>
-            <div class="indicator-row">
-              <span class="dot dot-unknown"></span>
-              <span class="indicator-label">{{ t("dashboard.status_unknown") }}</span>
-              <span class="indicator-value">{{ data.status.unknown }}</span>
-            </div>
-            <n-progress
-              v-if="statusTotal > 0"
-              :percentage="(data.status.online / statusTotal) * 100"
-              :show-indicator="false"
-              status="success"
-              type="line"
-            />
-            <p style="font-size: 12px; opacity: 0.7; margin: 0">
-              {{ indicatorSourceText }}
-            </p>
-          </n-space>
+          </div>
         </n-card>
       </div>
 
@@ -617,6 +622,12 @@ onMounted(() => { void load(); void loadPins(); });
 </template>
 
 <style scoped>
+/* IP 指示計：卡片內容撐滿整張卡（同列的 IP 使用率比較高時不留空白） */
+.indicator-card { display: flex; flex-direction: column; }
+.indicator-card :deep(.n-card-content) { flex: 1; display: flex; flex-direction: column; }
+.indicator-body { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+.indicator-rows { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 16px; }
+.indicator-foot { display: flex; flex-direction: column; gap: 10px; }
 /* widget 標題列：加品牌色 tint 的標籤背景條（KPI 卡無 header，不受影響） */
 :deep(.n-card > .n-card-header) {
   /* 中性灰底標題列：沉穩、有高級感，與頁面背景明顯區隔 */

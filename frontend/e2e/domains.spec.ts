@@ -59,3 +59,29 @@ test("網域：新增、手填到期日、編輯 DNS 託管、詳細資料、刪
     for (const d of list.items ?? []) await request.delete(`/api/v1/domains/${d.id}`, { headers: auth });
   }
 });
+
+test("網域：探測把查到的資料填進還空著的欄位，已填的不蓋掉（使用者 2026-11-06）", async ({ page }) => {
+  // 探測會對外查 RDAP 與 DNS：測試不連外，在瀏覽器攔下來回固定結果（後端的查詢在後端測試測）
+  await page.route("**/api/v1/domains/probe?*", (route) => route.fulfill({ json: {
+    name: "example.com", rdap_error: null, registrar: "Example Registrar", registrar_url: "https://registrar.example.net/",
+    registered_at: "2015-03-01T00:00:00Z", expires_at: "2027-08-13", status: [], nameservers: ["ada.ns.cloudflare.com"],
+    dns_provider: "Cloudflare", mx: ["1 aspmx.l.google.com"], mail_provider: "Google Workspace",
+    spf: true, dmarc: false, website: true,
+  } }));
+  await login(page);
+  await page.goto("/advanced/domains");
+  await page.getByTestId("domain-add").click();
+  const dlg = page.locator(".n-modal");
+  await page.getByTestId("domain-name").locator("input").fill("Example.COM");
+  await dlg.getByPlaceholder("https://").fill("https://mine.example.org/");      // 已經填的不蓋掉
+  await page.getByTestId("domain-probe").click();
+  await expect(page.getByTestId("domain-probe-note")).toContainText("已填入");
+  await expect(page.getByTestId("domain-name").locator("input")).toHaveValue("example.com");
+  await expect(dlg.locator("input[value='Example Registrar']")).toHaveCount(1);
+  await expect(dlg.getByPlaceholder("https://")).toHaveValue("https://mine.example.org/");
+  await expect(dlg.locator("input[value='Cloudflare']")).toHaveCount(1);
+  await expect(dlg.locator(".n-date-picker input")).toHaveValue("2027-08-13");
+  await expect(dlg.locator("textarea").first()).toHaveValue("郵件（Google Workspace）、網站、SPF 驗證紀錄");
+  await dlg.screenshot({ path: "test-results/domain-probe.png" });
+  await dlg.getByRole("button", { name: "取消" }).click();                         // 不存檔
+});

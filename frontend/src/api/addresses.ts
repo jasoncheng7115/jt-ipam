@@ -40,6 +40,8 @@ export interface IPAddressUpdate {
   mac?: string | null;
   owner?: string | null;
   device_id?: string | null;
+  /** 共用給裝置群組（堆疊管理 IP、HA 虛擬 IP）；管理員限定。空字串／null＝取消共用 */
+  device_group_id?: string | null;
   switch_port?: string | null;
   exclude_from_ping?: boolean | null;
   excluded_probes?: string[] | null;

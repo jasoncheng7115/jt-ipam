@@ -1100,6 +1100,29 @@ async def list_devices(
     return {"scope": scope, "count": total, **_page(total, len(out)), "devices": out}
 
 
+async def _device_group(session: AsyncSession, dev: Device, vis_dev: set[uuid.UUID] | None,
+                        vis_ip: set[uuid.UUID] | None) -> dict[str, Any] | None:
+    if not dev.group_id:
+        return None
+    from app.models.device_group import DeviceGroup
+    from app.services.device_groups import members_of
+    g = await session.get(DeviceGroup, dev.group_id)
+    if g is None:
+        return None
+    members = [m for m in await members_of(session, g.id) if vis_dev is None or m.id in vis_dev]
+    racks = await _name_map(session, Rack.name, [m.rack_id for m in members])
+    rep = next((m.name for m in members if m.id == g.representative_id), None)
+    ips = (await session.execute(select(IPAddress.id, IPAddress.ip).where(IPAddress.device_group_id == g.id)
+                                 .order_by(IPAddress.ip))).all()
+    return {
+        "name": g.name, "kind": g.kind, "role": dev.group_role, "order": dev.group_order,
+        "representative": rep,
+        "members": [{"name": m.name, "role": m.group_role, "order": m.group_order, "rack": racks.get(m.rack_id),
+                     "u_position": m.u_position} for m in members],
+        "shared_ips": [_host(ip) for iid, ip in ips if vis_ip is None or iid in vis_ip],
+    }
+
+
 async def get_device(
     session: AsyncSession, *, user: User,
     device_id: str | None = None, name: str | None = None,
@@ -1243,6 +1266,8 @@ async def get_device(
         "rack_slot": dev.rack_slot, "rack_slot_span": dev.rack_slot_span,
         "rack_vslot": dev.rack_vslot, "rack_vslot_span": dev.rack_vslot_span,
         "rack": rack_info,
+        # 裝置群組（堆疊／HA／叢集）：同組成員、角色與序號、整組共用的 IP（只列看得到的）
+        "group": await _device_group(session, dev, vis, vis_ip),
         "custom_fields": dev.custom_fields or None,
         **await _timestamps(session, Device, dev.id),
         "ips": [{"ip": _host(o.ip), "subnet": str(cidr), "hostname": o.hostname,
@@ -2103,6 +2128,14 @@ async def get_ip_history(
     }
 
 
+async def _ip_group_name(session: AsyncSession, obj: IPAddress) -> str | None:
+    if not obj.device_group_id:
+        return None
+    from app.models.device_group import DeviceGroup
+    g = await session.get(DeviceGroup, obj.device_group_id)
+    return g.name if g else None
+
+
 async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[str, Any]:
     """單一 IP 的完整資料：IP 編輯表單與詳細資料頁上的每個欄位。
 
@@ -2166,6 +2199,8 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
         "mac_vendor": await vendor_for_mac(session, obj.mac),
         "device": devs.get(obj.device_id),
         "device_id": str(obj.device_id) if obj.device_id else None,
+        # 共用給裝置群組的 IP（堆疊管理 IP、HA 虛擬 IP）：device 是群組的代表裝置
+        "device_group": await _ip_group_name(session, obj),
         "customer": cust.name if cust else None,
         "customer_id": str(obj.customer_id) if obj.customer_id else None,
         # 「上線跟著裝置」這一輪的依據是同裝置的哪個位址
@@ -4375,9 +4410,10 @@ async def create_device(
     except ValidationError as exc:
         raise _invalid_args(exc) from exc
 
+    from app.services.device_groups import GroupError
     try:
         dev = await create_device_checked(session, payload)
-    except (PlacementError, CustomFieldError) as exc:
+    except (PlacementError, CustomFieldError, GroupError) as exc:
         raise _ui_error(exc) from exc
     await _audit_tool_write(session, user=user, object_type="device", object_id=dev.id,
                             action="create", diff={"after": payload.model_dump(mode="json")})

@@ -4,6 +4,9 @@ jt-ipam 不會在伺服器之間同步紀錄；比對只用各台已經拉取下
 - 整個 zone 只在部分成員上 → 一筆 kind=zone（不再逐筆比那個 zone 的紀錄）；沒有任何可比對紀錄的 zone 不列
 - 所有成員都有的 zone → 逐筆比（正規化後的 名稱、型別、值；TTL 不比，SOA 不同步進來）
 - 群組設定「不比對的 zone」（excluded_zones）裡的 zone 不比：主從只複寫部分 zone、或某台另外放自己的 zone
+- 群組的排除（2026-11-05）：勾「排除 DHCP 範圍」時，IP 在 DHCP 範圍內的紀錄不比；管理員自訂的名稱
+  （FQDN、`*.example.com`）與 IP（單一、CIDR、起-迄）也不比。A／AAAA 看紀錄的 IP，PTR 從反解名稱算回 IP、
+  並用它指向的主機名稱比對名稱排除
 - AD 的服務定位資料（_msdcs、TrustAnchors 兩個 zone，DomainDnsZones／ForestDnsZones 紀錄）不比：
   Windows 與 Samba（UCS）登記方式不同，也不是 IPAM 的主機資料
 - 不同軟體可以混搭；Unbound（OPNsense）只有主機覆寫、沒有完整的 zone，只能和 Unbound 同組
@@ -103,6 +106,128 @@ def normalize_zone_list(zones: list[str] | None) -> list[str]:
 OVERRIDE_ONLY_TYPES = frozenset({"unbound_opnsense"})
 
 
+_NAME_RE = re.compile(r"^(\*\.)?([a-z0-9_]([a-z0-9_-]{0,62})?)(\.[a-z0-9_]([a-z0-9_-]{0,62})?)*$")
+
+
+class BadExclusion(ValueError):
+    """排除清單裡有看不懂的項目（API 回 422 dns_compare_bad_exclusion）。"""
+
+    def __init__(self, entry: str) -> None:
+        super().__init__(entry)
+        self.entry = entry
+
+
+def normalize_name_list(names: list[str] | None) -> list[str]:
+    """不比對的名稱：小寫、去結尾點、去重、保留順序；`*.x` 只比對 x 底下的名稱。"""
+    out: list[str] = []
+    for raw in names or []:
+        n = (raw or "").strip().rstrip(".").lower()
+        if not n:
+            continue
+        if len(n) > 253 or not _NAME_RE.match(n):
+            raise BadExclusion(raw)
+        if n not in out:
+            out.append(n)
+    return out
+
+
+def _parse_ip_entry(raw: str) -> tuple[int, int, int]:
+    """IP／CIDR／起-迄 → (版本, 起, 迄)（整數，含兩端）。"""
+    s = (raw or "").strip()
+    try:
+        if "-" in s:
+            a, b = (ipaddress.ip_address(x.strip()) for x in s.split("-", 1))
+            if a.version != b.version or int(a) > int(b):
+                raise ValueError(s)
+            return a.version, int(a), int(b)
+        if "/" in s:
+            net = ipaddress.ip_network(s, strict=False)
+            return net.version, int(net.network_address), int(net.broadcast_address)
+        a = ipaddress.ip_address(s)
+        return a.version, int(a), int(a)
+    except ValueError as exc:
+        raise BadExclusion(raw) from exc
+
+
+def normalize_ip_list(entries: list[str] | None) -> list[str]:
+    """不比對的 IP：去空白、驗證格式（IP、CIDR、起-迄，版本一致且起不大於迄）、去重。"""
+    out: list[str] = []
+    for raw in entries or []:
+        s = (raw or "").strip().replace(" ", "")
+        if not s:
+            continue
+        _parse_ip_entry(s)
+        if s not in out:
+            out.append(s)
+    return out
+
+
+def ptr_ip(name: str) -> str | None:
+    """反解名稱 → IP（in-addr.arpa／ip6.arpa）；不是完整反解名稱回 None。"""
+    n = (name or "").rstrip(".").lower()
+    try:
+        if n.endswith(".in-addr.arpa"):
+            parts = n[: -len(".in-addr.arpa")].split(".")
+            if len(parts) == 4:
+                return str(ipaddress.IPv4Address(".".join(reversed(parts))))
+        elif n.endswith(".ip6.arpa"):
+            nibbles = n[: -len(".ip6.arpa")].split(".")
+            if len(nibbles) == 32:
+                h = "".join(reversed(nibbles))
+                return str(ipaddress.IPv6Address(":".join(h[i:i + 4] for i in range(0, 32, 4))))
+    except ValueError:
+        return None
+    return None
+
+
+class RecordFilter:
+    """群組的紀錄排除：名稱（完整或 *.後綴）、IP 區間（自訂＋DHCP 範圍）。"""
+
+    def __init__(self, names: list[str] | None = None, ip_ranges: list[tuple[int, int, int]] | None = None) -> None:
+        self.exact = {n for n in (names or []) if not n.startswith("*.")}
+        self.suffixes = tuple(n[1:] for n in (names or []) if n.startswith("*."))   # ".lab.example"
+        self.ranges = list(ip_ranges or [])
+
+    def __bool__(self) -> bool:
+        return bool(self.exact or self.suffixes or self.ranges)
+
+    def _name(self, n: str) -> bool:
+        return n in self.exact or (bool(self.suffixes) and n.endswith(self.suffixes))
+
+    def _ip(self, value: str | None) -> bool:
+        if not value or not self.ranges:
+            return False
+        try:
+            a = ipaddress.ip_address(value)
+        except ValueError:
+            return False
+        v, i = a.version, int(a)
+        return any(rv == v and lo <= i <= hi for rv, lo, hi in self.ranges)
+
+    def skip(self, name_norm: str, rtype: str, value_norm: str) -> bool:
+        if rtype in ("A", "AAAA"):
+            return self._name(name_norm) or self._ip(value_norm)
+        if rtype == "PTR":
+            return self._name(value_norm) or self._ip(ptr_ip(name_norm))
+        return self._name(name_norm)
+
+
+async def record_filter(session: AsyncSession, group: Any) -> RecordFilter:
+    """群組設定 → RecordFilter；勾了排除 DHCP 範圍時，把子網路位址範圍裡用途為 DHCP 的都加進去。"""
+    ranges = [_parse_ip_entry(e) for e in normalize_ip_list(list(getattr(group, "excluded_ips", None) or []))]
+    if getattr(group, "exclude_dhcp_ranges", False):
+        from app.models.ip_range import IPRange
+        for start, end in (await session.execute(
+                select(IPRange.start_ip, IPRange.end_ip).where(IPRange.purpose == "dhcp"))).all():
+            try:
+                a, b = ipaddress.ip_address(str(start)), ipaddress.ip_address(str(end))
+            except ValueError:
+                continue
+            if a.version == b.version:
+                ranges.append((a.version, int(a), int(b)))
+    return RecordFilter(normalize_name_list(list(getattr(group, "excluded_names", None) or [])), ranges)
+
+
 def incompatible_types(types: list[str]) -> list[str]:
     """同一組裡不能放在一起的伺服器類型（空清單＝可以）。Unbound 只能和 Unbound 同組。"""
     kinds = {t in OVERRIDE_ONLY_TYPES for t in types}
@@ -142,7 +267,7 @@ async def group_of_servers(session: AsyncSession) -> dict[uuid.UUID, uuid.UUID |
 # ── 比對 ────────────────────────────────────────────────────────────────
 
 async def _snapshot(session: AsyncSession, member_ids: list[uuid.UUID], excluded: frozenset[str] = frozenset(),
-                    types: tuple[str, ...] = DEFAULT_COMPARE_TYPES) -> tuple[
+                    types: tuple[str, ...] = DEFAULT_COMPARE_TYPES, flt: RecordFilter | None = None) -> tuple[
         dict[uuid.UUID, set[str]], dict[uuid.UUID, set[tuple[str, str, str, str]]], int]:
     """每台成員的 zone 集合與紀錄集合（正規化後），以及還沒填正規化欄位的紀錄數。
     AD 服務定位 zone 與群組設定不比對的 zone 一律略過。"""
@@ -168,6 +293,8 @@ async def _snapshot(session: AsyncSession, member_ids: list[uuid.UUID], excluded
             missing_norm += 1
             continue
         if is_locator_name(nn):
+            continue
+        if flt and flt.skip(nn, (rtype or "").upper(), vn):
             continue
         recs[sid].add((normalize_zone(zname), nn, (rtype or "").upper(), vn))
     return zones, recs, missing_norm
@@ -228,7 +355,8 @@ async def check_group(session: AsyncSession, group: DNSCompareGroup, *, now: dat
         return done("incomplete", ", ".join(not_ready))
     ids = [m.id for m in members]
     types = tuple(normalize_compare_types(group.compare_types) or DEFAULT_COMPARE_TYPES)
-    zones, recs, missing_norm = await _snapshot(session, ids, frozenset(normalize_zone_list(group.excluded_zones)), types)
+    zones, recs, missing_norm = await _snapshot(session, ids, frozenset(normalize_zone_list(group.excluded_zones)), types,
+                                                await record_filter(session, group))
     if missing_norm:
         # 升級前同步進來的紀錄還沒有正規化欄位：下一輪同步就會補上
         return done("incomplete", f"{missing_norm} records waiting for the next sync")

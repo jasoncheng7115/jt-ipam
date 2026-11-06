@@ -251,3 +251,76 @@ async def test_daily_refresh_checks_the_oldest_first(db_session, fake_rdap) -> N
     await db_session.commit()
     res = await svc.refresh_all(db_session, pause=0)
     assert res == {"checked": 2, "ok": 1, "failed": 1}
+
+
+# ── 探測（使用者 2026-11-06：新增網域時先按「探測」，查到的資料填進其他欄位；不存檔）──
+
+def test_parse_registrar_url_and_mail_provider() -> None:
+    d = _rdap("example.com", datetime(2027, 1, 1, tzinfo=UTC), [])
+    d["entities"][0]["links"] = [{"rel": "about", "href": "https://registrar.example.net/"}]
+    assert svc.parse_rdap_domain(d).registrar_url == "https://registrar.example.net/"
+    d["entities"][0]["links"] = [{"rel": "about", "href": "javascript:alert(1)"}]
+    assert svc.parse_rdap_domain(d).registrar_url is None          # 只收 http / https（會變成連結）
+    d["entities"][0].pop("links")
+    d["entities"][0]["vcardArray"][1].append(["url", {}, "uri", "http://www.registrar.example.org"])
+    assert svc.parse_rdap_domain(d).registrar_url == "http://www.registrar.example.org"
+    # 指回 RDAP 伺服器的連結不是註冊商網址（實測 Gandi：related／about 指到 rdap.gandi.net）
+    d["entities"][0]["vcardArray"][1].pop()
+    d["entities"][0]["links"] = [{"rel": "related", "href": "https://rdap.registrar.example.net/"},
+                                 {"rel": "about", "href": "https://rdap.registrar.example.net/entity/1"}]
+    assert svc.parse_rdap_domain(d).registrar_url is None
+    assert svc.infer_dns_provider(["ns1.google.com", "ns2.google.com"]) == "Google"
+    assert svc.infer_mail_provider(["1 aspmx.l.google.com", "5 alt1.aspmx.l.google.com"]) == "Google Workspace"
+    assert svc.infer_mail_provider(["0 example-com.mail.protection.outlook.com"]) == "Microsoft 365"
+    assert svc.infer_mail_provider(["10 mx.example.net"]) is None
+    assert svc.infer_mail_provider([]) is None
+
+
+@pytest.fixture
+def fake_dns(monkeypatch):  # type: ignore[no-untyped-def]
+    recs: dict[tuple[str, str], list[str]] = {
+        ("example.com", "MX"): ["1 aspmx.l.google.com"],
+        ("example.com", "TXT"): ["v=spf1 include:_spf.google.com ~all", "google-site-verification=abc"],
+        ("_dmarc.example.com", "TXT"): ["v=DMARC1; p=none"],
+        ("example.com", "A"): ["192.0.2.80"],
+        ("example.io", "NS"): ["ns1.digitalocean.com", "ns2.digitalocean.com"],
+    }
+    monkeypatch.setattr(svc, "_dns_query", lambda name, rdtype: recs.get((name, rdtype), []))
+    return recs
+
+
+@pytest.mark.anyio
+async def test_probe_fills_registrar_dns_and_services_without_saving(
+        client, auth_headers, db_session, fake_rdap, fake_dns) -> None:
+    r = await client.get("/api/v1/domains/probe", headers=auth_headers, params={"name": "Example.com"})
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert p["name"] == "example.com" and p["rdap_error"] is None
+    assert p["registrar"] == "Example Registrar"
+    assert p["expires_at"] == fake_rdap["expires"].date().isoformat()
+    assert p["dns_provider"] == "Cloudflare"
+    assert p["mail_provider"] == "Google Workspace" and p["mx"] == ["1 aspmx.l.google.com"]
+    assert (p["spf"], p["dmarc"], p["website"]) == (True, True, True)
+    assert (await db_session.scalar(select(Domain).where(Domain.name == "example.com"))) is None   # 沒存檔
+
+
+@pytest.mark.anyio
+async def test_probe_without_rdap_still_reads_dns(client, auth_headers, fake_rdap, fake_dns) -> None:
+    """.io 沒有 RDAP：註冊商與到期日查不到，NS 改從 DNS 拿來推測託管。"""
+    p = (await client.get("/api/v1/domains/probe", headers=auth_headers, params={"name": "example.io"})).json()
+    assert p["rdap_error"] == "rdap_no_service" and p["registrar"] is None and p["expires_at"] is None
+    assert p["nameservers"] == ["ns1.digitalocean.com", "ns2.digitalocean.com"]
+    assert p["dns_provider"] == "DigitalOcean"
+    assert (p["spf"], p["website"], p["mail_provider"]) == (False, False, None)
+
+
+@pytest.mark.anyio
+async def test_probe_input_and_permissions(client, auth_headers, db_session, fake_rdap, fake_dns) -> None:
+    r = await client.get("/api/v1/domains/probe", headers=auth_headers, params={"name": "not a domain"})
+    assert r.status_code == 422 and _code(r) == "domain_invalid"
+    reader = await _user(db_session)
+    db_session.add(Permission(object_type="subnet", object_id=None, principal_type="user",
+                              principal_id=reader.id, level="read"))
+    await db_session.commit()
+    r = await client.get("/api/v1/domains/probe", headers=_hdr(reader), params={"name": "example.com"})
+    assert r.status_code == 403                    # 會對外查詢：只限管理員（跟重新查 RDAP 一樣）

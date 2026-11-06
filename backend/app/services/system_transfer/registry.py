@@ -55,6 +55,8 @@ CATEGORY: dict[str, str] = {
     "ip_ranges": "core",
     "ip_addresses": "core",
     "devices": "core",
+    # 裝置群組（堆疊／HA／叢集，0241）：與 devices 互相指（代表裝置 ↔ 所屬群組），匯入時往後指的那邊延後補
+    "device_groups": "core",
     "nat_translations": "core",
     "custom_field_definitions": "core",
     # core — DNS（伺服器定義屬設定，但記錄/區域是核心資料，一起放 core 較單純）

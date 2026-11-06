@@ -132,3 +132,32 @@ async def test_device_names_are_escaped(db_session, client):
     assert r.status_code == 200
     assert "<script>" not in r.text
     assert "&lt;script&gt;" in r.text
+
+
+async def test_device_group_bracket_is_drawn(db_session, client):
+    """裝置群組（堆疊／HA）在對外嵌入圖上也要標得出來：同色括線＋「名稱 本櫃/總數」，跟畫面與匯出一樣。"""
+    from app.models.device_group import DeviceGroup
+    rack = await _rack(db_session, exposed=True)
+    token = await _token(db_session)
+    g = DeviceGroup(name="N2048P-stack", kind="stack")
+    db_session.add(g)
+    await db_session.flush()
+    sw1 = (await db_session.execute(Device.__table__.select().where(Device.name == "sw-1"))).first()
+    db_session.add_all([Device(name="sw-2", type="switch", rack_id=rack.id, u_position=4, u_size=1, group_id=g.id),
+                        Device(name="sw-3", type="switch", group_id=g.id)])     # 沒放機櫃
+    await db_session.execute(Device.__table__.update().where(Device.id == sw1.id).values(group_id=g.id))
+    await db_session.commit()
+
+    body = (await client.get(f"/api/v1/racks/{rack.id}/embed.svg", params={"token": token})).text
+    assert body.count('class="rack-group"') == 1
+    assert "N2048P-stack 2/3" in body
+
+
+def test_svg_without_groups_is_unchanged():
+    """沒有群組的機櫃，嵌入圖逐位元組不變（不能因為加了群組就讓既有的嵌入圖變寬）。"""
+    from app.services.rack_svg import build_rack_svg
+    devs = [{"name": "a", "type": "switch", "u_position": 3, "u_size": 1}]
+    assert build_rack_svg("R", 12, devs) == build_rack_svg("R", 12, [{**devs[0], "group": None}])
+    with_group = build_rack_svg("R", 12, [{**devs[0], "group": {"id": "g", "name": "G", "total": 2}}])
+    assert 'class="rack-group"' in with_group and "G 1/2" in with_group
+    assert 'class="rack-group"' not in build_rack_svg("R", 12, devs)

@@ -15,12 +15,13 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { NCard, NEmpty, NAlert, NSpace, NTooltip, NButton, NButtonGroup, NIcon, NDropdown, NSlider, NPopover } from "naive-ui";
 import { otherFaceHints, type FaceHint } from "@/utils/rackOtherFace";
+import { groupBrackets, type GroupBracket, type RackGroupInfo } from "@/utils/rackGroups";
 import type { RackDiagram } from "@/api/racks";
 import { rackTypeFill as colorFor, RACK_DEVICE_TYPES } from "@/utils/rackColors";
 import { exportRacksDrawio, exportRacksPng, exportRacksSvg,
   type ExportDiagram } from "@/utils/rackGraphicsExport";
 import { exportTable, type ExportColumn } from "@/utils/tableExport";
-import { ExportIcon } from "@/icons";
+import { ExportIcon, GroupIcon } from "@/icons";
 import { useExportBusy } from "@/composables/useExportBusy";
 import { getRackNameAlign, type RackNameAlign } from "@/api/basic";
 
@@ -447,6 +448,7 @@ interface DevPart {
   is_bottom: boolean;  // device 最下格
   is_mid: boolean;     // device 垂直中間格（顯示名字 → 跨多 U 置中）
   primary_ip: string | null;
+  group: RackGroupInfo | null;   // 裝置群組（堆疊／HA／叢集）
 }
 interface Cell {
   u: number;                       // 1-based, top-most U
@@ -493,7 +495,7 @@ const cells = computed<Cell[]>(() => {
     u_size: d.u_size, is_top: false, is_bottom: false, is_mid: false, run: 1, runPx: 0, runBoard: 0,
     slot: Number(d.rack_slot ?? 0), span: Number(d.rack_slot_span ?? RACK_SLOTS),
   vslot: Number(d.rack_vslot ?? 0), vspan: Number(d.rack_vslot_span ?? RACK_SLOTS),
-    primary_ip: d.primary_ip,
+    primary_ip: d.primary_ip, group: d.group ?? null,
   });
   for (const d of props.diagram.devices) {
     // 只顯示目前檢視面（正/背）的裝置；未標面者視為正面
@@ -617,6 +619,61 @@ function switchToOther(h: FaceHint) {
   if (flashTimer) clearTimeout(flashTimer);
   flashTimer = setTimeout(() => { flashIds.value = new Set(); }, 2400);
 }
+
+/**
+ * 裝置群組的括線（客戶 2026-11-05：兩台 N2048P 堆疊要標得出來）。框外右側的「群組軌」，
+ * 每個群組一條同色括線從最上面的成員拉到最下面的成員，每台成員一個小刻度，標籤寫「名稱 本櫃台數/總台數」。
+ * 範圍重疊的群組分到不同軌道。縮圖不畫（同另一面提示）。
+ */
+interface PlacedGroup extends GroupBracket { top: number; height: number; ticks: number[] }
+const GROUP_LANE_PX = 10;
+const GROUP_LABEL_PX = 150;
+const placedGroups = computed<PlacedGroup[]>(() => {
+  if (!props.diagram || props.compact) return [];
+  const brackets = groupBrackets(props.diagram.devices as any, effFace.value);
+  if (!brackets.length) return [];
+  const pos = new Map<number, { top: number; px: number; board: number }>();
+  let acc = 0;
+  for (const c of cells.value) { pos.set(c.u, { top: acc, px: c.px, board: c.board }); acc += c.px; }
+  const span = (lo: number, hi: number) => {
+    const rows = [...pos.entries()].filter(([u]) => u >= lo && u <= hi).map(([, v]) => v);
+    if (!rows.length) return null;
+    const top = Math.min(...rows.map((r) => r.top));
+    return { top, bottom: Math.max(...rows.map((r) => r.top + r.px - r.board)) };
+  };
+  const out: PlacedGroup[] = [];
+  for (const b of brackets) {
+    const whole = span(b.from, b.to);
+    if (!whole) continue;
+    const ticks = b.members.map((m) => span(m.u_position, m.u_position + Math.max(1, m.u_size) - 1))
+      .filter((x): x is { top: number; bottom: number } => !!x)
+      .map((x) => (x.top + x.bottom) / 2 - whole.top);
+    out.push({ ...b, top: whole.top, height: Math.max(12, whole.bottom - whole.top), ticks });
+  }
+  return out;
+});
+const groupLanes = computed(() => placedGroups.value.reduce((a, g) => Math.max(a, g.lane + 1), 0));
+const groupHl = ref<Set<string>>(new Set());
+const openGroup = ref<string | null>(null);
+function groupLabel(g: GroupBracket): string {
+  return `${g.name} ${g.here}/${g.total}`;
+}
+function groupKind(kind: string): string {
+  return t(`device_groups.kind_${kind}`);
+}
+function memberMeta(m: any): string {
+  const g = m.group as RackGroupInfo | null;
+  const bits = [g?.role ? t(`device_groups.role_${g.role}`) : "", g?.order ? `#${g.order}` : "", m.model ?? ""];
+  return bits.filter(Boolean).join(" · ");
+}
+function goRack(id: string) {
+  openGroup.value = null;
+  router.push({ name: "racks", query: { rack: id } });
+}
+function goGroup(id: string) {
+  openGroup.value = null;
+  router.push({ name: "devices", query: { tab: "groups", group: id } });
+}
 </script>
 
 <template>
@@ -725,7 +782,7 @@ function switchToOther(h: FaceHint) {
                 <template #trigger>
                   <div
                     class="u-part u-occupied"
-                    :class="{ 'u-top': p.is_top, 'u-bottom': p.is_bottom, 'u-cont': !p.is_bottom, 'u-hl': hoveredId === p.id || flashIds.has(String(p.id)), 'u-self': !!highlightId && highlightId === p.id }"
+                    :class="{ 'u-top': p.is_top, 'u-bottom': p.is_bottom, 'u-cont': !p.is_bottom, 'u-hl': hoveredId === p.id || flashIds.has(String(p.id)) || groupHl.has(String(p.id)), 'u-self': !!highlightId && highlightId === p.id }"
                     :style="{ background: colorFor(p.type), left: pct(p.slot), width: pct(p.span),
                               ...partVStyle(p),
                               justifyContent: p.span >= 12 ? nameJustify : 'center' }"
@@ -748,6 +805,10 @@ function switchToOther(h: FaceHint) {
                   <div v-if="p.model" class="rt-row"><span>{{ t("cols.model") }}</span><b>{{ p.model }}</b></div>
                   <div v-if="p.primary_ip" class="rt-row"><span>IP</span><b>{{ p.primary_ip }}</b></div>
                   <div class="rt-row"><span>{{ t("rack_diagram.height") }}</span><b>{{ p.u_size }}U</b></div>
+                  <div v-if="p.group" class="rt-row">
+                    <span>{{ t("device_groups.group") }}</span>
+                    <b>{{ p.group.name }}{{ p.group.role ? ` · ${t(`device_groups.role_${p.group.role}`)}` : "" }}{{ p.group.order ? ` #${p.group.order}` : "" }}</b>
+                  </div>
                   <div v-if="p.span < 12" class="rt-row">
                     <span>{{ t("rack_diagram.width") }}</span><b>{{ p.span }}/12</b>
                   </div>
@@ -789,6 +850,50 @@ function switchToOther(h: FaceHint) {
               </div>
             </div>
           </template>
+        </div>
+        <!-- 裝置群組軌：同一群組的成員用同色括線框起來；只有在有群組時才占寬度 -->
+        <div v-if="placedGroups.length" class="group-rail" data-testid="rack-group-rail"
+             :style="{ paddingTop: 6 + topPx + 'px', width: groupLanes * GROUP_LANE_PX + GROUP_LABEL_PX + 'px' }">
+          <div class="group-rail__in" :style="{ height: cells.reduce((a, c) => a + c.px, 0) + 'px' }">
+            <template v-for="g in placedGroups" :key="g.id">
+              <i class="group-bracket" aria-hidden="true"
+                 :style="{ top: g.top + 'px', height: g.height + 'px', left: g.lane * GROUP_LANE_PX + 'px', '--grp': g.color }">
+                <i v-for="(y, i) in g.ticks" :key="i" class="group-tick" :style="{ top: y + 'px' }" />
+              </i>
+              <n-popover trigger="click" placement="right" :width="300"
+                         :show="openGroup === g.id" @update:show="(v: boolean) => (openGroup = v ? g.id : null)">
+                <template #trigger>
+                  <button type="button" class="group-chip" data-testid="rack-group-chip" :title="groupLabel(g)"
+                          :style="{ top: g.top + g.height / 2 + 'px', left: groupLanes * GROUP_LANE_PX + 4 + 'px', background: g.color }"
+                          @mouseenter="groupHl = new Set(g.members.map((m) => String(m.device_id)))"
+                          @mouseleave="groupHl = new Set()">
+                    <span class="group-chip__name">{{ g.name }}</span><span class="group-chip__n">{{ g.here }}/{{ g.total }}</span>
+                  </button>
+                </template>
+                <div class="face-pop" data-testid="rack-group-pop">
+                  <div class="face-pop__t">{{ g.name }}</div>
+                  <div class="face-pop__n">{{ groupKind(g.kind) }} · {{ t("device_groups.rack_here", { here: g.here, total: g.total }) }}</div>
+                  <button v-for="m in g.members" :key="m.device_id" type="button" class="face-pop__d" @click="goDevice(String(m.device_id))">
+                    <i class="face-pop__sw" :style="{ background: colorFor(m.type) }" />
+                    <span class="face-pop__name">{{ m.name }}</span>
+                    <span class="face-pop__m">{{ memberMeta(m) || t(`devices.type_${m.type}`) }}</span>
+                  </button>
+                  <div v-if="g.here > g.members.length" class="face-pop__n">
+                    {{ t("device_groups.rack_other_face", { n: g.here - g.members.length }) }}
+                  </div>
+                  <button v-for="r in g.elsewhere" :key="r.rack_id" type="button" class="group-pop__link"
+                          data-testid="rack-group-elsewhere" @click="goRack(r.rack_id)">
+                    {{ t("device_groups.rack_elsewhere", { n: r.count, rack: r.rack_name ?? "?" }) }}
+                  </button>
+                  <div v-if="g.unracked" class="face-pop__n">{{ t("device_groups.rack_unracked", { n: g.unracked }) }}</div>
+                  <n-button size="small" block @click="goGroup(g.id)">
+                    <template #icon><n-icon><GroupIcon /></n-icon></template>
+                    {{ t("device_groups.manage") }}
+                  </n-button>
+                </div>
+              </n-popover>
+            </template>
+          </div>
         </div>
         <!-- 另一面的提示軌：對齊 U 位／層，跨多 U 用括線；只有在有提示時才占寬度 -->
         <div v-if="railHints.length" class="face-rail" :style="{ paddingTop: 6 + topPx + 'px' }">
@@ -833,6 +938,21 @@ function switchToOther(h: FaceHint) {
 </template>
 
 <style scoped>
+/* 裝置群組軌：括線開口朝左（朝向機櫃裡的成員），每台成員一個刻度；標籤在所有軌道的右邊 */
+.group-rail { flex: 0 0 auto; }
+.group-rail__in { position: relative; }
+.group-bracket { position: absolute; width: 7px; border: 2px solid var(--grp); border-left: 0;
+  border-radius: 0 3px 3px 0; box-sizing: border-box; }
+.group-tick { position: absolute; left: -2px; width: 7px; height: 2px; margin-top: -1px; background: var(--grp); }
+.group-chip { position: absolute; transform: translateY(-50%); display: inline-flex; gap: 4px; align-items: center;
+  max-width: 146px; border: 0; border-radius: 4px; padding: 4px 6px; color: #fff; cursor: pointer;
+  font: 600 11px/1 system-ui, sans-serif; z-index: 1; }
+.group-chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.group-chip__n { flex: 0 0 auto; opacity: .9; font-variant-numeric: tabular-nums; }
+.group-chip:hover, .group-chip:focus-visible { filter: brightness(.92); box-shadow: 0 0 0 2px rgba(0, 0, 0, .15); }
+.group-pop__link { text-align: left; background: none; border: 0; padding: 2px 0; cursor: pointer; font: inherit;
+  color: var(--primary-color, #18a058); text-decoration: none; }
+.group-pop__link:hover { text-decoration: underline; }
 /* 另一面的提示軌（背 ×N／前 ×N）：框外右側，對齊 U 位；跨多 U 用左側括線 */
 .face-rail { flex: 0 0 auto; width: 58px; }
 .face-rail__in { position: relative; }

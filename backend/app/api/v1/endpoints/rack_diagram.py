@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
 from app.core.db import get_session
+from app.core.sqlin import in_values
 from app.models.address import IPAddress
 from app.models.device import Device
 from app.models.location import Rack
@@ -87,6 +88,9 @@ class RackDeviceSlot(StrictModel):
     # 層內的垂直格位：層架一層可以疊放、也可以不放滿。0 貼著層板，往上長
     rack_vslot: int = 0
     rack_vslot_span: int = RACK_SLOTS
+    # 裝置群組（堆疊／HA／叢集）：{id, name, kind, role, order, total, elsewhere: [{rack_id, rack_name, count}],
+    # unracked}；機櫃圖把同組成員用同色括線標起來，別的機櫃還有成員就標出來
+    group: dict[str, Any] | None = None
 
 
 class RackDiagram(StrictModel):
@@ -128,6 +132,38 @@ class RackDiagram(StrictModel):
     devices: list[RackDeviceSlot]
     conflicts: list[dict[str, Any]]    # 同一 U 被多 device 佔用 / 越界
 
+
+
+async def _group_info(session: AsyncSession, devices: list[Any], rack_id: uuid.UUID) -> dict[uuid.UUID, dict[str, Any]]:
+    """機櫃裡的裝置群組成員 → 群組資訊；不在這個機櫃的成員依機櫃彙總（沒放機櫃的另外算）。"""
+    from app.models.device_group import DeviceGroup
+    gids = {d.group_id for d in devices if getattr(d, "group_id", None)}
+    if not gids:
+        return {}
+    groups = {g.id: g for g in (await session.execute(
+        select(DeviceGroup).where(in_values(DeviceGroup.id, gids)))).scalars().all()}
+    members = (await session.execute(select(Device.id, Device.group_id, Device.rack_id).where(
+        in_values(Device.group_id, gids)))).all()
+    other_racks = {r for _i, _g, r in members if r and r != rack_id}
+    rack_names = dict((await session.execute(select(Rack.id, Rack.name).where(
+        in_values(Rack.id, other_racks)))).all()) if other_racks else {}
+    per_group: dict[uuid.UUID, dict[str, Any]] = {}
+    for gid in gids:
+        mine = [m for m in members if m[1] == gid]
+        away: dict[uuid.UUID, int] = {}
+        for _i, _g, r in mine:
+            if r and r != rack_id:
+                away[r] = away.get(r, 0) + 1
+        per_group[gid] = {"total": len(mine), "unracked": sum(1 for m in mine if not m[2]),
+                          "elsewhere": [{"rack_id": str(r), "rack_name": rack_names.get(r), "count": n}
+                                        for r, n in sorted(away.items(), key=lambda kv: str(rack_names.get(kv[0])))]}
+    out: dict[uuid.UUID, dict[str, Any]] = {}
+    for d in devices:
+        g = groups.get(getattr(d, "group_id", None))
+        if g is not None:
+            out[d.id] = {"id": str(g.id), "name": g.name, "kind": g.kind, "role": d.group_role,
+                         "order": d.group_order, **per_group[g.id]}
+    return out
 
 @router.get(
     "/{rack_id}/diagram",
@@ -180,6 +216,7 @@ async def rack_diagram(
             if ip.device_id is not None and ip.device_id not in fallback_ip:
                 fallback_ip[ip.device_id] = str(ip.ip).split("/")[0]
 
+    group_info = await _group_info(session, devices, rack_id)
     slots: list[RackDeviceSlot] = []
     # 占位以 (安裝方向, U) 為 key：前/後同 U 不算衝突（落地機櫃可前後各掛一台）
     # key=(安裝方向, U, 半格 L/R)：full 同時占 L+R；half 只占一邊 → 一左一右同 U 不衝突
@@ -238,6 +275,7 @@ async def rack_diagram(
                 rack_slot_span=span,
                 rack_vslot=int(getattr(d, "rack_vslot", 0) or 0),
                 rack_vslot_span=int(getattr(d, "rack_vslot_span", RACK_SLOTS) or RACK_SLOTS),
+                group=group_info.get(d.id),
             )
         )
 
@@ -332,12 +370,16 @@ async def rack_embed_svg(
     rows = (await session.execute(
         select(Device).where(Device.rack_id == rack_id)
     )).scalars().all()
+    groups = await _group_info(session, list(rows), rack_id)
     svg = build_rack_svg(
         rack.name, rack.u_height,
         [{"name": d.name, "type": d.type, "u_position": d.u_position,
           "u_size": d.u_size, "rack_slot": d.rack_slot,
           "rack_slot_span": d.rack_slot_span, "rack_face": d.rack_face,
-          "rack_vslot": d.rack_vslot, "rack_vslot_span": d.rack_vslot_span}
+          "rack_vslot": d.rack_vslot, "rack_vslot_span": d.rack_vslot_span,
+          # 裝置群組：只帶名稱與總台數（別的機櫃在哪不放進對外的圖）
+          "group": ({"id": groups[d.id]["id"], "name": groups[d.id]["name"], "total": groups[d.id]["total"]}
+                    if d.id in groups else None)}
          for d in rows],
         kind=getattr(rack, "kind", None),
         width_mm=getattr(rack, "width_mm", None),

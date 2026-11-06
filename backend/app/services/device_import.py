@@ -346,7 +346,13 @@ async def import_devices(session: AsyncSession, rows: list[list[str]], *, on_exi
         if dev is None:
             session.add(obj)
         await session.flush()                # 後面的列做 U 位檢查時要看得到這一台
-        await link_primary_ip(session, obj)
+        from app.services.device_groups import GroupError
+        try:
+            await link_primary_ip(session, obj)
+        except GroupError as exc:
+            # 主要 IP 是別的裝置群組共用的：不搶，這一台不設主要 IP，列在結果裡
+            obj.primary_ip_id = None
+            res.msg("ip_owned_by_group", ip=exc.params.get("ip", ""), group=exc.params.get("group", ""))
         res.action = "create" if dev is None else "update"
         (out.created_ids if dev is None else out.updated_ids).append(obj.id)
         if audit is not None and not dry_run:

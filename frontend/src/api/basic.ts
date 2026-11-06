@@ -129,7 +129,16 @@ export interface Device {
   rack_side?: "full" | "left" | "right" | null;
   description: string | null;
   customer_id: string | null;
+  /** 裝置群組（堆疊／HA／叢集）摘要；不在群組裡是 null */
+  group?: DeviceGroupSummary | null;
   created_at: string; updated_at: string;
+}
+export interface DeviceGroupSummary {
+  id: string; name: string; kind: string;
+  role: string | null; order: number | null;
+  member_count: number;
+  /** 這台是不是群組的代表裝置（共用 IP 掛在它上面） */
+  representative: boolean;
 }
 export async function listDevices(
   params?: { page?: number; pageSize?: number; q?: string; subnetId?: string | null },

@@ -107,11 +107,17 @@ async def require_target_access(session: AsyncSession, user: Any, target_type: s
 
 
 async def device_addresses(session: AsyncSession, device_id: uuid.UUID) -> list[TargetAddr]:
-    """裝置的所有 IP：掛在這台裝置上的，加上設為主要 IP 的那筆（可能沒掛 device_id）。"""
+    """裝置的所有 IP：掛在這台裝置上的，加上設為主要 IP 的那筆（可能沒掛 device_id）。
+
+    裝置群組的共用 IP（堆疊管理 IP、HA 虛擬 IP）：群組裡還有別台成員就不算這台的 —— 停掉一台，
+    別台還在提供這個位址。"""
     ids = [r[0] for r in (await session.execute(text("""
         SELECT a.id FROM ip_addresses a WHERE a.device_id = :d
+          AND NOT EXISTS (SELECT 1 FROM devices m WHERE m.group_id = a.device_group_id AND m.id <> :d)
         UNION
         SELECT d.primary_ip_id FROM devices d WHERE d.id = :d AND d.primary_ip_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM ip_addresses a JOIN devices m ON m.group_id = a.device_group_id
+                          WHERE a.id = d.primary_ip_id AND m.id <> :d)
     """), {"d": device_id})).all()]
     out = []
     for i in ids:

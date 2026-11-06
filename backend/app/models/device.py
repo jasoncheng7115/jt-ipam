@@ -58,6 +58,11 @@ class Device(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     custom_fields: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # 裝置群組（堆疊／HA／叢集，0241）：在哪一組、角色、堆疊序號。見 models/device_group.py
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="SET NULL"), index=True)
+    group_role: Mapped[str | None] = mapped_column(String(16))
+    group_order: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (
         CheckConstraint(

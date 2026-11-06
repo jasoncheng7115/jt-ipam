@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import String, func, or_, select
+from sqlalchemy import false as sa_false
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
@@ -17,7 +18,7 @@ from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.os_fingerprint import wazuh_os_display
 from app.core.sqlin import in_values
-from app.core.ui_error import detail_of
+from app.core.ui_error import detail_of, ui_detail
 from app.models.device import Device
 from app.models.librenms import LibreNMSDevice
 from app.models.vlan import VLAN, DeviceVLAN
@@ -328,7 +329,8 @@ async def list_devices(
 ) -> Paginated[DeviceRead]:
     """裝置清單。
 
-    `q` 是**伺服器端**搜尋（名稱／型號／序號／製造商，不分大小寫）。
+    `q` 是**伺服器端**搜尋（名稱／FQDN／型號／序號／說明，以及連到這台的 IP，不分大小寫）。
+    IP 只比對看得到的位址，不然搜一個看不到的 IP 就能知道它掛在哪台裝置上。
     這一支一定要有：畫面只載得下前幾百筆，若搜尋只在已載入的那幾筆上做，
     使用者新增的裝置只要排序落在載入範圍之外，就會「列表看不到、用名字也搜不到」，
     但從機櫃點進去卻看得到 —— 客戶就是這樣回報的。
@@ -336,12 +338,20 @@ async def list_devices(
     stmt = select(Device)
     cstmt = select(func.count()).select_from(Device)
     if q:
+        from app.models.address import IPAddress as _QIP
+        from app.services.permission import visible_ids as _vis_ids
         like = f"%{q.strip()}%"
+        ip_hit = select(_QIP.id).where(_QIP.device_id == Device.id, func.host(_QIP.ip).ilike(like))
+        q_vis_ip = await _vis_ids(session, user=_user, object_type="ip")
+        if q_vis_ip is not None:
+            ip_hit = ip_hit.where(in_values(_QIP.id, q_vis_ip) if q_vis_ip else sa_false())
         cond = or_(
             Device.name.ilike(like),
+            Device.fqdn.ilike(like),
             Device.model.ilike(like),
             Device.serial.ilike(like),
             Device.description.ilike(like),
+            ip_hit.exists(),
         )
         stmt = stmt.where(cond); cstmt = cstmt.where(cond)
     if type is not None:
@@ -399,6 +409,11 @@ async def list_devices(
             if adev != r.id:   # 還沒連到本裝置 → 可一鍵關聯
                 d.ip_match_id = str(aid)
         items.append(d)
+    # 裝置群組（堆疊／HA／叢集）摘要：清單的「群組」欄
+    from app.services.device_groups import summaries as _group_summaries
+    gs = await _group_summaries(session, list(rows))
+    for d, r in zip(items, rows, strict=False):
+        d.group = gs.get(r.id)
     return Paginated[DeviceRead](
         items=items, total=total, page=page, page_size=page_size,
     )
@@ -552,6 +567,8 @@ async def get_device(
     d.virt_vm = await vm_match_for(session, ip=d.ip, macs=macs or None)
     if d.virt_vm:
         d.is_virtual = True
+    from app.services.device_groups import summaries as _group_summaries
+    d.group = (await _group_summaries(session, [obj])).get(obj.id)
     return d
 
 
@@ -564,6 +581,7 @@ async def create_device(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DeviceRead:
     # 自訂欄位、類型來源、機櫃 U 位防呆、主要 IP 雙向連結：與 AI 工具 create_device 共用（services/device_write）
+    from app.services.device_groups import GroupError
     from app.services.device_write import PlacementError, create_device_checked
     try:
         obj = await create_device_checked(session, payload)
@@ -571,6 +589,9 @@ async def create_device(
         raise HTTPException(status_code=400, detail=detail_of(exc, "custom_field_error")) from exc
     except PlacementError as exc:
         raise HTTPException(status_code=409, detail=detail_of(exc, "rack_placement_error")) from exc
+    except GroupError as exc:
+        await session.rollback()
+        raise HTTPException(exc.status, detail=ui_detail(exc.code, str(exc), **exc.params)) from exc
     await append_audit(
         session,
         actor_user_id=str(user.id),
@@ -619,7 +640,12 @@ async def update_device(
         raise HTTPException(status_code=409, detail=detail_of(exc, "rack_placement_error")) from exc
     # 設了主要 IP → 同時把該 IP 的 device_id 指回本裝置（雙向連結，IP 清單/拓樸才接得起來）
     if changes.get("primary_ip_id"):
-        await link_primary_ip(session, obj)
+        from app.services.device_groups import GroupError
+        try:
+            await link_primary_ip(session, obj)
+        except GroupError as exc:
+            await session.rollback()
+            raise HTTPException(exc.status, detail=ui_detail(exc.code, str(exc), **exc.params)) from exc
     await append_audit(
         session,
         actor_user_id=str(user.id),

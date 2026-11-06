@@ -22,7 +22,17 @@ export interface DomainFields {
   expires_at?: string | null; auto_renew?: boolean | null;
 }
 
+/** 探測結果（不存檔）：新增網域時填表用 */
+export interface DomainProbe {
+  name: string; rdap_error: string | null;
+  registrar: string | null; registrar_url: string | null; registered_at: string | null; expires_at: string | null;
+  status: string[]; nameservers: string[]; dns_provider: string | null;
+  mx: string[]; mail_provider: string | null; spf: boolean; dmarc: boolean; website: boolean;
+}
+
 export const Domains = {
+  probe: (name: string) =>
+    apiClient.get<DomainProbe>("/api/v1/domains/probe", { params: { name } }).then((r) => r.data),
   async list(): Promise<Domain[]> {
     const { data } = await apiClient.get<{ items: Domain[] }>("/api/v1/domains", { params: { page_size: 500 } });
     return data.items;

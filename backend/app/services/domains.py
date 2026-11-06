@@ -62,6 +62,7 @@ def normalize_domain(raw: str) -> str:
 @dataclass
 class RdapDomain:
     registrar: str | None = None
+    registrar_url: str | None = None
     registered_at: datetime | None = None
     expires_at: datetime | None = None
     nameservers: list[str] = field(default_factory=list)
@@ -93,8 +94,34 @@ def parse_rdap_domain(d: dict[str, Any]) -> RdapDomain:
     for e in d.get("entities") or []:
         if "registrar" in (e.get("roles") or []):
             out.registrar = _entity_name(e) or e.get("handle")
+            out.registrar_url = _registrar_url(e)
             break
     return out
+
+
+def _http_url(v: Any) -> str | None:
+    """會在畫面上變成連結：只收 http / https。"""
+    s = str(v or "").strip()
+    return s[:2048] if s.lower().startswith(("http://", "https://")) else None
+
+
+def _registrar_url(e: dict[str, Any]) -> str | None:
+    """註冊商網址：先看 vCard 的 url，再看 links 的 about。
+
+    指回 RDAP 伺服器的連結不算（實測 Gandi 的 about／related 都是 rdap.gandi.net，那不是註冊商的網站）。
+    """
+    def ok(v: Any) -> str | None:
+        u = _http_url(v)
+        return u if u and "rdap" not in u.lower() else None
+    vcard = e.get("vcardArray")
+    if isinstance(vcard, list) and len(vcard) > 1 and isinstance(vcard[1], list):
+        for prop in vcard[1]:
+            if isinstance(prop, list) and len(prop) >= 4 and prop[0] == "url" and ok(prop[3]):
+                return ok(prop[3])
+    for link in e.get("links") or []:
+        if str(link.get("rel") or "").lower() == "about" and ok(link.get("href")):
+            return ok(link.get("href"))
+    return None
 
 
 # 從 NS 推測 DNS 託管在哪家（後綴比對；推不出來就不寫，畫面標「推測」）
@@ -103,6 +130,7 @@ _DNS_PROVIDERS: tuple[tuple[str, str], ...] = (
     ("awsdns-", "AWS Route 53"),
     ("azure-dns.", "Azure DNS"),
     ("googledomains.com", "Google Domains"),
+    ("google.com", "Google"),
     ("ns-cloud-", "Google Cloud DNS"),
     ("domaincontrol.com", "GoDaddy"),
     ("registrar-servers.com", "Namecheap"),
@@ -122,6 +150,31 @@ _DNS_PROVIDERS: tuple[tuple[str, str], ...] = (
     ("pchome.com.tw", "PChome"),
     ("gname.net", "Gname"),
 )
+
+
+# 從 MX 推測郵件服務（後綴比對）
+_MAIL_PROVIDERS: tuple[tuple[str, str], ...] = (
+    ("google.com", "Google Workspace"),
+    ("googlemail.com", "Google Workspace"),
+    ("protection.outlook.com", "Microsoft 365"),
+    ("zoho.", "Zoho Mail"),
+    ("messagingengine.com", "Fastmail"),
+    ("pphosted.com", "Proofpoint"),
+    ("mimecast.com", "Mimecast"),
+    ("secureserver.net", "GoDaddy"),
+    ("mailgun.org", "Mailgun"),
+    ("icloud.com", "iCloud Mail"),
+)
+
+
+def infer_mail_provider(mx: list[str] | None) -> str | None:
+    found: list[str] = []
+    for rec in mx or []:
+        host = rec.split()[-1].lower().rstrip(".")
+        for pat, name in _MAIL_PROVIDERS:
+            if pat in host and name not in found:
+                found.append(name)
+    return " / ".join(found) or None
 
 
 def infer_dns_provider(nameservers: list[str] | None) -> str | None:
@@ -349,3 +402,71 @@ __all__ = [
     "refresh_all",
     "summary_for_ai",
 ]
+
+
+# ── 探測（新增網域時先查一次，結果填進表單；不存檔）──────────────────────────────
+
+def _dns_query(name: str, rdtype: str) -> list[str]:
+    """系統解析器查一筆，查不到或出錯回空清單（探測只是幫忙填欄位，不因 DNS 失敗整個失敗）。"""
+    import dns.resolver
+    try:
+        res = dns.resolver.Resolver()
+        res.lifetime = res.timeout = 5.0
+        ans = res.resolve(name, rdtype)
+    except Exception:
+        return []
+    if rdtype == "MX":
+        return sorted(f"{r.preference} {r.exchange.to_text().rstrip('.')}" for r in ans)
+    if rdtype == "NS":
+        return sorted(r.target.to_text().rstrip(".").lower() for r in ans)
+    if rdtype == "TXT":
+        return ["".join(x.decode() if isinstance(x, bytes) else x for x in r.strings) for r in ans]
+    return [r.to_text() for r in ans]
+
+
+async def probe(name: str) -> dict[str, Any]:
+    """查 RDAP（註冊商、網址、註冊日、到期日、NS）與 DNS（NS、MX、SPF、DMARC、網站）。
+
+    RDAP 查不到（沒有服務、查無、連不上）只記代碼、照樣回 DNS 的部分；輸入不是網域才丟例外。
+    """
+    n = normalize_domain(name)
+    rd: RdapDomain | None = None
+    rdap_error: str | None = None
+    try:
+        rd = await lookup_domain(n)
+    except DomainInputError:
+        raise
+    except DomainError as exc:
+        rdap_error = exc.code or "rdap_failed"
+
+    def _dns() -> dict[str, Any]:
+        txt = _dns_query(n, "TXT")
+        return {
+            "ns": _dns_query(n, "NS"),
+            "mx": _dns_query(n, "MX"),
+            "spf": any(t.lower().startswith("v=spf1") for t in txt),
+            "dmarc": any(t.lower().startswith("v=dmarc1") for t in _dns_query(f"_dmarc.{n}", "TXT")),
+            "website": any(_dns_query(h, t) for h in (n, f"www.{n}") for t in ("A", "AAAA")),
+        }
+
+    try:
+        dns_part = await asyncio.wait_for(asyncio.to_thread(_dns), timeout=25)
+    except TimeoutError:
+        dns_part = {"ns": [], "mx": [], "spf": False, "dmarc": False, "website": False}
+    nameservers = (rd.nameservers if rd and rd.nameservers else dns_part["ns"])
+    return {
+        "name": n,
+        "rdap_error": rdap_error,
+        "registrar": (rd.registrar or None) if rd else None,
+        "registrar_url": rd.registrar_url if rd else None,
+        "registered_at": rd.registered_at if rd else None,
+        "expires_at": rd.expires_at.date() if rd and rd.expires_at else None,
+        "status": rd.status if rd else [],
+        "nameservers": nameservers,
+        "dns_provider": infer_dns_provider(nameservers),
+        "mx": dns_part["mx"],
+        "mail_provider": infer_mail_provider(dns_part["mx"]),
+        "spf": dns_part["spf"],
+        "dmarc": dns_part["dmarc"],
+        "website": dns_part["website"],
+    }

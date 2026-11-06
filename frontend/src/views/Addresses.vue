@@ -287,7 +287,7 @@ const allColumns: DataTableColumns<IPAddress> = [
   },
   {
     title: () => t("cols.device"), key: "device", width: 150, ellipsis: { tooltip: true }, sorter: true,
-    render: (r) => renderDeviceLink(r, (id) => { void router.push({ name: "device-detail", params: { id } }); }),
+    render: (r) => renderDeviceLink(r, (id) => { void router.push({ name: "device-detail", params: { id } }); }, t),
   },
   {
     title: () => t("common.description"), key: "description", width: 200, ellipsis: { tooltip: true },

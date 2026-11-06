@@ -139,6 +139,20 @@ async def list_domains(
     return Paginated[DomainOut](items=[_out(d) for d in rows], total=total, page=page, page_size=page_size)
 
 
+@router.get("/probe", dependencies=[Depends(require_admin)])
+async def probe_domain(
+    _user: CurrentUser, name: Annotated[str, Query(min_length=1, max_length=300)],
+) -> dict[str, Any]:
+    """探測（不存檔）：新增網域時先按「探測」，查到的註冊商、到期日、DNS 託管、郵件服務填進表單。
+
+    會對外查 RDAP 與 DNS，所以跟「重新查 RDAP」一樣只限管理員。RDAP 查不到時 `rdap_error` 寫原因，DNS 的部分照樣回。
+    """
+    try:
+        return await svc.probe(name)
+    except svc.DomainInputError as exc:
+        raise HTTPException(422, detail=ui_detail(exc.code or "domain_invalid", str(exc), **exc.params)) from exc
+
+
 @router.post("", response_model=DomainOut, status_code=201, dependencies=[Depends(require_admin)])
 async def create_domain(
     payload: DomainCreate, user: CurrentUser, request: Request,

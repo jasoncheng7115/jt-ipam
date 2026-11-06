@@ -252,6 +252,14 @@ async def build_topology(
                 allowed_device_ids.add(str(did))
 
     # ── nodes：所有 device（選用依 location / subnet 過濾） ──
+    # 裝置群組（堆疊／HA）：子網路篩選選進一台成員，同組其他成員一起帶進來 —— 共用 IP 只連到代表裝置，
+    # 不這樣做另一台堆疊成員就不會出現在圖上
+    if allowed_device_ids:
+        gids = {g for (g,) in (await session.execute(select(Device.group_id).where(
+            in_values(Device.id, {uuid.UUID(x) for x in allowed_device_ids}), Device.group_id.is_not(None)))).all()}
+        if gids:
+            allowed_device_ids |= {str(i) for (i,) in (await session.execute(
+                select(Device.id).where(in_values(Device.group_id, gids)))).all()}
     dstmt = select(Device)
     if location_id is not None:
         dstmt = dstmt.where(Device.location_id == location_id)
@@ -285,9 +293,15 @@ async def build_topology(
             pip_map[iid] = str(ipval).split("/")[0]
             if mac:
                 mac_map[iid] = str(mac)
+    # 裝置群組：節點帶群組資訊，前端把同組成員框在一起
+    from app.models.device_group import DeviceGroup
+    gids = {d.group_id for d in devices if d.group_id}
+    groups = {g.id: g for g in (await session.execute(
+        select(DeviceGroup).where(in_values(DeviceGroup.id, gids)))).scalars().all()} if gids else {}
     device_objs: dict[str, Device] = {}
     for d in devices:  # type: ignore[assignment]
         device_objs[str(d.id)] = d  # type: ignore[assignment]
+        grp = groups.get(d.group_id) if d.group_id else None
         nodes[str(d.id)] = {
             "data": {
                 "id": str(d.id),
@@ -300,6 +314,11 @@ async def build_topology(
                 "mac": mac_map.get(d.primary_ip_id) if d.primary_ip_id else None,
                 "rack_id": str(d.rack_id) if d.rack_id else None,
                 "location_id": str(d.location_id) if d.location_id else None,
+                "group_id": str(grp.id) if grp else None,
+                "group_name": grp.name if grp else None,
+                "group_kind": grp.kind if grp else None,
+                "group_role": d.group_role if grp else None,
+                "group_order": d.group_order if grp else None,
             }
         }
 

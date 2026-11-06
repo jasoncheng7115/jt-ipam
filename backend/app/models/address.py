@@ -45,6 +45,10 @@ class IPAddress(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("devices.id", ondelete="SET NULL"),
     )
+    # 共用給裝置群組（堆疊管理 IP、HA 虛擬 IP；0241）：設了它，device_id 一律是群組的代表裝置
+    # （services/device_groups 維持；沒經過檢查的寫入在存檔時改回）
+    device_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("device_groups.id", ondelete="SET NULL"), index=True)
     switch_port: Mapped[str | None] = mapped_column(Text)
     # FDB 推得的交換器位置是否高信心（該 port 僅一個 MAC = 直連存取埠；
     # 多 MAC（uplink/trunk）→ False，前端以灰色 + tooltip 標示）

@@ -118,6 +118,8 @@ class IPAddressUpdate(StrictModel):
     mac: str | None = None
     owner: Annotated[str | None, Field(max_length=128)] = None
     device_id: uuid.UUID | None = None
+    # 共用給裝置群組：給群組 id＝共用給它（設備欄自動是代表裝置）；給 null＝退出群組（留在原本的代表裝置上）
+    device_group_id: uuid.UUID | None = None
     switch_port: Annotated[str | None, Field(max_length=64)] = None
     exclude_from_ping: bool | None = None
     liveness_from_device: bool | None = None
@@ -257,5 +259,8 @@ class IPAddressRead(IPAddressBase):
     mac_vendor: str | None = None
     # 關聯裝置名稱（清單顯示用，前端不用再查）
     device_name: str | None = None
+    # 共用給裝置群組（堆疊／HA；device_id 是群組的代表裝置）
+    device_group_id: uuid.UUID | None = None
+    device_group_name: str | None = None
     created_at: datetime
     updated_at: datetime

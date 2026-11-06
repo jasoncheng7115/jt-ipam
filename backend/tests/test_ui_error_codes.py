@@ -33,6 +33,9 @@ def _codes_in_source() -> dict[str, set[str]]:
                 picked.append(node.args[0])
             if name == "detail_of" and len(node.args) > 1:
                 picked.append(node.args[1])
+            # 裝置群組的服務層例外：GroupError(status, code, message, **params)，端點轉成 ui_detail
+            if name == "GroupError" and len(node.args) > 1:
+                picked.append(node.args[1])
             picked += [kw.value for kw in node.keywords if kw.arg == "code"]
             for expr in picked:
                 # f-string 組出來的代碼（check_size／ws_timeouts）不在這裡檢查，

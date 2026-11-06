@@ -16,9 +16,26 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * 模型常把箭頭寫成 LaTeX（「進階 $\rightarrow$ 電路」，使用者 2026-11-06 回報），我們不渲染數學式，
+ * 原樣顯示就是一串怪字。只轉 `$\命令$` 這種單一個認得的符號；不認得的、一般的錢字號都不動。
+ */
+const LATEX_SYMBOLS: Record<string, string> = {
+  rightarrow: "→", to: "→", leftarrow: "←", gets: "←", leftrightarrow: "↔", longrightarrow: "⟶",
+  Rightarrow: "⇒", Leftarrow: "⇐", Leftrightarrow: "⇔", implies: "⇒", mapsto: "↦",
+  uparrow: "↑", downarrow: "↓", times: "×", cdot: "·", div: "÷", pm: "±",
+  le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", infty: "∞",
+  checkmark: "✓", ldots: "…", dots: "…", bullet: "•", degree: "°",
+};
+function latexSymbols(s: string): string {
+  return s.replace(/\$\s*\\([A-Za-z]+)\s*(?:\{\})?\s*\$/g, (m, cmd: string) => LATEX_SYMBOLS[cmd] ?? m);
+}
+
 function inline(s: string): string {
   // 行內 code(先處理，避免內部被其它規則動到)
   s = s.replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
+  // LaTeX 符號：程式碼裡的不動
+  s = s.split(/(<code>[\s\S]*?<\/code>)/).map((part, i) => (i % 2 ? part : latexSymbols(part))).join("");
   // 連結 [text](http...)
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
     (_m, t, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${t}</a>`);

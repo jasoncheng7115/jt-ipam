@@ -1300,6 +1300,7 @@ what a console is allowed to do.
   a wrong `JT_IPAM_PIN` in the config makes the agent fail without the server ever receiving its key, and the console relay cannot open either; an old scan agent
   (`JT_IPAM_INSECURE=1` in its config) runs the "Already installed" command → no key needed, becomes "Pinned", subnets and relay settings kept; re-running with
   "Verify with system CAs" clears the fingerprint from the config; self-update: a new version with a bad signature logs "SIGNATURE CHECK FAILED" and is not installed
+- [ ] **LaTeX symbols in AI answers** (`frontend/src/utils/__tests__/markdown.test.ts`): `$\rightarrow$`, `$\to$`, `$\times$` from the model show as →, ×; code and plain dollar amounts ($5) are left alone
 - [ ] **AI chat "Go to" buttons** (`tests/test_ui_map.py`, `e2e/chat-page-links.spec.ts`): ask "where are the scan agents" → a "Go to Scan agents" button under the answer opens
   that page; ask about jump hosts → the button opens the jump hosts tab on the scan agents page; ask about a field that only exists on a detail page → the button opens the
   list; a regular account asking about an admin-only page gets the location but no button; reopening the conversation from the history shows the buttons again
@@ -1313,6 +1314,12 @@ what a console is allowed to do.
   Windows (iis or store) → the server certificate is in Local Computer › Personal with its key, the intermediate in "Intermediate Certification Authorities", the root not in
   "Trusted Root" and the sync result says "root … not installed"; a second sync adds nothing twice; with `DEPLOY_<N>_INSTALL_ROOT=true` the root goes to "Trusted Root";
   the chain check in the sync result: without INSTALL_ROOT "root … came with the certificate but is not installed", with it "chain verified", server certificate only "CHAIN INCOMPLETE" naming the missing issuer
+- [ ] **DNS comparison group exclusions** (`tests/test_dns_compare_exclusions.py`, `e2e/dns-compare-groups.spec.ts`): "Exclude DHCP ranges" is off for a new group;
+  an A record on one server only whose IP is in a DHCP pool is a difference while it is off and disappears right after ticking it and saving (PTR too); ranges with
+  another purpose are unaffected; `*.lab.example.com` in "Names not compared" leaves out the names below it but not lab.example.com itself; a single IP, a CIDR and a
+  `start-end` range in "IPs not compared" all work; an entry that cannot be read (not-an-ip, start above end, IPv4 and IPv6 in one range) is named in the error and
+  nothing is saved; changing exclusions is audited
+- [ ] **Dashboard IP indicator**: with the IP usage card on two rows (4 subnets) the indicator card's content fills it with no blank area below; phone width unchanged
 - [ ] **Several DHCP ranges in one subnet are one pool** (`tests/test_dhcp_pool_multi_range.py`, issue #57): a FortiGate interface with two ip-ranges (or a Kea subnet
   with two pools), first range full and second mostly free → the war room capacity shows one pool card with each range on its own line, the combined usage and
   no "almost full"; only when both are nearly full does the notification fire, naming both ranges; the subnet Address ranges page still has two rows;
@@ -1322,6 +1329,7 @@ what a console is allowed to do.
 - [ ] **Date picker buttons** (`tests/test_date_picker_icons.py`, `frontend/e2e/maintenance.spec.ts`): open the date pickers on maintenance, domains,
   leased equipment, circuits and IP change assessment; clear / now / confirm have icons and the calendar starts on Sunday
 - [ ] **Domain management** (`tests/test_domains.py`, `frontend/e2e/domains.spec.ts`, customer wishlist): "Advanced > Domains" add (case, trailing
+  - [ ] **Probe** (adding a domain, next to the name): enter example.com and press Probe; registrar, registrar website, DNS hosting, expiry and services fill the empty fields, filled ones are kept and nothing is saved; a TLD without RDAP (.io) shows why and still fills the DNS part; a non-admin calling `GET /domains/probe` gets 403; the registrar website is never the RDAP server address
   dot, URL and IDN names are normalised; non-domains are rejected), an entered expiry shows "N days left" and "entered" (site time zone, no off-by-one);
   .com / .tw return registrar, expiry, nameservers and status, .io says "no RDAP"; an unreachable registry keeps the last result; Cloudflare
   nameservers show "Cloudflare (inferred)" and an entered provider wins; the registrar URL accepts only http / https; adding several skips existing,
@@ -2413,6 +2421,38 @@ happy path of "an upload succeeded" is not enough.
   the `put_ready` line entirely, uploads never started, and the symptom was **identical** to the
   bug being fixed, easy to read as "still broken" rather than "newly broken". Neither type
   checking nor unit tests can see this.
+
+## 7n. Device groups (stack / HA / cluster): **whenever device groups, IP device links, the rack diagram, topology, change impact or anomaly detection change**
+
+> A customer had two N2048P switches in one stack: there was no way to mark them as one unit, and the
+> stack management IP could only belong to one of them. A group keeps each member as its own device
+> (rack position, ports, serial) and puts the shared IPs on the group, attached to the representative.
+
+- [ ] **Create** (Devices → Groups tab, admin only): name, type (stack / HA active-passive / HA active-active /
+  cluster), members with role and order, representative, shared IPs. A device already in another group is
+  409 with its name; an unknown role or type is 422; non-admins see the list but no create / edit / delete
+  (`tests/test_device_groups.py`, `e2e/device-groups.spec.ts`)
+- [ ] **Shared IP stays on the representative**: the IP's device field shows the representative and is locked in
+  the IP form ("This IP is shared by a group"); setting another device from the IP form, the device form or a
+  device import is refused with 409 `ip_owned_by_group`; a sync or job that writes the device anyway is put
+  back on the representative. Changing the representative moves every shared IP with it; deleting the group
+  leaves the IPs on the last representative
+- [ ] **IP form "Share with group"** (admin): picking a group moves the IP to its representative; clearing it
+  keeps the device. The IP detail shows "Shared by group "X"", the IP lists show "Group shared" next to the device
+- [ ] **Rack diagram**: members in the same rack get one bracket in the group colour with "name here/total";
+  clicking it lists the members (role, order), "N more in rack B" (clicking switches to that rack), "not in any
+  rack" and "on the other side"; hovering highlights the members. SVG / PNG / draw.io export and the public
+  embedded SVG draw the same bracket; a rack without groups exports byte-for-byte as before
+- [ ] **Help** button next to Create (everyone sees it): explains what a group is, when to use each type, the fields, where groups show and the rules
+- [ ] **Member picker / device search**: typing an IP or FQDN finds the device (Devices page too, including a non-primary IP and `/devices?q=<ip>`); an IP you cannot see does not reveal its device; when nothing matches, the picker says members must be devices and a host only under virtualization / IP addresses has to be added first (nothing is created automatically). Switching the type to HA active / passive makes the first member "Primary" and the others "Standby"
+- [ ] **Device list / detail**: the Group column (name, role, order) opens the Groups tab; the detail page has a
+  "Device group" card with the other members, rack positions and the shared IPs
+- [ ] **Topology**: members are joined by an orange line labelled with the group name (legend "Device groups");
+  the layout is unchanged
+- [ ] **Change impact**: maintaining one member does not report the shared IP as affected; maintaining all members does
+- [ ] **Anomaly detection**: a shared IP moving between members' MACs is not MAC flapping and not a stale device link; moving to a MAC outside the group still is
+- [ ] **System transfer**: groups, members and shared IPs come back after export / import (replace and merge)
+- [ ] **AI**: get_device returns the group (members, role, shared IPs), get_ip_detail returns `device_group`
 
 ## 8. Recent feature spot-checks
 

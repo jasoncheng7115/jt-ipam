@@ -2,7 +2,7 @@
  * IP 清單共用欄位（子網路詳細頁與 IP 位址頁共用）：算法只有一份，兩頁的「最後出現」「失聯」「DHCP」一致。
  */
 import { describe, expect, it } from "vitest";
-import { dhcpInfoFor, isProbed, lastSeenText, staleDays, staleDaysLabel, toDhcpRanges } from "../ipColumns";
+import { dhcpInfoFor, isProbed, lastSeenText, renderDeviceLink, staleDays, staleDaysLabel, toDhcpRanges } from "../ipColumns";
 
 const t = (k: string, p?: Record<string, unknown>) => (p ? `${k}(${JSON.stringify(p)})` : k);
 const day = 86400000;
@@ -60,5 +60,17 @@ describe("ipToBigInt／rangeContaining（手動新增落在保留／DHCP 範圍�
     expect(rangeContaining("198.51.100.227", ranges)?.name).toBe("metallb");
     expect(rangeContaining("198.51.100.231", ranges)).toBeNull();
     expect(rangeContaining("2001:db8::20", ranges)?.name).toBe("v6");
+  });
+
+  it("裝置欄：共用給裝置群組的 IP 在裝置名稱旁邊標「群組共用」，沒有群組就只有連結", () => {
+    const plain: any = renderDeviceLink({ device_id: "d1", device_name: "sw-1" } as any, () => {}, t);
+    expect(plain.type).toBe("a");
+    const shared: any = renderDeviceLink(
+      { device_id: "d1", device_name: "sw-1", device_group_name: "N2048P" } as any, () => {}, t);
+    expect(shared.type).toBe("span");
+    const tag = shared.children[1];
+    expect(tag.children.default()).toBe("device_groups.shared_tag");
+    expect(tag.props.title).toContain("N2048P");
+    expect(renderDeviceLink({ device_id: null } as any, () => {}, t)).toBe("—");
   });
 });

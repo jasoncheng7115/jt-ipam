@@ -532,7 +532,8 @@ def _build(name: str, u_height: int, devices: list[dict[str, Any]],
             f'stroke="#dddddd" stroke-width="0.5"/>'
         )
 
-    for dev in devices:
+    geoms: dict[int, tuple[float, float]] = {}
+    for idx, dev in enumerate(devices):
         pos, size = dev.get("u_position"), dev.get("u_size")
         if not pos or not size:
             continue                      # 沒有位置的裝置不畫（畫了也不知道畫在哪）
@@ -550,6 +551,7 @@ def _build(name: str, u_height: int, devices: list[dict[str, Any]],
             y_bot = y_top + hgt
             hgt = vspan * cell
             y_top = y_bot - (v0 + vspan) * cell
+        geoms[idx] = (y_top + 1, hgt - 2)
         x, w, cx = _part_geom(dev, rack_left, COL_W)
         color = _COLORS.get(str(dev.get("type") or ""), "url(#rd-other)")
         p.append(
@@ -576,5 +578,73 @@ def _build(name: str, u_height: int, devices: list[dict[str, Any]],
                 f'font-weight="bold" fill="#ffffff">R</text>'
             )
     p.extend(over)
+    marks = _group_marks(devices, geoms)
+    if marks:
+        # 有群組才加寬（沒有群組的嵌入圖逐位元組不變）：右側多一條括線軌道＋標籤
+        lanes = max(m["lane"] for m in marks) + 1
+        extra = lanes * _GROUP_LANE_PX + _GROUP_LABEL_PX
+        new_w = round(width + extra, 2)
+        p[0] = p[0].replace(f'width="{width}"', f'width="{new_w}"', 1).replace(
+            f'viewBox="0 0 {width} {height}"', f'viewBox="0 0 {new_w} {height}"', 1)
+        bg = f'<rect x="0" y="0" width="{width}" height="{height}" fill="#ffffff"/>'
+        p = [f'<rect x="0" y="0" width="{new_w}" height="{height}" fill="#ffffff"/>' if x == bg else x for x in p]
+        rail_x = rack_left + COL_W + edge + 6
+        for m in marks:
+            bx = rail_x + m["lane"] * _GROUP_LANE_PX
+            y0, h = m["y"], m["h"]
+            ticks = "".join(f'<line x1="{bx}" y1="{y0 + t}" x2="{bx + 6}" y2="{y0 + t}" stroke="{m["color"]}" '
+                            f'stroke-width="2"/>' for t in m["ticks"])
+            lx = rail_x + lanes * _GROUP_LANE_PX + 4
+            lw = min(_GROUP_LABEL_PX - 8, len(m["label"]) * 6.4 + 12)
+            ly = y0 + h / 2
+            p.append(f'<g class="rack-group"><path d="M{bx} {y0} H{bx + 6} V{y0 + h} H{bx}" fill="none" '
+                     f'stroke="{m["color"]}" stroke-width="2"/>{ticks}'
+                     f'<rect x="{lx}" y="{ly - 9}" width="{lw}" height="18" rx="4" fill="{m["color"]}"/>'
+                     f'<text x="{lx + 6}" y="{ly + 4}" font-size="11" font-weight="bold" fill="#ffffff">'
+                     f'{_esc(m["label"])}</text></g>')
     p.append("</svg>")
     return "\n".join(p)
+
+
+# ── 裝置群組的括線（與前端 utils/rackGroups.ts、rackGraphicsExport.ts 同一套規則）─────────
+_GROUP_LANE_PX = 10
+_GROUP_LABEL_PX = 130
+_GROUP_PALETTE = ("#0f9d8a", "#d9822b", "#c2185b", "#7b5cd6", "#2e7d32", "#b8860b", "#00838f", "#ad1457")
+
+
+def _group_color(gid: str) -> str:
+    h = 0
+    for ch in gid:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return _GROUP_PALETTE[h % len(_GROUP_PALETTE)]
+
+
+def _group_marks(devices: list[dict[str, Any]], geoms: dict[int, tuple[float, float]]) -> list[dict[str, Any]]:
+    """devices 的 group = {id, name, total}；geoms 是裝置（依 devices 的索引）畫出來的 (y_top, 高度)。"""
+    by: dict[str, dict[str, Any]] = {}
+    for i, dev in enumerate(devices):
+        g = dev.get("group")
+        if not g or i not in geoms:
+            continue
+        e = by.setdefault(str(g["id"]), {"g": g, "boxes": []})
+        e["boxes"].append(geoms[i])
+    marks: list[dict[str, Any]] = []
+    for gid, e in by.items():
+        y = min(b[0] for b in e["boxes"])
+        bottom = max(b[0] + b[1] for b in e["boxes"])
+        name = str(e["g"].get("name") or "")
+        name = f"{name[:15]}…" if len(name) > 16 else name
+        total = int(e["g"].get("total") or len(e["boxes"]))
+        marks.append({"id": gid, "color": _group_color(gid), "label": f"{name} {len(e['boxes'])}/{total}",
+                      "y": y, "h": max(10.0, bottom - y), "lane": 0,
+                      "ticks": [b[0] + b[1] / 2 - y for b in e["boxes"]]})
+    # 軌道：由上往下排，跟已經放的任何一條重疊就往外挪一條
+    marks.sort(key=lambda m: (m["y"], m["label"]))
+    placed: list[dict[str, Any]] = []
+    for m in marks:
+        lane = 0
+        while any(q["lane"] == lane and q["y"] <= m["y"] + m["h"] and m["y"] <= q["y"] + q["h"] for q in placed):
+            lane += 1
+        m["lane"] = lane
+        placed.append(m)
+    return marks

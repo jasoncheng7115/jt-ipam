@@ -539,7 +539,7 @@ const allIpColumns = computed<DataTableColumns<IPAddress>>(() => autoSort([
             : h("span", { style: "font-family:monospace;word-break:break-all" }, (r.switch_port ?? "").replace(" / ", "@")) }) },
   { title: t("cols.device"), key: "device", width: 150, ellipsis: { tooltip: true },
     render: (r) => (r as any).__gap ? "—"
-      : renderDeviceLink(r, (id) => { void router.push({ name: "device-detail", params: { id } }); }) },
+      : renderDeviceLink(r, (id) => { void router.push({ name: "device-detail", params: { id } }); }, t) },
   { title: t("common.description"), key: "description", width: 200,
     ellipsis: { tooltip: true }, render: (r) => (r as any).__um ? umSeenText((r as any).um) : (r.description ?? "") },
   { title: t("addresses.last_seen"), key: "last_seen", width: 170,

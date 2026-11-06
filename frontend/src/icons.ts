@@ -50,6 +50,7 @@ import {
   Internet,
   IpAddressTag,
   Server,
+  Union,
   Windows,
   DataTransferBoth,
   DatabaseExport,
@@ -388,3 +389,5 @@ export const GraphRingsIcon = Rings;          // 依影響分層：同心圈
 export const OfflineIcon = WifiOff;
 export const UnauthorizedIcon = UserXmark;
 export const BackupIcon = DatabaseBackup;
+// 裝置群組（堆疊／HA／叢集，2026-11-05）：兩個重疊的形狀＝幾台合成一組
+export const GroupIcon = Union;

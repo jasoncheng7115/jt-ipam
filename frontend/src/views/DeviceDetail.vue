@@ -25,6 +25,7 @@ import UptimeBar from "@/components/UptimeBar.vue";
 import RackDiagram from "@/components/RackDiagram.vue";
 import DevicePortsPanel from "@/components/DevicePortsPanel.vue";
 import DevicePowerPortsPanel from "@/components/DevicePowerPortsPanel.vue";
+import DeviceGroupCard from "@/components/DeviceGroupCard.vue";
 import DeviceLeaseCard from "@/components/DeviceLeaseCard.vue";
 import SnmpDeviceCard from "@/components/SnmpDeviceCard.vue";
 import { getSnmpTargetForDevice } from "@/api/snmp";
@@ -566,6 +567,8 @@ onMounted(() => {
       <n-card v-if="device && relations.length > 1" :title="() => cardHead(TopologyIcon, t('relations.title'))" size="small">
         <relation-chain :nodes="relations" :current-id="device.id" />
       </n-card>
+
+      <DeviceGroupCard v-if="device && device.group" :device-id="device.id" :group="device.group" />
 
       <DevicePortsPanel v-if="device" :device-id="device.id" :device-name="device.name" :admin="isAdmin" />
 
