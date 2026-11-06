@@ -427,6 +427,8 @@ class AgentSubnetsOut(StrictModel):
 
 class AgentSubnetsPatch(StrictModel):
     subnet_ids: list[uuid.UUID]
+    # 要指派的子網路目前由別台代理掃描時，要明確帶 true 才搬過來（客戶 2026-11-05：以前默默搶走）
+    move_from_other_agents: bool = False
 
 
 @router.get("/{agent_id}/subnets", response_model=AgentSubnetsOut,
@@ -467,6 +469,17 @@ async def set_agent_subnets(
     current = set((await session.execute(
         select(Subnet.id).where(Subnet.scan_agent_id == agent_id)
     )).scalars().all())
+    # 別台代理手上的子網路：以前直接覆寫 scan_agent_id，客戶高雄的網段就這樣被搬到本機代理，
+    # 本機到不了那個網段 → 整段判離線好幾週（2026-11-05）。沒有明確確認就擋下，講出是哪幾個、原本哪台。
+    taken = (await session.execute(
+        select(Subnet.cidr, ScanAgent.name).join(ScanAgent, ScanAgent.id == Subnet.scan_agent_id)
+        .where(in_values(Subnet.id, want), Subnet.scan_agent_id != agent_id)
+        .order_by(Subnet.cidr))).all() if want else []
+    moved = [{"subnet": str(c), "from_agent": n} for c, n in taken]
+    if moved and not payload.move_from_other_agents:
+        raise HTTPException(409, detail=ui_detail(
+            "scan_agent_subnets_taken", "Some subnets are scanned by another agent; confirm to move them",
+            count=len(moved), subnets=", ".join(f"{m['subnet']} ({m['from_agent']})" for m in moved[:20])))
     to_clear = current - want
     if to_clear:
         await session.execute(
@@ -483,7 +496,7 @@ async def set_agent_subnets(
         actor_ip=request.client.host if request.client else None,
         actor_user_agent=request.headers.get("user-agent"),
         object_type="scan_agent", object_id=str(agent_id), action="update",
-        diff={"target": "agent_subnets", "count": len(want)},
+        diff={"target": "agent_subnets", "count": len(want), **({"moved": moved} if moved else {})},
         request_id=getattr(request.state, "request_id", None),
     )
     await session.commit()

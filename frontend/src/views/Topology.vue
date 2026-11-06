@@ -8,7 +8,7 @@
  *  - 點節點顯示資訊
  *  - 切換 wireless / vpn 顯示
  */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { NAlert,
   NCard,
@@ -21,6 +21,7 @@ import { NAlert,
   NSelect,
   useMessage,
   NTooltip,
+  NTag,
 } from "naive-ui";
 import { NIcon } from "naive-ui";
 import { TopologyIcon, RefreshIcon, FitIcon, ExportIcon, DevicesIcon, MacIcon, SubnetsIcon } from "@/icons";
@@ -241,14 +242,14 @@ function goSubnet() {
   if (selectedSubnetId.value) router.push({ name: "subnet-detail", params: { id: selectedSubnetId.value } });
 }
 const subnetIds = ref<string[]>([]);
-const subnetOptions = ref<{ label: string; value: string }[]>([]);
+const subnetOptions = ref<{ label: string; value: string; cidr: string }[]>([]);
 
 async function loadSubnetOptions() {
   try {
     const r = await listSubnets({ page: 1, pageSize: 500 });
     subnetOptions.value = r.items.map((s) => ({
       label: s.description ? `${s.cidr} — ${s.description}` : s.cidr,
-      value: s.id,
+      value: s.id, cidr: s.cidr,
     }));
   } catch { /* silent */ }
 }
@@ -1478,16 +1479,24 @@ watch([includeWireless, includeVpn, includeL3, includeFdb, includeVms, onlineOnl
   void refresh();
 });
 
+// 預設只畫常用子網路時要講出來（客戶 2026-11-05：篩選欄只看到「+1」，不知道為什麼自動選、選了什麼）
+const usedPinned = ref(false);
+const pinnedActive = computed(() => usedPinned.value && subnetIds.value.length > 0
+  && subnetIds.value.length === pinned.value.length && subnetIds.value.every((id) => pinned.value.includes(id)));
+/** 篩選欄的標籤只放 CIDR：連說明一起放，寬度不夠時「responsive」連第一個都收成「+1」 */
+function renderSubnetTag({ option, handleClose }: { option: any; handleClose: () => void }) {
+  return h(NTag, { size: "small", closable: true, onClose: (e: MouseEvent) => { e.stopPropagation(); handleClose(); } },
+    () => option.cidr ?? option.label);
+}
 onMounted(async () => {
   await loadSubnetOptions();
   // 有設常用子網路 → 進來預設只畫這些；否則畫全部
-  let usedPinned = false;
   try {
     await ensureLoaded();
-    if (pinned.value.length) { subnetIds.value = [...pinned.value]; usedPinned = true; }
+    if (pinned.value.length) { subnetIds.value = [...pinned.value]; usedPinned.value = true; }
   } catch { /* ignore */ }
   // 設了 subnetIds 會觸發 watch → refresh；沒設才在這裡主動畫一次
-  if (!usedPinned) void refresh();
+  if (!usedPinned.value) void refresh();
 });
 onUnmounted(() => {
   if (cy) cy.destroy();
@@ -1512,9 +1521,11 @@ onUnmounted(() => {
         :options="subnetOptions"
         multiple filterable clearable
         :placeholder="t('topology.filter_subnets')"
-        style="width: 250px"
+        style="width: 280px"
         :consistent-menu-width="false"
-        max-tag-count="responsive"
+        :max-tag-count="1"
+        :render-tag="renderSubnetTag"
+        data-testid="topology-subnet-filter"
       />
         <n-select v-model:value="viewMode" :options="viewModeOptions"
                   style="width: 190px" :consistent-menu-width="false" />
@@ -1561,6 +1572,13 @@ onUnmounted(() => {
           </n-button>
         </n-space>
       </n-space>
+      <div v-if="pinnedActive" class="pinned-note" data-testid="topology-pinned-note">
+        <span>{{ t("topology.pinned_note", { n: subnetIds.length }) }}</span>
+        <n-button size="tiny" @click="subnetIds = []">
+          <template #icon><n-icon><SubnetsIcon /></n-icon></template>
+          {{ t("topology.show_all_subnets") }}
+        </n-button>
+      </div>
     </div>
     <n-alert v-if="scopeLimited" type="info" :bordered="false" style="margin-bottom: 10px" data-testid="topology-scope-limited">
       {{ t("topology.scope_limited") }}
@@ -1652,6 +1670,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.pinned-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 10px;
+  font-size: 12.5px; opacity: .85; }
 .topo-legend {
   display: flex;
   flex-wrap: wrap;

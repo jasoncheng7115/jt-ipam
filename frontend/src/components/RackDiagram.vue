@@ -21,7 +21,7 @@ import { rackTypeFill as colorFor, RACK_DEVICE_TYPES } from "@/utils/rackColors"
 import { exportRacksDrawio, exportRacksPng, exportRacksSvg,
   type ExportDiagram } from "@/utils/rackGraphicsExport";
 import { exportTable, type ExportColumn } from "@/utils/tableExport";
-import { ExportIcon, GroupIcon } from "@/icons";
+import { ExportIcon, GroupIcon, RacksIcon } from "@/icons";
 import { useExportBusy } from "@/composables/useExportBusy";
 import { getRackNameAlign, type RackNameAlign } from "@/api/basic";
 
@@ -678,7 +678,11 @@ function goGroup(id: string) {
 
 <template>
   <n-card v-if="diagram" class="rack-diagram-card" :class="{ 'rd-compact': compact, 'rd-bare': bare }"
-          :bordered="!bare" :title="bare ? undefined : cardTitle">
+          :bordered="!bare">
+    <!-- 卡片標題要有圖示（同全站；以前用 title 屬性放不進圖示） -->
+    <template v-if="!bare" #header>
+      <span class="rd-card-title"><n-icon :size="18"><RacksIcon /></n-icon>{{ cardTitle }}</span>
+    </template>
     <n-space vertical :size="12">
       <!-- 控制列：自標題列搬到內文最上方。
            用 flex 而不是 n-space：n-space 的每個項目是 block 包 inline-flex，靠 baseline
@@ -938,6 +942,7 @@ function goGroup(id: string) {
 </template>
 
 <style scoped>
+.rd-card-title { display: inline-flex; align-items: center; gap: 8px; }
 /* 裝置群組軌：括線開口朝左（朝向機櫃裡的成員），每台成員一個刻度；標籤在所有軌道的右邊 */
 .group-rail { flex: 0 0 auto; }
 .group-rail__in { position: relative; }

@@ -6,7 +6,7 @@ import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
   NInput, NSwitch, NPopconfirm, NTag, NInputGroup, NAlert, NSelect, NTooltip,
   NCheckbox, NCheckboxGroup, NInputNumber, NPopover, NText, NTabs, NTabPane,
-  useMessage, type DataTableColumns,
+  useMessage, useDialog, type DataTableColumns,
 } from "naive-ui";
 import {
   ScanAgentsIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, SaveIcon, CancelIcon,
@@ -60,6 +60,7 @@ const saPicker = computed(() => [
 ]);
 
 const msg = useMessage();
+const dialog = useDialog();
 const route = useRoute();
 const router = useRouter();
 
@@ -180,14 +181,44 @@ function onProbesChange(vals: (string | number)[]) {
   enabledProbes.value = vals.map((v) => String(v));
   enabledProbes.value.forEach(ensureInterval);
 }
-const subnetOpts = ref<{ label: string; value: string }[]>([]);
+// 子網路選項標出「目前由哪台代理掃描」：以前勾了就默默從別台搬過來（客戶 2026-11-05：高雄的網段被搬到
+// 本機代理，本機到不了 → 整段判離線）。儲存前另外跳確認（見 submit）。
+const subnetRaw = ref<{ id: string; cidr: string; description: string | null; scan_agent_id: string | null }[]>([]);
+const agentName = (id: string | null) => (id ? rows.value.find((a) => a.id === id)?.name ?? id.slice(0, 8) : "");
+const subnetOpts = computed(() => subnetRaw.value.map((s) => {
+  const base = s.description ? `${s.cidr} (${s.description})` : s.cidr;
+  const other = s.scan_agent_id && s.scan_agent_id !== editing.value?.id;
+  return { label: other ? `${base} · ${t("scanAgentHelp.subnet_held_by", { agent: agentName(s.scan_agent_id) })}` : base,
+           value: s.id };
+}));
 async function loadSubnetOpts() {
   try {
     const res = await listSubnets({ page: 1, pageSize: 500 });
-    subnetOpts.value = res.items.map((s) => ({
-      label: s.description ? `${s.cidr} (${s.description})` : s.cidr, value: s.id,
-    }));
+    subnetRaw.value = res.items.map((s) => ({ id: s.id, cidr: s.cidr, description: s.description ?? null,
+                                               scan_agent_id: s.scan_agent_id ?? null }));
   } catch { /* silent */ }
+}
+/** 這次要指派、但目前由別台代理掃描的子網路 */
+function movesFromOthers(ids: string[]) {
+  return subnetRaw.value.filter((s) => ids.includes(s.id) && s.scan_agent_id && s.scan_agent_id !== editing.value?.id);
+}
+function confirmMoves(moves: ReturnType<typeof movesFromOthers>): Promise<boolean> {
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: t("scanAgentHelp.move_title"),
+      content: () => h("div", { "data-testid": "agent-move-confirm" }, [
+        h("p", { style: "margin:0 0 8px" }, t("scanAgentHelp.move_body")),
+        h("ul", { style: "margin:0;padding-left:20px" }, moves.map((m) =>
+          h("li", t("scanAgentHelp.move_item", { subnet: m.cidr, agent: agentName(m.scan_agent_id) })))),
+      ]),
+      positiveText: t("scanAgentHelp.move_ok"),
+      negativeText: t("common.cancel"),
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+      onMaskClick: () => resolve(false),
+    });
+  });
 }
 
 // 一次性金鑰揭露 modal
@@ -276,7 +307,9 @@ async function submit() {
         relay_max_sessions: form.value.relayMax,
         relay_ports: form.value.relayPorts,
       });
-      await setAgentSubnets(editing.value.id, form.value.subnet_ids);
+      const moves = movesFromOthers(form.value.subnet_ids);
+      if (moves.length && !(await confirmMoves(moves))) return;
+      await setAgentSubnets(editing.value.id, form.value.subnet_ids, moves.length > 0);
       show.value = false;
     } else {
       const created = await createScanAgent({
@@ -293,7 +326,7 @@ async function submit() {
       showKey.value = true;   // 顯示一次性金鑰 + 安裝指令
     }
     await refresh();
-  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  } catch (e: any) { msg.error(apiErrMsg(e)); }
 }
 async function rotate(r: ScanAgent) {
   try {

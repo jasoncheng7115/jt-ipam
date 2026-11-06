@@ -2456,6 +2456,11 @@ happy path of "an upload succeeded" is not enough.
 
 ## 8. Recent feature spot-checks
 
+- [ ] **Assigning agent subnets does not silently take another agent's** (`tests/test_scan_agent_subnet_list.py`, `e2e/scan-agent-subnet-list.spec.ts`): the picker says "scanned by X"; saving asks for confirmation listing the subnets and their current agent, Cancel changes nothing, confirming moves them; the API without `move_from_other_agents` returns 409 `scan_agent_subnets_taken`; the audit diff has `moved`
+- [ ] **Topology pinned-subnet filter** (`e2e/topology-pinned-filter.spec.ts`): with pinned subnets the filter shows the CIDR (not just "+1"), a note says only pinned subnets are drawn, and "Show all subnets" clears it
+- [ ] **Settings cards and system export hints** (`e2e/settings-cards-and-transfer.spec.ts`): the change assessment and maintenance cards use one setting per row; system export shows that it is counting (retry on failure) and why the button is disabled (counting, no category, short or mismatched passphrase); import says when the file or passphrase is missing
+- [ ] **Every card on the device page has a title icon** (`tests/test_page_header_icons.py`), including the rack diagram card
+
 - [ ] **OCS card shows OCS's own hardware** (device detail): manufacturer / model / serial come from OCS,
   not from device fields another source filled (a Windows device created by LibreNMS once showed
   "windows / Intel x64"); motherboard and BIOS rows; a factory placeholder system serial ("0123456789")

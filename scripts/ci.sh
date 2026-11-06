@@ -104,6 +104,8 @@ if [[ -d "$ROOT/frontend/node_modules" ]]; then
   step "frontend naive-ui imports"
   if node scripts/check-naive-imports.mjs; then ok "naive imports"; else bad "naive imports -- a component used in a template is not imported; it silently disappears at runtime"; fi
   step "frontend build"
+  # 型別檢查另外跑：正式的 build 不含 vue-tsc（2026-11-06：8 GB 主機上 vue-tsc 超過 Node 預設 2 GB 上限，升級建置失敗）
+  if npm run typecheck >/dev/null 2>&1; then ok "typecheck"; else bad "typecheck"; fi
   if npm run build >/dev/null 2>&1; then ok "build"; else bad "build"; fi
 else
   bad "frontend/node_modules not found -- skipping frontend checks"

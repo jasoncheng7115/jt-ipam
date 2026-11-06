@@ -1052,7 +1052,12 @@
     "col_subnets": "Subnets",
     "reinstall_label": "Already installed: upgrade or change the server check (the key and other settings are kept, no need to pass them)",
     "trust_fix_insecure": "This agent does not verify the server: anyone who can intercept the traffic could pose as jt-ipam to take the key or push a malicious program. Open the install guide, choose \"Pin this server's certificate\" and run the \"Already installed\" command on the host (the key and other settings are kept).",
-    "trust_fix_legacy": "Older agents do not report how they check the server, and one installed with the old command most likely does not. The agent updates itself; then open the install guide, choose \"Pin this server's certificate\" and run the \"Already installed\" command on the host (the key and other settings are kept)."
+    "trust_fix_legacy": "Older agents do not report how they check the server, and one installed with the old command most likely does not. The agent updates itself; then open the install guide, choose \"Pin this server's certificate\" and run the \"Already installed\" command on the host (the key and other settings are kept).",
+    "subnet_held_by": "scanned by \"{agent}\"",
+    "move_title": "Move from another agent?",
+    "move_body": "These subnets are scanned by another agent. Once moved, that agent stops scanning them; if this agent cannot reach those networks, every address in them will be judged offline.",
+    "move_ok": "Move them",
+    "move_item": "{subnet}: scanned by \"{agent}\""
   },
   "chat": {
     "local_badge": "Local Ollama",
@@ -1291,7 +1296,9 @@
     "legend_pending": "Unconfirmed (also learned on another switch)",
     "legend_vpn": "VPN tunnel (virtual link)",
     "layered_hint": "Click a device to see its port; the icon shows the type",
-    "same_name": "same name {i}/{n}"
+    "same_name": "same name {i}/{n}",
+    "pinned_note": "Showing only your pinned subnets ({n}) by default; clear the filter to show all.",
+    "show_all_subnets": "Show all subnets"
   },
   "hostnameSrc": {
     "auto": "Auto (follow global order)",
@@ -4176,7 +4183,8 @@
     "device_group_not_found": "Device group not found",
     "device_group_representative_not_member": "The representative device must be a member of the group",
     "ip_not_found": "IP address not found",
-    "ip_owned_by_group": "{ip} is shared by device group \"{group}\"; change it from the group settings"
+    "ip_owned_by_group": "{ip} is shared by device group \"{group}\"; change it from the group settings",
+    "scan_agent_subnets_taken": "{count} subnets are scanned by another agent; confirm to move them: {subnets}"
   },
   "adguard_admin": {
     "scope_subnets": "Limit to subnets",
@@ -5204,7 +5212,17 @@
     "col_table": "Table",
     "col_errored": "errors",
     "import_partial": "Import finished, but {n} rows were not written",
-    "import_partial_hint": "Those rows are missing entirely, not merely missing a field. Check the failed column per table below to see which one, and send us the messages listed here."
+    "import_partial_hint": "Those rows are missing entirely, not merely missing a field. Check the failed column per table below to see which one, and send us the messages listed here.",
+    "counting": "Counting the records in each category…",
+    "count_failed": "Could not read the record counts: {reason}",
+    "retry": "Retry",
+    "why_counting": "Still counting the records, please wait",
+    "why_count_failed": "Counting failed; retry first",
+    "why_no_scope": "Tick at least one category",
+    "why_pass_short": "The passphrase needs at least 8 characters",
+    "why_pass_mismatch": "The two passphrases do not match",
+    "why_no_file": "Choose an export file first",
+    "why_no_pass": "Enter the passphrase set at export"
   },
   "windows_dhcp": {
     "title": "Windows DHCP Server",
@@ -8135,7 +8153,9 @@
     "graph_export": "Export",
     "graph_export_png": "PNG (image)",
     "graph_export_svg": "SVG (vector, editable)",
-    "last_sync": "Last synced"
+    "last_sync": "Last synced",
+    "set_valid_hours_hint": "How long an analysis stays valid to act on; after that it has to be run again (1–168 hours).",
+    "set_retention_hint": "How many days a finished assessment is kept before it is cleaned up (7–3650 days)."
   },
   "unmanaged_page": {
     "intro": "IPAM has no record of this address, but it has been seen in use recently. Below is only what the sources that saw it report; use Add to manage it, or Probe to find out what it is first.",

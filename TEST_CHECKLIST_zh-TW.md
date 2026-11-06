@@ -1790,6 +1790,11 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 ## 8. 近期功能點檢
 
+- [ ] **代理指派子網路不默默搬走別台的**（`tests/test_scan_agent_subnet_list.py`、`e2e/scan-agent-subnet-list.spec.ts`）：子網路選單標「目前由「X」掃描」；儲存時跳確認列出子網路與原本的代理，取消什麼都不動、確定才搬；API 不帶 `move_from_other_agents` 回 409 `scan_agent_subnets_taken`；稽核 diff 有 `moved`
+- [ ] **拓樸圖常用子網路篩選**（`e2e/topology-pinned-filter.spec.ts`）：有常用子網路的帳號進拓樸圖，篩選欄顯示 CIDR（不是只有「+1」），下方說明預設只畫常用子網路，按「顯示全部子網路」清掉篩選
+- [ ] **系統設定卡片與系統匯出提示**（`e2e/settings-cards-and-transfer.spec.ts`）：IP 變更評估、維護排程卡片一列一個設定；系統匯出統計中有提示、失敗可重試，按鈕旁寫出不能按的原因（還在統計、沒勾資料、密碼太短、兩次不同），匯入未選檔或沒密碼也有提示
+- [ ] **裝置頁每張卡片標題有圖示**（`tests/test_page_header_icons.py`）：含機櫃圖卡片
+
 - [ ] **OCS 卡片顯示 OCS 自己的硬體**（裝置明細）：製造商/型號/序號取自 OCS，不是別的來源填的裝置欄位
   （LibreNMS 建立的 Windows 裝置曾顯示「windows/Intel x64」）；有主機板與 BIOS；系統序號是出廠佔位
   （「0123456789」）時改顯示主機板序號並標「（主機板）」；主要零件列出處理器（核心/執行緒）、記憶體

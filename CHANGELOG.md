@@ -4,11 +4,15 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
-## [Unreleased]
+## [1.0.20] - 2026-11-06
+
+### Upgrade notes
+- **The frontend build no longer runs the type check**: on an 8 GB host the type check (vue-tsc) went past Node's default heap of about 2 GB and aborted, so the frontend build failed during an upgrade. The production build now only bundles, with the Node heap raised to 4 GB; type checking stays in development and CI.
 
 ### Added
 - **"Probe" button next to the domain name when adding a domain** (a user request). It looks the domain up in RDAP and DNS and fills the fields that are still empty: registrar and its website, DNS hosting (from the name servers), expiry date, and the services the domain is bound to (mail provider from MX, website, SPF, DMARC). Filled fields are left alone and nothing is saved until you press Save. For a top-level domain without RDAP (.io and others), the DNS part is still filled in.
 - **Device groups: stacks, HA pairs and clusters** (a customer: two N2048P switches in one stack could not be marked as one unit, and the stack management IP could only belong to one of them). Each member stays its own device (rack position, ports, serial); the group ties them together.
+  - A "Help" button on the Groups tab explains what a group is, when to use each type, the fields and the rules.
   - **Devices › Groups tab** (admins create and edit): type (stack, HA active / passive, HA active / active, cluster), members with role and order, a representative device and the IPs the whole group shares.
   - **Shared IPs** (stack management IP, HA virtual IP) are kept on the group and attached to the representative. The IP form has "Share with group" and locks the device field; setting another device from the IP form, the device form, a device import or a sync is refused or put back.
   - **Rack diagram**: members in the same rack get one bracket in the group colour labelled "name 2/3"; clicking it lists the members and "N more in rack B", which switches to that rack. Exports and the public embedded SVG draw the same bracket.
@@ -32,6 +36,7 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
   - They are saved in the chat history, so reopening a conversation shows them again.
 
 ### Security
+- The Windows certificate agent installer's usage comment spelled out the download-and-run one-liner, which YARA rules used by EDR products flag (they do not care that it is a comment). The comment is rewritten, with a guard test.
 - **Certificate agents make sure they talk to the real jt-ipam** (a user asked "what if someone poses as the jt-ipam certificate server"). The install commands used to turn TLS verification off (`curl -k`, `JT_IPAM_INSECURE`), so anyone who could intercept the traffic could pose as jt-ipam, take the agent key, or push a "new agent" that the host runs as root / SYSTEM.
   - **The install command pins the jt-ipam certificate**: the page reads the certificate this jt-ipam actually presents (connecting to itself only) and puts its fingerprint in the command. Linux uses curl's `--pinnedpubkey`, Windows compares the certificate's SHA-256; it is written to the agent config and checked on every connection, which stops before the key is sent when it does not match. Works with a self-signed certificate.
   - With a certificate from a public CA the command uses normal certificate verification; "do not verify" can still be chosen but is marked as risky and is no longer the default.
@@ -44,6 +49,11 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
   - The lists have a "Server check" column. Re-running the scan agent installer now keeps the key and other settings from the config file: on an installed host the "Already installed" command in the install guide adds the pin without rotating the key.
 
 ### Fixed
+- **Assigning subnets to a scan agent could silently take them from another agent** (a customer: a remote site's subnet ended up on the local agent, which cannot reach it, so every address there showed offline for weeks). The subnet picker now says which agent scans each subnet, and saving asks for confirmation listing what moves from where; the API refuses with 409 unless the move is confirmed, and the audit log records the previous agent.
+- The topology subnet filter showed only "+1" when your pinned subnets were applied by default. Tags now show the CIDR, the first one is always visible, and a line under the toolbar says only pinned subnets are drawn, with "Show all subnets".
+- System settings: the IP change assessment and maintenance cards were squeezed into two columns (descriptions wrapped every few words); they now use one setting per row like the other cards.
+- System export / import: "Generate export file" was greyed out without a reason while the record counts were loading. The page now shows that it is counting (with a retry if it fails), and next to the button says why it cannot be pressed yet; the import "Analyze" button does the same.
+- The rack diagram card title had no icon; a guard test now checks every card on the device page.
 - AI chat answers sometimes showed LaTeX such as `$\rightarrow$` instead of an arrow (a menu path written as "Advanced $\rightarrow$ Circuits"). Common LaTeX symbols are now shown as the character (→, ⇒, ×, ≥ …) outside code, and the model is told to write menu paths with › as the UI map gives them.
 - Searching devices by IP found nothing: the device search only looked at name, model, serial and description. It now also matches FQDN and the IPs linked to the device (only IPs you can see), on the Devices page and in the device group member picker. The Devices page no longer filters the server results again in the browser, which hid devices matched by a non-primary IP, and a `?q=` link now searches the server instead of only the first page.
 - Racks shown side by side as separate cards: "Switch to rear" in the other-side hint did nothing (a customer: it worked for a single rack only). The merged card already handled it; the separate cards now switch the whole row too.

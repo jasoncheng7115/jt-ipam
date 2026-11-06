@@ -1052,7 +1052,12 @@
     "col_subnets": "子網路",
     "reinstall_label": "已安裝的主機：升級或改伺服器驗證（金鑰與其他設定沿用，不用再帶）",
     "trust_fix_insecure": "這個代理沒有驗證伺服器：能攔截網路的人可以假冒 jt-ipam 拿走金鑰或推惡意程式。開「安裝說明」選「釘選這台的憑證」，在主機上執行「已安裝的主機」那行指令（金鑰與其他設定沿用）。",
-    "trust_fix_legacy": "舊版代理沒有回報驗證方式，用舊的安裝指令裝的多半沒有驗證伺服器。代理會自動更新；之後開「安裝說明」選「釘選這台的憑證」，在主機上執行「已安裝的主機」那行指令（金鑰與其他設定沿用）。"
+    "trust_fix_legacy": "舊版代理沒有回報驗證方式，用舊的安裝指令裝的多半沒有驗證伺服器。代理會自動更新；之後開「安裝說明」選「釘選這台的憑證」，在主機上執行「已安裝的主機」那行指令（金鑰與其他設定沿用）。",
+    "subnet_held_by": "目前由「{agent}」掃描",
+    "move_title": "從別台代理搬過來？",
+    "move_body": "下面這些子網路目前由別台代理掃描。搬過來之後，原本那台就不再掃描它們；如果這台代理到不了那些網段，裡面的位址會全部判成離線。",
+    "move_ok": "確定搬過來",
+    "move_item": "{subnet}：目前由「{agent}」掃描"
   },
   "chat": {
     "local_badge": "本地 Ollama",
@@ -1291,7 +1296,9 @@
     "legend_pending": "待確認（別台交換器也學到）",
     "legend_vpn": "VPN 隧道（虛擬連線）",
     "layered_hint": "點裝置看它接在哪個埠；類型看圖示",
-    "same_name": "同名 {i}/{n}"
+    "same_name": "同名 {i}/{n}",
+    "pinned_note": "預設只畫你的常用子網路（{n} 個），清除篩選就會畫全部。",
+    "show_all_subnets": "顯示全部子網路"
   },
   "hostnameSrc": {
     "auto": "自動 (跟全域順序)",
@@ -4176,7 +4183,8 @@
     "device_group_not_found": "找不到這個裝置群組",
     "device_group_representative_not_member": "代表裝置必須是群組的成員",
     "ip_not_found": "找不到這個 IP 位址",
-    "ip_owned_by_group": "{ip} 由裝置群組「{group}」共用，要換裝置請到群組設定改"
+    "ip_owned_by_group": "{ip} 由裝置群組「{group}」共用，要換裝置請到群組設定改",
+    "scan_agent_subnets_taken": "有 {count} 個子網路目前由別台代理掃描，確認後才會搬過來：{subnets}"
   },
   "adguard_admin": {
     "scope_subnets": "限定子網路範圍",
@@ -5204,7 +5212,17 @@
     "col_table": "資料表",
     "col_errored": "錯誤",
     "import_partial": "匯入完成，但有 {n} 列沒有寫入",
-    "import_partial_hint": "這些列是整筆沒有進去（不是少了某個欄位）。請看下方各表的「失敗」欄位確認是哪一張表，並把下列訊息回報給我們。"
+    "import_partial_hint": "這些列是整筆沒有進去（不是少了某個欄位）。請看下方各表的「失敗」欄位確認是哪一張表，並把下列訊息回報給我們。",
+    "counting": "正在統計各類資料的筆數…",
+    "count_failed": "讀不到資料量：{reason}",
+    "retry": "重試",
+    "why_counting": "還在統計資料量，請稍候",
+    "why_count_failed": "資料量統計失敗，請先重試",
+    "why_no_scope": "請至少勾選一類資料",
+    "why_pass_short": "密碼至少要 8 個字",
+    "why_pass_mismatch": "兩次輸入的密碼不一樣",
+    "why_no_file": "請先選擇匯出檔",
+    "why_no_pass": "請輸入匯出時設的密碼"
   },
   "windows_dhcp": {
     "title": "Windows DHCP 伺服器",
@@ -8135,7 +8153,9 @@
     "graph_export": "匯出",
     "graph_export_png": "PNG（點陣圖）",
     "graph_export_svg": "SVG（向量圖，可編輯）",
-    "last_sync": "最後同步"
+    "last_sync": "最後同步",
+    "set_valid_hours_hint": "分析做完之後多久內可以據以執行，超過就要重新分析（1～168 小時）。",
+    "set_retention_hint": "評估結束後，紀錄保留幾天再自動清除（7～3650 天）。"
   },
   "unmanaged_page": {
     "intro": "IPAM 沒有這個位址的記錄，但最近看得到它在用。下面只有看到它的來源提供的資訊；要管理它就按「新增」，想知道它是什麼可以先「探測」。",

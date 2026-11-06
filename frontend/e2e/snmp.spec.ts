@@ -215,7 +215,7 @@ test("裝置清單批次指派：勾兩台、套用 → 收集項目依裝置類
   try {
     await login(page);
     await page.goto("/devices");
-    await page.getByPlaceholder("搜尋名稱 / 型號 / 序號").fill(tag);
+    await page.getByPlaceholder("搜尋名稱 / IP / 型號 / 序號").fill(tag);
     for (const name of [rtr.name, sw.name]) {
       const row = page.locator(".n-data-table-tr", { hasText: name });
       await expect(row).toBeVisible({ timeout: 15_000 });

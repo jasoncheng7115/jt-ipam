@@ -162,9 +162,10 @@ export async function getAgentSubnetList(id: string): Promise<AgentSubnetItem[]>
   const { data } = await apiClient.get<{ subnets?: AgentSubnetItem[] }>(`/api/v1/scan-agents/${id}/subnets`);
   return data.subnets ?? [];
 }
-export async function setAgentSubnets(id: string, subnetIds: string[]): Promise<string[]> {
+/** moveFromOtherAgents：要指派的子網路目前由別台代理掃描時，使用者確認過才帶 true（否則後端回 409） */
+export async function setAgentSubnets(id: string, subnetIds: string[], moveFromOtherAgents = false): Promise<string[]> {
   const { data } = await apiClient.put<{ subnet_ids: string[] }>(
-    `/api/v1/scan-agents/${id}/subnets`, { subnet_ids: subnetIds },
+    `/api/v1/scan-agents/${id}/subnets`, { subnet_ids: subnetIds, move_from_other_agents: moveFromOtherAgents },
   );
   return data.subnet_ids;
 }

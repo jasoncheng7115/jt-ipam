@@ -855,7 +855,8 @@ async function doPreviewAutolink() {
       <!-- 變更影響預演（預設關閉；開了之後選單、IP 頁、裝置頁才有入口） -->
       <n-card class="ss-group" size="small" data-testid="ss-change-impact">
         <template #header><span class="ss-h">{{ t("change_impact.title") }}</span></template>
-        <div class="ss-grid">
+        <!-- 一列一個設定（同資安卡片）：以前放在兩欄格子裡，說明被擠成一行四五個字、右欄對不齊、整張卡大片空白 -->
+        <div class="ss-rows">
           <div class="ss-r fld">
             <div class="ss-r__text">
               <label>{{ t("change_impact.set_enabled") }}</label>
@@ -887,15 +888,25 @@ async function doPreviewAutolink() {
               </n-button>
             </div>
           </div>
-          <div class="fld">
-            <label>{{ t("change_impact.set_valid_hours") }}</label>
-            <n-input-number :value="impactCfg.run_valid_hours" :min="1" :max="168" style="width: 160px"
-                            @update:value="(v: number | null) => v && saveImpact({ run_valid_hours: v })" />
+          <div class="ss-r fld">
+            <div class="ss-r__text">
+              <label>{{ t("change_impact.set_valid_hours") }}</label>
+              <div class="hint">{{ t("change_impact.set_valid_hours_hint") }}</div>
+            </div>
+            <div class="ss-r__ctl">
+              <n-input-number :value="impactCfg.run_valid_hours" :min="1" :max="168" style="width: 160px"
+                              @update:value="(v: number | null) => v && saveImpact({ run_valid_hours: v })" />
+            </div>
           </div>
-          <div class="fld">
-            <label>{{ t("change_impact.set_retention") }}</label>
-            <n-input-number :value="impactCfg.retention_days" :min="7" :max="3650" style="width: 160px"
-                            @update:value="(v: number | null) => v && saveImpact({ retention_days: v })" />
+          <div class="ss-r fld">
+            <div class="ss-r__text">
+              <label>{{ t("change_impact.set_retention") }}</label>
+              <div class="hint">{{ t("change_impact.set_retention_hint") }}</div>
+            </div>
+            <div class="ss-r__ctl">
+              <n-input-number :value="impactCfg.retention_days" :min="7" :max="3650" style="width: 160px"
+                              @update:value="(v: number | null) => v && saveImpact({ retention_days: v })" />
+            </div>
           </div>
         </div>
       </n-card>
@@ -903,7 +914,7 @@ async function doPreviewAutolink() {
       <!-- 維護排程：維護期間範圍內不告警 -->
       <n-card class="ss-group" size="small" data-testid="ss-maintenance">
         <template #header><span class="ss-h">{{ t("maint.page_title") }}</span></template>
-        <div class="ss-grid">
+        <div class="ss-rows">
           <div class="ss-r fld">
             <div class="ss-r__text">
               <label>{{ t("maint.set_max_hours") }}</label>

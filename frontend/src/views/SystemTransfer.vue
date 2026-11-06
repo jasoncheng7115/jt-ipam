@@ -5,7 +5,8 @@ import {
   NAlert, NButton, NCard, NCheckbox, NCheckboxGroup, NCode, NDataTable, NDivider,
   NIcon, NInput, NPopconfirm, NRadio, NRadioGroup, NSpace, NSpin, useMessage,
 } from "naive-ui";
-import { AdminIcon, ExportIcon, ImportIcon } from "@/icons";
+import { AdminIcon, DownloadIcon, ExportIcon, ImportIcon, RefreshIcon, SearchIcon } from "@/icons";
+import { apiErrMsg } from "@/api/client";
 import { srvText } from "@/utils/wsError";
 import { getTask } from "@/api/tasks";
 import {
@@ -20,15 +21,23 @@ const msg = useMessage();
 // ─────────────────── schema / scope ───────────────────
 const schema = ref<TransferSchema | null>(null);
 const scope = ref<string[]>([]);
+// 剛進頁面時各類筆數還在統計（大站要好幾秒），按鈕反灰卻沒說為什麼，使用者以為壞了（2026-10-15）
+const counting = ref(true);
+const countError = ref("");
 
-onMounted(async () => {
+async function loadSchema() {
+  counting.value = true;
+  countError.value = "";
   try {
     schema.value = await getTransferSchema();
     scope.value = [...schema.value.default_scope];
-  } catch {
-    msg.error(t("errors.network"));
+  } catch (e) {
+    countError.value = apiErrMsg(e);
+  } finally {
+    counting.value = false;
   }
-});
+}
+onMounted(loadSchema);
 
 function scopeCount(cat: string): number {
   return schema.value?.counts?.[cat] ?? 0;
@@ -43,9 +52,16 @@ const expReady = ref(false);
 const expSummary = ref<Record<string, unknown> | null>(null);
 let expTimer: ReturnType<typeof setInterval> | null = null;
 
-const canExport = computed(
-  () => scope.value.length > 0 && expPass.value.length >= 8 && expPass.value === expPass2.value,
-);
+/** 「產生匯出檔」不能按的原因（按鈕旁邊直接講，見 feedback_busy_buttons） */
+const exportBlocker = computed(() => {
+  if (counting.value) return t("system_transfer.why_counting");
+  if (countError.value) return t("system_transfer.why_count_failed");
+  if (!scope.value.length) return t("system_transfer.why_no_scope");
+  if (expPass.value.length < 8) return t("system_transfer.why_pass_short");
+  if (expPass.value !== expPass2.value) return t("system_transfer.why_pass_mismatch");
+  return "";
+});
+const canExport = computed(() => !exportBlocker.value);
 
 async function runExport() {
   if (!canExport.value) return;
@@ -230,6 +246,17 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
         <div class="st-label">{{ t("system_transfer.scope_label") }}</div>
         <!-- 一項一列：名稱與筆數同一行（筆數靠右對齊），內容說明在下一行。以前三欄格子裡
              名稱一長就把筆數擠到下一行，看起來亂（使用者回報） -->
+        <div v-if="counting" class="st-counting" data-testid="st-counting">
+          <n-spin :size="16" /><span>{{ t("system_transfer.counting") }}</span>
+        </div>
+        <n-alert v-else-if="countError" type="error" :bordered="false" data-testid="st-count-error">
+          <n-space align="center" :wrap-item="false">
+            <span>{{ t("system_transfer.count_failed", { reason: countError }) }}</span>
+            <n-button size="small" @click="loadSchema">
+              <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("system_transfer.retry") }}
+            </n-button>
+          </n-space>
+        </n-alert>
         <n-checkbox-group v-model:value="scope">
           <div class="st-scope-list">
             <n-checkbox v-for="cat in schema?.scopes ?? []" :key="cat" :value="cat" class="st-scope-row"
@@ -262,9 +289,11 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
           {{ t("system_transfer.generate") }}
         </n-button>
         <n-button v-if="expReady" type="success" @click="doDownload">
+          <template #icon><n-icon><DownloadIcon /></n-icon></template>
           {{ t("system_transfer.download") }}
         </n-button>
         <n-spin v-if="expBusy" :size="16" />
+        <span v-if="exportBlocker && !expBusy" class="st-why" data-testid="st-export-why">{{ exportBlocker }}</span>
       </n-space>
     </n-card>
 
@@ -290,8 +319,12 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
 
       <n-space align="center" style="margin-bottom: 12px">
         <n-button type="primary" :disabled="!impFile || !impPass" :loading="impBusy" @click="doAnalyze">
+          <template #icon><n-icon><SearchIcon /></n-icon></template>
           {{ t("system_transfer.analyze") }}
         </n-button>
+        <span v-if="!impBusy && (!impFile || !impPass)" class="st-why" data-testid="st-import-why">
+          {{ !impFile ? t("system_transfer.why_no_file") : t("system_transfer.why_no_pass") }}
+        </span>
       </n-space>
 
       <template v-if="analyzed">
@@ -359,6 +392,8 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
 </template>
 
 <style scoped>
+.st-counting { display: flex; align-items: center; gap: 8px; font-size: 13px; opacity: .8; margin: 4px 0 10px; }
+.st-why { font-size: 12.5px; opacity: .7; }
 .fail-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; opacity: 0.85; word-break: break-all; }
 .fail-list li { margin-bottom: 2px; }
 .st-wrap { display: flex; flex-direction: column; gap: 16px; }
