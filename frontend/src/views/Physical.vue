@@ -6,7 +6,7 @@ import {
   NSelect, NInput, NInputNumber, NPopconfirm, NTabs, NTabPane,
   useMessage, type DataTableColumns,
 } from "naive-ui";
-import { PhysicalIcon, PowerIcon, VpnIcon, RefreshIcon, PlusIcon, EditIcon, DeleteIcon, ListIcon } from "@/icons";
+import { PhysicalIcon, PowerIcon, VpnIcon, RefreshIcon, PlusIcon, EditIcon, DeleteIcon, ListIcon, CancelIcon, SaveIcon } from "@/icons";
 import { Physical, type DevicePort } from "@/api/phase3";
 import { listDevices, listLocations } from "@/api/basic";
 import { useCustomers } from "@/composables/useCustomers";
@@ -438,8 +438,8 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showCable = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="savingCable" @click="saveCable">{{ t("common.save") }}</n-button>
+          <n-button @click="showCable = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="savingCable" @click="saveCable"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -475,8 +475,8 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showCableEdit = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="savingCableEdit" @click="saveEditCable">{{ t("common.save") }}</n-button>
+          <n-button @click="showCableEdit = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="savingCableEdit" @click="saveEditCable"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -505,8 +505,8 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showPower = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="savingPower" @click="savePower">{{ t("common.save") }}</n-button>
+          <n-button @click="showPower = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="savingPower" @click="savePower"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>

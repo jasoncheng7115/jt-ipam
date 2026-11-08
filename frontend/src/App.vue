@@ -232,6 +232,10 @@ html[data-theme="dark"] { --jt-tabs-strip: rgba(148, 197, 255, 0.05); --jt-tabs-
   border-radius: 3px 3px 0 0;
 }
 
+/* 標題在左的描述表格：標題不折字（iPad 寬度下「CIDR」「閘道」被擠成一字一行），寬度讓內容欄去換行。
+   手機版另外改成上下排（下面 640px 的區塊會蓋過這條） */
+.n-descriptions.n-descriptions--left-label-placement .n-descriptions-table-header { white-space: nowrap; }
+
 /* 卡片柔和陰影：淺色模式給層次感（深色靠表面/邊框對比，黑陰影本就不明顯） */
 .n-card { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 6px rgba(16, 24, 40, 0.05); }
 

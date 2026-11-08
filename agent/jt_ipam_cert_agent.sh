@@ -14,6 +14,9 @@
 #   # PINNED_PUBKEY=sha256//<base64>   # pin the jt-ipam server's public key (the install command fills this in);
 #   #                                  # with a pin the agent only talks to that server, self-signed or not
 #   AUTO_UPDATE=true           # auto-update self when the server has a newer agent
+#   AUTO_PIN=true              # an agent that does not verify jt-ipam switches to verifying it by itself
+#                              # (system CAs, else the server's public key), and follows a certificate
+#                              # change signed by this jt-ipam; set false to keep the TLS settings above as-is
 #   TLS_BASE=/etc/ssl/jt-ipam  # default write directory for built-in profiles
 #
 #   # Each deployment is a group of DEPLOY_<N>_* lines (one setting per line). N = 1, 2, 3, ...
@@ -49,7 +52,7 @@
 #   #   DEPLOY_1_VERIFY=off   (Proxmox / Cockpit / Webmin verify 127.0.0.1 by default; nginx etc. only when set)
 #
 # Usage: jt_ipam_cert_agent.sh [--config PATH] [--dry-run] [--force] [--debug] [--upgrade] [--version]
-AGENT_VERSION=0.4.176
+AGENT_VERSION=0.4.177
 
 # Public key that signs this script. Self-update only replaces the agent with a copy whose signature
 # verifies against it, so neither a fake server nor a compromised one can push a script that runs as root.
@@ -154,6 +157,40 @@ build_curl() {
   [ -n "${CA_CERT:-}" ] && CURL+=(--cacert "$CA_CERT")
   return 0
 }
+
+# ─────────────────── Verifying jt-ipam without a reinstall ───────────────────
+# Agents installed before jt-ipam 1.0.20 do not verify the server. Instead of asking for a reinstall on
+# every host, the agent switches by itself (AUTO_PIN): it fetches jt-ipam's trust data (the server
+# certificate's public key, signed with this jt-ipam's own identity key; the agent key is never sent
+# with it), tries normal CA verification, else pins the public key, and only keeps a setting that it
+# actually connected with. It remembers the identity key: when jt-ipam later changes its certificate,
+# the new key is accepted only with a valid signature from that identity, and only after connecting with it.
+# What it learned lives in $STATE_DIR/trust and wins over the config file (the installer removes it).
+AUTO_PIN="${AUTO_PIN:-true}"
+TRUST_FILE="$STATE_DIR/trust"
+TRUST_IDENTITY=""
+valid_pin() { [[ "$1" =~ ^sha256//[A-Za-z0-9+/]{43}=$ ]]; }
+valid_b64() { [ "${#1}" -lt 4096 ] && [[ "$1" =~ ^[A-Za-z0-9+/]+={0,2}$ ]]; }
+
+load_trust() {
+  [ -r "$TRUST_FILE" ] || return 0
+  local line mode="" pin="" ident=""
+  while IFS= read -r line; do
+    case "${line%%=*}" in
+      TRUST_MODE) mode="${line#*=}" ;;
+      TRUST_PIN) pin="${line#*=}" ;;
+      TRUST_IDENTITY) ident="${line#*=}" ;;
+    esac
+  done < "$TRUST_FILE"
+  case "$mode" in
+    pinned) valid_pin "$pin" || return 0; PINNED_PUBKEY="$pin"; VERIFY_TLS=true ;;
+    ca) PINNED_PUBKEY=""; VERIFY_TLS=true ;;
+    *) return 0 ;;
+  esac
+  valid_b64 "$ident" && TRUST_IDENTITY="$ident"
+  return 0
+}
+load_trust
 build_curl
 
 # ─────────────────── Per-profile file list + test + reload ───────────────────
@@ -568,10 +605,109 @@ self_update() {
   fi
 }
 
+# trust_get <out-file> <curl TLS options...>  — jt-ipam's signed trust data; never sends the agent key
+trust_get() {
+  local out="$1"; shift
+  curl -fsS --max-time 20 "$@" -o "$out" "$SERVER/api/v1/agent-trust" 2>/dev/null
+}
+tfield() {  # name file
+  local line
+  while IFS= read -r line; do
+    [ "${line%%=*}" = "$1" ] && { printf '%s' "${line#*=}"; return 0; }
+  done < "$2"
+  return 1
+}
+# trust_sig_ok <file> <identity SPKI base64>  — 0 = signed by that identity, 1 = bad, 2 = cannot check
+trust_sig_ok() {
+  command -v openssl >/dev/null 2>&1 || return 2
+  local pub body sig rc
+  pub="$(mktemp)"; body="$(mktemp)"; sig="$(mktemp)"
+  printf -- '-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n' "$(printf '%s' "$2" | fold -w 64)" > "$pub"
+  sed '/^sig=/,$d' "$1" > "$body"
+  if ! tfield sig "$1" | base64 -d > "$sig" 2>/dev/null; then rm -f "$pub" "$body" "$sig"; return 1; fi
+  openssl dgst -sha256 -verify "$pub" -signature "$sig" "$body" >/dev/null 2>&1; rc=$?
+  rm -f "$pub" "$body" "$sig"
+  [ "$rc" = 0 ]
+}
+save_trust() {  # mode pin identity
+  local tmp="$TRUST_FILE.new"
+  mkdir -p "$STATE_DIR"
+  ( umask 077; printf 'TRUST_MODE=%s\nTRUST_PIN=%s\nTRUST_IDENTITY=%s\n' "$1" "$2" "$3" > "$tmp" ) \
+    && mv -f "$tmp" "$TRUST_FILE" || return 1
+  load_trust; build_curl
+}
+ca_opts() { [ -n "${CA_CERT:-}" ] && printf '%s\n' --cacert "$CA_CERT"; return 0; }
+
+# Learn jt-ipam's identity once; an agent that does not verify the server also switches to verifying it.
+trust_maintain() {
+  case "$SERVER" in https://*) ;; *) return 0 ;; esac
+  [ "$AUTO_PIN" = false ] && return 0
+  [ -n "$TRUST_IDENTITY" ] && return 0
+  if ! command -v openssl >/dev/null 2>&1; then
+    [ "$TLS_MODE" = insecure ] && log "[trust] openssl is not installed, so this agent cannot switch to verifying jt-ipam by itself (install openssl)"
+    return 0
+  fi
+  local tmp ident pin ok=0
+  local -a ca; mapfile -t ca < <(ca_opts)
+  tmp="$(mktemp)"
+  case "$TLS_MODE" in
+    insecure) trust_get "$tmp" -k && ok=1 ;;
+    pinned) trust_get "$tmp" -k --pinnedpubkey "$PINNED_PUBKEY" && ok=1 ;;
+    *) trust_get "$tmp" "${ca[@]}" && ok=1 ;;
+  esac
+  if [ "$ok" = 1 ] && [ "$(tfield jt-ipam-agent-trust "$tmp")" = 1 ]; then
+    ident="$(tfield identity_spki "$tmp")"; pin="$(tfield spki_pin "$tmp")"
+    if valid_b64 "$ident" && valid_pin "$pin" && trust_sig_ok "$tmp" "$ident"; then
+      case "$TLS_MODE" in
+        pinned) [ "$pin" = "$PINNED_PUBKEY" ] && save_trust pinned "$pin" "$ident" ;;
+        ca) save_trust ca "" "$ident" ;;
+        insecure)
+          if [ "$(tfield auto_pin "$tmp")" != 1 ]; then
+            dbg "[trust] switching automatically is turned off on jt-ipam"
+          elif trust_get /dev/null "${ca[@]}"; then
+            save_trust ca "" "$ident" && log "[trust] now verifying jt-ipam's certificate (certificate authorities)"
+          elif trust_get /dev/null -k --pinnedpubkey "$pin"; then
+            save_trust pinned "$pin" "$ident" && log "[trust] now only talking to the jt-ipam server with public key $pin"
+          else
+            dbg "[trust] could not connect with jt-ipam's certificate (a proxy in between?); not switching"
+          fi ;;
+      esac
+    fi
+  fi
+  rm -f "$tmp"
+  return 0
+}
+
+# A verified connection failed on the certificate: follow a certificate change signed by this jt-ipam.
+# 0 = switched to the new public key (retry), 1 = nothing changed.
+trust_recover() {
+  [ -n "$TRUST_IDENTITY" ] || return 1
+  [ "$TLS_MODE" = insecure ] && return 1
+  local tmp pin na rc=1
+  tmp="$(mktemp)"
+  if trust_get "$tmp" -k && [ "$(tfield identity_spki "$tmp")" = "$TRUST_IDENTITY" ]; then
+    pin="$(tfield spki_pin "$tmp")"; na="$(tfield not_after "$tmp")"
+    if ! trust_sig_ok "$tmp" "$TRUST_IDENTITY"; then
+      log "[trust] the server's certificate changed but the change is not signed by this jt-ipam; not following it"
+    elif valid_pin "$pin" && [ "$pin" != "$PINNED_PUBKEY" ] && [[ "$na" =~ ^[0-9]+$ ]] && [ "$na" -gt "$(date +%s)" ] \
+         && trust_get /dev/null -k --pinnedpubkey "$pin"; then
+      save_trust pinned "$pin" "$TRUST_IDENTITY" && rc=0
+      log "[trust] jt-ipam changed its certificate; following it (signed by this jt-ipam): $pin"
+    fi
+  fi
+  rm -f "$tmp"
+  return $rc
+}
+
 # ─────────────────── Main flow ───────────────────
 mkdir -p "$STATE_DIR"; touch "$STATE_FILE"
+[ "$DRY_RUN" = 1 ] || trust_maintain
 CHECK="$(mktemp)"
-if ! "${CURL[@]}" -o "$CHECK" "$API/check?format=text" 2>/dev/null; then
+"${CURL[@]}" -o "$CHECK" "$API/check?format=text" 2>/dev/null; rc=$?
+# 51 / 60: certificate not accepted, 90: public key does not match the pin
+case "$rc" in 51|60|90) [ "$DRY_RUN" != 1 ] && trust_recover && {
+  "${CURL[@]}" -o "$CHECK" "$API/check?format=text" 2>/dev/null; rc=$?; } ;; esac
+if [ "$rc" != 0 ]; then
   log "check failed (cannot reach $SERVER)"; rm -f "$CHECK"; exit 1
 fi
 SERVER_SHA="$(awk -F= '/^agent_sha=/{print $2}' "$CHECK")"

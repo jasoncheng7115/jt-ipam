@@ -12,7 +12,7 @@ import {
 } from "naive-ui";
 import { listSubnets } from "@/api/subnets";
 import {
-  WazuhIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, MissingIcon, DevicesIcon, EyeIcon,
+  WazuhIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, MissingIcon, DevicesIcon, EyeIcon, CancelIcon, SaveIcon,
 } from "@/icons";
 import {
   listWazuh, createWazuh, updateWazuh, deleteWazuh, testWazuh, syncWazuh,
@@ -398,8 +398,8 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         </div>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showInst = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button>
+        <n-button @click="showInst = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" @click="submit"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>
   </n-card>

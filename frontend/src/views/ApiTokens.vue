@@ -61,8 +61,8 @@
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="createShow = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="saving" @click="doCreate">{{ t("common.save") }}</n-button>
+          <n-button @click="createShow = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="saving" @click="doCreate"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -90,7 +90,7 @@
       <n-code :code="curlSample" language="bash" style="margin-top: 6px" />
       <template #footer>
         <n-space justify="end">
-          <n-button type="primary" @click="closeCreated">{{ t("api_tokens.created_done") }}</n-button>
+          <n-button type="primary" @click="closeCreated"><template #icon><n-icon><CheckIcon /></n-icon></template>{{ t("api_tokens.created_done") }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -105,7 +105,7 @@ import {
   NAlert, NButton, NCard, NCode, NDataTable, NForm, NFormItem, NIcon, NInput,
   NInputNumber, NModal, NPopconfirm, NRadio, NRadioGroup, NSpace, NTag, useMessage,
 } from "naive-ui";
-import { CopyIcon, DeleteIcon, KeyIcon, PlusIcon, RefreshIcon } from "@/icons";
+import { CopyIcon, DeleteIcon, KeyIcon, PlusIcon, RefreshIcon, CancelIcon, CheckIcon, SaveIcon } from "@/icons";
 import {
   createApiToken, listApiTokens, revokeApiToken,
   type ApiToken, type ApiTokenCreated,

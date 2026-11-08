@@ -18,8 +18,11 @@ test("拓樸圖：預設只畫常用子網路時標出來，可一鍵顯示全�
     const subs = (await (await request.get("/api/v1/subnets?page_size=5", { headers: H })).json()).items as { id: string; cidr: string }[];
     test.skip(subs.length < 1, "測試資料要有子網路");
     const pin = subs[0];
-    const put = await request.patch("/api/v1/me/preferences", { headers: H, data: { pinned_subnet_ids: [pin.id] } });
+    // 另外塞一個不存在的子網路（客戶 2026-11-06：常用子網路裡留著刪掉的，篩選欄顯示 UUID、圖畫不出來）
+    const put = await request.patch("/api/v1/me/preferences", { headers: H,
+      data: { pinned_subnet_ids: [pin.id, "00000000-0000-4000-8000-000000000001"] } });
     expect(put.ok(), await put.text()).toBeTruthy();
+    expect((await put.json()).pinned_subnet_ids).toEqual([pin.id]);
 
     await page.goto("/login");
     await page.getByPlaceholder(/帳號|Username/).fill(user.username);
@@ -29,6 +32,8 @@ test("拓樸圖：預設只畫常用子網路時標出來，可一鍵顯示全�
     await page.goto("/topology");
     const filter = page.getByTestId("topology-subnet-filter");
     await expect(filter.locator(".n-tag").first()).toHaveText(pin.cidr, { timeout: 15_000 });
+    await expect(filter.locator(".n-tag")).toHaveCount(1);
+    await expect(filter).not.toContainText("00000000-");
     const note = page.getByTestId("topology-pinned-note");
     await expect(note).toContainText("常用子網路（1 個）");
     await page.getByTestId("topology-pinned-note").screenshot({ path: "test-results/topology-pinned-note.png" }).catch(() => {});

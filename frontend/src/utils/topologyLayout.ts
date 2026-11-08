@@ -18,6 +18,8 @@ export interface L2Link {
   port_mac_count?: number | null;
   /** 哪張網卡的 MAC 學到的（後端 10-23 起帶）；不同網卡各接一台才算雙接 */
   mac?: string | null;
+  /** 後端認出的網卡綁定（同一個 MAC 各插在兩台交換器的單一 MAC 埠）：同一個 MAC 也算雙接 */
+  bond?: boolean | null;
 }
 
 export interface Owner {
@@ -50,6 +52,7 @@ export function assignOwners(links: L2Link[], switchOrder: string[]): Map<string
 /**
  * 雙接：同一台主機用**不同網卡**各接一台交換器（實機 10-23：虛擬化主機的 LAN 卡接一台、儲存網路卡接另一台）。
  * 只有兩條線的 MAC 都知道而且不同才算；同一個 MAC 在兩台都學到是上聯埠造成的，仍走 assignOwners 只歸一個。
+ * 例外是後端標了 bond 的線（網卡綁定跨兩台交換器，實機 11-07）：同一個 MAC 也算。
  * 回傳 主機 → 依 switchOrder 排好的交換器與各自的連線。
  */
 export function multiHomed(links: L2Link[], switchOrder: string[]): Map<string, { switches: string[]; edges: string[] }> {
@@ -61,7 +64,7 @@ export function multiHomed(links: L2Link[], switchOrder: string[]): Map<string, 
     const perSwitch = new Map<string, L2Link>();
     for (const l of ls) if (l.mac && !perSwitch.has(l.target)) perSwitch.set(l.target, l);
     if (perSwitch.size < 2) continue;
-    const macs = new Set([...perSwitch.values()].map((l) => l.mac!.toLowerCase()));
+    const macs = new Set([...perSwitch.values()].map((l) => (l.bond ? `${l.target}@` : "") + l.mac!.toLowerCase()));
     if (macs.size < perSwitch.size) continue;          // 有兩台是同一張卡學到的 → 不算雙接
     const switches = [...perSwitch.keys()].sort((a, b) => (rank.get(a) ?? 9999) - (rank.get(b) ?? 9999) || a.localeCompare(b));
     out.set(host, { switches, edges: switches.map((sw) => perSwitch.get(sw)!.id) });

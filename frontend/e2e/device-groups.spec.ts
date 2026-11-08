@@ -55,6 +55,8 @@ test("裝置群組：新增、機櫃圖括線與跨櫃連結、多櫃切換到�
     const sw2 = await dev(`e2e-dg-sw2-${sfx}`, ra.id, 8);
     const sw3 = await dev(`e2e-dg-sw3-${sfx}`, rb.id, 6);
     await dev(`e2e-dg-rear-${sfx}`, ra.id, 4, "rear", "server");
+    // 背面 U9 正好在群組兩台（U10、U8）中間：背面提示與群組標籤會搶同一個高度（使用者 2026-11-06 截圖）
+    await dev(`e2e-dg-back-${sfx}`, ra.id, 9, "rear", "server");
     const section = (await call("get", "/api/v1/sections")).items?.[0] ?? (await call("get", "/api/v1/sections"))[0];
     const octet = 16 * (Date.now() % 15);
     const sn = await call("post", "/api/v1/subnets", { section_id: section.id, cidr: `198.18.250.${octet}/28`,
@@ -131,6 +133,21 @@ test("裝置群組：新增、機櫃圖括線與跨櫃連結、多櫃切換到�
     await expect(pop).toContainText(sw2.name);
     await expect(pop).toContainText("主控");
     await page.screenshot({ path: "test-results/device-groups-rack.png" });
+    // 背面提示與群組標籤放在同一欄、不互相蓋住；背面提示貼著括線，不會被推到很遠
+    const boxes = async () => {
+      const g = (await chip.boundingBox())!;
+      const hints = await page.getByTestId("rack-face-hint").evaluateAll((els) =>
+        els.map((e) => { const c = e.querySelector(".face-chip")!.getBoundingClientRect(); return { x: c.left, top: c.top, bottom: c.bottom }; }));
+      const frame = (await page.locator(".rack-frame").first().boundingBox())!;
+      return { g, hints, frameRight: frame.x + frame.width };
+    };
+    const b = await boxes();
+    expect(b.hints.length).toBeGreaterThanOrEqual(2);
+    for (const h of b.hints) {
+      expect(h.bottom <= b.g.y + 1 || h.top >= b.g.y + b.g.height - 1, "背面提示跟群組標籤重疊").toBeTruthy();
+      expect(h.x - b.frameRight, "背面提示離機櫃太遠").toBeLessThan(40);
+      expect(Math.abs(h.x - b.g.x), "背面提示與群組標籤要在同一欄").toBeLessThan(2);
+    }
     const away = pop.getByTestId("rack-group-elsewhere");
     await expect(away).toContainText(`另有 1 台在機櫃 ${rb.name}`);
     await away.click();
@@ -156,6 +173,14 @@ test("裝置群組：新增、機櫃圖括線與跨櫃連結、多櫃切換到�
     await expect(card).toContainText(sw1.name);
     await expect(card).toContainText("本機");
     await expect(card).toContainText(mgmt);
+    // 對齊的三欄（11-07「排列的不好看」）：每位成員一列，角色與機櫃位置在同一欄
+    const members = card.getByTestId("device-group-members");
+    await expect(members.locator("thead th")).toHaveText(["成員", "角色", "機櫃位置"]);
+    expect(await members.locator("tbody tr").count()).toBeGreaterThanOrEqual(2);
+    const lefts = await members.locator("tbody tr td:nth-child(2)").evaluateAll((tds) => tds.map((td) => Math.round(td.getBoundingClientRect().left)));
+    expect(new Set(lefts).size).toBe(1);
+    await expect(members.locator("tbody tr.is-self")).toContainText("本機");
+    await expect(card.getByTestId("device-group-shared-ips")).toContainText(mgmt);
     await card.screenshot({ path: "test-results/device-groups-card.png" });
     await page.goto(`/devices?q=${mgmt}`);
     await expect(page.locator("tr", { hasText: sw1.name }).first()).toBeVisible({ timeout: 15_000 });

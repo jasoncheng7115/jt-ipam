@@ -346,10 +346,10 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
         <n-form-item :label="t('common.username')">
           <n-input v-model:value="form.api_username" placeholder="ipam-readonly" />
         </n-form-item>
-        <n-form-item :label="editing ? t('mikrotik.pw_keep') : t('common.password')">
+        <n-form-item :label="editing ? t('mikrotik.pw_keep') : t('common.password')" :show-feedback="false">
           <n-input v-model:value="form.api_password" type="password" show-password-on="click" />
         </n-form-item>
-        <div class="mt-hint" style="margin: -8px 0 12px">{{ t("mikrotik.pw_hint") }}</div>
+        <div class="mt-hint" style="margin: 4px 0 16px">{{ t("mikrotik.pw_hint") }}</div>
         <n-form-item :label="t('firewall_admin.verify_tls')">
           <n-switch v-model:value="form.verify_tls" />
         </n-form-item>

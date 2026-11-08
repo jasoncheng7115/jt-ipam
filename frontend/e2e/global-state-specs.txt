@@ -25,3 +25,5 @@ rdp-engine-recommend-guacd.spec.ts
 warroom-display-token.spec.ts
 # 打開戰情室的資訊展示模式（全站設定）：平行時別的戰情室 spec 會少四個主題
 warroom-info-mode.spec.ts
+# 切換「代理自動驗證 jt-ipam」系統設定（2026-11-07）：平行時別的 spec 看到的設定會不一樣
+settings-cards-and-transfer.spec.ts

@@ -12,7 +12,7 @@ import {
   NSpace,
 } from "naive-ui";
 import { listNotifications, markAllRead, markRead, type Notification } from "@/api/notifications";
-import { BellIcon, CheckIcon } from "@/icons";
+import { BellIcon, CheckIcon, GoToIcon } from "@/icons";
 import { fmtDateTime, fmtRelative } from "@/utils/datetime";
 import { useI18n } from "vue-i18n";
 import { notifTitle, notifBody } from "@/utils/notifText";
@@ -130,7 +130,7 @@ onUnmounted(() => {
         <n-empty v-else size="small" :description="t('notifications.empty')" />
       </div>
       <div style="text-align: center; border-top: 1px solid var(--n-divider-color); padding-top: 6px">
-        <n-button text size="small" @click="goAll">{{ t("notifications.view_all") }}</n-button>
+        <n-button text size="small" @click="goAll"><template #icon><n-icon><GoToIcon /></n-icon></template>{{ t("notifications.view_all") }}</n-button>
       </div>
     </n-space>
   </n-popover>

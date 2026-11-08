@@ -389,7 +389,7 @@ onMounted(() => {
             </template>
             {{ t("common.confirm_delete_n", { n: vlanChecked.length }) }}
           </n-popconfirm>
-          <n-button size="small" @click="vlanChecked = []">{{ t("common.clear_selection") }}</n-button>
+          <n-button size="small" @click="vlanChecked = []"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.clear_selection") }}</n-button>
         </n-space>
         <n-data-table
           :columns="vlanCols" :data="vlansFiltered" :loading="loading" :bordered="false"
@@ -423,7 +423,7 @@ onMounted(() => {
             </template>
             {{ t("common.confirm_delete_n", { n: domChecked.length }) }}
           </n-popconfirm>
-          <n-button size="small" @click="domChecked = []">{{ t("common.clear_selection") }}</n-button>
+          <n-button size="small" @click="domChecked = []"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.clear_selection") }}</n-button>
         </n-space>
         <n-data-table
           :columns="domCols" :data="domains" :loading="loading" :bordered="false"

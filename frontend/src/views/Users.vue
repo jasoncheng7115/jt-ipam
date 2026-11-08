@@ -472,10 +472,10 @@ onMounted(() => { void refresh(); });
         </n-space>
       </template>
       <n-form label-placement="top">
-        <n-form-item :label="t('users.mfa_policy_required')">
+        <n-form-item :label="t('users.mfa_policy_required')" :show-feedback="false">
           <n-select v-model:value="policy.mfa_required" :options="policyOptions" data-testid="mfa-policy-select" />
         </n-form-item>
-        <p class="policy-hint">{{ t("users.mfa_policy_hint") }}</p>
+        <p class="policy-hint" style="margin: 4px 0 16px">{{ t("users.mfa_policy_hint") }}</p>
         <n-form-item :label="t('users.mfa_policy_sso')">
           <n-space vertical :size="2" style="width:100%">
             <n-switch v-model:value="policy.mfa_apply_to_sso" />

@@ -52,3 +52,29 @@ test("不同網卡各接一台的主機進雙接群組，同一張卡兩邊學�
   // 雙接群組裡只有 pve-1：同一張卡兩邊都學到的 srv-same 照舊歸一台
   expect((svg.match(/雙接群組/g) ?? []).length).toBe(1);
 });
+
+test("網卡綁定（同一個 MAC 插在兩台，後端標 bond）也進雙接群組", async ({ page }) => {
+  const bond = (e: ReturnType<typeof l2>) => ({ data: { ...e.data, bond: true } });
+  await page.route(/\/api\/v1\/topology(\?.*)?$/, (route) => route.fulfill({ json: {
+    nodes: [n("swa", "switch-a", "switch"), n("swc", "switch-c", "switch"),
+            n("file", "nas-b", "server"), n("one", "srv-one", "server")],
+    edges: [
+      { data: { id: "up", source: "swa", target: "swc", kind: "l2_uplink", via: "fdb", evidence: "learned", port: "Eth1/2", peer_port: "Gi1/0/48" } },
+      bond(l2("f1", "file", "swa", "Eth1/7", "aa:00:00:00:00:05")),
+      bond(l2("f2", "file", "swc", "Gi1/0/7", "aa:00:00:00:00:05")),
+      l2("o1", "one", "swa", "Eth1/5", "aa:00:00:00:00:03"),
+    ],
+  } }));
+  await login(page);
+  await page.goto("/topology");
+  await page.locator(".n-select").nth(1).click();
+  await page.locator(".n-base-select-option", { hasText: "以交換器為中心" }).click();
+  await expect(page.getByTestId("topology-legend-layered")).toContainText("雙接");
+
+  const dl = page.waitForEvent("download");
+  await page.getByRole("button", { name: /匯出/ }).first().click();
+  await page.locator(".n-dropdown-option", { hasText: "SVG" }).click();
+  const svg = await readFile((await (await dl).path())!, "utf8");
+  expect(svg).toContain("switch-a + switch-c 雙接群組");
+  expect(svg).not.toContain("switch-c 接入群組");
+});

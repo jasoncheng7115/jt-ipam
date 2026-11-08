@@ -63,14 +63,40 @@ class Http(Protocol):
 
 @dataclass
 class Steps:
-    """做了什麼、在哪一步失敗；存進 last_steps 給畫面看。"""
+    """做了什麼、在哪一步失敗；存進 last_steps 給畫面看。
+
+    listener：每完成一步、每換一個階段就被叫一次（items, 目前階段），推送中的畫面靠它顯示做到哪裡
+    （使用者 2026-11-07）。回報失敗絕不影響推送本身。
+    """
     items: list[dict[str, Any]] = field(default_factory=list)
+    listener: Callable[[list[dict[str, Any]], str | None], None] | None = None
+    current: str | None = None
+
+    def _notify(self) -> None:
+        if self.listener is None:
+            return
+        try:
+            self.listener(self.items, self.current)
+        except Exception:  # 進度只是顯示用，回報失敗照樣推下去
+            return
+
+    def stage(self, name: str) -> None:
+        """進入一個階段（推之前先連、推送、確認、換回）：畫面顯示「目前：…」。"""
+        self.current = name
+        self._notify()
 
     def ok(self, step: str, detail: str = "") -> None:
         self.items.append({"step": step, "ok": True, "detail": detail[:300]})
+        self._notify()
 
     def fail(self, step: str, code: str, detail: str = "") -> None:
         self.items.append({"step": step, "ok": False, "code": code, "detail": detail[:300]})
+        self._notify()
+
+    def warn(self, step: str, code: str, detail: str = "") -> None:
+        """沒失敗、但也沒做到（例如沒有確認位址所以沒確認）：畫面不打勾，寫出原因（使用者 2026-11-07）。"""
+        self.items.append({"step": step, "ok": True, "warn": True, "code": code, "detail": detail[:300]})
+        self._notify()
 
 
 Rollback = Callable[[], Awaitable[None]]

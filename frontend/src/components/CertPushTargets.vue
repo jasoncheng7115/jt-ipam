@@ -16,8 +16,13 @@ import {
   updateCertPushTarget, type CertPushKind, type CertPushTarget, type CertPushTargetIn, type DeviceCert,
 } from "@/api/certificates";
 import { trackTask } from "@/composables/useTaskTracker";
+import { stepLine, stepState } from "@/utils/certPushSteps";
 import { fmtDateTime } from "@/utils/datetime";
-import { CancelIcon, DeleteIcon, EditIcon, InfoIcon, PlusIcon, RefreshIcon, SaveIcon, SendIcon } from "@/icons";
+import { CancelIcon, DeleteIcon, EditIcon, InfoIcon, PlusIcon, RefreshIcon, SaveIcon, SearchIcon, SendIcon } from "@/icons";
+import ColumnPicker from "@/components/ColumnPicker.vue";
+import ExportButton from "@/components/ExportButton.vue";
+import { useColumnPrefs } from "@/composables/useColumnPrefs";
+import { useTablePagination } from "@/composables/useTablePagination";
 
 const props = defineProps<{ certOptions: { label: string; value: string }[] }>();
 const { t, te, locale } = useI18n();
@@ -27,6 +32,34 @@ const labelWidth = computed(() => (String(locale.value).startsWith("en") ? 290 :
 const msg = useMessage();
 
 const rows = ref<CertPushTarget[]>([]);
+// 表格上方的篩選、欄位、匯出（使用者 2026-11-07：跟「派送代理」頁籤比少了好幾樣）
+const filterQ = ref("");
+const pg = useTablePagination();
+const shown = computed(() => {
+  const q = filterQ.value.trim().toLowerCase();
+  if (!q) return rows.value;
+  return rows.value.filter((r) => [r.name, r.certificate_name, kindLabel(r.kind), r.api_url]
+    .some((v) => String(v ?? "").toLowerCase().includes(q)));
+});
+const COL_KEYS = ["name", "certificate_name", "kind", "api_url", "auto_push", "last_status", "actions"];
+const prefs = useColumnPrefs("cert_push_targets", COL_KEYS, COL_KEYS);
+const pickerItems = computed(() => [
+  { key: "name", label: t("cols.name") },
+  { key: "certificate_name", label: t("certpush.certificate") },
+  { key: "kind", label: t("certpush.device") },
+  { key: "api_url", label: t("certpush.api_url") },
+  { key: "auto_push", label: t("certpush.auto_push") },
+  { key: "last_status", label: t("certpush.status") },
+  { key: "actions", label: t("cols.actions") },
+]);
+const exportCols = computed(() => pickerItems.value.filter((c) => c.key !== "actions")
+  .concat([{ key: "last_push_at", label: t("certpush.last_push_at") }]));
+const exportRows = computed(() => shown.value.map((r) => ({
+  name: r.name, certificate_name: r.certificate_name ?? "", kind: kindLabel(r.kind), api_url: r.api_url,
+  auto_push: r.auto_push ? t("certpush.auto_on") : "",
+  last_status: r.last_status ? t(`certpush.status_${r.last_status}`) : t("certpush.never"),
+  last_push_at: r.last_push_at ? fmtDateTime(r.last_push_at) : "",
+})));
 const loading = ref(false);
 async function load() {
   loading.value = true;
@@ -180,11 +213,18 @@ const STATUS_TYPE: Record<string, "success" | "warning" | "error" | "default"> =
 };
 function stepsList(r: CertPushTarget) {
   return h("div", { style: "max-width:420px;font-size:12.5px;line-height:1.7", "data-testid": "certpush-steps" },
-    (r.last_steps || []).map((s) => h("div", { style: s.ok ? "" : "color:var(--error-color,#d03050)" }, [
-      `${s.ok ? "✓" : "✗"} ${te(`certpush.step_${s.step}`) ? t(`certpush.step_${s.step}`) : s.step}`,
-      s.code ? `：${errText(s.code)}` : "",
-      s.detail ? h("span", { style: "opacity:.7" }, `（${s.detail}）`) : "",
-    ])));
+    // 三種：成功 ✓、沒做到 ⚠（例如沒有確認位址所以沒確認；使用者 2026-11-07：狀態寫未確認、明細卻全是綠勾）、失敗 ✗
+    (r.last_steps || []).map((s) => {
+      const st = stepState(s), l = stepLine(s, t, te);
+      return h("div", {
+        style: st === "fail" ? "color:var(--error-color,#d03050)" : st === "warn" ? "color:var(--warning-color,#f0a020)" : "",
+        "data-step-state": st,
+      }, [
+        `${l.mark} ${l.label}`,
+        l.reason ? `：${l.reason}` : "",
+        l.detail ? h("span", { style: "opacity:.7" }, `（${l.detail}）`) : "",
+      ]);
+    }));
 }
 function iconBtn(icon: any, label: string, onClick: () => void, extra: Record<string, any> = {}) {
   return h(NTooltip, null, {
@@ -194,14 +234,19 @@ function iconBtn(icon: any, label: string, onClick: () => void, extra: Record<st
   });
 }
 
-const cols = computed<DataTableColumns<CertPushTarget>>(() => [
-  { title: t("cols.name"), key: "name", minWidth: 140, render: (r) => h("span", { style: r.enabled ? "" : "opacity:.5" }, r.name) },
-  { title: t("certpush.certificate"), key: "certificate_name", minWidth: 140 },
-  { title: t("certpush.device"), key: "kind", width: 120, render: (r) => kindLabel(r.kind) },
-  { title: t("certpush.api_url"), key: "api_url", minWidth: 180, ellipsis: { tooltip: true } },
+const colsAll = computed<DataTableColumns<CertPushTarget>>(() => [
+  { title: t("cols.name"), key: "name", minWidth: 140, sorter: (a, b) => a.name.localeCompare(b.name),
+    render: (r) => h("span", { style: r.enabled ? "" : "opacity:.5" }, r.name) },
+  { title: t("certpush.certificate"), key: "certificate_name", minWidth: 140,
+    sorter: (a, b) => String(a.certificate_name ?? "").localeCompare(String(b.certificate_name ?? "")) },
+  { title: t("certpush.device"), key: "kind", width: 120, sorter: (a, b) => kindLabel(a.kind).localeCompare(kindLabel(b.kind)),
+    render: (r) => kindLabel(r.kind) },
+  { title: t("certpush.api_url"), key: "api_url", minWidth: 180, ellipsis: { tooltip: true },
+    sorter: (a, b) => a.api_url.localeCompare(b.api_url) },
   { title: t("certpush.auto_push"), key: "auto_push", width: 100,
     render: (r) => (r.auto_push ? h(NTag, { size: "small", type: "info", bordered: false }, () => t("certpush.auto_on")) : "—") },
-  { title: t("certpush.status"), key: "last_status", minWidth: 200, render: (r) => {
+  { title: t("certpush.status"), key: "last_status", minWidth: 200,
+    sorter: (a, b) => String(a.last_push_at ?? "").localeCompare(String(b.last_push_at ?? "")), render: (r) => {
     if (!r.last_status) return h("span", { style: "opacity:.6" }, t("certpush.never"));
     const tag = h(NTag, { size: "small", type: STATUS_TYPE[r.last_status] ?? "default", bordered: false },
       () => t(`certpush.status_${r.last_status}`));
@@ -223,20 +268,35 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
     }),
   ]) },
 ]);
+const cols = computed(() =>
+  prefs.orderColumns(colsAll.value.filter((c: any) => prefs.visibleKeys.value.includes(c.key))));
 </script>
 
 <template>
   <div>
     <n-alert type="info" :show-icon="true" style="margin-bottom:10px">{{ t("certpush.intro") }}</n-alert>
-    <n-space justify="space-between" style="margin-bottom:10px">
-      <n-button type="primary" size="small" data-testid="certpush-new" @click="openNew">
-        <template #icon><n-icon :component="PlusIcon" /></template>{{ t("certpush.new") }}
-      </n-button>
-      <n-button size="small" quaternary @click="load">
-        <template #icon><n-icon :component="RefreshIcon" /></template>{{ t("common.refresh") }}
-      </n-button>
+    <!-- 工具列照「派送代理」頁籤：新增、篩選｜匯出、欄位、重新整理（使用者 2026-11-07） -->
+    <n-space justify="space-between" align="center" style="margin-bottom:10px" :wrap="true">
+      <n-space :size="8" align="center">
+        <n-button type="primary" size="small" data-testid="certpush-new" @click="openNew">
+          <template #icon><n-icon :component="PlusIcon" /></template>{{ t("certpush.new") }}
+        </n-button>
+        <n-input v-model:value="filterQ" clearable size="small" :placeholder="t('certpush.filter_ph')" style="width: 220px"
+                 data-testid="certpush-filter">
+          <template #prefix><n-icon :component="SearchIcon" /></template>
+        </n-input>
+      </n-space>
+      <n-space :size="8">
+        <ExportButton :columns="exportCols" :rows="exportRows" filename="cert-push-targets" :title="t('certpush.tab')" />
+        <ColumnPicker :all="pickerItems" :visible="prefs.visibleKeys.value"
+                      @update:visible="prefs.setVisible" @reset="prefs.reset"
+                      :order="prefs.order.value" @update:order="prefs.setOrder" />
+        <n-button size="small" quaternary @click="load">
+          <template #icon><n-icon :component="RefreshIcon" /></template>{{ t("common.refresh") }}
+        </n-button>
+      </n-space>
     </n-space>
-    <n-data-table :columns="cols" :data="rows" :loading="loading" size="small" :scroll-x="1100"
+    <n-data-table :columns="cols" :data="shown" :loading="loading" size="small" :scroll-x="1100" :pagination="pg"
                   :row-key="(r: CertPushTarget) => r.id" data-testid="certpush-table" />
 
     <n-modal v-model:show="show" preset="card" :style="{ width: `${labelWidth + 520}px`, maxWidth: '95vw' }"
@@ -255,11 +315,12 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
           <n-input v-model:value="f.api_url" :placeholder="t(`certpush.url_ph_${f.kind}`)" data-testid="certpush-url" />
         </n-form-item>
         <n-form-item :label="t('certpush.verify_tls')"><n-switch v-model:value="f.verify_tls" /></n-form-item>
-        <n-form-item :label="t(`certpush.key_${f.kind}`)" :required="!editing">
+        <n-form-item :label="t(`certpush.key_${f.kind}`)" :required="!editing" :show-feedback="f.kind === 'opnsense'">
           <n-input v-model:value="f.api_key" type="password" show-password-on="click"
                    :placeholder="editing?.has_secret ? t('certpush.keep_secret') : ''" data-testid="certpush-key" />
         </n-form-item>
-        <n-form-item v-if="f.kind === 'opnsense'" :label="t('certpush.secret_opnsense')" :required="!editing">
+        <!-- 後面接說明文字的輸入項不留驗證訊息的空白，說明才會貼著輸入框（使用者 2026-11-07：說明離輸入框跟下一項一樣遠） -->
+        <n-form-item v-if="f.kind === 'opnsense'" :label="t('certpush.secret_opnsense')" :required="!editing" :show-feedback="false">
           <n-input v-model:value="f.api_secret" type="password" show-password-on="click"
                    :placeholder="editing?.has_secret ? t('certpush.keep_secret') : ''" />
         </n-form-item>
@@ -296,7 +357,7 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
           <n-form-item :label="t('certpush.pa_profile')" required>
             <n-input v-model:value="f.options.profile" placeholder="GP-Portal-Profile" />
           </n-form-item>
-          <n-form-item :label="t('certpush.pa_commit')"><n-switch v-model:value="f.options.commit" /></n-form-item>
+          <n-form-item :label="t('certpush.pa_commit')" :show-feedback="false"><n-switch v-model:value="f.options.commit" /></n-form-item>
           <div class="cp-hint">{{ f.options.commit === false ? t("certpush.pa_commit_off_hint") : t("certpush.pa_commit_hint") }}</div>
           <n-form-item v-if="f.options.commit !== false" :label="t('certpush.pa_commit_admin')">
             <n-input v-model:value="f.options.commit_admin" :placeholder="t('certpush.pa_commit_admin_ph')"
@@ -320,17 +381,19 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
         </template>
 
         <n-form-item :label="t('certpush.verify')"><n-switch v-model:value="verifyOn" /></n-form-item>
-        <n-form-item v-if="verifyOn" :label="t('certpush.verify_endpoint')">
+        <n-form-item v-if="verifyOn" :label="t('certpush.verify_endpoint')"
+                     :show-feedback="!(f.kind === 'paloalto' || f.kind === 'opnsense')">
           <n-input v-model:value="f.verify_endpoint"
                    :placeholder="t(f.kind === 'paloalto' || f.kind === 'opnsense' ? 'certpush.verify_endpoint_ph_explicit' : 'certpush.verify_endpoint_ph')" />
         </n-form-item>
         <!-- Palo Alto、OPNsense：換的憑證可能不是管理介面在用的，沒填確認位址就不確認、不換回（11-03） -->
         <div v-if="verifyOn && (f.kind === 'paloalto' || f.kind === 'opnsense')" class="cp-hint" data-testid="cp-verify-explicit-hint">
           {{ t("certpush.verify_explicit_hint") }}</div>
-        <n-form-item :label="t('certpush.auto_push')"><n-switch v-model:value="f.auto_push" /></n-form-item>
+        <n-form-item :label="t('certpush.auto_push')" :show-feedback="false"><n-switch v-model:value="f.auto_push" /></n-form-item>
         <div class="cp-hint" data-testid="cp-auto-push-hint">{{ t("certpush.auto_push_hint") }}</div>
         <n-form-item :label="t('certpush.enabled')"><n-switch v-model:value="f.enabled" /></n-form-item>
-        <div class="cp-hint"><n-icon :component="InfoIcon" /> {{ t("certpush.verify_hint") }}</div>
+        <!-- 整張表單的說明（不屬於上面「啟用」那一項），所以不貼著它 -->
+        <div class="cp-note"><n-icon :component="InfoIcon" /> {{ t("certpush.verify_hint") }}</div>
       </n-form>
       <template #footer>
         <n-space justify="end">
@@ -349,5 +412,7 @@ const cols = computed<DataTableColumns<CertPushTarget>>(() => [
 /* 全站把 small 按鈕撐到 34px；這裡與同列的 small 下拉清單（28px）對齊 */
 .cp-row-btn { flex: none; --n-height: 28px !important; height: 28px !important; min-height: 28px !important; }
 .cp-certs { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--n-border-color, rgba(128,128,128,.25)); border-radius: 6px; padding: 6px 10px; max-height: 220px; overflow: auto; }
-.cp-hint { font-size: 12px; opacity: .75; margin: -4px 0 12px var(--cp-label, 200px); line-height: 1.6; }
+/* 貼著上面的輸入框（那一項不留驗證訊息的空白），跟下一項之間才留間距 */
+.cp-hint { font-size: 12px; opacity: .75; margin: 4px 0 18px var(--cp-label, 200px); line-height: 1.6; }
+.cp-note { font-size: 12px; opacity: .75; margin: 4px 0 4px var(--cp-label, 200px); line-height: 1.6; }
 </style>

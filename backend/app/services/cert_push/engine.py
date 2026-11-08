@@ -131,29 +131,60 @@ def verify_address(target: CertPushTarget) -> tuple[str, int]:
     return (u.hostname or ""), (u.port or 443)
 
 
+#: 最近一次連不到的原因（DNS 解析不到、被拒絕、逾時、被對外連線規則擋下…），步驟明細寫出來。
+#: 2026-11-07：確認位址的 DNS 沒設，畫面只寫 unreachable，看不出是哪裡的問題
+_PROBE_ERRORS: dict[tuple[str, int], str] = {}
+
+
+def probe_error(host: str, port: int) -> str:
+    return _PROBE_ERRORS.get((host, port), "")
+
+
+def _why(host: str, port: int, reason: str) -> None:
+    if len(_PROBE_ERRORS) > 500:
+        _PROBE_ERRORS.clear()
+    _PROBE_ERRORS[(host, port)] = reason[:200]
+
+
 async def presented_fingerprint(host: str, port: int, timeout: float = 8.0) -> str | None:
-    """連過去讀對方出示的憑證，回 SHA-256 指紋（小寫十六進位，與 CertVersion 相同）；連不到回 None。
-    只讀不驗（自簽、名稱不符照樣讀得到）—— 這裡要知道的是「它現在用的是哪一張」，不是「它可不可信」。"""
+    """連過去讀對方出示的憑證，回 SHA-256 指紋（小寫十六進位，與 CertVersion 相同）；連不到回 None，
+    原因記在 probe_error()。只讀不驗（自簽、名稱不符照樣讀得到）—— 這裡要知道的是「它現在用的是哪一張」，
+    不是「它可不可信」。"""
     # 先解析並檢查位址（core/net_guard），再連「檢查過的那個位址」：不然 DNS 在檢查與連線之間換掉就繞過了
     from app.core import net_guard
+    _PROBE_ERRORS.pop((host, port), None)
     try:
         addrs = await net_guard.acheck_target(host, port)
-    except UnsafeOutboundURL:
+    except UnsafeOutboundURL as exc:
+        _why(host, port, str(exc))
         return None
     if not addrs:
+        _why(host, port, f"no address for {host}")
         return None
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     try:
         _r, w = await asyncio.wait_for(asyncio.open_connection(str(addrs[0]), port, ssl=ctx, server_hostname=host), timeout)
-    except (TimeoutError, OSError, ssl.SSLError):
+    except TimeoutError:
+        _why(host, port, f"no answer from {addrs[0]}:{port} within {timeout:g}s")
+        return None
+    except ssl.SSLError as exc:
+        _why(host, port, f"TLS handshake failed: {exc.reason or exc}")
+        return None
+    except OSError as exc:
+        _why(host, port, f"{addrs[0]}:{port}: {exc.strerror or exc}")
         return None
     try:
         der = w.get_extra_info("ssl_object").getpeercert(binary_form=True)
     finally:
         w.close()
     return hashlib.sha256(der).hexdigest() if der else None
+
+
+def _unreachable(host: str, port: int) -> str:
+    why = probe_error(host, port)
+    return f"unreachable ({why})" if why else "unreachable"
 
 
 async def _current(session: AsyncSession, cert_id: Any) -> CertVersion | None:
@@ -170,9 +201,11 @@ async def _bundle(session: AsyncSession, cert: Certificate, ver: CertVersion) ->
 
 async def push_target(session: AsyncSession, target: CertPushTarget, *, actor_user_id: Any = None,
                       request_id: str | None = None, trigger: str = "manual",
-                      probe=presented_fingerprint) -> dict[str, Any]:
-    """推一個目標並記錄結果。回 {status, fingerprint, steps, error}。呼叫端負責 commit。"""
-    steps = Steps()
+                      probe=presented_fingerprint, progress: Any = None) -> dict[str, Any]:
+    """推一個目標並記錄結果。回 {status, fingerprint, steps, error}。呼叫端負責 commit。
+
+    progress(items, stage)：每完成一步、每換一個階段就叫一次（背景作業拿來即時顯示做到哪裡）。"""
+    steps = Steps(listener=progress)
     status, error, fp = "error", None, None
     from sqlalchemy import text
     got = (await session.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": lock_key(target.id)})).scalar()
@@ -199,17 +232,52 @@ async def push_target(session: AsyncSession, target: CertPushTarget, *, actor_us
         else:
             eps, skipped = [("service", *verify_address(target))], []
         verify = (target.options or {}).get("verify", True) is not False
+        soft = (driver.soft_verify_endpoints(api_ep, custom)
+                if verify and not eps and hasattr(driver, "soft_verify_endpoints") else [])
         before: dict[str, str | None] = {}
+        if verify and eps:
+            steps.stage("probe_before")
         for label, host, port in (eps if verify else []):
             before[label] = await probe(host, port)
-            steps.ok("probe_before", f"{label} {host}:{port} {'reachable' if before[label] else 'unreachable'}")
+            if before[label]:
+                steps.ok("probe_before", f"{label} {host}:{port} reachable")
+            else:
+                # 連不到不打勾，寫出原因（2026-11-07 截圖：「✓ 推之前先連一次（… unreachable）」）
+                steps.warn("probe_before", "certpush_probe_unreachable",
+                           f"{label} {host}:{port} {_unreachable(host, port)}")
+        steps.stage("push")
         rollback = await driver.push(bundle, steps)
+        steps.stage("verify")
         if getattr(driver, "staged", False):
             status = "staged"
         elif rollback is None or not verify or not eps:
-            for s in skipped:
-                steps.ok("verify", f"{s}: no verify address; not verified")
+            # 沒確認到的要講清楚為什麼，不可以打勾（以前全部 steps.ok，狀態寫未確認、明細卻全是綠勾）
             status = "unverified"
+            if not verify:
+                steps.warn("verify", "certpush_verify_disabled", "verify turned off for this target")
+            elif soft and rollback is not None:
+                # 軟性確認（見 OPNsenseDriver.soft_verify_endpoints）：對得上算確認，對不上只警示、不換回
+                good = True
+                for label, host, port in soft:
+                    seen = None
+                    for i in range(VERIFY_TRIES):
+                        seen = await probe(host, port)
+                        if seen == fp:
+                            break
+                        if i < VERIFY_TRIES - 1:
+                            await asyncio.sleep(VERIFY_INTERVAL_S)
+                    if seen == fp:
+                        steps.ok("verify", f"{label} {host}:{port} presents {fp[:16]}")
+                    else:
+                        steps.warn("verify", "certpush_verify_webgui_old",
+                                   f"{label} {host}:{port} presents {(seen or 'nothing')[:16]}; not rolled back")
+                        good = False
+                status = "ok" if good else "unverified"
+            else:
+                if rollback is None and eps:
+                    steps.warn("verify", "certpush_verify_no_rollback", "nothing to roll back to; not verified")
+                for s in skipped or ([] if eps else ["service"]):
+                    steps.warn("verify", "certpush_verify_no_address", f"{s}: no verify address; not verified")
         else:
             failed, unknown = [], []
             for label, host, port in eps:
@@ -223,15 +291,19 @@ async def push_target(session: AsyncSession, target: CertPushTarget, *, actor_us
                 if seen == fp:
                     steps.ok("verify", f"{label} {host}:{port} presents {fp[:16]}")
                 elif before.get(label) is None and seen is None:
-                    steps.ok("verify", f"{label} {host}:{port} unreachable before and after; not verified")
+                    why = probe_error(host, port)
+                    steps.warn("verify", "certpush_verify_unreachable",
+                               f"{label} {host}:{port} unreachable before and after"
+                               + (f" ({why})" if why else "") + "; not verified")
                     unknown.append(label)
                 else:
                     steps.fail("verify", "certpush_verify_failed",
                                f"{label} {host}:{port} presents {(seen or 'nothing')[:16]}")
                     failed.append(label)
             for s in skipped:
-                steps.ok("verify", f"{s}: no verify address; not verified")
+                steps.warn("verify", "certpush_verify_no_address", f"{s}: no verify address; not verified")
             if failed:
+                steps.stage("rollback")
                 try:
                     await rollback()
                     steps.ok("rollback")

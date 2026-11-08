@@ -138,6 +138,8 @@ mv -f "$TMP" "$AGENT"
 chown -R "$RUN_USER:$RUN_GROUP" "$DEST"
 
 echo "==> Writing ${ENVFILE}"
+# The server check chosen on this run wins over what the agent learned by itself (jt-ipam-trust next to it)
+[[ -n "$TRUST_GIVEN" ]] && rm -f "${DEST}/jt-ipam-trust"
 ( umask 077
   {
     echo "JT_IPAM_URL=${JT_IPAM_URL}"

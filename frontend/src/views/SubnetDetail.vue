@@ -127,6 +127,11 @@ import {
   toDhcpRanges, type DhcpRangeInfo,
 } from "@/utils/ipColumns";
 import { saveBlob } from "@/utils/saveFile";
+import { useDescColumns } from "@/composables/useDescColumns";
+
+// 標題在左的描述表格：寬度不夠三欄就改兩欄（iPad 橫向）
+const subnetDescEl = ref<any>(null);
+const descCols = useDescColumns(subnetDescEl);
 
 const route = useRoute();
 const router = useRouter();
@@ -820,7 +825,7 @@ onMounted(() => {
                 accept=".csv,text/csv"
                 :disabled="importBusy"
               >
-                <n-button :loading="importBusy" type="primary" size="small">
+                <n-button :loading="importBusy" type="primary" size="small"><template #icon><n-icon><UploadIcon /></n-icon></template>
                   {{ t("csv_import.select_file") }}
                 </n-button>
               </n-upload>
@@ -843,7 +848,7 @@ onMounted(() => {
             {{ t("subnet_detail.delete_confirm") }}
           </n-popconfirm>
         </n-space>
-        <n-descriptions bordered :column="3" size="small" label-placement="left">
+        <n-descriptions ref="subnetDescEl" bordered :column="descCols" size="small" label-placement="left">
           <n-descriptions-item :label="t('subnets.cidr')">{{ subnet.cidr }}</n-descriptions-item>
           <n-descriptions-item :label="t('subnets.section')">
             <a v-if="section" href="#" class="entity-link"

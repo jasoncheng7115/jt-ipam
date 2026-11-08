@@ -2445,6 +2445,7 @@ happy path of "an upload succeeded" is not enough.
   embedded SVG draw the same bracket; a rack without groups exports byte-for-byte as before
 - [ ] **Help** button next to Create (everyone sees it): explains what a group is, when to use each type, the fields, where groups show and the rules
 - [ ] **Member picker / device search**: typing an IP or FQDN finds the device (Devices page too, including a non-primary IP and `/devices?q=<ip>`); an IP you cannot see does not reveal its device; when nothing matches, the picker says members must be devices and a host only under virtualization / IP addresses has to be added first (nothing is created automatically). Switching the type to HA active / passive makes the first member "Primary" and the others "Standby"
+- [ ] **Group labels and other-side hints share a column** (`e2e/device-groups.spec.ts`): with a rear device between two group members, "Rear ×1" stays put and the group label moves to a free spot inside its bracket; they do not overlap, share a left edge, and the hint stays within the bracket width of the rack
 - [ ] **Device list / detail**: the Group column (name, role, order) opens the Groups tab; the detail page has a
   "Device group" card with the other members, rack positions and the shared IPs
 - [ ] **Topology**: members are joined by an orange line labelled with the group name (legend "Device groups");
@@ -2456,8 +2457,36 @@ happy path of "an upload succeeded" is not enough.
 
 ## 8. Recent feature spot-checks
 
+- [ ] **Windows certificate agent on Chinese Windows** (`tests/test_powershell_agents.py`): .ps1 files are plain ASCII; one real run on Traditional Chinese Windows (PowerShell 5.1): pins by itself, follows a signed certificate change, refuses forged ones
+
+- [ ] **IP topology minimap** (`e2e/topology-minimap.spec.ts`): every mode has it; hidden nodes are left out; clicking it moves the view; the relation graph minimap still works
+
+- [ ] **AI asks about device groups** (`tests/test_mcp_device_groups.py`): "which device groups exist" uses `group="*"`, a group's members use its name; the tool list stays within its budget
+
+- [ ] **Certificate push progress and unreachable reasons** (`tests/test_cert_push_progress.py`, `e2e/cert-push.spec.ts`): while pushing, the background tasks panel shows finished steps and "Now: …"; a verify address without DNS shows the DNS failure and the pre-push step is ⚠
+
+- [ ] **AI chat keeps the question** (`tests/test_ai_question_kept.py`): the system prompt carries the current question; oversized tool results are shortened (largest first) and the answer says so; on a real num_ctx 16384 model, "who uses <IP>" answers about that IP
+
+- [ ] **iPad layout** (`e2e/viewport-height.spec.ts`, `e2e/ipad-labels.spec.ts`): the layout fills the window and follows it when it grows; subnet details use two pairs per row at 1000px with unwrapped labels; source names under "Last seen by source" do not overflow
+
+- [ ] **Agents verify jt-ipam automatically** (`tests/test_agent_trust_bundle.py`, `test_cert_agent_auto_pin.py`, `test_python_agent_auto_pin.py`, `test_powershell_agents.py`): an unverified agent switches after updating (CA first, else pin, only once it connects, no key sent); not when switched off in System settings or behind a load balancer; follows a jt-ipam certificate change only when signed by the identity key; audit has `agent_tls_verified`
+- [ ] **Windows certificate agent runs** (`tests/test_powershell_agents.py`): every .ps1 parses with pwsh; one scheduled run on a real Windows host logs no ParserError
+
+- [ ] **Topology: bonded dual-homed hosts** (`tests/test_topology_fdb.py`, `e2e/topology-dual-homed.spec.ts`): the same MAC alone on a port of each of two switches → two links, dual-homed group, ports marked as a bonded NIC; not when the other port also carries other MACs
+
+- [ ] **Push table toolbar and the "Not verified" entry** (`e2e/cert-push.spec.ts`, `e2e/cert-agent-trust.spec.ts`): push to devices has filter, columns and export; the "Not verified" / "Not verified (old)" tag on agent lists is clickable and opens that agent's install command
+
+- [ ] **Push step warnings and OPNsense soft check** (`tests/test_cert_push_review_fixes.py`, `e2e/cert-push.spec.ts`): without a check address, "Connect and check" shows a warning with the reason (no tick); OPNsense with the web GUI restart and no check address: new certificate on the API URL = confirmed, old = warning and nothing restored; form help text sits right under its field (`tests/test_form_hint_spacing.py`)
+
+- [ ] **Embedding model on another server** (`tests/test_llm_role_servers.py`, `e2e/llm-role-server.spec.ts`): the embedding URL sits above the embedding model picker; with another server's URL the picker lists that server's models (`GET /system/llm/models?role=embedding`), clearing it goes back to the chat server
+
+- [ ] **Interpretation / audit: provider before URL** (`tests/test_llm_role_servers.py`, `e2e/llm-role-server.spec.ts`): turn on "Use a different LLM server", choose OpenAI-compatible first; it stays after save and reload, the chat server is still used until a URL is entered, and turning the switch off clears provider and key
+
+- [ ] **Every button has an icon** (`tests/test_button_icons.py`): Cancel / Save / Confirm in the power, cabling, SFTP, RustDesk and rack dialogs have icons; the guard lists the exemptions (symbol buttons, toggle groups, link-style buttons)
+
 - [ ] **Assigning agent subnets does not silently take another agent's** (`tests/test_scan_agent_subnet_list.py`, `e2e/scan-agent-subnet-list.spec.ts`): the picker says "scanned by X"; saving asks for confirmation listing the subnets and their current agent, Cancel changes nothing, confirming moves them; the API without `move_from_other_agents` returns 409 `scan_agent_subnets_taken`; the audit diff has `moved`
 - [ ] **Topology pinned-subnet filter** (`e2e/topology-pinned-filter.spec.ts`): with pinned subnets the filter shows the CIDR (not just "+1"), a note says only pinned subnets are drawn, and "Show all subnets" clears it
+- [ ] **Stale pinned subnets are skipped** (`tests/test_pinned_subnets_cleanup.py`, `e2e/topology-pinned-filter.spec.ts`): deleted, archived or invisible subnets in the pinned list are not returned by `GET /me/preferences` and are dropped on save; the topology filter shows CIDRs only, never an ID, and the map draws
 - [ ] **Settings cards and system export hints** (`e2e/settings-cards-and-transfer.spec.ts`): the change assessment and maintenance cards use one setting per row; system export shows that it is counting (retry on failure) and why the button is disabled (counting, no category, short or mismatched passphrase); import says when the file or passphrase is missing
 - [ ] **Every card on the device page has a title icon** (`tests/test_page_header_icons.py`), including the rack diagram card
 

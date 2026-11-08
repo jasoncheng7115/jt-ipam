@@ -4,6 +4,78 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [1.0.21] - 2026-11-08
+
+> **Windows certificate agents:** 1.2.0, shipped with 1.0.20, cannot run at all, and on Chinese Windows the agent was also broken by its comments (see Fixed). An agent that already updated to it cannot update itself again: run its install command on that host once more. Linux, scan and RustDesk agents are not affected.
+
+### Changed
+
+#### Installed agents verify jt-ipam without a reinstall
+**How it works**
+- After updating, an agent that does not verify the server switches to verifying it by itself; no install command has to be re-run on each host.
+- It fetches jt-ipam's trust data without sending its key, tries system CAs, else pins the certificate.
+- It keeps the new setting only after connecting with it, so a load balancer in between leaves it as it was.
+
+**Certificate changes**
+- Each jt-ipam now has its own identity key (stored encrypted, included in the system export).
+- Agents remember it; when jt-ipam changes its certificate they follow only a change signed by that key that they can connect with.
+
+**Settings and audit**
+- "Agents verify jt-ipam automatically" in System settings, on by default.
+- The audit log records `agent_tls_verified` for each agent that switches.
+- New endpoints: `GET /api/v1/agent-trust`, `GET` / `PUT /api/v1/system/agent-auto-pin`.
+
+**Versions**
+- Certificate agent 0.4.177 (Linux) / 1.3.0 (Windows), scan agent 1.22.0, RustDesk agent 1.4.0.
+
+#### Certificate push
+**Progress**
+- The background tasks panel lists each finished step (✓ / ⚠ / ✗ with the reason) and the current stage while the push runs, and keeps the full list when it is done.
+
+**Clearer results**
+- Steps that were not done show a warning with the reason instead of a tick (no check address, unreachable before and after, check turned off).
+- An unreachable check address gives the cause: DNS resolution failed, connection refused, no answer, TLS handshake failed, or blocked by the outbound rules.
+- OPNsense web GUI pushes without a check address check the API URL once: the new certificate there counts as confirmed; the old one is only a warning and nothing is restored.
+
+**Page**
+- The push targets tab has a filter, column picker, export, sorting and paging, like the agents tab.
+- An agent tagged "Not verified" can be clicked to open its install command with pinning selected.
+- The intro and the integration docs say the OPNsense web GUI certificate was verified on a real device.
+
+#### Topology and racks
+- IP topology has the overview minimap in the bottom-left corner in every mode, shared with the relation graph of IP change impact; frames and hidden nodes are left out, and a few nodes no longer fill it.
+- Rack diagram: device group labels and other-side hints share one column; group labels use an outline in the group colour; exports and the embedded SVG match.
+
+#### Device groups
+- AI chat and MCP: `list_devices` takes a `group` filter (`*` lists every grouped device) and each row carries the group name, type and role.
+- The "Device group" card on device details is an aligned table (member, role, rack position) with this device highlighted and shared IPs below.
+
+### Fixed
+
+#### Agents
+- **Windows certificate agent 1.2.0 could not parse**: an empty string inside a subexpression of a double-quoted string, which PowerShell reads as an escaped quote. Fixed in 1.3.0; every PowerShell script is now parsed in the tests.
+- **Windows certificate agent on Chinese (Big5) Windows**: Windows PowerShell 5.1 reads a script without a BOM in the system code page, and Chinese comments in the agent swallowed the line break after them, turning the next line of code into a comment. In 1.0.20 this broke parsing altogether; since 1.0.19 it also dropped the WinRM error message. The agent scripts are now plain ASCII, with a guard test. Verified on Windows 11 (Traditional Chinese, PowerShell 5.1): an unverified agent pins the server by itself, follows a certificate change signed by jt-ipam, and refuses forged ones without sending its key.
+
+#### AI chat
+- **Answered a different question** (asked who uses an IP, it reported the subnet's usage). With a context length of 16384 the tool list takes about 12,700 tokens, and one detailed result pushed the prompt over the limit; Ollama dropped the oldest message, the question itself.
+  - The current question is also in the system prompt, which Ollama never drops.
+  - Tool results are shortened before sending when they would not fit (JSON measured at about 2.5 characters per token), and the answer says so.
+
+#### LLM settings
+- Choosing "OpenAI-compatible endpoint" before entering the URL no longer jumps back to Ollama after saving.
+- The embedding model list comes from the embedding server when one is set; its URL field sits above the model picker.
+
+#### Topology
+- A host bonded across two switches (one MAC on two NICs, e.g. LACP to a stack or MLAG pair) shows both links and goes into the dual-homed group.
+- The subnet filter no longer shows an ID and draws nothing when a pinned subnet was deleted, archived or put out of reach.
+
+#### Layout
+- iPad: no blank strip below the page right after loading.
+- iPad landscape: detail page labels no longer break one letter per line; the table drops to two pairs per row below about 960px.
+- IP details, "Last seen by source": long source names wrap before the parenthesis instead of running over the time column.
+- Help text sits right under its form field.
+- 134 text buttons in 51 screens got their icons, with a guard test.
+
 ## [1.0.20] - 2026-11-06
 
 ### Upgrade notes

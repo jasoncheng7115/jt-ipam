@@ -39,7 +39,7 @@ import { fmtDateTime } from "@/utils/datetime";
 import { useFileListPagination } from "@/composables/useFileListPagination";
 import {
   RefreshIcon, FilesIcon, CancelIcon, DeleteIcon, EditIcon,
-  DownloadIcon, UploadIcon, NewFolderIcon, FilterIcon, SortAscIcon, MoveIcon, UpLevelIcon, ChevronRightIcon,
+  DownloadIcon, UploadIcon, NewFolderIcon, FilterIcon, SortAscIcon, MoveIcon, UpLevelIcon, ChevronRightIcon, CheckIcon, CopyIcon, SaveIcon,
 } from "@/icons";
 
 const props = defineProps<{
@@ -1225,7 +1225,7 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
           <n-button v-if="phase === 'connected'" size="tiny" type="error" ghost @click="disconnect">
             <template #icon><n-icon :component="CancelIcon" /></template>{{ t("ssh.disconnect") }}
           </n-button>
-          <n-button v-else size="tiny" type="primary" ghost @click="reconnect">
+          <n-button v-else size="tiny" type="primary" ghost @click="reconnect"><template #icon><n-icon><RefreshIcon /></n-icon></template>
             {{ t("ssh.reconnect") }}
           </n-button>
         </n-space>
@@ -1259,7 +1259,7 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
             <span v-if="closeCode !== null" class="sftp-offline-code">
               {{ t("sftp.offline_code", { code: closeCode }) }}
             </span>
-            <n-button size="small" type="primary" @click="reconnect">
+            <n-button size="small" type="primary" @click="reconnect"><template #icon><n-icon><RefreshIcon /></n-icon></template>
               {{ t("ssh.reconnect") }}
             </n-button>
           </div>
@@ -1370,8 +1370,8 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
                  :placeholder="t('sftp.name_ph')" @keyup.enter="submitNameDlg" />
         <template #footer>
           <n-space justify="end">
-            <n-button @click="nameDlg = null">{{ t("common.cancel") }}</n-button>
-            <n-button type="primary" :loading="busy" @click="submitNameDlg">
+            <n-button @click="nameDlg = null"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+            <n-button type="primary" :loading="busy" @click="submitNameDlg"><template #icon><n-icon><CheckIcon /></n-icon></template>
               {{ t("common.confirm") }}
             </n-button>
           </n-space>
@@ -1393,9 +1393,9 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
         </n-checkbox>
         <template #footer>
           <n-space justify="end">
-            <n-button data-testid="sftp-conflict-skip" @click="answerConflict('skip')">{{ t("sftp.conflict_skip") }}</n-button>
-            <n-button data-testid="sftp-conflict-rename" @click="answerConflict('rename')">{{ t("sftp.conflict_keep_both") }}</n-button>
-            <n-button type="warning" data-testid="sftp-conflict-overwrite" @click="answerConflict('overwrite')">
+            <n-button data-testid="sftp-conflict-skip" @click="answerConflict('skip')"><template #icon><n-icon><MoveIcon /></n-icon></template>{{ t("sftp.conflict_skip") }}</n-button>
+            <n-button data-testid="sftp-conflict-rename" @click="answerConflict('rename')"><template #icon><n-icon><CopyIcon /></n-icon></template>{{ t("sftp.conflict_keep_both") }}</n-button>
+            <n-button type="warning" data-testid="sftp-conflict-overwrite" @click="answerConflict('overwrite')"><template #icon><n-icon><SaveIcon /></n-icon></template>
               {{ t("sftp.conflict_overwrite") }}
             </n-button>
           </n-space>
@@ -1413,8 +1413,8 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
         </n-space>
         <template #footer>
           <n-space justify="end">
-            <n-button @click="confirmRecursive = null">{{ t("common.cancel") }}</n-button>
-            <n-button type="error" :loading="busy" @click="doDeleteRecursive">
+            <n-button @click="confirmRecursive = null"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+            <n-button type="error" :loading="busy" @click="doDeleteRecursive"><template #icon><n-icon><DeleteIcon /></n-icon></template>
               {{ t("sftp.delete_dir_confirm") }}
             </n-button>
           </n-space>
@@ -1428,7 +1428,7 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
           <n-input-group>
             <n-input v-model:value="moveDest" class="mono" :placeholder="t('sftp.move_path_ph')"
                      @keyup.enter="browseMove(moveDest)" />
-            <n-button :loading="moveLoading" @click="browseMove(moveDest)">
+            <n-button :loading="moveLoading" @click="browseMove(moveDest)"><template #icon><n-icon><MoveIcon /></n-icon></template>
               {{ t("sftp.move_go") }}
             </n-button>
           </n-input-group>
@@ -1447,8 +1447,8 @@ onBeforeUnmount(() => { try { ws?.close(); } catch { /* 已關閉 */ } });
         </n-space>
         <template #footer>
           <n-space justify="end">
-            <n-button @click="moveDlg = false">{{ t("common.cancel") }}</n-button>
-            <n-button type="primary" :loading="busy" @click="confirmMove">
+            <n-button @click="moveDlg = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+            <n-button type="primary" :loading="busy" @click="confirmMove"><template #icon><n-icon><MoveIcon /></n-icon></template>
               {{ t("sftp.move_here", { dir: moveDest }) }}
             </n-button>
           </n-space>

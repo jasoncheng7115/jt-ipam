@@ -10,7 +10,7 @@ import {
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
-import { DevicesIcon, RefreshIcon, EditIcon, DeleteIcon, TopologyIcon, AddressesIcon, LibreNMSIcon, WazuhIcon, VirtualizationIcon, SubnetsIcon, LinkIcon , DhcpServerIcon, OpenNewWindowIcon, RustDeskIcon, ChangeImpactIcon } from "@/icons";
+import { DevicesIcon, RefreshIcon, EditIcon, DeleteIcon, TopologyIcon, AddressesIcon, LibreNMSIcon, WazuhIcon, VirtualizationIcon, SubnetsIcon, LinkIcon , DhcpServerIcon, OpenNewWindowIcon, RustDeskIcon, ChangeImpactIcon, CancelIcon, CheckIcon } from "@/icons";
 import ChangeImpactWizard from "@/components/ChangeImpactWizard.vue";
 import MaintenanceQuickButton from "@/components/MaintenanceQuickButton.vue";
 import type { ScenarioType } from "@/api/changeImpact";
@@ -47,6 +47,11 @@ import { useAuthStore } from "@/stores/auth";
 import { storeToRefs } from "pinia";
 import { useTablePagination } from "@/composables/useTablePagination";
 import { shortOcsAgent } from "@/utils/ocsAgent";
+import { useDescColumns } from "@/composables/useDescColumns";
+
+// 標題在左的描述表格：寬度不夠三欄就改兩欄（iPad 橫向）
+const deviceDescEl = ref<any>(null);
+const descCols = useDescColumns(deviceDescEl);
 const pg = useTablePagination();
 const { t, te } = useI18n();
 
@@ -513,7 +518,7 @@ onMounted(() => {
         </n-space>
         <div class="dev-head-row">
           <div class="dev-head-info">
-        <n-descriptions bordered :column="3" size="small" label-placement="left">
+        <n-descriptions ref="deviceDescEl" bordered :column="descCols" size="small" label-placement="left">
           <n-descriptions-item :label="t('common.name')">{{ device.name }}</n-descriptions-item>
           <n-descriptions-item :label="t('common.type')">{{ t(`devices.type_${device.type}`) }}</n-descriptions-item>
           <n-descriptions-item :label="t('devices.vendor')">{{ device.vendor ?? "—" }}</n-descriptions-item>
@@ -861,8 +866,8 @@ onMounted(() => {
                 remote :loading="linkLoading" @search="onLinkSearch"
                 :placeholder="t('devices.link_ip_ph')" />
       <n-space justify="end">
-        <n-button @click="showLinkIp = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="success" :loading="linking" :disabled="!linkIpId" @click="doLinkIp">
+        <n-button @click="showLinkIp = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="success" :loading="linking" :disabled="!linkIpId" @click="doLinkIp"><template #icon><n-icon><CheckIcon /></n-icon></template>
           {{ t("common.ok") }}
         </n-button>
       </n-space>

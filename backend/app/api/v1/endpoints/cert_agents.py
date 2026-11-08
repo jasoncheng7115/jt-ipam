@@ -38,6 +38,7 @@ from app.schemas.certificate import (
     CertAgentRead,
     CertAgentUpdate,
 )
+from app.services import agent_trust
 from app.services.cert_service import export_cert_file
 
 router = APIRouter(prefix="/cert-agents", tags=["cert-agents"])
@@ -542,7 +543,9 @@ async def agent_check(
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
     # 代理怎麼確認伺服器（舊版代理不帶 → None，清單會提示重新安裝）
-    agent.tls_mode = x_agent_tls if x_agent_tls in ("pinned", "ca", "insecure") else None
+    agent.tls_mode = await agent_trust.record_tls_mode(
+        session, request, object_type="cert_agent", object_id=agent.id, name=agent.name,
+        old=agent.tls_mode, header=x_agent_tls)
     certs = await _current_versions_for_scope(session, agent)
     await session.commit()
     sha = _agent_sha()  # server 上派送代理程式的 sha256；agent 比對不同就自我更新

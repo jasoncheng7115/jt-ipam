@@ -25,7 +25,7 @@ import {
   NSwitch,
 } from "naive-ui";
 import { NIcon } from "naive-ui";
-import { RacksIcon, DeleteIcon, PlusIcon, EditIcon, SaveIcon, CancelIcon, LocationsIcon, PinIcon } from "@/icons";
+import { RacksIcon, DeleteIcon, PlusIcon, EditIcon, SaveIcon, CancelIcon, LocationsIcon, PinIcon, CheckIcon, CopyIcon, RestoreIcon, SettingsIcon } from "@/icons";
 import { exportTable, type ExportColumn } from "@/utils/tableExport";
 import { exportRacksSvg, exportRacksPng, exportRacksDrawio, type RackNameAlign } from "@/utils/rackGraphicsExport";
 import { getRackNameAlign } from "@/api/basic";
@@ -880,7 +880,7 @@ function doMergedExport(key: string) {
       <!-- 在平面圖上點選的機櫃 → 顯示其 U 位 -->
       <n-card v-if="roomFocus" style="margin-bottom: 16px" :bordered="false" content-style="padding:0">
         <n-space justify="end" style="margin-bottom: 6px">
-          <n-button size="tiny" quaternary @click="roomFocus = null">
+          <n-button size="tiny" quaternary @click="roomFocus = null"><template #icon><n-icon><CancelIcon /></n-icon></template>
             {{ t("common.cancel") }}
           </n-button>
         </n-space>
@@ -967,7 +967,7 @@ function doMergedExport(key: string) {
           </template>
           {{ t("common.confirm_delete_n", { n: checkedKeys.length }) }}
         </n-popconfirm>
-        <n-button size="small" @click="checkedKeys = []">{{ t("common.clear_selection") }}</n-button>
+        <n-button size="small" @click="checkedKeys = []"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.clear_selection") }}</n-button>
       </n-space>
       <n-data-table
         :columns="columns"
@@ -1029,12 +1029,12 @@ function doMergedExport(key: string) {
               <n-input-number v-model:value="form.u_height" :min="1" :max="99" style="flex: 1 1 0; min-width: 0" />
               <!-- 層數調整：插入／刪除一層時上面的裝置整批跟著移（直接改層數不會搬裝置）。
                    只有既有的機櫃才有裝置可搬，新增時不出現。 -->
-              <n-button v-if="editing && isAdmin" size="small" class="level-ops-btn" @click="openLevelOps">
+              <n-button v-if="editing && isAdmin" size="small" class="level-ops-btn" @click="openLevelOps"><template #icon><n-icon><SettingsIcon /></n-icon></template>
                 {{ t("racks.level_ops") }}
               </n-button>
               <!-- 剛做完才出現的復原：照著回應帶的 undo 送回去即可 -->
               <n-button v-if="editing && levelUndo && levelUndo.rackId === editing.id"
-                        size="small" type="warning" ghost :loading="levelBusy" @click="undoLevel">
+                        size="small" type="warning" ghost :loading="levelBusy" @click="undoLevel"><template #icon><n-icon><RestoreIcon /></n-icon></template>
                 {{ t("racks.level_undo") }}
               </n-button>
             </div>
@@ -1129,7 +1129,7 @@ function doMergedExport(key: string) {
               <!-- 剛把開關打開、還沒按儲存時，那串網址一定回 404 —— 先給得出來只會
                    讓人以為功能壞了。要等**存進去的**值也是開啟才放行。 -->
               <n-button size="small" :disabled="!embedCfg?.enabled || !editing.expose_svg"
-                        @click="copyEmbedUrl">
+                        @click="copyEmbedUrl"><template #icon><n-icon><CopyIcon /></n-icon></template>
                 {{ t("racks.embed_copy") }}
               </n-button>
               <span v-if="embedCfg?.enabled && !editing.expose_svg" class="embed-hint">
@@ -1195,9 +1195,9 @@ function doMergedExport(key: string) {
       </n-space>
       <template #footer>
         <n-space justify="end">
-          <n-button size="small" @click="showLevelOps = false">{{ t("common.cancel") }}</n-button>
+          <n-button size="small" @click="showLevelOps = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
           <n-button size="small" type="primary" :disabled="!levelPlan || !!levelPlan.blockers.length"
-                    :loading="levelBusy" @click="applyLevel">
+                    :loading="levelBusy" @click="applyLevel"><template #icon><n-icon><CheckIcon /></n-icon></template>
             {{ t("racks.level_apply") }}
           </n-button>
         </n-space>
@@ -1223,8 +1223,8 @@ function doMergedExport(key: string) {
       </n-form-item>
       <p style="font-size:12px; opacity:.6; margin:0 0 8px">{{ pickUsesLevels ? t("racks.place_device_hint_level") : t("racks.place_device_hint") }}</p>
       <n-space justify="end">
-        <n-button @click="showDevicePick = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" :disabled="!pickDeviceId" :loading="pickBusy" @click="confirmPickDevice">
+        <n-button @click="showDevicePick = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" :disabled="!pickDeviceId" :loading="pickBusy" @click="confirmPickDevice"><template #icon><n-icon><CheckIcon /></n-icon></template>
           {{ t("common.confirm") }}
         </n-button>
       </n-space>

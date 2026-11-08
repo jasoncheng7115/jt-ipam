@@ -23,6 +23,9 @@
     AGENT_KEY=<enrollment key>
     VERIFY_TLS=true             # set false only if the jt-ipam server cert is self-signed
     AUTO_UPDATE=true            # auto-update this script when the server has a newer one
+    AUTO_PIN=true               # an agent that does not verify jt-ipam switches to verifying it by
+                                # itself (Windows trust, else the server certificate's SHA-256), and
+                                # follows a certificate change signed by this jt-ipam; false = as above
     REMOVE_OLD_CERT=false       # delete the previously bound cert from the store after a
                                 # successful switch. Off by default: the same certificate
                                 # may still be bound elsewhere on this machine.
@@ -73,7 +76,7 @@ param(
     [switch] $Help
 )
 
-$AGENT_VERSION = "1.2.0"
+$AGENT_VERSION = "1.3.0"
 
 # Public key (RSA) that signs this script: self-update only installs a copy whose signature verifies, so
 # neither a fake server nor a compromised one can push a script that runs as SYSTEM.
@@ -143,7 +146,7 @@ Scheduled-run log: $STATE_DIR\last-run.log
 if ($Help) { Show-Usage; exit 0 }
 if ($ShowVersion) { Write-Output $AGENT_VERSION; exit 0 }
 
-# ─────────────────── Config ───────────────────
+# ------------------- Config -------------------
 
 function Read-ConfigFile {
     param([string] $Path)
@@ -190,7 +193,27 @@ try {
     exit 2
 }
 $VERIFY_TLS = Test-CfgTrue (Get-Cfg $CFG "VERIFY_TLS" "true")
-$CERT_SHA256 = "$(Get-Cfg $CFG "CERT_SHA256" "")".Trim()
+$CERT_SHA256 = (Get-Cfg $CFG "CERT_SHA256" "").Trim()
+$AUTO_PIN = Test-CfgTrue (Get-Cfg $CFG "AUTO_PIN" "true")
+# What the agent learned about jt-ipam by itself (see "Verifying jt-ipam without a reinstall" below)
+# wins over the config file; the installer removes it when it writes a new server check.
+$TRUST_FILE = Join-Path $STATE_DIR "trust"
+$TRUST_N = ""
+$TRUST_E = ""
+function Read-JtTrust {
+    if (-not (Test-Path -LiteralPath $TRUST_FILE)) { return }
+    try { $t = Read-ConfigFile -Path $TRUST_FILE } catch { return }
+    $mode = Get-Cfg $t "TRUST_MODE"
+    $sha = Get-Cfg $t "TRUST_SHA256"
+    if ($mode -eq "pinned" -and $sha -match '^[0-9A-Fa-f]{64}$') {
+        $script:CERT_SHA256 = $sha; $script:VERIFY_TLS = $true
+    } elseif ($mode -eq "ca") {
+        $script:CERT_SHA256 = ""; $script:VERIFY_TLS = $true
+    } else { return }
+    $n = Get-Cfg $t "TRUST_N"; $e = Get-Cfg $t "TRUST_E"
+    if ($n -match '^[A-Za-z0-9+/]+={0,2}$' -and $e -match '^[A-Za-z0-9+/]+={0,2}$') { $script:TRUST_N = $n; $script:TRUST_E = $e }
+}
+Read-JtTrust
 # How the agent makes sure it talks to the real jt-ipam (reported to the server, shown on the agent list).
 $TLS_MODE = if ($CERT_SHA256) { "pinned" } elseif (-not $VERIFY_TLS) { "insecure" } else { "ca" }
 $AUTO_UPDATE = Test-CfgTrue (Get-Cfg $CFG "AUTO_UPDATE" "true")
@@ -210,7 +233,7 @@ function Enable-JtPin {
        server certificate; any other server -- including one posing as jt-ipam -- is refused before the
        agent key is sent. The check is compiled C#: a PowerShell script block as the callback can run on a
        thread without a runspace and fail. #>
-    param([string] $Sha256)
+    param([string] $Sha256, [int] $Mode = 1)
     if (-not ("JtPin" -as [type])) {
         Add-Type -TypeDefinition @"
 using System;
@@ -219,30 +242,57 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 public static class JtPin {
     public static string Sha256 = "";
+    // 1 = certificate SHA-256 pin, 2 = normal (CA) verification, 0 = no verification
+    public static int Mode = 1;
+    // set when a certificate was refused: jt-ipam may have changed its certificate
+    public static bool Refused = false;
     public static bool Check(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errors) {
-        if (cert == null) return false;
-        using (SHA256 h = SHA256.Create()) {
-            string got = BitConverter.ToString(h.ComputeHash(cert.GetRawCertData())).Replace("-", "");
-            return string.Equals(got, Sha256.Replace(":", ""), StringComparison.OrdinalIgnoreCase);
+        if (Mode == 0) return true;
+        bool ok;
+        if (Mode == 2) {
+            ok = errors == SslPolicyErrors.None;
+        } else if (cert == null) {
+            ok = false;
+        } else {
+            using (SHA256 h = SHA256.Create()) {
+                string got = BitConverter.ToString(h.ComputeHash(cert.GetRawCertData())).Replace("-", "");
+                ok = string.Equals(got, Sha256.Replace(":", ""), StringComparison.OrdinalIgnoreCase);
+            }
         }
+        if (!ok) Refused = true;
+        return ok;
     }
 }
 "@
     }
     [JtPin]::Sha256 = $Sha256
+    [JtPin]::Mode = $Mode
     [Net.ServicePointManager]::ServerCertificateValidationCallback =
         [Delegate]::CreateDelegate([Net.Security.RemoteCertificateValidationCallback], [JtPin].GetMethod("Check"))
 }
 
-if ($CERT_SHA256) {
-    Write-Dbg "pinned to the jt-ipam server certificate $CERT_SHA256"
-    Enable-JtPin -Sha256 $CERT_SHA256
-} elseif (-not $VERIFY_TLS) {
-    Write-Dbg "TLS verification disabled for calls to $SERVER"
-    [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+# The check is installed for every mode (one compiled callback, see Enable-JtPin). If compiling is not
+# possible here, fall back to what older agents did; switching to verification by itself is then off.
+$JT_CALLBACK = $true
+function Set-JtTlsMode {
+    $script:TLS_MODE = if ($CERT_SHA256) { "pinned" } elseif (-not $VERIFY_TLS) { "insecure" } else { "ca" }
+    if (-not $JT_CALLBACK) { return }
+    if ($CERT_SHA256) { Enable-JtPin -Sha256 $CERT_SHA256 }
+    elseif (-not $VERIFY_TLS) { Enable-JtPin -Sha256 "" -Mode 0 }
+    else { Enable-JtPin -Sha256 "" -Mode 2 }
+}
+try {
+    Set-JtTlsMode
+    if ($CERT_SHA256) { Write-Dbg "pinned to the jt-ipam server certificate $CERT_SHA256" }
+    elseif (-not $VERIFY_TLS) { Write-Dbg "TLS verification disabled for calls to $SERVER" }
+} catch {
+    $JT_CALLBACK = $false
+    Write-Log "warning: could not set up the certificate check ($($_.Exception.Message))"
+    if ($CERT_SHA256) { Write-Log "the server pin cannot be enforced; not connecting"; exit 2 }
+    if (-not $VERIFY_TLS) { [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } }
 }
 
-# ─────────────────── HTTP ───────────────────
+# ------------------- HTTP -------------------
 
 function Invoke-Jt {
     <# Returns the raw response body as a byte[]. Used for both text and binary parts so the
@@ -257,7 +307,7 @@ function Invoke-Jt {
 
 function Invoke-JtText { param([string] $Url) return [Text.Encoding]::UTF8.GetString((Invoke-Jt -Url $Url)) }
 
-# ─────────────────── Certificate store ───────────────────
+# ------------------- Certificate store -------------------
 
 function Import-JtCertificate {
     <# Import a PKCS#12 blob into LocalMachine\My straight from memory and return its
@@ -380,7 +430,7 @@ function Remove-JtCertificate {
     } finally { $store.Close() }
 }
 
-# ─────────────────── Bindings ───────────────────
+# ------------------- Bindings -------------------
 
 function ConvertTo-BindingParts {
     <# "0.0.0.0:443" -> non-SNI ipport ; "www.example.com:443" -> SNI hostnameport.
@@ -464,7 +514,7 @@ function Set-HttpSysCertificate {
     Write-Dbg "netsh add sslcert $($Parts.Key) -> $Thumbprint"
 }
 
-# ─────────────────── Reporting ───────────────────
+# ------------------- Reporting -------------------
 
 $script:ReportLines = New-Object Collections.ArrayList
 
@@ -473,7 +523,7 @@ $script:JtChainNote = @{}
 function Add-Report {
     param([string] $Cert, [string] $Profile, [string] $Status,
           [string] $Fingerprint, [string] $NotAfter, [string] $Message = "")
-    # 這次匯入時憑證鏈放到哪裡（Install-JtChain 記的），一起回報
+    # Report where this import put the certificate chain (recorded by Install-JtChain)
     if ($Status -eq "ok" -and $script:JtChainNote.ContainsKey($Cert) -and $script:JtChainNote[$Cert]) {
         $Message = if ($Message) { "$Message; chain: $($script:JtChainNote[$Cert])" } else { "chain: $($script:JtChainNote[$Cert])" }
     }
@@ -496,7 +546,7 @@ function Send-Report {
     }
 }
 
-# ─────────────────── State ───────────────────
+# ------------------- State -------------------
 
 function Get-DeploymentTarget {
     <# What makes this deployment distinct from another one using the same certificate and
@@ -543,7 +593,7 @@ function Set-StateFingerprint {
     Set-Content -LiteralPath $STATE_FILE -Value $keep -Encoding UTF8
 }
 
-# ─────────────────── Deployment ───────────────────
+# ------------------- Deployment -------------------
 
 function Get-CertificatePfx {
     <# Fetch the certificate as a Windows-importable PKCS#12. The password is random per run
@@ -710,8 +760,8 @@ function Invoke-DeployWinrm {
             "@{Hostname=`"$env:COMPUTERNAME`";CertificateThumbprint=`"$thumb`"}")
     }
     if ($r.ExitCode -ne 0) {
-        # 最常見的原因不是權限，是憑證不符合 WinRM 的要求：CN/SAN 必須含這台的主機名稱，
-        # 且要有「伺服器驗證」EKU。單看 WSManFault 看不出這件事，所以明講。
+        # The usual cause is not permissions but a certificate WinRM will not take: its CN/SAN must
+        # include this host's name and it needs the Server Authentication EKU. WSManFault does not say so.
         $why = "$($r.Brief) -- WinRM requires the certificate's CN/SAN to include this host's " +
                "name ($env:COMPUTERNAME) and to have the Server Authentication EKU"
         Write-Log "[$Cert/winrm] could not configure the listener: $why"
@@ -911,7 +961,7 @@ function Invoke-DeployFiles {
     return $true
 }
 
-# ─────────────────── Self-update ───────────────────
+# ------------------- Self-update -------------------
 
 function Get-FileSha256 {
     param([string] $Path)
@@ -970,16 +1020,135 @@ function Invoke-SelfUpdate {
     }
 }
 
-# ─────────────────── Main ───────────────────
+# ------------------- Verifying jt-ipam without a reinstall -------------------
+# Agents installed before jt-ipam 1.0.20 do not verify the server. Instead of asking for a reinstall on
+# every host, the agent switches by itself (AUTO_PIN): it fetches jt-ipam's trust data (the server
+# certificate's SHA-256, signed with this jt-ipam's own identity key; the agent key is never sent with it),
+# tries normal Windows verification, else pins the certificate, and only keeps a setting it actually
+# connected with. It remembers the identity key: when jt-ipam later changes its certificate, the new one is
+# accepted only with a valid signature from that identity, and only after connecting with it.
+
+function Test-JtRsa {
+    <# $true when $SignatureB64 is a valid RSA / SHA-256 signature of $Bytes by the key (modulus, exponent). #>
+    param([byte[]] $Bytes, [string] $SignatureB64, [string] $ModulusB64, [string] $ExponentB64)
+    try {
+        $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+        $kp = New-Object Security.Cryptography.RSAParameters
+        $kp.Modulus = [Convert]::FromBase64String($ModulusB64)
+        $kp.Exponent = [Convert]::FromBase64String($ExponentB64)
+        $rsa.ImportParameters($kp)
+        return $rsa.VerifyData($Bytes, "SHA256", [Convert]::FromBase64String($SignatureB64.Trim()))
+    } catch { return $false }
+}
+
+function Get-JtTrustData {
+    <# jt-ipam's signed trust data, checked with the given mode (0 none, 1 pin, 2 Windows trust). No agent key. #>
+    param([int] $Mode, [string] $Sha256 = "")
+    $oldMode = [JtPin]::Mode; $oldSha = [JtPin]::Sha256
+    [JtPin]::Mode = $Mode; [JtPin]::Sha256 = $Sha256
+    try {
+        # A new connection each time: a reused one would skip the check being tried
+        $r = Invoke-WebRequest -Uri "$SERVER/api/v1/agent-trust" -UseBasicParsing -TimeoutSec 20 -DisableKeepAlive
+        return [Text.Encoding]::ASCII.GetString($r.RawContentStream.ToArray())
+    } catch { return $null }
+    finally { [JtPin]::Mode = $oldMode; [JtPin]::Sha256 = $oldSha }
+}
+
+function ConvertFrom-JtTrust {
+    param([string] $Text)
+    if (-not $Text) { return $null }
+    $i = $Text.IndexOf("`nsig=")
+    if ($i -lt 0) { return $null }
+    $f = @{}
+    foreach ($line in $Text.Substring(0, $i).Split("`n")) {
+        $j = $line.IndexOf("=")
+        if ($j -gt 0) { $f[$line.Substring(0, $j)] = $line.Substring($j + 1) }
+    }
+    $f["_body"] = [Text.Encoding]::ASCII.GetBytes($Text.Substring(0, $i + 1))
+    $f["_sig"] = $Text.Substring($i + 5).Trim()
+    if ($f["jt-ipam-agent-trust"] -ne "1" -or "$($f["cert_sha256"])" -notmatch '^[0-9A-Fa-f]{64}$') { return $null }
+    if (-not $f["identity_n"] -or -not $f["identity_e"]) { return $null }
+    return $f
+}
+
+function Save-JtTrust {
+    param([string] $Mode, [string] $Sha256, [string] $N, [string] $E)
+    try {
+        $tmp = "$TRUST_FILE.new"
+        [IO.File]::WriteAllText($tmp, "TRUST_MODE=$Mode`r`nTRUST_SHA256=$Sha256`r`nTRUST_N=$N`r`nTRUST_E=$E`r`n")
+        Set-PrivateFileAcl -Path $tmp
+        Move-Item -LiteralPath $tmp -Destination $TRUST_FILE -Force
+    } catch {
+        Write-Log "[trust] cannot save $TRUST_FILE : $($_.Exception.Message)"
+        return $false
+    }
+    Read-JtTrust
+    Set-JtTlsMode
+    return $true
+}
+
+function Update-JtTrust {
+    <# Learn jt-ipam's identity once; an agent that does not verify the server switches to verifying it. #>
+    if (-not $JT_CALLBACK -or -not $SERVER.StartsWith("https://") -or -not $AUTO_PIN -or $TRUST_N) { return }
+    $mode = switch ($TLS_MODE) { "pinned" { 1 } "ca" { 2 } default { 0 } }
+    $f = ConvertFrom-JtTrust (Get-JtTrustData -Mode $mode -Sha256 $CERT_SHA256)
+    if (-not $f -or -not (Test-JtRsa $f["_body"] $f["_sig"] $f["identity_n"] $f["identity_e"])) { return }
+    $n = $f["identity_n"]; $e = $f["identity_e"]; $sha = $f["cert_sha256"].ToUpperInvariant()
+    if ($TLS_MODE -eq "pinned") {
+        if ($sha -eq $CERT_SHA256.Replace(":", "")) { $null = Save-JtTrust "pinned" $sha $n $e }
+    } elseif ($TLS_MODE -eq "ca") {
+        $null = Save-JtTrust "ca" "" $n $e
+    } elseif ($f["auto_pin"] -ne "1") {
+        Write-Dbg "[trust] switching automatically is turned off on jt-ipam"
+    } elseif (Get-JtTrustData -Mode 2) {
+        if (Save-JtTrust "ca" "" $n $e) { Write-Log "[trust] now verifying jt-ipam's certificate (Windows trust)" }
+    } elseif (Get-JtTrustData -Mode 1 -Sha256 $sha) {
+        if (Save-JtTrust "pinned" $sha $n $e) { Write-Log "[trust] now only talking to the jt-ipam server with certificate $sha" }
+    } else {
+        Write-Dbg "[trust] could not connect with jt-ipam's certificate (a proxy in between?); not switching"
+    }
+}
+
+function Restore-JtTrust {
+    <# A verified connection was refused on the certificate: follow a change signed by this jt-ipam. #>
+    if (-not $JT_CALLBACK -or -not $TRUST_N -or $TLS_MODE -eq "insecure") { return $false }
+    $f = ConvertFrom-JtTrust (Get-JtTrustData -Mode 0)
+    if (-not $f -or $f["identity_n"] -ne $TRUST_N -or $f["identity_e"] -ne $TRUST_E) { return $false }
+    if (-not (Test-JtRsa $f["_body"] $f["_sig"] $TRUST_N $TRUST_E)) {
+        Write-Log "[trust] the server's certificate changed but the change is not signed by this jt-ipam; not following it"
+        return $false
+    }
+    $sha = $f["cert_sha256"].ToUpperInvariant()
+    $na = [long] 0
+    $now = [long] ([DateTime]::UtcNow - [DateTime]::new(1970, 1, 1)).TotalSeconds
+    if (-not [long]::TryParse("$($f["not_after"])", [ref] $na) -or $na -le $now) { return $false }
+    if ($sha -eq $CERT_SHA256.Replace(":", "").ToUpperInvariant()) { return $false }
+    if (-not (Get-JtTrustData -Mode 1 -Sha256 $sha)) { return $false }
+    if (-not (Save-JtTrust "pinned" $sha $TRUST_N $TRUST_E)) { return $false }
+    Write-Log "[trust] jt-ipam changed its certificate; following it (signed by this jt-ipam): $sha"
+    return $true
+}
+
+# ------------------- Main -------------------
 
 if (-not (Test-Path -LiteralPath $STATE_DIR)) { $null = New-Item -ItemType Directory -Path $STATE_DIR -Force }
 
+if (-not $DryRun) { Update-JtTrust }
+
 $check = $null
 try {
+    if ($JT_CALLBACK) { [JtPin]::Refused = $false }
     $check = Invoke-JtText -Url "$API/check?format=json" | ConvertFrom-Json
 } catch {
-    Write-Log "check failed (cannot reach $SERVER): $($_.Exception.Message)"
-    exit 1
+    $why = $_.Exception.Message
+    if ($JT_CALLBACK -and [JtPin]::Refused -and -not $DryRun -and (Restore-JtTrust)) {
+        try { $check = Invoke-JtText -Url "$API/check?format=json" | ConvertFrom-Json }
+        catch { $why = $_.Exception.Message }
+    }
+    if (-not $check) {
+        Write-Log "check failed (cannot reach $SERVER): $why"
+        exit 1
+    }
 }
 
 $serverSha = ""

@@ -181,13 +181,39 @@ async def push_now(target_id: uuid.UUID, user: CurrentUser, request: Request,
     t = await _get(session, target_id)
     actor, rid = user.id, getattr(request.state, "request_id", None)
 
-    async def _runner(sess: AsyncSession, _task: Any) -> dict[str, Any]:
+    async def _runner(sess: AsyncSession, task: Any) -> dict[str, Any]:
+        import asyncio
+
+        from app.services.background_tasks import update_task_progress
         target = await sess.get(CertPushTarget, target_id)
         if target is None:
             return {"status": "error", "error": "certpush_not_found"}
-        r = await engine.push_target(sess, target, actor_user_id=actor, request_id=rid, trigger="manual")
+        # 推的過程即時寫進作業紀錄，「背景作業」面板邊推邊顯示做到哪一步（使用者 2026-11-07）。
+        # 引擎的回報是同步的：只記下最新的一份，另一個工作負責寫進資料庫（寫入慢也不拖慢推送）
+        name = target.name
+        latest: dict[str, Any] = {}
+        changed = asyncio.Event()
+
+        def on_progress(items: list[dict[str, Any]], stage: str | None) -> None:
+            latest.update(steps=[dict(i) for i in items], stage=stage)
+            changed.set()
+
+        async def flusher() -> None:
+            while True:
+                await changed.wait()
+                changed.clear()
+                await update_task_progress(task.id, {"target": name, **latest})
+                await asyncio.sleep(0.3)
+
+        writer = asyncio.create_task(flusher())
+        try:
+            r = await engine.push_target(sess, target, actor_user_id=actor, request_id=rid, trigger="manual",
+                                         progress=on_progress)
+        finally:
+            writer.cancel()
+            await asyncio.gather(writer, return_exceptions=True)
         await sess.commit()
-        return {"target": target.name, "status": r["status"], "error": r["error"]}
+        return {"target": name, "status": r["status"], "error": r["error"], "steps": r.get("steps") or []}
 
     task = await spawn_task(session=session, kind="cert.push", target_type="cert_push_target",
                             target_id=t.id, target_label=t.name, actor_user_id=user.id, runner=_runner)

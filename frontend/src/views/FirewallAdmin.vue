@@ -855,8 +855,8 @@ onMounted(() => {
         </n-form-item>
       </n-form>
       <n-space justify="end">
-        <n-button @click="showMapCreate = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" @click="submitMap">{{ t("common.save") }}</n-button>
+        <n-button @click="showMapCreate = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" @click="submitMap"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
       </n-space>
     </n-modal>
   </n-card>

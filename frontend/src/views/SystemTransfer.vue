@@ -5,7 +5,7 @@ import {
   NAlert, NButton, NCard, NCheckbox, NCheckboxGroup, NCode, NDataTable, NDivider,
   NIcon, NInput, NPopconfirm, NRadio, NRadioGroup, NSpace, NSpin, useMessage,
 } from "naive-ui";
-import { AdminIcon, DownloadIcon, ExportIcon, ImportIcon, RefreshIcon, SearchIcon } from "@/icons";
+import { AdminIcon, DownloadIcon, ExportIcon, ImportIcon, RefreshIcon, SearchIcon, CheckIcon } from "@/icons";
 import { apiErrMsg } from "@/api/client";
 import { srvText } from "@/utils/wsError";
 import { getTask } from "@/api/tasks";
@@ -356,12 +356,12 @@ onUnmounted(() => { stopExpTimer(); stopImpTimer(); });
                       :data="countRows" :max-height="320" style="margin: 8px 0" />
 
         <n-space align="center">
-          <n-button :loading="impBusy" @click="doApply(true)">
+          <n-button :loading="impBusy" @click="doApply(true)"><template #icon><n-icon><SearchIcon /></n-icon></template>
             {{ t("system_transfer.dry_run") }}
           </n-button>
           <n-popconfirm @positive-click="doApply(false)">
             <template #trigger>
-              <n-button type="error" :loading="impBusy && !!impTaskId">
+              <n-button type="error" :loading="impBusy && !!impTaskId"><template #icon><n-icon><CheckIcon /></n-icon></template>
                 {{ t("system_transfer.apply") }}
               </n-button>
             </template>

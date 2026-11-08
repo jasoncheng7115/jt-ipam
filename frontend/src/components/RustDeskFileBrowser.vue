@@ -40,7 +40,7 @@ import type { CloseInfo, PasswordReason, Phase } from "@/rdweb/session";
 import type { MessageBox } from "@/rdweb/messages";
 import {
   CancelIcon, ChevronRightIcon, DeleteIcon, DownloadIcon, EditIcon, FilesIcon, FilterIcon, NewFolderIcon, RefreshIcon,
-  UpLevelIcon, UploadIcon,
+  UpLevelIcon, UploadIcon, CheckIcon, LoginIcon, MoveIcon, SaveIcon,
 } from "@/icons";
 
 const props = withDefaults(defineProps<{
@@ -809,7 +809,7 @@ onBeforeUnmount(() => {
           <div class="rdf-note" style="margin-top:6px">{{ t("rdweb.rate_limit_hint") }}</div>
           <n-space justify="space-between" align="center" style="margin-top:10px">
             <n-checkbox v-model:checked="remember" size="small">{{ t("rdweb.remember_password") }}</n-checkbox>
-            <n-button size="small" type="primary" data-testid="rdfile-retry-submit" @click="submitPassword">
+            <n-button size="small" type="primary" data-testid="rdfile-retry-submit" @click="submitPassword"><template #icon><n-icon><LoginIcon /></n-icon></template>
               {{ t("rdweb.login") }}
             </n-button>
           </n-space>
@@ -819,13 +819,13 @@ onBeforeUnmount(() => {
           <n-input v-model:value="retry.code" size="small" :maxlength="12"
                    :input-props="{ autocomplete: 'one-time-code', inputmode: 'numeric' }" @keyup.enter="submit2fa" />
           <n-space justify="end" style="margin-top:10px">
-            <n-button size="small" type="primary" @click="submit2fa">{{ t("rdweb.login") }}</n-button>
+            <n-button size="small" type="primary" @click="submit2fa"><template #icon><n-icon><LoginIcon /></n-icon></template>{{ t("rdweb.login") }}</n-button>
           </n-space>
         </n-card>
         <div v-else class="rdf-wait">
           <n-spin :size="22" />
           <div>{{ ui === "waiting_approval" ? t("rdweb.waiting_approval") : ui === "connected" ? t("rdfile.listing") : stageText }}</div>
-          <n-button v-if="ui === 'waiting_approval'" size="small" ghost @click="disconnect">{{ t("common.cancel") }}</n-button>
+          <n-button v-if="ui === 'waiting_approval'" size="small" ghost @click="disconnect"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
         </div>
       </div>
 
@@ -841,7 +841,7 @@ onBeforeUnmount(() => {
           <div class="rdf-offline-box">
             <n-icon :size="24"><CancelIcon /></n-icon>
             <span class="rdf-offline-title">{{ t("sftp.offline_title") }}</span>
-            <n-button size="small" type="primary" @click="backToForm">{{ t("vnc.reconnect") }}</n-button>
+            <n-button size="small" type="primary" @click="backToForm"><template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("vnc.reconnect") }}</n-button>
           </div>
         </div>
         <n-space align="center" class="rdf-pathbar">
@@ -900,7 +900,7 @@ onBeforeUnmount(() => {
         <div class="rdf-queue-head">
           <span class="rdf-queue-title">{{ t("rdfile.queue") }}</span>
           <span class="rdf-note">{{ t("rdfile.queue_note") }}</span>
-          <n-button size="tiny" quaternary @click="clearFinished">{{ t("rdfile.queue_clear") }}</n-button>
+          <n-button size="tiny" quaternary @click="clearFinished"><template #icon><n-icon><DeleteIcon /></n-icon></template>{{ t("rdfile.queue_clear") }}</n-button>
         </div>
         <div v-for="j in jobs" :key="j.key" class="rdf-job" data-testid="rdfile-job">
           <n-icon :size="16" class="rdf-job-icon"><component :is="j.kind === 'download' ? DownloadIcon : UploadIcon" /></n-icon>
@@ -933,8 +933,8 @@ onBeforeUnmount(() => {
                data-testid="rdfile-name-input" @keyup.enter="submitNameDlg" />
       <template #footer>
         <n-space justify="end">
-          <n-button @click="nameDlg = null">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="busy" data-testid="rdfile-name-submit" @click="submitNameDlg">
+          <n-button @click="nameDlg = null"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="busy" data-testid="rdfile-name-submit" @click="submitNameDlg"><template #icon><n-icon><CheckIcon /></n-icon></template>
             {{ t("common.confirm") }}
           </n-button>
         </n-space>
@@ -947,8 +947,8 @@ onBeforeUnmount(() => {
       <n-alert type="warning" :bordered="false">{{ t("rdfile.delete_dir_body", { name: confirmDir?.name ?? "" }) }}</n-alert>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="confirmDir = null">{{ t("common.cancel") }}</n-button>
-          <n-button type="error" :loading="busy" data-testid="rdfile-delete-dir-confirm" @click="confirmDirDelete">
+          <n-button @click="confirmDir = null"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="error" :loading="busy" data-testid="rdfile-delete-dir-confirm" @click="confirmDirDelete"><template #icon><n-icon><DeleteIcon /></n-icon></template>
             {{ t("rdfile.delete_dir_confirm") }}
           </n-button>
         </n-space>
@@ -980,8 +980,8 @@ onBeforeUnmount(() => {
       </n-checkbox>
       <template #footer>
         <n-space justify="end">
-          <n-button data-testid="rdfile-conflict-skip" @click="answerConflict('skip')">{{ t("sftp.conflict_skip") }}</n-button>
-          <n-button type="warning" data-testid="rdfile-conflict-overwrite" @click="answerConflict('overwrite')">
+          <n-button data-testid="rdfile-conflict-skip" @click="answerConflict('skip')"><template #icon><n-icon><MoveIcon /></n-icon></template>{{ t("sftp.conflict_skip") }}</n-button>
+          <n-button type="warning" data-testid="rdfile-conflict-overwrite" @click="answerConflict('overwrite')"><template #icon><n-icon><SaveIcon /></n-icon></template>
             {{ t("sftp.conflict_overwrite") }}
           </n-button>
         </n-space>

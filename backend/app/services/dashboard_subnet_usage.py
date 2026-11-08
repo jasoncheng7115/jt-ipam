@@ -82,6 +82,15 @@ async def _usable(session: AsyncSession, user: User, ids: list[uuid.UUID]) -> li
     return [i for i in ids if i in alive]
 
 
+async def usable_subnet_ids(session: AsyncSession, user: User, raw: list[Any]) -> list[str]:
+    """一般的「常用子網路」（pinned_subnet_ids）：同一套檢查，不限個數（最多看前 200 個）。
+
+    客戶 2026-11-06：常用子網路裡留著一個已經刪掉或看不到的子網路，拓樸圖拿它當預設篩選 → 篩選欄只有一串 UUID、
+    圖畫不出來。讀與寫都過這一關。
+    """
+    return [str(i) for i in await _usable(session, user, _parse_ids(raw))]
+
+
 async def sanitize_pins(session: AsyncSession, user: User, raw: list[Any]) -> list[str]:
     """寫進偏好之前：去重、去掉不存在／已歸檔／看不到的，最多留 4 個。"""
     return [str(i) for i in (await _usable(session, user, _parse_ids(raw)))[:MAX_SUBNETS]]

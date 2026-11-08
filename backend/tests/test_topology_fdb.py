@@ -411,3 +411,37 @@ async def test_busy_port_alone_still_unplaced_without_an_uplink_to_rule_out(db_s
         await _fdb(db_session, a, "Te1/1/9", m)
     g = await build_topology(db_session, include_l3=False, include_vpn=False, include_wireless=False)
     assert [e for e in _l2(g) if e["source"] == str(host.id)] == []
+
+
+async def test_bonded_host_on_two_switches_gets_both_edges(db_session):
+    """網卡綁定（bond / LACP）跨兩台交換器：兩張卡共用一個 MAC（實機 11-07：檔案伺服器、日誌伺服器）。
+    同一個 MAC 在兩台交換器各出現在一個「只有它」的埠上 —— 上聯埠不會只有一個 MAC，
+    所以這是插在兩邊，兩條線都要畫，並標 bond 讓前端認得出是雙接。"""
+    a, b, sn = await _two_switch_uplink(db_session)
+    host = await _device(db_session, "nas-b", "server")
+    mac = "aa:bb:cc:00:e0:01"
+    await _ip(db_session, sn, "198.51.100.130", mac, host)
+    await _fdb(db_session, a, "Gi1/0/5", mac)
+    await _fdb(db_session, b, "Gi1/0/7", mac)
+
+    g = await build_topology(db_session, include_l3=False, include_vpn=False, include_wireless=False)
+    mine = sorted((e for e in _l2(g) if e["source"] == str(host.id)), key=lambda e: e["port"])
+    assert [(e["target"], e["port"]) for e in mine] == [(str(a.id), "Gi1/0/5"), (str(b.id), "Gi1/0/7")]
+    assert all(e["bond"] for e in mine)
+    assert all(e["direct"] for e in mine)
+
+
+async def test_same_mac_on_a_shared_port_elsewhere_is_not_a_bond(db_session):
+    """另一邊的埠還有別的 MAC（底下接集線器、或其實是朝外的路）→ 不算綁定，照舊只畫最乾淨的那條。"""
+    a, b, sn = await _two_switch_uplink(db_session)
+    host = await _device(db_session, "srv-z", "server")
+    mac = "aa:bb:cc:00:e1:01"
+    await _ip(db_session, sn, "198.51.100.131", mac, host)
+    await _fdb(db_session, a, "Gi1/0/6", mac)
+    for m in [mac, "aa:bb:cc:00:e1:02", "aa:bb:cc:00:e1:03"]:
+        await _fdb(db_session, b, "Gi1/0/8", m)
+
+    g = await build_topology(db_session, include_l3=False, include_vpn=False, include_wireless=False)
+    mine = [e for e in _l2(g) if e["source"] == str(host.id)]
+    assert [(e["target"], e["port"]) for e in mine] == [(str(a.id), "Gi1/0/6")]
+    assert not mine[0].get("bond")

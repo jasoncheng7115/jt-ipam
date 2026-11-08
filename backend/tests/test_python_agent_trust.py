@@ -34,7 +34,9 @@ AGENT_DIR = Path(__file__).resolve().parents[2] / "agent"
 SCAN = AGENT_DIR / "jt_ipam_agent.py"
 RUSTDESK = AGENT_DIR / "jt_ipam_rustdesk_agent.py"
 AGENTS = pytest.mark.parametrize("path", [SCAN, RUSTDESK], ids=["scan", "rustdesk"])
-TRUST_FUNCS = ("_tls_mode", "_ctx", "_der_tlv", "_spki_pin", "_check_pin", "_urlopen", "_verify_signature")
+TRUST_FUNCS = ("_tls_mode", "_ctx", "_der_tlv", "_spki_pin", "_check_pin", "_urlopen", "_verify_signature",
+               "_rsa_verify", "_trust_load", "_trust_save", "_trust_get", "_trust_parse", "_trust_maintain",
+               "_trust_cert_error", "_trust_recover")
 
 
 def _load(path: Path):  # type: ignore[no-untyped-def]

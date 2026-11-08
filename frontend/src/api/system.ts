@@ -261,7 +261,7 @@ export interface OllamaModelsResult {
 }
 
 /** role：哪一個用途的 LLM Server（判讀／巡檢可以各接一台，沒設就是基本設定那台） */
-export async function listOllamaModels(role: "chat" | "interpret" | "audit" = "chat"): Promise<OllamaModelsResult> {
+export async function listOllamaModels(role: "chat" | "interpret" | "audit" | "embedding" = "chat"): Promise<OllamaModelsResult> {
   const { data } = await apiClient.get<OllamaModelsResult>(
     "/api/v1/system/llm/models", { params: role === "chat" ? undefined : { role } },
   );

@@ -599,8 +599,9 @@ def _build(name: str, u_height: int, devices: list[dict[str, Any]],
             ly = y0 + h / 2
             p.append(f'<g class="rack-group"><path d="M{bx} {y0} H{bx + 6} V{y0 + h} H{bx}" fill="none" '
                      f'stroke="{m["color"]}" stroke-width="2"/>{ticks}'
-                     f'<rect x="{lx}" y="{ly - 9}" width="{lw}" height="18" rx="4" fill="{m["color"]}"/>'
-                     f'<text x="{lx + 6}" y="{ly + 4}" font-size="11" font-weight="bold" fill="#ffffff">'
+                     f'<rect x="{lx}" y="{ly - 9}" width="{lw}" height="18" rx="4" fill="{m["color"]}" '
+                     f'fill-opacity="0.15" stroke="{m["color"]}"/>'
+                     f'<text x="{lx + 6}" y="{ly + 4}" font-size="11" font-weight="bold" fill="#1f2937">'
                      f'{_esc(m["label"])}</text></g>')
     p.append("</svg>")
     return "\n".join(p)

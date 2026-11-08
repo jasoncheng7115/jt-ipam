@@ -47,6 +47,13 @@ describe("雙接（不同網卡各接一台交換器）", () => {
       { id: "b", source: "h", target: "s2" },
     ], ["s1", "s2"]).size).toBe(0);
   });
+
+  it("網卡綁定（後端標 bond）：同一個 MAC 插在兩台也是雙接", () => {
+    expect(multiHomed([
+      { id: "a", source: "nas-a", target: "s2", port: "Gi1/0/7", mac: "aa:aa:aa:aa:aa:01", bond: true },
+      { id: "b", source: "nas-a", target: "s1", port: "Gi1/0/5", mac: "aa:aa:aa:aa:aa:01", bond: true },
+    ], ["s1", "s2"]).get("nas-a")).toEqual({ switches: ["s1", "s2"], edges: ["b", "a"] });
+  });
 });
 
 describe("節點名稱", () => {

@@ -86,7 +86,7 @@
           <n-popconfirm v-if="running" @positive-click="cancel">
             <template #trigger>
               <n-button size="small" secondary :loading="cancelling" style="margin-top: 10px"
-                        data-testid="identify-cancel">{{ t("identify.cancel") }}</n-button>
+                        data-testid="identify-cancel"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("identify.cancel") }}</n-button>
             </template>
             {{ t("identify.cancel_confirm") }}
           </n-popconfirm>
@@ -314,7 +314,7 @@ import {
   type IdentifySshKey, type IdentifyStatus, type IdentifyTarget,
 } from "@/api/identify";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
-import { CheckIcon, DownloadIcon, IdentifyIcon } from "@/icons";
+import { CheckIcon, DownloadIcon, IdentifyIcon, CancelIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import type { IPAddress } from "@/types";
 import { fmtDateTime } from "@/utils/datetime";

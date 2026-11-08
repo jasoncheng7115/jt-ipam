@@ -19,7 +19,7 @@ import { computed, nextTick, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { NButton, NPopover, NCheckbox, NIcon } from "naive-ui";
 import { Settings as SettingsIcon } from "@iconoir/vue";
-import { DragHandleIcon } from "@/icons";
+import { DragHandleIcon, RestoreIcon } from "@/icons";
 import { applyOrder, moveItem } from "@/utils/columnOrder";
 
 const { t } = useI18n();
@@ -157,7 +157,7 @@ function onHandleKey(e: KeyboardEvent, key: string) {
         </div>
       </div>
       <div class="col-picker-foot">
-        <n-button size="tiny" quaternary @click="emit('reset')">{{ t("column_picker.reset") }}</n-button>
+        <n-button size="tiny" quaternary @click="emit('reset')"><template #icon><n-icon><RestoreIcon /></n-icon></template>{{ t("column_picker.reset") }}</n-button>
       </div>
     </div>
   </n-popover>

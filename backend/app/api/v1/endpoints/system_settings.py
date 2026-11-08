@@ -763,6 +763,37 @@ async def put_cert_expiry_alert(
     return CertExpiryOut(days=days)
 
 
+class AgentAutoPinOut(StrictModel):
+    """升級後的代理自動改成驗證 jt-ipam（先試 CA、不行就釘選憑證指紋；換憑證自動跟上）。"""
+
+    enabled: bool
+
+
+@router.get("/agent-auto-pin", response_model=AgentAutoPinOut)
+async def get_agent_auto_pin(session: Annotated[AsyncSession, Depends(get_session)]) -> AgentAutoPinOut:
+    from app.services.agent_trust import auto_pin_enabled
+    return AgentAutoPinOut(enabled=await auto_pin_enabled(session))
+
+
+@router.put("/agent-auto-pin", response_model=AgentAutoPinOut)
+async def put_agent_auto_pin(
+    payload: AgentAutoPinOut, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AgentAutoPinOut:
+    from app.services.agent_trust import set_auto_pin
+    enabled = await set_auto_pin(session, enabled=payload.enabled, updated_by_user_id=user.id)
+    await append_audit(
+        session, actor_user_id=str(user.id),
+        actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"),
+        object_type="system", object_id=None, action="update",
+        diff={"target": "agent_auto_pin", "enabled": enabled},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return AgentAutoPinOut(enabled=enabled)
+
+
 @public_router.get("/ip-cooldown", response_model=CooldownOut)
 async def get_ip_cooldown(
     _user: CurrentUser,
@@ -1209,17 +1240,22 @@ async def rotate_mcp_key(
 async def list_ollama_models(
     _user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
-    role: Literal["chat", "interpret", "audit"] = "chat",
+    role: Literal["chat", "interpret", "audit", "embedding"] = "chat",
 ) -> dict[str, Any]:
     """列出 LLM 端點上可用的模型清單（給設定頁的下拉選用）。
 
     Ollama 走 `/api/tags`、OpenAI 相容走 `/v1/models` —— 兩者的回應結構也不同。
     `role` 指定哪一個用途的 LLM Server（判讀／巡檢可以各接一台，沒設就是對話那台）。
+    `embedding`：嵌入模型位址有填就問那一台（使用者 2026-11-07：以前一律問對話那台，挑不到另一台上的嵌入模型）。
     """
+    from dataclasses import replace
+
     from app.services import ai as ai_mod
     from app.services.system_config import role_config
 
-    cfg = role_config(await get_llm_config(session), role)
+    base = await get_llm_config(session)
+    cfg = (replace(base, url=base.embedding_base_url or base.url) if role == "embedding"
+           else role_config(base, role))
     provider = getattr(cfg, "provider", "ollama") or "ollama"
     url = ai_mod.models_url(cfg.url, provider)
     headers = ai_mod.auth_headers(provider, getattr(cfg, "api_key", None))

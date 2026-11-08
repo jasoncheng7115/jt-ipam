@@ -61,14 +61,25 @@ export function useAgentTrust(opts: { explicitCa?: boolean } = {}) {
 export type AgentTrust = ReturnType<typeof useAgentTrust>;
 
 /** 清單的「伺服器驗證」欄：代理回報的 X-Agent-Tls；沒連過顯示 —、連過但沒回報是舊版代理 */
+/**
+ * onFix：給「未驗證」的代理一個入口（使用者 2026-11-07：「伺服器驗證未驗證，但沒地方啟用」）。
+ * 標籤可以點，點了打開那台代理的安裝指令（已預選釘選憑證），拿到主機上重跑一次就好。
+ */
 export function renderTlsState(seen: boolean, tls: string | null | undefined, testid: string,
-  hint: (state: string) => string, t: (k: string) => string): VNodeChild {
+  hint: (state: string) => string, t: (k: string) => string, onFix?: () => void): VNodeChild {
   if (!seen) return h("span", { style: "opacity:.5" }, "—");
   const st = tls ?? "legacy";
   const type = st === "pinned" ? "success" : st === "ca" ? "info" : "error";
+  const fixable = !!onFix && (st === "insecure" || st === "legacy");
   return h(NTooltip, { style: "max-width:380px" }, {
-    trigger: () => h(NTag, { size: "small", type, bordered: false, "data-testid": testid },
-      () => t(`certTrust.state_${st}`)),
-    default: () => hint(st),
+    trigger: () => h(NTag, {
+      size: "small", type, bordered: false, "data-testid": testid,
+      ...(fixable ? { style: "cursor:pointer;text-decoration:underline dotted", role: "button", tabindex: 0, "data-fixable": "1",
+                      onClick: (e: MouseEvent) => { e.stopPropagation(); onFix!(); },
+                      onKeydown: (e: KeyboardEvent) => { if (e.key === "Enter") onFix!(); } } : {}),
+    }, () => t(`certTrust.state_${st}`)),
+    default: () => (fixable
+      ? [h("div", hint(st)), h("div", { style: "margin-top:6px;font-weight:600" }, t("certTrust.click_to_fix"))]
+      : hint(st)),
   });
 }

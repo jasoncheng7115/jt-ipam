@@ -163,7 +163,7 @@ onMounted(() => { void refresh(); });
         </template>
         {{ t("common.confirm_delete_n", { n: checkedKeys.length }) }}
       </n-popconfirm>
-      <n-button size="small" @click="checkedKeys = []">{{ t("common.clear_selection") }}</n-button>
+      <n-button size="small" @click="checkedKeys = []"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.clear_selection") }}</n-button>
     </n-space>
     <n-data-table
       :columns="cols" :data="filteredRows" :loading="loading" :bordered="false"

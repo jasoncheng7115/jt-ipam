@@ -214,6 +214,21 @@ async def _run(task_id: uuid.UUID, runner: TaskRunner) -> None:
     await _persist_final(task_id, status=status, summary=summary, error=error)
 
 
+async def update_task_progress(task_id: uuid.UUID, summary: dict[str, Any], progress: int | None = None) -> None:
+    """執行中的作業回報進度（例如憑證推送做到哪一步）：用自己的 session，只寫還在跑的作業，
+    晚到的回報不會蓋掉最終結果。絕不 raise。"""
+    values: dict[str, Any] = {"summary": summary}
+    if progress is not None:
+        values["progress"] = max(0, min(99, int(progress)))
+    try:
+        async with SessionLocal() as sess:
+            await sess.execute(update(BackgroundTask).where(
+                BackgroundTask.id == task_id, BackgroundTask.status == "running").values(**values))
+            await sess.commit()
+    except Exception:
+        logger.exception("failed to write progress of task %s", task_id)
+
+
 async def _persist_final(task_id: uuid.UUID, *, status: str, summary: dict[str, Any] | None,
                          error: str | None) -> None:
     values: dict[str, Any] = {"status": status, "error": error, "finished_at": datetime.now(UTC)}

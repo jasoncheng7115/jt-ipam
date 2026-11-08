@@ -491,11 +491,11 @@ onMounted(() => { void refresh(); void loadOpts(); });
       <span>{{ t("common.selected_n", { n: checkedKeys.length }) }}</span>
       <n-popconfirm @positive-click="doBulkDelete">
         <template #trigger>
-          <n-button type="error" size="small" :loading="bulkBusy">{{ t("common.bulk_delete") }}</n-button>
+          <n-button type="error" size="small" :loading="bulkBusy"><template #icon><n-icon><DeleteIcon /></n-icon></template>{{ t("common.bulk_delete") }}</n-button>
         </template>
         {{ t("nat.confirm_delete_n", { n: checkedKeys.length }) }}
       </n-popconfirm>
-      <n-button size="small" @click="checkedKeys = []">{{ t("common.clear_selection") }}</n-button>
+      <n-button size="small" @click="checkedKeys = []"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.clear_selection") }}</n-button>
     </n-space>
 
     <FocusRowBanner :ctl="natFocus" :loading="loading" />

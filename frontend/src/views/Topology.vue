@@ -29,11 +29,12 @@ import { useRouter } from "vue-router";
 import cytoscape from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import { getTopology, type TopologyData } from "@/api/topology";
-import { listSubnets } from "@/api/subnets";
+import { getSubnet, listSubnets } from "@/api/subnets";
 import { usePinnedSubnets } from "@/composables/usePinnedSubnets";
 import { useExportBusy } from "@/composables/useExportBusy";
 import { useFillHeight } from "@/composables/usePageFill";
 import { saveBlob } from "@/utils/saveFile";
+import GraphMinimap from "@/components/GraphMinimap.vue";
 import { assignOwners, deviceGroupLinks, gridPositions, multiHomed, nodeLabels, packRows, ringPositions, segmentsFor } from "@/utils/topologyLayout";
 
 cytoscape.use(coseBilkent as any);
@@ -255,6 +256,7 @@ async function loadSubnetOptions() {
 }
 
 let cy: cytoscape.Core | null = null;
+const topoMini = ref<InstanceType<typeof GraphMinimap> | null>(null);
 // 往下佔滿視窗（使用者 2026-10-08：IP 拓樸圖下面也留空）：工具列到頁面底部剛好等於可視高度，
 // 圖例在畫布下方，量的時候一起算進去
 const topoBarEl = ref<HTMLElement | null>(null);
@@ -672,6 +674,7 @@ function buildAccessGroups(input: TopologyData): TopologyData {
   const links = l2.map((e) => ({
     id: e.data.id, source: e.data.source, target: e.data.target, port: e.data.port,
     direct: e.data.direct, port_mac_count: e.data.port_mac_count, mac: e.data.mac,
+    bond: e.data.bond,
   }));
   // 不同網卡各接一台交換器的（雙接）另外成一組，放在那幾台交換器之間；其餘照舊只歸一台
   const multi = multiHomed(links, order);
@@ -725,7 +728,7 @@ function buildAccessGroups(input: TopologyData): TopologyData {
     const es = m.edges.map((id) => edgeById.get(id)!.data);
     hn.data.multi_homed = m.switches.length;
     hn.data.owner_switch = sws.map((x) => x!.data.label).join("、");
-    hn.data.owner_port = es.map((e, i) => `${sws[i]!.data.label} ${e.port ?? "—"}${e.nic ? `（${e.nic}）` : ""}`).join("\n");
+    hn.data.owner_port = es.map((e, i) => `${sws[i]!.data.label} ${e.port ?? "—"}${e.nic ? `（${e.nic}）` : e.bond ? `（${t("topology.nic_bond")}）` : ""}`).join("\n");
     hn.data.owner_direct = es.every((e) => e.direct);
     hn.data.also_learned = null;
     if (sws.some((x) => (x!.data.parent ?? null) !== (hn.data.parent ?? null))) continue;
@@ -1074,6 +1077,8 @@ function render(data: TopologyData) {
       animate: false,
     } as any,
   });
+  // 左下角縮圖總覽（每一種模式都有；使用者 2026-11-07）
+  if (topoMini.value) topoMini.value.attach(cy);
 
   cy.on("tap", "node", (evt) => {
     evt.cy.elements().unselect();
@@ -1481,8 +1486,11 @@ watch([includeWireless, includeVpn, includeL3, includeFdb, includeVms, onlineOnl
 
 // 預設只畫常用子網路時要講出來（客戶 2026-11-05：篩選欄只看到「+1」，不知道為什麼自動選、選了什麼）
 const usedPinned = ref(false);
+/** 這次進頁面實際套用的常用子網路（查不到的已經濾掉） */
+const pinnedDefault = ref<string[]>([]);
 const pinnedActive = computed(() => usedPinned.value && subnetIds.value.length > 0
-  && subnetIds.value.length === pinned.value.length && subnetIds.value.every((id) => pinned.value.includes(id)));
+  && subnetIds.value.length === pinnedDefault.value.length
+  && subnetIds.value.every((id) => pinnedDefault.value.includes(id)));
 /** 篩選欄的標籤只放 CIDR：連說明一起放，寬度不夠時「responsive」連第一個都收成「+1」 */
 function renderSubnetTag({ option, handleClose }: { option: any; handleClose: () => void }) {
   return h(NTag, { size: "small", closable: true, onClose: (e: MouseEvent) => { e.stopPropagation(); handleClose(); } },
@@ -1493,7 +1501,21 @@ onMounted(async () => {
   // 有設常用子網路 → 進來預設只畫這些；否則畫全部
   try {
     await ensureLoaded();
-    if (pinned.value.length) { subnetIds.value = [...pinned.value]; usedPinned.value = true; }
+    if (pinned.value.length) {
+      // 選項只載前 500 個子網路：常用的不在裡面時另外查名稱，不然篩選欄只看得到一串 UUID（客戶 2026-11-06）。
+      // 查不到（刪掉或看不到）的不當預設篩選 —— 否則圖一片空白（後端讀偏好時也已經濾掉）
+      const known = new Set(subnetOptions.value.map((o) => o.value));
+      const usable: string[] = [];
+      for (const id of pinned.value) {
+        if (known.has(id)) { usable.push(id); continue; }
+        try {
+          const s = await getSubnet(id);
+          subnetOptions.value.push({ label: s.description ? `${s.cidr} — ${s.description}` : s.cidr, value: s.id, cidr: s.cidr });
+          usable.push(id);
+        } catch { /* 不存在或看不到：略過 */ }
+      }
+      if (usable.length) { pinnedDefault.value = usable; subnetIds.value = usable; usedPinned.value = true; }
+    }
   } catch { /* ignore */ }
   // 設了 subnetIds 會觸發 watch → refresh；沒設才在這裡主動畫一次
   if (!usedPinned.value) void refresh();
@@ -1589,6 +1611,11 @@ onUnmounted(() => {
     <n-spin :show="loading">
       <div ref="shellEl" class="topology-shell" :style="fill.height.value ? { height: `${fill.height.value}px` } : undefined">
         <div ref="containerRef" class="cy"></div>
+        <!-- 縮圖總覽：整張圖的縮影＋目前看到的範圍，點或拖曳就移過去（跟 IP 變更評估的關係圖同一個元件）。
+             網段框、接入群組框這類外框不畫，被圖例隱藏的節點也不畫 -->
+        <GraphMinimap ref="topoMini" selector="node:childless" testid="topology-minimap"
+                      :color-of="(n) => NODE_COLOURS[String(n.data('type'))] || NODE_COLOURS.other"
+                      :round-of="(n) => (n.data('type') === 'subnet' ? 3 : 1.5)" />
         <n-card v-if="selected" size="small" class="info-pane" :title="selectedTitle" closable @close="selected = null">
           <table class="info-table">
             <tbody>

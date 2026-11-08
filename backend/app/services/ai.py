@@ -1086,7 +1086,11 @@ async def chat(
     def _meta() -> dict[str, Any]:
         return {"model": cfg.chat_model, "elapsed_ms": int((time.monotonic() - started) * 1000)}
 
+    measured: tuple[int, int] | None = None
+    trimmed = 0
     for _ in range(max_iterations):
+        trimmed += _fit_context(convo, ollama_tools, num_ctx=cfg.num_ctx, provider=cfg.provider, measured=measured)
+        sent_len = len(convo)
         body = {
             "model": cfg.chat_model,
             "messages": convo,
@@ -1105,6 +1109,8 @@ async def chat(
         if resp.status_code != 200:
             raise AIUpstream(f"{provider_label(cfg.provider)} chat {resp.status_code}: {resp.text[:200]}")
         data = resp.json()
+        if _prompt_tokens(data):
+            measured = (int(_prompt_tokens(data) or 0), sent_len)
 
         msg = extract_reply(data, cfg.provider)
         convo.append(msg)
@@ -1125,7 +1131,8 @@ async def chat(
                     content = (await _force_final_answer(cfg, convo)
                                or _empty_answer_message(locale, data.get("done_reason"),
                                                         _prompt_tokens(data), cfg.num_ctx))
-                return {"answer": _annotate_unverified(content, convo, locale),
+                return {"answer": _with_trimmed_note(_annotate_unverified(content, convo, locale), trimmed,
+                                                     cfg.num_ctx, cfg.provider, locale),
                         "messages": convo, **_meta()}
 
         # 異動類工具不直接執行 → 回傳待確認動作，等使用者按「確認」
@@ -1306,6 +1313,91 @@ def _page_context_line(context: dict[str, Any] | None) -> str:
     return "".join(parts)
 
 
+# ── 工具結果撐爆上下文時，使用者的問題不能被丟掉（2026-11-07 正式站台）──
+# num_ctx=16384 時工具清單＋系統提示詞就用掉約 12,700 token；查一筆資料多的 IP 再加一輪就超過上限。
+# Ollama 超過時從最舊的訊息丟起（系統提示詞與最後一則保留），被丟掉的正好是使用者的問題：
+# 使用者問「這個 IP 誰在用」，模型只看得到上一個工具的結果，就回答整個網段的使用率。
+#: 回答至少留這麼多 token（另外不少於上下文的 1/16）
+_ANSWER_RESERVE_MIN = 1024
+#: 縮短工具結果時至少留這麼多字（開頭通常是最重要的欄位：位址、名稱、狀態）
+_TRIM_FLOOR = 800
+_TRIM_NOTE = " …[truncated to fit the model's context length]"
+#: 工具結果是 JSON（鍵名、數字、引號）：實測 gemma4 約 2.5 字元一個 token，一般文字的估算（4 字元）會少算六成
+_DATA_CHARS_PER_TOKEN = 2.4
+
+
+def _estimate_data_tokens(text: str) -> int:
+    cjk = sum(1 for ch in text if ord(ch) > 0x2E7F)
+    return cjk + int((len(text) - cjk) / _DATA_CHARS_PER_TOKEN) + 1
+
+
+def _context_limit(num_ctx: int | None, provider: str) -> int | None:
+    if num_ctx:
+        return int(num_ctx)
+    return _OLLAMA_DEFAULT_CTX if provider == "ollama" else None
+
+
+def _fit_context(convo: list[dict[str, Any]], tools: list[Any], *, num_ctx: int | None, provider: str,
+                 measured: tuple[int, int] | None = None) -> int:
+    """送出前估算提示詞，超過上下文（扣掉回答的空間）就縮短最大的工具結果；回傳縮短了幾則。
+
+    `measured`＝(上一輪實際的提示詞 token 數, 當時 convo 的長度)：有的話前段用實測、只估新加的訊息，
+    比整段估算準（估算刻意偏高，實測工具清單約多 8%）。
+    """
+    ctx = _context_limit(num_ctx, provider)
+    if not ctx:
+        return 0
+    budget = ctx - max(_ANSWER_RESERVE_MIN, ctx // 16)
+
+    def est(m: dict[str, Any]) -> int:
+        text = m.get("content") or ""
+        return (_estimate_data_tokens(text) if m.get("role") == "tool" else estimate_tokens(text)) + 8
+
+    if measured and 0 < measured[1] <= len(convo):
+        total = measured[0] + sum(est(m) for m in convo[measured[1]:])
+    else:
+        total = estimate_tokens(json.dumps(tools, ensure_ascii=False)) + sum(est(m) for m in convo)
+    shrunk = 0
+    while total > budget:
+        cands = [m for m in convo if m.get("role") == "tool" and len(m.get("content") or "") > _TRIM_FLOOR + 200]
+        if not cands:
+            break
+        m = max(cands, key=lambda x: len(x["content"]))
+        text = m["content"]
+        per_char = _estimate_data_tokens(text) / max(1, len(text))
+        keep = max(_TRIM_FLOOR, len(text) - int((total - budget) / max(per_char, 0.01)) - 100)
+        before = est(m)
+        m["content"] = text[:keep] + _TRIM_NOTE
+        total -= before - est(m)
+        shrunk += 1
+    return shrunk
+
+
+_TRIMMED_NOTE = {
+    "zh-TW": "（部分查詢結果太長，已截短才放得進模型的上下文長度 {ctx}；管理員可以在 AI 設定調大。）",
+    "en-US": "(Some tool results were too long and were shortened to fit the model's context length of {ctx}; "
+             "an admin can raise it in the AI settings.)",
+    "ja-JP": "（一部の検索結果が長すぎるため、モデルのコンテキスト長 {ctx} に収まるよう短くしました。"
+             "管理者は AI 設定で増やせます。）",
+}
+
+
+def _with_trimmed_note(answer: str, trimmed: int, num_ctx: int | None, provider: str, locale: str | None) -> str:
+    ctx = _context_limit(num_ctx, provider)
+    if not trimmed or not ctx:
+        return answer
+    note = _TRIMMED_NOTE.get(locale or "", _TRIMMED_NOTE["en-US"]).format(ctx=ctx)
+    return f"{answer}\n\n{note}"
+
+
+def _latest_question(messages: list[dict[str, Any]]) -> str:
+    for m in reversed(messages):
+        text = m.get("content")
+        if m.get("role") == "user" and isinstance(text, str) and text.strip():
+            return text.strip()[:600]
+    return ""
+
+
 def _build_chat_context(
     messages: list[dict[str, Any]], locale: str | None,
     page_context: dict[str, Any] | None = None,
@@ -1395,6 +1487,9 @@ def _build_chat_context(
                 + DATA_RULE_EN + " "
                 + _lang_instruction(locale)
                 + _page_context_line(page_context)
+                # 放在系統提示詞：上下文滿了 Ollama 會丟最舊的訊息，系統提示詞不會被丟
+                + (f"\n\nThe user's current question (answer exactly this, using the tools as needed): "
+                   f"{json.dumps(question, ensure_ascii=False)}" if (question := _latest_question(messages)) else "")
             ),
         }
     ]
@@ -1549,7 +1644,16 @@ async def chat_stream(
     def _meta() -> dict[str, Any]:
         return {"model": cfg.chat_model, "elapsed_ms": int((time.monotonic() - started) * 1000)}
 
+    measured: tuple[int, int] | None = None
+    trimmed = 0
+
+    def _final(answer: str) -> str:
+        return _with_trimmed_note(_annotate_unverified(answer, convo, locale), trimmed, cfg.num_ctx,
+                                  cfg.provider, locale)
+
     for _ in range(max_iterations):
+        trimmed += _fit_context(convo, ollama_tools, num_ctx=cfg.num_ctx, provider=cfg.provider, measured=measured)
+        sent_len = len(convo)
         # chat_body 依服務類型組主體（options 是 Ollama 專屬，送給 OpenAI 端點會被拒絕）
         body = {**chat_body(cfg, cfg.provider, messages=convo, tools=ollama_tools), "stream": True}
         content_parts: list[str] = []
@@ -1594,6 +1698,8 @@ async def chat_stream(
                         done_reason = d.done_reason
                         break
             tool_calls = tool_buf.calls()
+            if prompt_tokens:
+                measured = (prompt_tokens, sent_len)
         except UnsafeOutboundURL as exc:
             yield {"type": "error", **ai_error_event(exc, admin=admin, code="ai_ssrf_blocked",
                                                      reason=f"SSRF guard: {exc}")}
@@ -1634,8 +1740,7 @@ async def chat_stream(
                        "trace_messages": convo, **_meta()}
                 return
             else:
-                yield {"type": "done", "answer": _annotate_unverified(full_content, convo, locale),
-                       "trace_messages": convo, **_meta()}
+                yield {"type": "done", "answer": _final(full_content), "trace_messages": convo, **_meta()}
                 return
 
         # 異動類工具：不直接執行，回傳待確認動作給前端，等使用者按「確認」
@@ -1652,6 +1757,7 @@ async def chat_stream(
 
     # max_iterations 用完 → 不給工具，串流最後一次強制作答
     yield {"type": "tool_round"}
+    trimmed += _fit_context(convo, [], num_ctx=cfg.num_ctx, provider=cfg.provider)
     final_parts: list[str] = []
     body = {**chat_body(cfg, cfg.provider, messages=convo, tools=[]), "stream": True}
     try:
@@ -1672,8 +1778,7 @@ async def chat_stream(
     answer = "".join(final_parts) or _steps_exceeded_message(locale)
     if final_parts:
         convo.append({"role": "assistant", "content": answer})
-    yield {"type": "done", "answer": _annotate_unverified(answer, convo, locale),
-           "trace_messages": convo, **_meta()}
+    yield {"type": "done", "answer": _final(answer), "trace_messages": convo, **_meta()}
 
 
 # ─────────────────── 全表 reindex（admin 一次性） ───────────────────

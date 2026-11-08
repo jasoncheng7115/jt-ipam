@@ -120,3 +120,38 @@ async def test_device_certs_preview_before_saving(client, auth_headers, monkeypa
     r = await client.post("/api/v1/cert-push-targets/device-certs/preview", headers=auth_headers,
                           json={**body, "api_url": "http://192.0.2.10"})
     assert r.status_code == 422 and r.json()["detail"]["code"] == "certpush_https_required"
+
+
+async def test_push_progress_is_visible_while_it_runs(client, auth_headers, monkeypatch) -> None:
+    """推送中的作業紀錄即時帶已完成的步驟與目前階段（使用者 11-07：「推送憑證要顯示目前做到那個階段」）；
+    做完的結果也帶完整步驟。"""
+    import asyncio
+
+    from app.services.background_tasks import _BG_TASKS
+    from app.services.cert_push import engine
+    go = asyncio.Event()
+
+    async def slow_push(session, target, *, progress=None, **_kw):
+        progress([{"step": "probe_before", "ok": True, "detail": "service reachable"}], "push")
+        await go.wait()
+        steps = [{"step": "probe_before", "ok": True}, {"step": "import", "ok": True}]
+        progress(steps, "verify")
+        return {"status": "ok", "error": None, "steps": steps}
+
+    monkeypatch.setattr(engine, "push_target", slow_push)
+    cid, _ = await _cert_with_version(client, auth_headers)
+    tid = (await client.post("/api/v1/cert-push-targets", headers=auth_headers, json=_body(cid))).json()["id"]
+    task_id = (await client.post(f"/api/v1/cert-push-targets/{tid}/push", headers=auth_headers)).json()["task_id"]
+    running = None
+    for _ in range(50):
+        running = (await client.get(f"/api/v1/tasks/{task_id}", headers=auth_headers)).json()
+        if (running.get("summary") or {}).get("stage"):
+            break
+        await asyncio.sleep(0.1)
+    assert running and running["status"] == "running"
+    assert running["summary"]["stage"] == "push" and running["summary"]["steps"][0]["step"] == "probe_before"
+    go.set()
+    await asyncio.wait_for(asyncio.gather(*list(_BG_TASKS), return_exceptions=True), timeout=10)
+    done = (await client.get(f"/api/v1/tasks/{task_id}", headers=auth_headers)).json()
+    assert done["status"] == "succeeded"
+    assert [s["step"] for s in done["summary"]["steps"]] == ["probe_before", "import"]

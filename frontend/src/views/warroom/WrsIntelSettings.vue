@@ -12,7 +12,7 @@ import {
   NAlert, NButton, NCheckbox, NCheckboxGroup, NColorPicker, NFormItem, NIcon, NInputNumber, NRadioButton, NRadioGroup,
   NSelect, NSpace, NSwitch, useMessage,
 } from "naive-ui";
-import { PlayIcon, RefreshIcon } from "@/icons";
+import { PlayIcon, RefreshIcon, CheckIcon } from "@/icons";
 import { apiErrMsg } from "@/api/client";
 import { generateIntelNow, type IntelColors, type IntelEvents, type IntelSettings, type IntelState } from "@/api/warroom";
 import { getAnomalySchedule, type AnomalySchedule } from "@/api/phase3";
@@ -235,14 +235,14 @@ async function generateNow() {
     </n-alert>
     <p class="wri-hint wri-hint--block wri-warn" data-testid="wrs-intel-llm-load">{{ t("warroom_settings.intel_interval_load") }}</p>
     <p class="wri-hint wri-hint--block">{{ t("warroom_settings.intel_model_hint") }}</p>
-    <n-form-item :label="t('warroom_settings.intel_domains')">
+    <n-form-item :label="t('warroom_settings.intel_domains')" :show-feedback="false">
       <n-checkbox-group v-model:value="model.domains" data-testid="wrs-intel-domains">
         <n-space :size="[14, 6]">
           <n-checkbox v-for="d in DOMAINS" :key="d" :value="d" :label="t(`warroom.intel.cat.${d}`)" />
         </n-space>
       </n-checkbox-group>
     </n-form-item>
-    <p class="wri-hint wri-hint--block">{{ t("warroom_settings.intel_domains_hint") }}</p>
+    <p class="wri-hint wri-hint--block" style="margin: 4px 0 16px">{{ t("warroom_settings.intel_domains_hint") }}</p>
     <n-form-item :label="t('warroom_settings.intel_mask_ips')" label-placement="left">
       <n-switch v-model:value="model.mask_ips" />
       <span class="wri-hint">{{ t("warroom_settings.intel_mask_ips_hint") }}</span>
@@ -309,7 +309,7 @@ async function generateNow() {
       </div>
       <n-alert v-if="lowContrast.length" type="warning" :bordered="false" class="wri-alert" data-testid="wrs-intel-contrast">
         {{ t("warroom_settings.intel_contrast_low", { list: lowContrast.map((k) => t(`warroom_settings.intel_color_${k}`)).join(" / ") }) }}
-        <n-button size="tiny" type="warning" class="wri-fix" data-testid="wrs-intel-fix" @click="fixContrast">
+        <n-button size="tiny" type="warning" class="wri-fix" data-testid="wrs-intel-fix" @click="fixContrast"><template #icon><n-icon><CheckIcon /></n-icon></template>
           {{ t("warroom_settings.intel_contrast_fix") }}</n-button>
       </n-alert>
       <n-button size="small" class="wri-reset" @click="resetColors">
@@ -324,11 +324,11 @@ async function generateNow() {
       <n-switch v-model:value="model.warning_enabled" data-testid="wrs-intel-warning" />
     </n-form-item>
     <template v-if="model.warning_enabled">
-      <n-form-item :label="t('warroom_settings.intel_warning_categories')">
+      <n-form-item :label="t('warroom_settings.intel_warning_categories')" :show-feedback="false">
         <n-select v-model:value="model.warning_categories" :options="catOpts" multiple style="max-width: 640px"
                   data-testid="wrs-intel-warning-cats" />
       </n-form-item>
-      <p class="wri-hint wri-hint--block">{{ t("warroom_settings.intel_warning_categories_hint") }}</p>
+      <p class="wri-hint wri-hint--block" style="margin: 4px 0 16px">{{ t("warroom_settings.intel_warning_categories_hint") }}</p>
       <n-alert v-if="detectText" type="info" :show-icon="false" :bordered="false" class="wri-alert" data-testid="wrs-intel-detect">
         {{ detectText }}<template v-if="detectSuggest">{{ t("warroom_settings.intel_det_suggest") }}</template>
         <router-link to="/anomaly" class="wri-link" data-testid="wrs-intel-detect-link">{{ t("warroom_settings.intel_det_link") }}</router-link>

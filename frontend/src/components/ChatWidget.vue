@@ -26,7 +26,7 @@ import {
 import { fmtRelative, fmtDateTime } from "@/utils/datetime";
 import { BubbleStar } from "@iconoir/vue";
 import { humanToolName } from "@/utils/toolLabel";
-import { CancelIcon, SendIcon, ChatHistoryIcon, ToolsIcon, RefreshIcon, WarnIcon, ExpandIcon, ReduceIcon, GoToIcon } from "@/icons";
+import { CancelIcon, SendIcon, ChatHistoryIcon, ToolsIcon, RefreshIcon, WarnIcon, ExpandIcon, ReduceIcon, GoToIcon, CheckIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import { renderMarkdown } from "@/utils/markdown";
 import { aiErrText } from "@/utils/wsError";
@@ -481,10 +481,10 @@ async function removeConversation(id: string) {
             </div>
             <div class="confirm-btns">
               <n-button size="small" type="primary" :loading="confirming"
-                        @click="confirmPending(m, m.pendingActions[0])">
+                        @click="confirmPending(m, m.pendingActions[0])"><template #icon><n-icon><CheckIcon /></n-icon></template>
                 {{ t("chat.confirm_do") }}
               </n-button>
-              <n-button size="small" quaternary :disabled="confirming" @click="cancelPending(m)">
+              <n-button size="small" quaternary :disabled="confirming" @click="cancelPending(m)"><template #icon><n-icon><CancelIcon /></n-icon></template>
                 {{ t("chat.confirm_cancel") }}
               </n-button>
             </div>

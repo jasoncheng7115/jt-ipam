@@ -297,7 +297,7 @@ function ssoSaml() {
       <!-- Step 2: TOTP -->
       <n-form v-else @submit.prevent="submitMfa">
         <p style="margin: 0 0 12px 0; opacity: 0.8">{{ t("login.mfa_prompt") }}</p>
-        <n-form-item :label="t('login.mfa_code')">
+        <n-form-item :label="t('login.mfa_code')" :show-feedback="false">
           <n-input
             v-model:value="code"
             placeholder="123456"
@@ -308,7 +308,7 @@ function ssoSaml() {
             @keyup.enter="submitMfa"
           />
         </n-form-item>
-        <p class="mfa-hint">{{ t("login.mfa_recovery_hint") }}</p>
+        <p class="mfa-hint" style="margin: 4px 0 16px">{{ t("login.mfa_recovery_hint") }}</p>
         <n-space justify="space-between">
           <n-button type="error" ghost @click="cancelSecondStep">
             <template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}
@@ -325,6 +325,7 @@ function ssoSaml() {
 <style scoped>
 .login-shell {
   height: 100vh;
+  height: var(--app-height, 100dvh);
   display: flex;
   align-items: center;
   justify-content: center;

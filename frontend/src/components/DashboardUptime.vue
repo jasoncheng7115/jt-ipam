@@ -17,7 +17,7 @@
 
     <n-empty v-if="!ids.length" :description="t('uptime.dash_empty')" size="small">
       <template #extra>
-        <n-button size="small" @click="openPicker">{{ t("uptime.dash_pick") }}</n-button>
+        <n-button size="small" @click="openPicker"><template #icon><n-icon><EditIcon /></n-icon></template>{{ t("uptime.dash_pick") }}</n-button>
       </template>
     </n-empty>
 
@@ -136,7 +136,7 @@ import {
 import CardTitle from "@/components/CardTitle.vue";
 import {
   AddressesIcon, CancelIcon, HostnameIcon, IPChangesIcon, SaveIcon, SettingsIcon,
-  SlaIcon, SortAscIcon, SortDescIcon,
+  SlaIcon, SortAscIcon, SortDescIcon, EditIcon,
 } from "@/icons";
 import { apiClient } from "@/api/client";
 import { listAddresses } from "@/api/addresses";

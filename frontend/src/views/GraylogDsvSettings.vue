@@ -11,7 +11,7 @@ import {
   NCard, NSpace, NIcon, NInput, NSelect, NSwitch, NButton, NAlert, NTag,
   NDrawer, NDrawerContent, NDataTable, useMessage, type DataTableColumns,
 } from "naive-ui";
-import { ExportIcon, SaveIcon, RefreshIcon, CopyIcon, InfoIcon } from "@/icons";
+import { ExportIcon, SaveIcon, RefreshIcon, CopyIcon, InfoIcon, EyeIcon, TokenIcon } from "@/icons";
 import { getGraylogDsv, putGraylogDsv, revealGraylogDsvToken, type GraylogDsv } from "@/api/system";
 import { fmtDate } from "@/utils/datetime";
 import { listFirewalls } from "@/api/integrations";
@@ -333,7 +333,7 @@ onMounted(() => { void load(); });
               {{ tokenExpired ? t("llm_settings.mcp_key_expired", { date: fmtDate(dsv.token_expires_at) })
                               : t("llm_settings.mcp_key_expires", { date: fmtDate(dsv.token_expires_at) }) }}
             </n-tag>
-            <n-button v-if="dsv.token_set" size="small" data-testid="dsv-token-show" @click="toggleToken">
+            <n-button v-if="dsv.token_set" size="small" data-testid="dsv-token-show" @click="toggleToken"><template #icon><n-icon><EyeIcon /></n-icon></template>
               {{ tokenShown ? t("common.hide") : t("common.show") }}
             </n-button>
             <n-select v-model:value="tokenDays" :options="tokenDayOptions" size="small" style="width: 110px"
@@ -371,7 +371,7 @@ onMounted(() => { void load(); });
 
       <n-alert v-if="!dsv.token_set" type="warning" :show-icon="true" style="margin-top:14px">
         {{ t("settings.system.graylog_need_token") }}
-        <n-button size="tiny" type="primary" style="margin-left:8px" :loading="saving" @click="() => save(true)">
+        <n-button size="tiny" type="primary" style="margin-left:8px" :loading="saving" @click="() => save(true)"><template #icon><n-icon><TokenIcon /></n-icon></template>
           {{ t("settings.system.graylog_gen_token") }}
         </n-button>
       </n-alert>

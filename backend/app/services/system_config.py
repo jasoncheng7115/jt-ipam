@@ -271,13 +271,17 @@ async def get_llm_config(session: AsyncSession) -> LLMConfig:
             except (ValueError, TypeError):
                 pass
         for role in LLM_ROLES:
+            # 供應商與金鑰照實讀回，不管填了位址沒有：畫面每改一欄就存一次，先選「OpenAI 相容端點」、
+            # 還沒填位址時，以前讀回的供應商是空的 → 畫面跳回 Ollama（使用者 2026-11-07）。
+            # 要不要用自己的 server 仍然只看位址（role_config）
             if v.get(f"ai_{role}_url"):
                 setattr(cfg, f"ai_{role}_url", str(v[f"ai_{role}_url"]))
-                setattr(cfg, f"ai_{role}_provider",
-                        str(v.get(f"ai_{role}_provider")) if v.get(f"ai_{role}_provider") in ("ollama", "openai")
-                        else "ollama")
-                if v.get(f"ai_{role}_api_key_enc"):
-                    setattr(cfg, f"ai_{role}_api_key", _dec(str(v[f"ai_{role}_api_key_enc"]), _role_key_aad(role)))
+            if v.get(f"ai_{role}_provider") in ("ollama", "openai"):
+                setattr(cfg, f"ai_{role}_provider", str(v[f"ai_{role}_provider"]))
+            elif v.get(f"ai_{role}_url"):
+                setattr(cfg, f"ai_{role}_provider", "ollama")
+            if v.get(f"ai_{role}_api_key_enc"):
+                setattr(cfg, f"ai_{role}_api_key", _dec(str(v[f"ai_{role}_api_key_enc"]), _role_key_aad(role)))
         if isinstance(v.get("ai_audit_times"), list):
             times = normalize_times(v["ai_audit_times"])
             if times:

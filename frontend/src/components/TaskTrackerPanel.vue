@@ -8,10 +8,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { NButton, NCard, NIcon, NProgress, NSpin, NTooltip, useMessage } from "naive-ui";
-import { ChevronDownIcon, CopyIcon, DismissIcon, FailIcon, OkIcon, TasksIcon, WarnIcon } from "@/icons";
+import { ChevronDownIcon, CopyIcon, DismissIcon, FailIcon, OkIcon, TasksIcon, WarnIcon, DeleteIcon } from "@/icons";
 import { restoreTracked, useTaskTracker, type TrackedTask } from "@/composables/useTaskTracker";
 import { taskKindLabel } from "@/utils/taskKind";
 import { taskResultText } from "@/utils/taskSummary";
+import { stageLabel, stepLine, stepState, taskPushSteps, type StepState } from "@/utils/certPushSteps";
 
 const props = defineProps<{ raised?: boolean }>();
 const { t, te } = useI18n();
@@ -33,8 +34,11 @@ watch(() => tracked.value.length, (n, old) => { if (n > (old ?? 0)) collapsed.va
 onMounted(() => restoreTracked());
 onBeforeUnmount(() => { if (clock !== null) clearInterval(clock); });
 
+type StepView = { key: string; state: StepState; text: string; detail: string };
 type View = { id: string; state: "running" | "pending" | "succeeded" | "failed" | "lost"; label: string;
-  elapsed: string; progress: number; result: string };
+  elapsed: string; progress: number; result: string;
+  /** 憑證推送：已完成的步驟與目前階段（使用者 2026-11-07：「推送憑證要顯示目前做到那個階段」） */
+  steps: StepView[]; stage: string };
 
 function elapsedText(x: TrackedTask): string {
   const task = x.task;
@@ -55,9 +59,17 @@ const views = computed<View[]>(() => tracked.value.map((x) => {
   const label = task
     ? `${taskKindLabel(task.kind, t, te)}${task.target_label ? `：${task.target_label}` : ""}`
     : t("tasks.tracker.loading");
+  const push = taskPushSteps(task?.kind, task?.summary);
+  const steps = (push?.steps ?? []).map((st, i) => {
+    const l = stepLine(st, t, te);
+    return { key: `${i}-${st.step}`, state: stepState(st), text: `${l.mark} ${l.label}${l.reason ? `：${l.reason}` : ""}`,
+             detail: l.detail };
+  });
+  const running = state === "running" || state === "pending";
   return {
     id: x.id, state, label, elapsed: elapsedText(x), progress: task?.progress ?? 0,
     result: x.lost ? t("tasks.tracker.lost") : task ? taskResultText(task, t) : "",
+    steps, stage: running && push?.stage ? t("certpush.current_stage", { stage: stageLabel(push.stage, t, te) }) : "",
   };
 }));
 const finishedCount = computed(() => views.value.filter((v) => v.state !== "running" && v.state !== "pending").length);
@@ -85,7 +97,7 @@ async function copy(text: string): Promise<void> {
       </div>
     </template>
     <template #header-extra>
-      <n-button v-if="finishedCount" size="tiny" quaternary @click="dismissFinished" data-testid="task-tracker-clear">
+      <n-button v-if="finishedCount" size="tiny" quaternary @click="dismissFinished" data-testid="task-tracker-clear"><template #icon><n-icon><DeleteIcon /></n-icon></template>
         {{ t("tasks.tracker.clear_done") }}
       </n-button>
       <n-button size="tiny" quaternary :aria-label="collapsed ? t('tasks.tracker.expand') : t('tasks.tracker.collapse')"
@@ -115,6 +127,15 @@ async function copy(text: string): Promise<void> {
         <div class="jt-tt-meta" data-testid="task-tracker-status">{{ stateText(v) }} · {{ v.elapsed }}</div>
         <n-progress v-if="v.state === 'running' && v.progress > 0" type="line" :percentage="v.progress"
                     :height="4" :show-indicator="false" style="margin-top: 4px" />
+        <div v-if="v.steps.length || v.stage" class="jt-tt-steps" data-testid="task-tracker-steps">
+          <div v-for="st in v.steps" :key="st.key" class="jt-tt-step" :data-step-state="st.state"
+               :title="st.detail || undefined">
+            {{ st.text }}<span v-if="st.detail" class="jt-tt-step-detail">（{{ st.detail }}）</span>
+          </div>
+          <div v-if="v.stage" class="jt-tt-stage" data-testid="task-tracker-stage">
+            <n-spin :size="12" /> {{ v.stage }}
+          </div>
+        </div>
         <div v-if="v.result" class="jt-tt-result" :class="{ 'jt-tt-err': v.state === 'failed' || v.state === 'lost' }"
              data-testid="task-tracker-result">{{ v.result }}</div>
         <div v-if="v.state !== 'running' && v.state !== 'pending'" class="jt-tt-actions">
@@ -169,4 +190,9 @@ html[data-theme="dark"] .jt-task-tracker {
   .jt-task-tracker { right: 16px; left: 16px; width: auto; bottom: 16px; }
   .jt-task-tracker.jt-tt-raised { bottom: 88px; }
 }
+.jt-tt-steps { margin-top: 6px; font-size: 12px; line-height: 1.6; max-height: 180px; overflow-y: auto; }
+.jt-tt-step[data-step-state="warn"] { color: var(--warning-color, #f0a020); }
+.jt-tt-step[data-step-state="fail"] { color: var(--error-color, #d03050); }
+.jt-tt-step-detail { opacity: 0.7; overflow-wrap: anywhere; }
+.jt-tt-stage { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-top: 2px; }
 </style>

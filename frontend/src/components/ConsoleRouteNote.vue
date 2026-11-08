@@ -19,7 +19,7 @@ import SubnetEditModal from "@/components/SubnetEditModal.vue";
 import { useAuthStore } from "@/stores/auth";
 import type { Subnet } from "@/types";
 import { wsErrorText } from "@/utils/wsError";
-import { LinkIcon, WarnIcon } from "@/icons";
+import { LinkIcon, WarnIcon, CancelIcon, SaveIcon } from "@/icons";
 
 const props = defineProps<{ addressId: string }>();
 const { t } = useI18n();
@@ -138,9 +138,9 @@ function gotoSetup() {
       </div>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showEdit = false">{{ t("common.cancel") }}</n-button>
+          <n-button @click="showEdit = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
           <n-button v-if="!nothingToPick" type="primary" :loading="saving" data-testid="console-route-save"
-                    @click="save">
+                    @click="save"><template #icon><n-icon><SaveIcon /></n-icon></template>
             {{ t("common.save") }}
           </n-button>
         </n-space>

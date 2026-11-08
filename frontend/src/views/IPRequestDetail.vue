@@ -21,7 +21,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { storeToRefs } from "pinia";
-import { RequestsIcon } from "@/icons";
+import { RequestsIcon, CancelIcon, CheckIcon, FailIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import {
   approveRequest,
@@ -136,7 +136,7 @@ onMounted(() => {
             @positive-click="approve"
           >
             <template #trigger>
-              <n-button type="primary">{{ t("request_detail.approve_btn") }}</n-button>
+              <n-button type="primary"><template #icon><n-icon><CheckIcon /></n-icon></template>{{ t("request_detail.approve_btn") }}</n-button>
             </template>
             {{ t("request_detail.approve_confirm") }}
           </n-popconfirm>
@@ -144,7 +144,7 @@ onMounted(() => {
             v-if="detail.request.can_approve"
             type="error"
             @click="showReject = true"
-          >
+          ><template #icon><n-icon><FailIcon /></n-icon></template>
             {{ t("request_detail.reject_btn") }}
           </n-button>
           <n-popconfirm
@@ -155,7 +155,7 @@ onMounted(() => {
             @positive-click="cancel"
           >
             <template #trigger>
-              <n-button>{{ t("request_detail.cancel_btn") }}</n-button>
+              <n-button><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("request_detail.cancel_btn") }}</n-button>
             </template>
             {{ t("request_detail.cancel_confirm") }}
           </n-popconfirm>
@@ -254,8 +254,8 @@ onMounted(() => {
       </n-form>
       <template #action>
         <n-space>
-          <n-button @click="showReject = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="error" @click="reject">{{ t("request_detail.confirm_reject") }}</n-button>
+          <n-button @click="showReject = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="error" @click="reject"><template #icon><n-icon><FailIcon /></n-icon></template>{{ t("request_detail.confirm_reject") }}</n-button>
         </n-space>
       </template>
     </n-modal>

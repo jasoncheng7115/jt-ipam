@@ -47,7 +47,7 @@ import {
   MigrationIcon, ImportIcon, PluginsIcon, ExportIcon, TerminalIcon, TestIcon,
   // topbar / user menu
   LogoutIcon, AccountIcon, LanguageIcon, ThemeDarkIcon, ThemeLightIcon, ThemeAutoIcon, MenuIcon,
-  renderIcon,
+  renderIcon, GoToIcon,
 } from "@/icons";
 import { User as UserOutline } from "@iconoir/vue";
 import { useChangeImpact } from "@/composables/useChangeImpact";
@@ -717,7 +717,7 @@ function startDrag(e: MouseEvent) {
                  style="margin-bottom: 12px" :title="t('doctor.schema_behind_title')">
           {{ t("doctor.schema_behind_body") }}
           <n-button size="tiny" type="error" ghost style="margin-left: 8px"
-                    @click="handleMenu('doctor')">{{ t("nav.doctor") }}</n-button>
+                    @click="handleMenu('doctor')"><template #icon><n-icon><GoToIcon /></n-icon></template>{{ t("nav.doctor") }}</n-button>
         </n-alert>
         <router-view />
       </n-layout-content>
@@ -736,6 +736,8 @@ function startDrag(e: MouseEvent) {
 .app-root {
   height: 100vh;
   height: 100dvh;
+  /* 實際視窗高度（utils/viewportHeight）：iPad Safari 剛載入時 dvh 偏小、下面留白 */
+  height: var(--app-height, 100dvh);
 }
 /* 側欄 logo 欄與頂端列共用同一個高度：兩者各自由內容撐高的話，底邊會差幾 px，
    在左上角形成一道對不齊的缺口（實機回報）。高度綁在同一個變數上就不會再飄。 */
@@ -913,6 +915,7 @@ function startDrag(e: MouseEvent) {
   bottom: 0;
   height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   z-index: 2001;
 }
 /* 選單捲到頂／底時不要把捲動傳給後面的頁面 */

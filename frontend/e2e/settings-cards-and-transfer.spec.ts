@@ -58,3 +58,23 @@ test("系統匯出：統計中有提示；按鈕不能按時寫出原因", async
   await expect(page.getByRole("button", { name: "產生匯出檔" })).toBeEnabled();
   await expect(page.getByTestId("st-import-why")).toContainText("請先選擇匯出檔");
 });
+
+test("代理自動驗證 jt-ipam：一列一個設定，開關存得住", async ({ page }) => {
+  await login(page);
+  await page.goto("/system-settings");
+  const card = page.getByTestId("ss-agent-trust");
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toContainText("代理自動驗證 jt-ipam");
+  await expect(card.locator(".ss-rows")).toHaveCount(1);
+  const sw = page.getByTestId("ss-agent-auto-pin");
+  await expect(sw).toHaveClass(/n-switch--active/);
+  const put = page.waitForResponse((r) => r.url().includes("/system/agent-auto-pin") && r.request().method() === "PUT");
+  await sw.click();
+  expect((await put).status()).toBe(200);
+  await page.reload();
+  await page.getByTestId("ss-agent-trust").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("ss-agent-auto-pin")).not.toHaveClass(/n-switch--active/);
+  await card.screenshot({ path: "test-results/ss-agent-trust.png" });
+  await page.getByTestId("ss-agent-auto-pin").click();               // 還原
+  await expect(page.getByTestId("ss-agent-auto-pin")).toHaveClass(/n-switch--active/);
+});

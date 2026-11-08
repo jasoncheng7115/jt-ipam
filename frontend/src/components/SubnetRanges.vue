@@ -12,7 +12,7 @@ import {
   NButton, NDataTable, NForm, NFormItem, NIcon, NInput, NModal, NPopconfirm, NProgress,
   NSelect, NSpace, NTag, useMessage, type DataTableColumns,
 } from "naive-ui";
-import { PlusIcon, EditIcon, DeleteIcon } from "@/icons";
+import { PlusIcon, EditIcon, DeleteIcon, CancelIcon, SaveIcon } from "@/icons";
 import { apiErrMsg } from "@/api/client";
 import {
   createIPRange, deleteIPRange, updateIPRange, RANGE_COLORS,
@@ -178,8 +178,8 @@ async function remove(r: IPRange) {
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button size="small" @click="show = false">{{ t("common.cancel") }}</n-button>
-          <n-button size="small" type="primary" :loading="busy" @click="submit">{{ t("common.save") }}</n-button>
+          <n-button size="small" @click="show = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button size="small" type="primary" :loading="busy" @click="submit"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>

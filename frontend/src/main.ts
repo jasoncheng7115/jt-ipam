@@ -12,6 +12,7 @@ import { installTabArrowStyle, installTabScrollArrows } from "@/utils/tabScrollA
 import { setExportLogger } from "@/utils/saveFile";
 import { reportExportEvent } from "@/api/exportEvents";
 import { installSelectionCellClick } from "@/utils/selectionCellClick";
+import { installViewportHeight } from "@/utils/viewportHeight";
 
 // 全站表格欄寬可拖拉（必須在任何畫面建立表格之前）
 installResizableColumns(NDataTable);
@@ -20,6 +21,9 @@ installTabScrollArrows(NTabs);
 installTabArrowStyle();
 // 表格勾選欄整格都可以點（點到勾選框旁邊不會變成點整列、跳進詳細頁）
 installSelectionCellClick();
+
+// 版面高度用實際視窗高度（iPad Safari 剛載入時 100dvh 偏小，下面留一大片空白）
+installViewportHeight();
 
 // 頁面載入診斷（「切回分頁就整頁重新載入」要靠這個分辨是誰重載的）
 startPageDiag();

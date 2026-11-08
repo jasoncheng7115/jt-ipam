@@ -18,7 +18,7 @@ import { useTerminalLinks } from "@/composables/useTerminalLinks";
 import "@xterm/xterm/css/xterm.css";
 import { requestBmcTicket, buildBmcWsUrl, listBmcCredentials, createBmcCredential } from "@/api/bmc";
 import type { SshCredential } from "@/api/ssh";
-import { TerminalIcon, CancelIcon, RefreshIcon, InfoIcon, FitIcon } from "@/icons";
+import { TerminalIcon, CancelIcon, RefreshIcon, InfoIcon, FitIcon, GoToIcon } from "@/icons";
 import ConnElapsed from "@/components/ConnElapsed.vue";
 import ConsoleDisconnectedOverlay from "@/components/ConsoleDisconnectedOverlay.vue";
 
@@ -250,7 +250,7 @@ onBeforeUnmount(() => { window.removeEventListener("resize", onWinResize); teard
       <n-alert v-if="phase === 'connected' && !blankDismissed" class="bmc-blank" type="info" closable :show-icon="true"
                style="margin:6px 0" @close="blankDismissed = true">
         {{ t("bmc.blank_hint") }}
-        <n-button text type="primary" size="small" style="margin-left:4px" @click="guideOpen = true">
+        <n-button text type="primary" size="small" style="margin-left:4px" @click="guideOpen = true"><template #icon><n-icon><GoToIcon /></n-icon></template>
           {{ t("bmc.guide_open") }}
         </n-button>
       </n-alert>

@@ -24,7 +24,7 @@ import {
   deleteSubnet, archiveSubnet, unarchiveSubnet,
 } from "@/api/subnets";
 import type { Subnet, SubnetUsage } from "@/types";
-import { SubnetsIcon, RefreshIcon, DeleteIcon, PlusIcon, EditIcon, ArchiveIcon, RestoreIcon, ScanAgentsIcon, PinIcon } from "@/icons";
+import { SubnetsIcon, RefreshIcon, DeleteIcon, PlusIcon, EditIcon, ArchiveIcon, RestoreIcon, ScanAgentsIcon, PinIcon, CancelIcon } from "@/icons";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import SubnetEditModal from "@/components/SubnetEditModal.vue";
@@ -395,7 +395,7 @@ onMounted(() => {
         </template>
         {{ t("common.confirm_delete_n", { n: checkedKeys.length }) }}
       </n-popconfirm>
-      <n-button size="small" @click="checkedKeys = []">{{ t("common.clear_selection") }}</n-button>
+      <n-button size="small" @click="checkedKeys = []"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.clear_selection") }}</n-button>
     </n-space>
     <n-data-table
       :columns="columns"

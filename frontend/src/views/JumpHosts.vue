@@ -19,7 +19,7 @@ import {
 } from "@/api/jumpHosts";
 import {
   TerminalIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, TestIcon, SaveIcon, CancelIcon,
-  InfoIcon, CloneIcon,
+  InfoIcon, CloneIcon, CheckIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { apiErrMsg } from "@/api/client";
@@ -334,8 +334,8 @@ onMounted(() => { void refresh(); });
         </n-space>
       </template>
       <n-space justify="end" style="margin-top: 12px">
-        <n-button @click="probeOpen = false">{{ t("common.close") }}</n-button>
-        <n-button v-if="probe && probe.matches !== true" type="primary" @click="trustFingerprint">
+        <n-button @click="probeOpen = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.close") }}</n-button>
+        <n-button v-if="probe && probe.matches !== true" type="primary" @click="trustFingerprint"><template #icon><n-icon><CheckIcon /></n-icon></template>
           {{ t("jump_hosts.trust") }}
         </n-button>
       </n-space>

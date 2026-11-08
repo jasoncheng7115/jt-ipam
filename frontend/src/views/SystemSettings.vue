@@ -13,7 +13,7 @@ import {
   NButton, NPopconfirm, NTag, NAlert, useMessage,
 } from "naive-ui";
 const origin = window.location.origin;
-import { AdminIcon, SaveIcon, RefreshIcon, RequestsIcon, WarnIcon, DeleteIcon, OkIcon } from "@/icons";
+import { AdminIcon, SaveIcon, RefreshIcon, RequestsIcon, WarnIcon, DeleteIcon, OkIcon, CopyIcon, EyeIcon, PlayIcon } from "@/icons";
 import { getRackEmbedConfig, revealRackEmbedToken, setRackEmbedConfig, type RackEmbedConfig } from "@/api/racks";
 import { getBackupEncryption, removeBackupEncryption, setBackupEncryption, type BackupEncryption } from "@/api/system";
 import { fmtDate } from "@/utils/datetime";
@@ -40,7 +40,7 @@ import {
   getMapProvider, setMapProvider, getRackNameAlign, setRackNameAlign,
   getOnlineGrace, setOnlineGrace,
   getIpCooldown, setIpCooldown,
-  getCertExpiryDays, setCertExpiryDays,
+  getCertExpiryDays, setCertExpiryDays, getAgentAutoPin, setAgentAutoPin,
   getGeoipConfig, setGeoipConfig, updateGeoipDbNow,
   type GeoIPConfig, type RackNameAlign, type LivenessSource,
 } from "@/api/basic";
@@ -335,6 +335,14 @@ async function changeCertExpiry(n: number | null) {
   if (n == null) return;
   certExpiryDays.value = n;
   try { await setCertExpiryDays(n); msg.success(t("common.ok")); } catch (e) { msg.error(apiErrMsg(e)); }
+}
+// 代理自動改成驗證 jt-ipam（2026-11-07）：還沒驗證的代理更新後自己換，不必逐台重跑安裝指令
+const agentAutoPin = ref(true);
+async function changeAgentAutoPin(v: boolean) {
+  const old = agentAutoPin.value;
+  agentAutoPin.value = v;
+  try { await setAgentAutoPin(v); msg.success(t("common.ok")); }
+  catch (e) { agentAutoPin.value = old; msg.error(apiErrMsg(e)); }
 }
 async function changeCooldown(v: number | null) {
   const n = v ?? 0;
@@ -663,6 +671,7 @@ onMounted(() => {
     .catch(() => {});
   getIpCooldown().then((d) => { cooldownDays.value = d; }).catch(() => {});
   getCertExpiryDays().then((d) => { certExpiryDays.value = d; }).catch(() => {});
+  getAgentAutoPin().then((v) => { agentAutoPin.value = v; }).catch(() => {});
   void loadGeoip();
   void loadLdap();
   void loadLdapGroups();
@@ -815,7 +824,7 @@ async function doPreviewAutolink() {
                     <template #suffix>MB</template>
                   </n-input-number>
                 </div>
-                <n-button size="small" :loading="probe?.running" @click="checkSftpPath">
+                <n-button size="small" :loading="probe?.running" @click="checkSftpPath"><template #icon><n-icon><PlayIcon /></n-icon></template>
                   {{ t("settings.system.sftp_probe_run") }}
                 </n-button>
               </n-space>
@@ -1048,6 +1057,22 @@ async function doPreviewAutolink() {
         </div>
       </n-card>
 
+      <!-- 代理驗證 jt-ipam -->
+      <n-card class="ss-group" size="small" data-testid="ss-agent-trust">
+        <template #header><span class="ss-h">{{ t("system_settings.grp_agent_trust") }}</span></template>
+        <div class="ss-rows">
+          <div class="ss-r fld">
+            <div class="ss-r__text">
+              <label>{{ t("system_settings.agent_auto_pin") }}</label>
+              <div class="hint">{{ t("system_settings.agent_auto_pin_hint") }}</div>
+            </div>
+            <div class="ss-r__ctl">
+              <n-switch :value="agentAutoPin" data-testid="ss-agent-auto-pin" @update:value="changeAgentAutoPin" />
+            </div>
+          </div>
+        </div>
+      </n-card>
+
       <!-- 機櫃圖對外嵌入 -->
       <n-card class="ss-group" size="small">
         <template #header><span class="ss-h">{{ t("system_settings.grp_rack_embed") }}</span></template>
@@ -1066,15 +1091,15 @@ async function doPreviewAutolink() {
                 {{ rackTokenExpired ? t("llm_settings.mcp_key_expired", { date: fmtDate(rackEmbed.token_expires_at) })
                                     : t("llm_settings.mcp_key_expires", { date: fmtDate(rackEmbed.token_expires_at) }) }}
               </n-tag>
-              <n-button size="small" @click="toggleRackToken">
+              <n-button size="small" @click="toggleRackToken"><template #icon><n-icon><EyeIcon /></n-icon></template>
                 {{ showRackToken ? t("common.hide") : t("common.show") }}
               </n-button>
-              <n-button size="small" @click="copyRackToken">{{ t("common.copy") }}</n-button>
+              <n-button size="small" @click="copyRackToken"><template #icon><n-icon><CopyIcon /></n-icon></template>{{ t("common.copy") }}</n-button>
               <n-select v-model:value="rackTokenDays" :options="tokenDayOptions" size="small" style="width: 110px"
                         :aria-label="t('llm_settings.mcp_key_days')" />
               <n-popconfirm @positive-click="regenRackToken">
                 <template #trigger>
-                  <n-button size="small" type="warning" ghost>
+                  <n-button size="small" type="warning" ghost><template #icon><n-icon><RefreshIcon /></n-icon></template>
                     {{ t("system_settings.rack_embed_regen") }}
                   </n-button>
                 </template>
@@ -1233,7 +1258,7 @@ async function doPreviewAutolink() {
             <n-input v-model:value="ldapPw" type="password" show-password-on="click"
                      :placeholder="ldap.password_set ? t('settings.system.ldap_pw_set') : t('settings.system.ldap_pw_unset')"
                      style="flex:1" />
-            <n-button v-if="ldap.password_set" size="small" quaternary type="error" @click="clearLdapPw">
+            <n-button v-if="ldap.password_set" size="small" quaternary type="error" @click="clearLdapPw"><template #icon><n-icon><DeleteIcon /></n-icon></template>
               {{ t("settings.system.ldap_pw_clear") }}
             </n-button>
           </div>

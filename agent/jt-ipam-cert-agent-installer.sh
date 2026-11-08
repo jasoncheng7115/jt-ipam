@@ -182,6 +182,8 @@ ${CERT_HINT}
 # DEPLOY_1_TEST= config-test command run before reload
 EOF
     chmod 0600 "$CONF"
+    # what an earlier agent learned about the server by itself would override the new settings
+    rm -f "${STATEDIR}/trust"
     CONF_STATUS="created (template - edit DEPLOY_1_* to enable)"
 else
     CONF_STATUS="kept (existing config left untouched)"
@@ -193,6 +195,7 @@ else
         else
             sed -i "/^AGENT_KEY=/a PINNED_PUBKEY=${JT_IPAM_PIN}" "$CONF"
         fi
+        rm -f "${STATEDIR}/trust"      # the pin given now wins over what the agent learned by itself
         CONF_STATUS="kept, jt-ipam server key pinned (deployments left untouched)"
     fi
 fi

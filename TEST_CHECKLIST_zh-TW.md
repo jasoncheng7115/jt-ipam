@@ -1781,6 +1781,7 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
   沒有群組的機櫃匯出內容跟以前逐位元組相同
 - [ ] **「說明」按鈕**在新增旁邊（每個帳號都看得到）：說明群組是什麼、各類型什麼時候用、欄位、會出現在哪裡與規則
 - [ ] **成員選單與裝置搜尋**：輸入 IP 或 FQDN 找得到裝置（裝置頁也是，含非主要 IP 與 `/devices?q=<ip>`）；看不到的 IP 不會透露掛在哪台；找不到時提示成員要是裝置，只出現在虛擬化或 IP 位址的主機要先新增（不會自動建立）。類型換成 HA 主備時，第一台是「主要」、其他是「備援」
+- [ ] **群組標籤與背面提示同一欄**（`e2e/device-groups.spec.ts`）：群組兩台中間的 U 位背面有裝置時，「背 ×1」留在原位、群組標籤讓到括線內的空位，兩者不重疊、左緣對齊，「背 ×N」離機櫃不超過括線寬度
 - [ ] **裝置清單／詳細資料**：「群組」欄（名稱、角色、序號）點了到群組頁籤；詳細資料有「裝置群組」卡片，列出其他成員、機櫃位置與共用 IP
 - [ ] **拓樸圖**：成員之間一條標群組名稱的橘色連線（圖例「裝置群組」），版面不變
 - [ ] **IP 變更評估**：只維護其中一台時，共用 IP 不算受影響；整組都維護才算
@@ -1790,8 +1791,36 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 ## 8. 近期功能點檢
 
+- [ ] **Windows 派送代理在中文版 Windows**（`tests/test_powershell_agents.py`）：.ps1 只用 ASCII；在繁中 Windows（PowerShell 5.1）實際跑一次：自動釘選、跟上簽過章的換證、拒絕冒牌
+
+- [ ] **IP 拓樸圖縮圖總覽**（`e2e/topology-minimap.spec.ts`）：四種模式都有縮圖；隱藏的節點不畫；點縮圖畫面移過去；關係圖的縮圖照常
+
+- [ ] **AI 查裝置群組**（`tests/test_mcp_device_groups.py`）：問「有哪些裝置群組」模型帶 `group="*"`、問某群組成員帶群組名稱；工具清單不超過上限
+
+- [ ] **憑證推送進度與連不到的原因**（`tests/test_cert_push_progress.py`、`e2e/cert-push.spec.ts`）：推送中背景作業面板顯示已完成步驟與「目前：…」；確認位址的 DNS 沒設時，步驟寫出 DNS 解析失敗、推之前那步是 ⚠
+
+- [ ] **AI 對話不丟問題**（`tests/test_ai_question_kept.py`）：系統提示詞帶這次的問題；工具結果放不下時縮短最大的、回答註明截短；num_ctx 16384 的實機問「某 IP 誰在用」答的是那個 IP
+
+- [ ] **iPad 版面**（`e2e/viewport-height.spec.ts`、`e2e/ipad-labels.spec.ts`）：版面填滿視窗、視窗變高跟著填滿；子網路詳細在 1000px 寬改兩欄、標題不折字；各來源最後出現的來源名稱不溢出
+
+- [ ] **代理自動驗證 jt-ipam**（`tests/test_agent_trust_bundle.py`、`test_cert_agent_auto_pin.py`、`test_python_agent_auto_pin.py`、`test_powershell_agents.py`）：未驗證的代理更新後自己改成驗證（先 CA、再釘選，連得上才換、不帶金鑰）；系統設定關掉就不換；負載平衡器擋住時不換；jt-ipam 換憑證時只跟身分金鑰簽過的；稽核有 `agent_tls_verified`
+- [ ] **Windows 派送代理能執行**（`tests/test_powershell_agents.py`）：每支 .ps1 用 pwsh 解析通過；Windows 真機跑一次排程工作，日誌沒有 ParserError
+
+- [ ] **拓樸圖：網卡綁定的雙接主機**（`tests/test_topology_fdb.py`、`e2e/topology-dual-homed.spec.ts`）：同一個 MAC 在兩台交換器各自獨占一個埠 → 兩條線、進雙接群組、連接埠註明「網卡綁定」；另一邊的埠還有別的 MAC 時不算
+
+- [ ] **推送目標表格工具列與「未驗證」入口**（`e2e/cert-push.spec.ts`、`e2e/cert-agent-trust.spec.ts`）：推送到設備有篩選、欄位、匯出；代理清單的「未驗證 / 未驗證（舊版）」標籤可以點，打開該代理的安裝指令
+
+- [ ] **推送步驟的警示與 OPNsense 軟性確認**（`tests/test_cert_push_review_fixes.py`、`e2e/cert-push.spec.ts`）：沒有確認位址的推送，明細的「連過去確認」顯示 ⚠ 與原因（不打勾）；OPNsense 勾重啟網頁管理介面、沒填確認位址：API 網址是新憑證＝已確認，是舊憑證＝警示且不換回；表單說明文字緊貼欄位（`tests/test_form_hint_spacing.py`）
+
+- [ ] **嵌入模型接另一台**（`tests/test_llm_role_servers.py`、`e2e/llm-role-server.spec.ts`）：「嵌入模型位址」在嵌入模型選單上面；填了另一台的位址，選單改列那一台的模型（`GET /system/llm/models?role=embedding`），清空就回到對話那台
+
+- [ ] **判讀／巡檢先選供應商再填位址**（`tests/test_llm_role_servers.py`、`e2e/llm-role-server.spec.ts`）：打開「這個用途使用不同的 LLM Server」、先選 OpenAI 相容端點，存完不跳回 Ollama、重新整理還在；還沒填位址前照樣用對話那台；關掉開關清掉供應商與金鑰
+
+- [ ] **按鈕都有圖示**（`tests/test_button_icons.py`）：電力、佈線、SFTP、RustDesk、機櫃等對話框的取消 / 儲存 / 確認都有圖示；守門測試列出例外（符號按鈕、切換鈕組、像連結的文字按鈕）
+
 - [ ] **代理指派子網路不默默搬走別台的**（`tests/test_scan_agent_subnet_list.py`、`e2e/scan-agent-subnet-list.spec.ts`）：子網路選單標「目前由「X」掃描」；儲存時跳確認列出子網路與原本的代理，取消什麼都不動、確定才搬；API 不帶 `move_from_other_agents` 回 409 `scan_agent_subnets_taken`；稽核 diff 有 `moved`
 - [ ] **拓樸圖常用子網路篩選**（`e2e/topology-pinned-filter.spec.ts`）：有常用子網路的帳號進拓樸圖，篩選欄顯示 CIDR（不是只有「+1」），下方說明預設只畫常用子網路，按「顯示全部子網路」清掉篩選
+- [ ] **常用子網路自動略過失效的**（`tests/test_pinned_subnets_cleanup.py`、`e2e/topology-pinned-filter.spec.ts`）：常用子網路裡有已刪除、已歸檔或看不到的子網路時，`GET /me/preferences` 不回傳它們，存檔時也濾掉；拓樸圖篩選欄只顯示 CIDR、不會出現 ID，圖照常畫出來
 - [ ] **系統設定卡片與系統匯出提示**（`e2e/settings-cards-and-transfer.spec.ts`）：IP 變更評估、維護排程卡片一列一個設定；系統匯出統計中有提示、失敗可重試，按鈕旁寫出不能按的原因（還在統計、沒勾資料、密碼太短、兩次不同），匯入未選檔或沒密碼也有提示
 - [ ] **裝置頁每張卡片標題有圖示**（`tests/test_page_header_icons.py`）：含機櫃圖卡片
 

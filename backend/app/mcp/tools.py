@@ -1029,7 +1029,7 @@ async def list_locations(
 async def list_devices(
     session: AsyncSession, *, user: User,
     name: str | None = None, type: str | None = None, limit: int = 100,
-    location_id: str | None = None, rack_id: str | None = None,
+    location_id: str | None = None, rack_id: str | None = None, group: str | None = None,
 ) -> dict[str, Any]:
     """列出/搜尋裝置（可給 name 子字串或 type 過濾）：畫面「裝置」清單的欄位（主要 IP、類型、虛實、
     製造商、型號、序號、地點、機櫃、單位、說明）＋機櫃位置與 IP 數。其餘（各 IP 明細、VLAN、連接埠、
@@ -1051,6 +1051,14 @@ async def list_devices(
     if rack_id:
         stmt = stmt.where(Device.rack_id == _as_uuid(rack_id, "rack_id"))
         scope = f"rack:{rack_id}"
+    # 裝置群組（堆疊／HA）：名稱子字串；「*」＝有群組的全部（2026-11-07：問「有哪些 HA 群組」以前沒工具可叫）
+    from app.models.device_group import DeviceGroup
+    if group and group.strip():
+        stmt = stmt.where(Device.group_id.is_not(None))
+        if group.strip() != "*":
+            stmt = stmt.where(Device.group_id.in_(
+                select(DeviceGroup.id).where(DeviceGroup.name.ilike(f"%{group.strip()}%"))))
+        scope = f"group:{group.strip()}"
     # 可見性推進 SQL：先截斷再過濾會讓受限帳號拿到不足 limit 的結果，
     # 且總數會把看不到的也算進去
     vis = await visible_ids(session, user=user, object_type="device")
@@ -1069,6 +1077,9 @@ async def list_devices(
     custs = await _name_map(session, Customer.name, [d.customer_id for d in rows])
     locs = await _name_map(session, Location.name, [d.location_id for d in rows])
     racks = await _name_map(session, Rack.name, [d.rack_id for d in rows])
+    gids = {d.group_id for d in rows if d.group_id}
+    groups = {g.id: g for g in (await session.execute(
+        select(DeviceGroup).where(DeviceGroup.id.in_(gids)))).scalars().all()} if gids else {}   # bounded: ≤ limit
     # 主要 IP 與畫面同一套解析：primary_ip → LibreNMS 管理 IP → 名稱本身是 IP
     from app.api.v1.endpoints.devices import _resolve_device_ips
     ip_map = await _resolve_device_ips(session, rows)
@@ -1096,6 +1107,8 @@ async def list_devices(
             "rack_slot": d.rack_slot, "rack_slot_span": d.rack_slot_span,
             "rack_vslot": d.rack_vslot, "rack_vslot_span": d.rack_vslot_span,
             "rack_id": str(d.rack_id) if d.rack_id else None,
+            "group": ({"name": groups[d.group_id].name, "kind": groups[d.group_id].kind, "role": d.group_role,
+                       "order": d.group_order} if d.group_id in groups else None),
         })
     return {"scope": scope, "count": total, **_page(total, len(out)), "devices": out}
 
@@ -2925,7 +2938,7 @@ async def get_topology(
     node_keys = ("id", "label", "type", "vendor", "model", "ip", "status", "os", "hardware", "sw_version",
                  "sysname", "rack", "location", "description", "host", "cluster", "endpoint", "tunnel", "vpn_type")
     edge_keys = ("kind", "label", "type", "status", "via", "evidence", "port", "peer_port", "source_port",
-                 "target_port", "vlan", "direct", "port_mac_count", "a_endpoint", "b_endpoint", "ssid", "color",
+                 "target_port", "vlan", "direct", "port_mac_count", "bond", "a_endpoint", "b_endpoint", "ssid", "color",
                  "distance_m", "protocol")
 
     def _keep(d: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
@@ -5135,8 +5148,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_devices": {
         "fn": list_devices,
         "description": (
-            "List or search devices (name substring, type). Rows have the device-list columns (primary IP, type, "
-            "vendor, model, serial, location, rack and position, customer). Ports, power, VLANs and integrations "
+            "List or search devices (name substring, type, device group). Rows have the device-list columns (primary "
+            "IP, type, vendor, model, serial, location, rack and position, customer, group). Ports, power, VLANs and integrations "
             "are in get_device; for shelving units call list_racks (rows are levels, not U)."),
         "parameters": {
             "type": "object",
@@ -5146,6 +5159,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500},
                 "location_id": {"type": "string", "description": "Restrict to one location (機房)"},
                 "rack_id": {"type": "string", "description": "Restrict to one rack"},
+                "group": {"type": "string", "description": "device group (stack/HA) name; * lists every grouped device (which groups exist)"},
             },
         },
     },
@@ -5198,8 +5212,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "properties": {
                 "ip": {"type": "string"},
                 "subnet_cidr": {"type": "string",
-                                "description": "subnet the IP is in, when the same IP exists in several"},
-                "ip_id": {"type": "string", "description": "exact IP record id (from an overlap error or search)"},
+                                "description": "when the IP is in several subnets"},
+                "ip_id": {"type": "string", "description": "IP record id"},
             },
             "required": ["ip"],
         },
@@ -5624,8 +5638,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "parameters": {"type": "object", "properties": {
             "ip": {"type": "string"},
             "subnet_cidr": {"type": "string",
-                            "description": "subnet the IP is in, when the same IP exists in several"},
-            "ip_id": {"type": "string", "description": "exact IP record id (from an overlap error or search)"},
+                            "description": "when the IP is in several subnets"},
+            "ip_id": {"type": "string", "description": "IP record id"},
             "hostname": {"type": "string"},
             "state": {"type": "string", "enum": sorted(_IP_STATE_ENUM)},
             "owner": {"type": "string"}, "description": {"type": "string"}, "mac": {"type": "string"},
@@ -5635,11 +5649,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "switch_port": {"type": "string"},
             "liveness_from_device": {
                 "type": "boolean",
-                "description": "online status follows the linked device (gateways that do not answer pings)"},
+                "description": "online status follows the linked device"},
             "exclude_from_ping": {"type": "boolean"},
             "excluded_probes": {"type": "array", "items": {"type": "string", "enum": sorted(_PROBE_ENUM)},
-                                "description": "probes to skip for this IP (icmp = do not ping)"},
-            "ptr_ignore": {"type": "boolean", "description": "ignore this IP in PTR / reverse DNS checks"},
+                                "description": "probes to skip"},
+            "ptr_ignore": {"type": "boolean", "description": "skip PTR checks"},
             "is_dhcp_server": {"type": "boolean"}},
             "required": ["ip"]},
     },

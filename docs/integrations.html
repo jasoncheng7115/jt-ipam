@@ -1979,7 +1979,7 @@
       <li><span class="zh">要確認的服務不在 API 位址上時（例如 SSL VPN），填「確認位址（主機:埠）」</span><span class="en">If the service to check is not on the API address (SSL VPN, for example), fill in the verify address (host:port)</span><span class="ja">確認するサービスが API のアドレスと異なる場合（SSL VPN など）は確認先（ホスト:ポート）を入力</span></li>
     </ul></div>
     <div><h4><span class="zh">限制與注意</span><span class="en">Limits and notes</span><span class="ja">制限と注意</span></h4><ul>
-      <li><span class="zh">Beta：尚未在每一家的真機上驗證過</span><span class="en">Beta: not yet verified on real hardware from every vendor</span><span class="ja">Beta：すべてのベンダーの実機ではまだ検証していません</span></li>
+      <li><span class="zh">Beta：OPNsense 網頁管理介面的憑證已在真機驗證，其他廠牌尚未在真機上驗證</span><span class="en">Beta: the OPNsense web GUI certificate has been verified on a real device; other vendors have not been verified on real hardware yet</span><span class="ja">Beta：OPNsense の Web GUI 証明書は実機で検証済み、その他のメーカーはまだ実機で検証していません</span></li>
       <li><span class="zh">推之前就連不到確認位址時只標「未確認」、不會換回；只匯入不換上也算未確認</span><span class="en">If the verify address was unreachable before the push, the result is "unverified" and nothing is rolled back; import-only also counts as unverified</span><span class="ja">配布前から確認先に接続できない場合は「未確認」となり元に戻しません。インポートのみも未確認扱い</span></li>
       <li><span class="zh">不支援 Check Point；設備上舊的憑證不會自動刪除</span><span class="en">Check Point is not supported; old certificates on the device are not deleted automatically</span><span class="ja">Check Point は非対応。機器上の古い証明書は自動削除しません</span></li>
       <li><span class="zh">OPNsense 重啟網頁管理介面時，管理連線可能短暫中斷</span><span class="en">Restarting the OPNsense web GUI can briefly cut management sessions</span><span class="ja">OPNsense の Web 管理画面を再起動すると管理接続が一時的に切れることがあります</span></li>

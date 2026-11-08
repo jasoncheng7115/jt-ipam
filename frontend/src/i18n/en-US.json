@@ -1278,6 +1278,7 @@
     "status_disabled": "Disabled in LibreNMS",
     "access_group": "{name} access group",
     "access_group_multi": "{names} dual-homed group",
+    "nic_bond": "bonded NIC",
     "attach_mode": "Attachment",
     "multi_homed": "Dual-homed ({n} switches, separate NICs)",
     "legend_multi": "Dual-homed (separate NICs)",
@@ -3382,6 +3383,9 @@
     }
   },
   "errors": {
+    "certpush_probe_unreachable": "Could not reach this address before the push (it still pushes and tries again afterwards)",
+    "agent_trust_unavailable": "This jt-ipam has no HTTPS certificate information available",
+    "agent_trust_bad_host": "Cannot get the jt-ipam certificate for this address",
     "scan_agent_name_taken": "Another scan agent already uses this name",
     "certpush_bad_option": "Unsupported option: {option}",
     "certpush_cert_not_found": "Certificate not found",
@@ -4184,7 +4188,12 @@
     "device_group_representative_not_member": "The representative device must be a member of the group",
     "ip_not_found": "IP address not found",
     "ip_owned_by_group": "{ip} is shared by device group \"{group}\"; change it from the group settings",
-    "scan_agent_subnets_taken": "{count} subnets are scanned by another agent; confirm to move them: {subnets}"
+    "scan_agent_subnets_taken": "{count} subnets are scanned by another agent; confirm to move them: {subnets}",
+    "certpush_verify_no_address": "No check address, so it was not checked. For the management interface certificate, enter the API URL host:port; for a certificate another service uses, enter that service's host:port",
+    "certpush_verify_unreachable": "The address could not be reached before or after the push, so it could not be checked",
+    "certpush_verify_disabled": "\"Check after pushing\" is turned off for this target",
+    "certpush_verify_no_rollback": "No previous certificate to restore, so it was not checked",
+    "certpush_verify_webgui_old": "The management interface still presents the old certificate; nothing was restored. If the certificate is used by another service (HAProxy, for example), enter a check address; if it is the management interface certificate, check the device"
   },
   "adguard_admin": {
     "scope_subnets": "Limit to subnets",
@@ -4323,7 +4332,7 @@
     "chat_model": "Chat model",
     "embedding_model": "Embedding model",
     "embedding_url": "Embedding API base URL (optional)",
-    "embedding_url_hint": "Only needed when the embedding model runs elsewhere; leave empty to use the URL above. Provider, API key and timeout are shared.",
+    "embedding_url_hint": "Only needed when the embedding model runs elsewhere; leave empty to use the URL above. Once set, the embedding model list below comes from this server. Provider, API key and timeout are shared.",
     "tools_title": "jt-ipam MCP tools",
     "tools_intro": "The AI assistant and external MCP clients can call these {n} tools ({m} of which change data and require confirmation). Read-only tools answer instantly; mutating ones pause in the AI chat for you to confirm.",
     "tools_mutating": "Mutating",
@@ -4704,6 +4713,9 @@
     "webhook_token_ph": "leave blank for no Authorization header"
   },
   "system_settings": {
+    "agent_auto_pin_hint": "When on, certificate, scan and RustDesk agents that do not verify the server yet switch to verifying it after they update: system CAs first, else this server's certificate is pinned, and only a setting they actually connected with is kept. No need to re-run the install command on every host. When jt-ipam changes its certificate, verified agents check the new one against this server's identity key and follow it (not affected by this switch). When off, unverified agents stay as they are.",
+    "agent_auto_pin": "Agents verify jt-ipam automatically",
+    "grp_agent_trust": "Agents verifying jt-ipam",
     "title": "System Settings (global)",
     "grp_display": "Display & map",
     "grp_liveness": "Liveness",
@@ -9550,7 +9562,12 @@
     "info_mode_intel_note": "Information display mode is on: AI intelligence states current figures only, without WARNING, watch list or source status."
   },
   "certpush": {
-    "intro": "No agent on the firewall: jt-ipam pushes the certificate through the device's management API and puts it in use, then connects to check that the device really presents the new certificate, and restores the previous one if it cannot confirm. Create a separate account just for certificates (existing integration accounts are usually read-only). Beta: not yet verified on real devices of every vendor.",
+    "current_stage": "Now: {stage}",
+    "stage_rollback": "Rolling back to the previous certificate",
+    "stage_verify": "Checking the new certificate",
+    "stage_push": "Pushing to the device",
+    "stage_probe_before": "Connecting before the push",
+    "intro": "No agent on the firewall: jt-ipam pushes the certificate through the device's management API and puts it in use, then connects to check that the device really presents the new certificate. If the address answers with the old certificate, the previous one is restored; without a check address, or when it cannot be reached, the push is only marked \"not confirmed\" and nothing is restored. Create a separate account just for certificates (existing integration accounts are usually read-only). Beta: verified on a real OPNsense device for the web GUI certificate; other vendors are not yet verified on real devices.",
     "new": "New push target",
     "edit": "Edit push target",
     "certificate": "Certificate",
@@ -9637,7 +9654,7 @@
     "pa_commit_off_hint": "Only written to the candidate configuration, not applied; the status is \"Written, awaiting commit\" and you commit on the firewall yourself. Nothing is verified or reverted.",
     "pa_commit_admin": "Commit as admin",
     "pa_commit_admin_ph": "Optional: commit only this admin's changes (partial commit)",
-    "verify_explicit_hint": "On this device the certificate may serve something other than the admin interface (for example GlobalProtect or HAProxy), so without a verify address the push is only marked \"not verified\" and never reverted. If it is the admin interface certificate, enter the API URL's host:port.",
+    "verify_explicit_hint": "On this device the certificate may serve something other than the admin interface (for example GlobalProtect or HAProxy), so without a verify address the push is only marked \"not verified\" and never reverted. If it is the admin interface certificate, enter the API URL's host:port. On OPNsense with \"Restart the web GUI after pushing\" on, the API URL is checked once even without one (a mismatch is only a warning; nothing is restored).",
     "verify_endpoint_ph_explicit": "e.g. gp.example.net:443; empty = not verified",
     "step_precheck": "Check for changes pending from others",
     "step_import_ca": "Import the intermediate CA",
@@ -9645,7 +9662,9 @@
     "step_revert_candidate": "Revert the candidate configuration",
     "step_rollback_verify": "Check the original is back",
     "step_read_admin": "Read the admin interface certificate",
-    "step_read_sslvpn": "Read the SSL VPN certificate"
+    "step_read_sslvpn": "Read the SSL VPN certificate",
+    "filter_ph": "Filter name / certificate / device / URL",
+    "last_push_at": "Last pushed at"
   },
   "not_found": {
     "title": "Page not found",
@@ -9892,7 +9911,7 @@
     "mode_pinned": "Pin this server's certificate (recommended)",
     "mode_ca": "Verify with system CAs",
     "mode_insecure": "Do not verify (not recommended)",
-    "hint_mode_pinned": "The install command and every later connection of the agent only accept a server whose certificate fingerprint is {fp}…; another host posing as jt-ipam is refused before the agent key is sent. After jt-ipam changes its certificate (with a new key), run the install command on the host again.",
+    "hint_mode_pinned": "The install command and every later connection of the agent only accept a server whose certificate fingerprint is {fp}…; another host posing as jt-ipam is refused before the agent key is sent. When jt-ipam changes its certificate, the agent checks the new one against this jt-ipam's identity key and follows it, no reinstall needed.",
     "hint_mode_ca": "The host's system CAs verify the jt-ipam certificate; use this when jt-ipam has a certificate from a public CA.",
     "hint_unavailable": "The certificate this jt-ipam presents cannot be read (for example a load balancer handles HTTPS in front of it), so it cannot be pinned; with a public certificate choose \"Verify with system CAs\".",
     "hint_mode_insecure": "No server check: anyone who can intercept the traffic could pose as jt-ipam, take the agent key or push a program that runs as root / SYSTEM on the host. Use it only for testing.",
@@ -9902,11 +9921,13 @@
     "state_legacy": "Not verified (old)",
     "hint_pinned": "The agent only talks to the jt-ipam whose certificate fingerprint matches, and self-update only accepts versions signed by jt-ipam.",
     "hint_ca": "The agent verifies the jt-ipam certificate with the host's system CAs, and self-update only accepts versions signed by jt-ipam.",
-    "hint_insecure": "This agent does not verify the server: anyone who can intercept the traffic could pose as jt-ipam to take the key or push a malicious program. Open \"View agent connection key & install command\", choose \"Pin this server's certificate\" and run the install command on the host again (the deployments are kept).",
-    "hint_legacy": "An older agent does not report how it checks the server; ones installed with the old command usually do not. The agent updates itself on its next run; then open \"View agent connection key & install command\" and run the install command on the host once more to pin the server certificate (the deployments are kept).",
-    "hint_pinned_public": "This certificate comes from a public CA (for example Let's Encrypt) and is renewed regularly, usually with a new key; after a renewal the pinned fingerprint no longer matches and the agent cannot connect. Open jt-ipam by the domain name on the certificate and generate the command there; it then uses system CA verification."
+    "hint_insecure": "This agent does not verify the server: anyone who can intercept the traffic could pose as jt-ipam to take the key or push a malicious program. Current agents switch to verifying it by themselves on their next run (System settings, \"Agents verify jt-ipam automatically\"). If one stays like this (for example behind a load balancer that handles HTTPS), open \"View agent connection key & install command\", choose \"Pin this server's certificate\" and run the install command on the host again (the deployments are kept).",
+    "hint_legacy": "An older agent does not report how it checks the server; ones installed with the old command usually do not. The agent updates itself on its next run and then switches to verifying the server by itself, no reinstall needed.",
+    "hint_pinned_public": "This certificate comes from a public CA (for example Let's Encrypt) and is renewed regularly, usually with a new key. The agent checks the new certificate against this jt-ipam's identity key and follows it; opening jt-ipam by the domain name on the certificate and generating the command there uses system CA verification, which is simpler.",
+    "click_to_fix": "Click this tag to open the install command for the fix (pinning already selected) and run it once on the host; deployments are kept."
   },
   "device_groups": {
+    "col_rack": "Rack position",
     "tab_devices": "Devices",
     "tab_groups": "Groups",
     "title": "Device groups",

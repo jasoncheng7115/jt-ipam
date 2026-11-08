@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { NCard, NIcon, NList, NListItem, NSpace, NText, NTag, NButton, NPagination, NEmpty, useMessage } from "naive-ui";
-import { BellIcon } from "@/icons";
+import { BellIcon, CheckIcon } from "@/icons";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { notifTitle, notifBody } from "@/utils/notifText";
@@ -81,7 +81,7 @@ onMounted(load);
     </template>
     <!-- 控制列：自標題列搬到內文最上方 -->
     <n-space align="center" justify="end" style="margin-bottom: 10px">
-      <n-button size="small" @click="clearAll">{{ t("notifications.mark_all_read") }}</n-button>
+      <n-button size="small" @click="clearAll"><template #icon><n-icon><CheckIcon /></n-icon></template>{{ t("notifications.mark_all_read") }}</n-button>
     </n-space>
     <n-list v-if="items.length" hoverable clickable>
       <n-list-item

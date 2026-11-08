@@ -237,7 +237,7 @@ onMounted(() => { void refresh(); });
             v-model:value="memberToAdd" :options="userOptions" filterable
             :placeholder="t('groups.add_member_placeholder')" style="width: 280px"
           />
-          <n-button type="primary" :disabled="!memberToAdd" @click="add">
+          <n-button type="primary" :disabled="!memberToAdd" @click="add"><template #icon><n-icon><PlusIcon /></n-icon></template>
             {{ t("common.create") }}
           </n-button>
         </n-space>
@@ -257,7 +257,7 @@ onMounted(() => { void refresh(); });
             <template #suffix>
               <n-popconfirm @positive-click="removeMember(u)">
                 <template #trigger>
-                  <n-button size="small" type="error">{{ t("common.delete") }}</n-button>
+                  <n-button size="small" type="error"><template #icon><n-icon><DeleteIcon /></n-icon></template>{{ t("common.delete") }}</n-button>
                 </template>
                 {{ t("common.confirm_delete") }}
               </n-popconfirm>

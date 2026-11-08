@@ -26,7 +26,7 @@ import {
 } from "@/api/rustdesk";
 import {
   RustDeskIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, CopyIcon, TestIcon, SyncIcon,
-  TerminalIcon, DevicesIcon, AuditIcon, ListIcon, SelectAllIcon,
+  TerminalIcon, DevicesIcon, AuditIcon, ListIcon, SelectAllIcon, TokenIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
@@ -400,7 +400,8 @@ const allCols = computed<DataTableColumns<RustDeskServer>>(() => autoSort([
     title: t("certTrust.col"), key: "agent_tls", width: 130,
     sorter: byValue((r: RustDeskServer) => r.agent_tls_mode ?? ""),
     render: (r) => renderTlsState(!!r.agent_last_seen_at, r.agent_tls_mode, "rustdesk-agent-tls",
-      (st) => (st === "pinned" || st === "ca" ? t(`certTrust.hint_${st}`) : t(`rustdesk.trust_fix_${st}`)), t),
+      (st) => (st === "pinned" || st === "ca" ? t(`certTrust.hint_${st}`) : t(`rustdesk.trust_fix_${st}`)), t,
+      () => openInstall(r)),
   },
   {
     title: t("common.status"), key: "enabled", width: 90,
@@ -956,7 +957,7 @@ onMounted(() => { void refresh(); void trust.load(); });
             <n-space align="center" :size="8">
               <n-spin v-if="delSummary.pending" key="spin" :size="14" />
               <span key="text">{{ summaryText(delSummary) }}</span>
-              <n-button key="log" text type="primary" size="small" @click="openDeleteLog">{{ t("rustdesk.del_log") }}</n-button>
+              <n-button key="log" text type="primary" size="small" @click="openDeleteLog"><template #icon><n-icon><DeleteIcon /></n-icon></template>{{ t("rustdesk.del_log") }}</n-button>
             </n-space>
           </n-alert>
           <n-text v-if="!peerTotal && !peerLoading" depth="3" style="font-size: 13px">{{ t("rustdesk.no_devices") }}</n-text>
@@ -1137,7 +1138,7 @@ onMounted(() => { void refresh(); void trust.load(); });
         <n-alert v-if="installNoKey" type="warning" :bordered="false" style="margin-bottom: 12px">
           {{ t("rustdesk.no_key") }}
           <div style="margin-top: 8px">
-            <n-button size="small" type="primary" @click="rotateKey">{{ t("rustdesk.gen_key") }}</n-button>
+            <n-button size="small" type="primary" @click="rotateKey"><template #icon><n-icon><TokenIcon /></n-icon></template>{{ t("rustdesk.gen_key") }}</n-button>
           </div>
         </n-alert>
         <template v-if="installKey">
@@ -1193,7 +1194,7 @@ onMounted(() => { void refresh(); void trust.load(); });
             </n-button>
             <n-popconfirm @positive-click="rotateKey">
               <template #trigger>
-                <n-button size="small" tertiary type="warning" data-testid="rustdesk-rotate">{{ t("rustdesk.rotate_key") }}</n-button>
+                <n-button size="small" tertiary type="warning" data-testid="rustdesk-rotate"><template #icon><n-icon><TokenIcon /></n-icon></template>{{ t("rustdesk.rotate_key") }}</n-button>
               </template>
               {{ t("rustdesk.rotate_confirm") }}
             </n-popconfirm>

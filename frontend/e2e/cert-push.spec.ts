@@ -111,6 +111,20 @@ test("新增 OPNsense 目標：範例跟著設備換、存檔前就能讀設備�
   await expect(picked).toHaveText("Web GUI（fw.example.net）");
   expect((await picked.boundingBox())!.height).toBeLessThanOrEqual(sel!.height + 1);
 
+  // 說明文字貼著它說明的那一項，跟下一項之間才有距離（使用者 2026-11-07）
+  const gaps = await modal.locator(".cp-hint").evaluateAll((els) => els.map((e) => {
+    const prev = e.previousElementSibling!.getBoundingClientRect();
+    const next = e.nextElementSibling?.getBoundingClientRect();
+    const me = e.getBoundingClientRect();
+    return { above: me.top - prev.bottom, below: next ? next.top - me.bottom : 99 };
+  }));
+  expect(gaps.length).toBeGreaterThan(1);
+  for (const g of gaps) {
+    expect(g.above, `說明離上面那一項 ${g.above}px`).toBeLessThan(10);
+    expect(g.below, `說明離下一項 ${g.below}px`).toBeGreaterThan(g.above + 6);
+  }
+  await modal.screenshot({ path: "test-results/certpush-form-hints.png" });
+
   // 欄位名稱都是一行
   const tall = await modal.locator(".n-form-item-label").evaluateAll((els) =>
     els.filter((e) => e.getBoundingClientRect().height > 30).map((e) => e.textContent));
@@ -165,4 +179,80 @@ test("Palo Alto 目標：commit 的說明跟著開關換、可填 partial commit
   const tall = await modal.locator(".n-form-item-label").evaluateAll((els) =>
     els.filter((e) => e.getBoundingClientRect().height > 30).map((e) => e.textContent));
   expect(tall).toEqual([]);
+});
+
+test("推送明細：沒確認到的步驟顯示警示和原因，不打勾（使用者 2026-11-07）", async ({ page }) => {
+  await page.route("**/api/v1/cert-push-targets", (route) => route.request().method() !== "GET" ? route.continue()
+    : route.fulfill({ json: { items: [{
+      id: "t-1", name: "fw-lab-01", enabled: true, kind: "opnsense", certificate_id: "c-1", certificate_name: "example.net",
+      api_url: "https://192.0.2.13", verify_tls: false, options: { cert_uuid: "u-1", restart_webgui: false },
+      verify_endpoint: null, auto_push: true, has_secret: true, last_push_at: new Date().toISOString(),
+      last_status: "unverified", last_error: null, last_fingerprint: "a".repeat(64), current_fingerprint: "a".repeat(64),
+      up_to_date: true, last_steps: [
+        { step: "read", ok: true, detail: "Web GUI TLS certificate" },
+        { step: "replace", ok: true, detail: "Web GUI TLS certificate" },
+        { step: "verify", ok: true, warn: true, code: "certpush_verify_no_address", detail: "service: no verify address; not verified" },
+      ] }] } }));
+  await login(page);
+  await page.goto("/certificates");
+  await page.locator(".n-tabs-tab", { hasText: "推送到設備" }).click();
+  await page.locator("tr", { hasText: "fw-lab-01" }).getByText("未確認").hover();
+  const steps = page.getByTestId("certpush-steps");
+  await expect(steps).toBeVisible();
+  const warn = steps.locator("[data-step-state=warn]");
+  await expect(warn).toHaveCount(1);
+  await expect(warn).toContainText("⚠");
+  await expect(warn).toContainText("沒有確認位址");
+  await expect(steps.locator("[data-step-state=ok]")).toHaveCount(2);
+  await steps.screenshot({ path: "test-results/certpush-steps-warn.png" });
+  // 表格上方的工具跟「派送代理」頁籤一樣：篩選、匯出、欄位（使用者 2026-11-07）
+  const pane = page.locator(".n-tab-pane").filter({ has: page.getByTestId("certpush-table") });
+  await expect(pane.getByRole("button", { name: "匯出" })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "欄位" })).toBeVisible();
+  await page.getByTestId("certpush-filter").locator("input").fill("沒有這台");
+  await expect(page.getByTestId("certpush-table").locator("tbody tr", { hasText: "fw-lab-01" })).toHaveCount(0);
+  await page.getByTestId("certpush-filter").locator("input").fill("fw-lab");
+  await expect(page.getByTestId("certpush-table").locator("tbody tr", { hasText: "fw-lab-01" })).toHaveCount(1);
+});
+
+
+test("推送中右下角顯示已完成的步驟與目前階段（11-07）", async ({ page, request }) => {
+  const H = await token(request);
+  const tag = `cpp${Date.now().toString(36)}`;
+  const cert = await (await request.post("/api/v1/certificates", { headers: H, data: { name: `${tag}-cert`, description: "e2e" } })).json();
+  await request.post(`/api/v1/certificates/${cert.id}/self-signed`, { headers: H, data: { common_name: "fw.example.com", sans: ["fw.example.com"], days: 30 } });
+  const tgt = await (await request.post("/api/v1/cert-push-targets", { headers: H, data: {
+    name: `${tag}-fg`, certificate_id: cert.id, kind: "fortigate", api_url: "https://192.0.2.1:8443",
+    options: { bind: ["admin"] }, secret: { api_key: "k" } } })).json();
+  const taskId = "00000000-0000-0000-0000-00000000c0de";
+  const steps = [
+    { step: "probe_before", ok: true, warn: true, code: "certpush_probe_unreachable",
+      detail: "service fw.example.com:443 unreachable (DNS resolution failed for fw.example.com)" },
+    { step: "import", ok: true, detail: "" },
+  ];
+  let polls = 0;
+  await page.route(`**/api/v1/cert-push-targets/${tgt.id}/push`, (r) => r.fulfill({ json: { task_id: taskId, status: "pending", queued_at: new Date().toISOString() } }));
+  await page.route(`**/api/v1/tasks/${taskId}`, (r) => {
+    polls += 1;
+    const base = { id: taskId, kind: "cert.push", target_label: `${tag}-fg`, trigger: "manual",
+      queued_at: new Date().toISOString(), started_at: new Date().toISOString() };
+    return r.fulfill({ json: polls < 4
+      ? { ...base, status: "running", progress: 0, summary: { target: `${tag}-fg`, steps, stage: "push" } }
+      : { ...base, status: "succeeded", progress: 100, finished_at: new Date().toISOString(),
+          summary: { target: `${tag}-fg`, status: "ok", error: null, steps } } });
+  });
+  await login(page);
+  await page.goto("/certificates");
+  await page.locator(".n-tabs-tab", { hasText: "推送到設備" }).click();
+  const row = page.getByTestId("certpush-table").locator("tr", { hasText: `${tag}-fg` });
+  await row.getByRole("button", { name: "立即推送" }).click();
+  const tracker = page.getByTestId("task-tracker");
+  await expect(tracker.getByTestId("task-tracker-stage")).toContainText("目前：推送到設備");
+  const lines = tracker.getByTestId("task-tracker-steps");
+  await expect(lines).toContainText("⚠ 推之前先連一次");
+  await expect(lines).toContainText("DNS resolution failed");
+  await expect(lines).toContainText("✓ 匯入憑證");
+  await tracker.screenshot({ path: "test-results/certpush-progress.png" });
+  await expect(tracker.getByTestId("task-tracker-stage")).toHaveCount(0, { timeout: 15_000 });   // 做完就沒有「目前」
+  await request.delete(`/api/v1/cert-push-targets/${tgt.id}`, { headers: H });
 });

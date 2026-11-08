@@ -900,7 +900,8 @@ const agentColsAll = computed<DataTableColumns<CertAgent>>(() => autoSort([
     } },
   { title: t("certTrust.col"), key: "tls", width: 130,
     sorter: (a, b) => (a.tls_mode ?? "").localeCompare(b.tls_mode ?? ""),
-    render: (a) => renderTlsState(!!a.last_seen_at, a.tls_mode, "cert-agent-tls", (st) => t(`certTrust.hint_${st}`), t) },
+    render: (a) => renderTlsState(!!a.last_seen_at, a.tls_mode, "cert-agent-tls", (st) => t(`certTrust.hint_${st}`), t,
+                                  () => viewAgent(a)) },
   { title: t("cols.version"), key: "agent_version", width: 120,
     render: (a) => {
       if (!a.agent_version) return "—";

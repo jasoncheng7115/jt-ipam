@@ -1278,6 +1278,7 @@
     "status_disabled": "LibreNMS 已停用",
     "access_group": "{name} 接入群組",
     "access_group_multi": "{names} 雙接群組",
+    "nic_bond": "網卡綁定",
     "attach_mode": "接入方式",
     "multi_homed": "雙接（{n} 台交換器，不同網卡）",
     "legend_multi": "雙接（不同網卡各接一台）",
@@ -3382,6 +3383,9 @@
     }
   },
   "errors": {
+    "certpush_probe_unreachable": "推之前連不到這個位址（還是會推，推完再試一次）",
+    "agent_trust_unavailable": "這台 jt-ipam 沒有可用的 HTTPS 憑證資訊",
+    "agent_trust_bad_host": "無法從這個網址取得 jt-ipam 的憑證",
     "scan_agent_name_taken": "這個名稱已經有其他掃描代理在用了",
     "certpush_bad_option": "不支援的設定：{option}",
     "certpush_cert_not_found": "找不到這張憑證",
@@ -4184,7 +4188,12 @@
     "device_group_representative_not_member": "代表裝置必須是群組的成員",
     "ip_not_found": "找不到這個 IP 位址",
     "ip_owned_by_group": "{ip} 由裝置群組「{group}」共用，要換裝置請到群組設定改",
-    "scan_agent_subnets_taken": "有 {count} 個子網路目前由別台代理掃描，確認後才會搬過來：{subnets}"
+    "scan_agent_subnets_taken": "有 {count} 個子網路目前由別台代理掃描，確認後才會搬過來：{subnets}",
+    "certpush_verify_no_address": "沒有確認位址，沒連過去確認。換的是管理介面的憑證就填 API 網址的主機:埠；是別的服務在用的，填那個服務的主機:埠",
+    "certpush_verify_unreachable": "推之前、推之後都連不到這個位址，沒辦法確認",
+    "certpush_verify_disabled": "這個推送目標關閉了「推完連過去確認」",
+    "certpush_verify_no_rollback": "沒有可換回的舊憑證資料，所以沒有確認",
+    "certpush_verify_webgui_old": "管理介面出示的還是舊憑證，沒有換回。如果換的是別的服務（例如 HAProxy）在用的憑證，請填確認位址；如果確實是管理介面的憑證，請到設備上看一下"
   },
   "adguard_admin": {
     "scope_subnets": "限定子網路範圍",
@@ -4293,7 +4302,7 @@
     "chat_model": "對話模型",
     "embedding_model": "嵌入模型",
     "embedding_url": "嵌入模型位址（選用）",
-    "embedding_url_hint": "兩種模型分開部署時才需要填；留空＝沿用上面那個位址。供應商、金鑰與逾時仍共用。",
+    "embedding_url_hint": "兩種模型分開部署時才需要填；留空＝沿用上面那個位址。填了之後，下面的嵌入模型清單會改列這一台上的模型。供應商、金鑰與逾時仍共用。",
     "timeout_sec": "逾時 (秒)",
     "num_ctx": "對話上下文長度 (num_ctx)",
     "num_ctx_placeholder": "預設 (留空)",
@@ -4704,6 +4713,9 @@
     "webhook_token_ph": "留空＝不帶授權標頭"
   },
   "system_settings": {
+    "agent_auto_pin_hint": "開啟時，還沒驗證伺服器的派送、掃描、RustDesk 代理更新後會自己改成驗證：先試系統 CA，不行就釘選這台的憑證，實際連得上才換，不必到每台主機重跑安裝指令。jt-ipam 換憑證時，已驗證的代理用這台的身分金鑰確認新憑證後自動跟上（這部分不受這個開關影響）。關閉後，未驗證的代理維持原狀。",
+    "agent_auto_pin": "代理自動驗證 jt-ipam",
+    "grp_agent_trust": "代理驗證 jt-ipam",
     "title": "系統設定（全域）",
     "grp_display": "顯示與地圖",
     "grp_liveness": "上線判定",
@@ -9550,7 +9562,12 @@
     "info_mode_intel_note": "目前是資訊展示模式：AI 情報只播報現況與數量，不會出現 WARNING、持續關注與來源狀態。"
   },
   "certpush": {
-    "intro": "不用在防火牆上裝代理：jt-ipam 用設備的管理 API 把憑證推過去並換上，推完會連過去確認對方真的換成新憑證，確認不到就自動換回原本的。請另外建一組只給換憑證用的帳號（現有的整合帳號多半是唯讀）。Beta：尚未在每一家的真機上驗證過。",
+    "current_stage": "目前：{stage}",
+    "stage_rollback": "換回原本的憑證",
+    "stage_verify": "連過去確認",
+    "stage_push": "推送到設備",
+    "stage_probe_before": "推之前先連一次",
+    "intro": "不用在防火牆上裝代理：jt-ipam 用設備的管理 API 把憑證推過去並換上，推完連過去確認對方是不是真的換成新憑證：連得到卻還是舊憑證就自動換回原本的；沒有確認位址或連不到時只標「未確認」，不會換回。請另外建一組只給換憑證用的帳號（現有的整合帳號多半是唯讀）。Beta：OPNsense 網頁管理介面的憑證已在真機驗證，其他廠牌尚未在真機上驗證。",
     "new": "新增推送目標",
     "edit": "編輯推送目標",
     "certificate": "憑證",
@@ -9637,7 +9654,7 @@
     "pa_commit_off_hint": "只寫進候選設定，不會套用到線上；狀態是「已寫入，待 commit」，請在防火牆上自己 commit。這時不驗證、也不會換回。",
     "pa_commit_admin": "commit 的管理員帳號",
     "pa_commit_admin_ph": "選填：填了只 commit 這個帳號的變更（partial commit）",
-    "verify_explicit_hint": "這種設備換的憑證不一定是管理介面在用的（例如 GlobalProtect、HAProxy），所以沒填確認位址時只標「未確認」、不會自動換回。換的是管理介面的憑證，請填 API 網址的主機:埠。",
+    "verify_explicit_hint": "這種設備換的憑證不一定是管理介面在用的（例如 GlobalProtect、HAProxy），所以沒填確認位址時只標「未確認」、不會自動換回。換的是管理介面的憑證，請填 API 網址的主機:埠。OPNsense 勾了「推完重啟網頁管理介面」時，沒填也會連 API 網址確認一次（對不上只警示、不換回）。",
     "verify_endpoint_ph_explicit": "例：gp.example.net:443；留空＝不確認",
     "step_precheck": "檢查有沒有別人待提交的變更",
     "step_import_ca": "匯入中繼 CA",
@@ -9645,7 +9662,9 @@
     "step_revert_candidate": "換回候選設定",
     "step_rollback_verify": "確認已換回原本的",
     "step_read_admin": "讀取管理介面目前的憑證",
-    "step_read_sslvpn": "讀取 SSL VPN 目前的憑證"
+    "step_read_sslvpn": "讀取 SSL VPN 目前的憑證",
+    "filter_ph": "篩選名稱 / 憑證 / 設備 / 網址",
+    "last_push_at": "上次推送時間"
   },
   "not_found": {
     "title": "找不到這個頁面",
@@ -9892,7 +9911,7 @@
     "mode_pinned": "釘選這台的憑證（建議）",
     "mode_ca": "用系統 CA 驗證",
     "mode_insecure": "不驗證（不建議）",
-    "hint_mode_pinned": "安裝指令和代理之後的每次連線，只接受憑證指紋 {fp}… 的伺服器；別的主機假冒 jt-ipam 會在送出代理金鑰前就被拒絕。jt-ipam 換了憑證（換了金鑰）後，要在主機上重新執行一次安裝指令。",
+    "hint_mode_pinned": "安裝指令和代理之後的每次連線，只接受憑證指紋 {fp}… 的伺服器；別的主機假冒 jt-ipam 會在送出代理金鑰前就被拒絕。jt-ipam 換憑證時，代理會用這台 jt-ipam 的身分金鑰確認新憑證、自動跟上，不必重裝。",
     "hint_mode_ca": "用主機的系統 CA 驗證 jt-ipam 的憑證，適合 jt-ipam 用公開 CA 簽的正式憑證時。",
     "hint_unavailable": "讀不到這台 jt-ipam 出示的憑證（例如前面有負載平衡器在處理 HTTPS），所以無法釘選；用正式憑證時選「用系統 CA 驗證」。",
     "hint_mode_insecure": "不驗證伺服器：能攔截網路的人可以假冒 jt-ipam，拿走代理金鑰，或推一支以 root / SYSTEM 執行的程式到這台主機。只在測試環境使用。",
@@ -9902,11 +9921,13 @@
     "state_legacy": "未驗證（舊版）",
     "hint_pinned": "代理只跟憑證指紋相符的 jt-ipam 連線，自我更新也只接受 jt-ipam 簽章過的版本。",
     "hint_ca": "代理用主機的系統 CA 驗證 jt-ipam 的憑證，自我更新只接受 jt-ipam 簽章過的版本。",
-    "hint_insecure": "這個代理沒有驗證伺服器：能攔截網路的人可以假冒 jt-ipam 拿走金鑰或推惡意程式。請按「檢視代理連線 Key 與安裝指令」，選「釘選這台的憑證」，在主機上重新執行安裝指令（部署設定會保留）。",
-    "hint_legacy": "舊版代理沒有回報驗證方式，用舊的安裝指令裝的多半沒有驗證伺服器。代理下一次執行會自動更新；之後請按「檢視代理連線 Key 與安裝指令」，在主機上重新執行一次安裝指令，把伺服器憑證釘選進設定（部署設定會保留）。",
-    "hint_pinned_public": "這張憑證是公開 CA 簽發的（例如 Let's Encrypt），會定期續約、通常連金鑰一起換，續約後釘選的指紋就對不上、代理會連不上。建議改用憑證上的網域名稱開啟 jt-ipam 再產生指令，會自動改用系統 CA 驗證。"
+    "hint_insecure": "這個代理沒有驗證伺服器：能攔截網路的人可以假冒 jt-ipam 拿走金鑰或推惡意程式。新版代理會在下一次執行時自己改成驗證（系統設定的「代理自動驗證 jt-ipam」）；一直沒改的（例如中間有負載平衡器在處理 HTTPS），請按「檢視代理連線 Key 與安裝指令」，選「釘選這台的憑證」，在主機上重新執行安裝指令（部署設定會保留）。",
+    "hint_legacy": "舊版代理沒有回報驗證方式，用舊的安裝指令裝的多半沒有驗證伺服器。代理下一次執行會自動更新，更新後會自己改成驗證伺服器，不必重裝。",
+    "hint_pinned_public": "這張憑證是公開 CA 簽發的（例如 Let's Encrypt），會定期續約、通常連金鑰一起換。代理會用這台 jt-ipam 的身分金鑰確認新憑證、自動跟上；改用憑證上的網域名稱開啟 jt-ipam 再產生指令，則會直接用系統 CA 驗證，更單純。",
+    "click_to_fix": "點這個標籤，打開修正用的安裝指令（已選好釘選憑證），到那台主機上執行一次就好，部署設定會保留。"
   },
   "device_groups": {
+    "col_rack": "機櫃位置",
     "tab_devices": "裝置",
     "tab_groups": "群組",
     "title": "裝置群組",

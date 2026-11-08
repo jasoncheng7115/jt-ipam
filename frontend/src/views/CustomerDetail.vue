@@ -17,6 +17,11 @@ import { fmtDateTime } from "@/utils/datetime";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { autoSort } from "@/composables/useTableSort";
 import { useTablePagination } from "@/composables/useTablePagination";
+import { useDescColumns } from "@/composables/useDescColumns";
+
+// 標題在左的描述表格：寬度不夠三欄就改兩欄（iPad 橫向）
+const customerDescEl = ref<any>(null);
+const descCols = useDescColumns(customerDescEl);
 const pg = useTablePagination();
 
 interface Summary {
@@ -99,7 +104,7 @@ onMounted(() => {
             {{ t("common.back_to_list") }}
           </n-button>
         </n-space>
-        <n-descriptions bordered :column="3" size="small" label-placement="left">
+        <n-descriptions ref="customerDescEl" bordered :column="descCols" size="small" label-placement="left">
           <n-descriptions-item :label="t('customer_detail.internal_name')">{{ data.customer.name }}</n-descriptions-item>
           <n-descriptions-item :label="t('customer_detail.display_name')">{{ data.customer.title ?? "—" }}</n-descriptions-item>
           <n-descriptions-item :label="t('cols.contact')">{{ data.customer.contact ?? "—" }}</n-descriptions-item>

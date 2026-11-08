@@ -77,16 +77,10 @@
         <div v-else ref="wrapEl" class="irg-wrap" :style="fill.height.value ? { height: `${fill.height.value}px` } : undefined">
           <div class="irg-stage">
             <div ref="box" class="irg-canvas" />
-            <!-- 縮圖（照另一個內部專案 JSON 圖的作法）：整張圖的縮影＋目前看到的範圍，點或拖曳就移過去 -->
-            <div class="irg-mini" :class="{ 'irg-mini--dark': miniDark }" data-testid="cip-graph-minimap"
-                 @pointerdown="miniDown" @pointermove="miniMove"
-                 @pointerup="miniUp" @pointerleave="miniUp">
-              <svg :width="MINI_W" :height="MINI_H">
-                <rect v-for="m in mini.nodes" :key="m.id" :x="m.x" :y="m.y" :width="m.w" :height="m.h"
-                      :rx="m.round" :fill="m.color" />
-              </svg>
-              <div class="irg-mini-view" :style="mini.view" />
-            </div>
+            <!-- 縮圖：整張圖的縮影＋目前看到的範圍，點或拖曳就移過去（IP 拓樸圖共用同一個元件） -->
+            <GraphMinimap ref="miniRef" selector="[!zone]" testid="cip-graph-minimap"
+                          :color-of="(n) => String(n.data('color') || '#94a3b8')"
+                          :round-of="(n) => (n.hasClass('card') || n.data('group') ? 1.5 : null)" />
           </div>
           <!-- 明細改成圖旁邊的一欄（使用者 2026-10-08：蓋住圖面、名稱被截斷、文字都一樣樣式很難看）：
                完整名稱、為什麼列出來、依關係分組（可點過去）、證據來源與時間、開啟原始物件 -->
@@ -170,7 +164,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import GraphMinimap from "@/components/GraphMinimap.vue";
 import { useI18n } from "vue-i18n";
 import { NAlert, NButton, NDropdown, NIcon, NPopover, NRadioButton, NRadioGroup, NSpin, NTag } from "naive-ui";
 import { useRouter } from "vue-router";
@@ -250,7 +245,6 @@ const LEGEND = ["modeled_disruption", "redundancy_unverified", "potential_disrup
 const TYPE_KEY: Record<string, string> = { virtual_machine: "vm", ip_address: "ip" };
 // 線上的字：邊很少才直接顯示；其餘只在滑過或點選外圍節點時顯示那幾條（滑過中心不顯示，否則整圈的字一起跳出來）
 const EDGE_LABELS_MAX = 6;
-const MINI_W = 180, MINI_H = 120, MINI_PAD = 8;
 
 function nodeOf(id: string) { return data.value?.nodes.find((n) => n.id === id); }
 const BLOCKER_COLOR = "#d03050";
@@ -470,8 +464,7 @@ function draw() {
   lastGraph = g;
   runLayout(g.nodes.length, mode);
   initialView();
-  drawMini();
-  cy.on("viewport", scheduleView);
+  if (miniRef.value) miniRef.value.attach(cy);
 
   // 滑過／點選：只留這個節點與相鄰的；外圍節點才顯示它那幾條線上的字
   const focus = (id: string | null) => {
@@ -609,58 +602,9 @@ function initialView() {
 }
 function impactOf(n: cytoscape.NodeSingular) { return String(n.data("impact") ?? ""); }
 
-// ── 縮圖 ──
-const mini = reactive({ nodes: [] as { id: string; x: number; y: number; w: number; h: number; round: number;
-                                        color: string }[],
-                        view: {} as Record<string, string> });
-let miniScale = 1, miniOx = 0, miniOy = 0, miniBB = { x1: 0, y1: 0, w: 1, h: 1 };
-const miniDark = ref(false);
-function drawMini() {
-  if (!cy) return;
-  miniDark.value = isDark();
-  const bb = cy.elements().boundingBox();
-  miniBB = { x1: bb.x1, y1: bb.y1, w: Math.max(bb.w, 1), h: Math.max(bb.h, 1) };
-  miniScale = Math.min((MINI_W - MINI_PAD * 2) / miniBB.w, (MINI_H - MINI_PAD * 2) / miniBB.h);
-  miniOx = (MINI_W - miniBB.w * miniScale) / 2;
-  miniOy = (MINI_H - miniBB.h * miniScale) / 2;
-  mini.nodes = cy.nodes("[!zone]").map((n) => {
-    const b = n.boundingBox({ includeLabels: false });
-    const w = Math.max(b.w * miniScale, 3), h = Math.max(b.h * miniScale, 3);
-    return { id: n.id(), x: miniOx + (b.x1 - miniBB.x1) * miniScale, y: miniOy + (b.y1 - miniBB.y1) * miniScale, w, h,
-             round: n.hasClass("card") || n.data("group") ? 1.5 : Math.min(w, h) / 2, color: n.data("color") };
-  });
-  updateView();
-}
-function updateView() {
-  if (!cy) return;
-  const ext = cy.extent();
-  const left = miniOx + (ext.x1 - miniBB.x1) * miniScale, top = miniOy + (ext.y1 - miniBB.y1) * miniScale;
-  const l = Math.max(0, left), tp = Math.max(0, top);
-  const r = Math.min(MINI_W, left + ext.w * miniScale), b = Math.min(MINI_H, top + ext.h * miniScale);
-  mini.view = { left: `${l}px`, top: `${tp}px`, width: `${Math.max(r - l, 6)}px`, height: `${Math.max(b - tp, 6)}px` };
-}
-let viewQueued = false;
-function scheduleView() {
-  if (viewQueued) return;
-  viewQueued = true;
-  requestAnimationFrame(() => { viewQueued = false; updateView(); });
-}
-let miniDragging = false;
-function miniPan(ev: PointerEvent) {
-  if (!cy) return;
-  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  const mx = (ev.clientX - rect.left - miniOx) / miniScale + miniBB.x1;
-  const my = (ev.clientY - rect.top - miniOy) / miniScale + miniBB.y1;
-  const z = cy.zoom();
-  cy.pan({ x: cy.width() / 2 - mx * z, y: cy.height() / 2 - my * z });
-}
-function miniDown(ev: PointerEvent) {
-  miniDragging = true;
-  (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
-  miniPan(ev);
-}
-function miniMove(ev: PointerEvent) { if (miniDragging) miniPan(ev); }
-function miniUp() { miniDragging = false; }
+// ── 縮圖（GraphMinimap）──
+const miniRef = ref<InstanceType<typeof GraphMinimap> | null>(null);
+function updateView() { miniRef.value?.redraw(); }
 
 function redraw() {
   picked.value = null;
@@ -766,12 +710,4 @@ onBeforeUnmount(() => { window.removeEventListener("resize", onResize); cy?.dest
 .irg-reasons { margin: 4px 0 0; padding-left: 18px; line-height: 1.5; }
 .irg-ev { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .irg-ev-label { word-break: break-word; }
-/* 左下角：右下角是 AI 對話的浮動按鈕（圖往下佔滿之後會疊在一起） */
-.irg-mini { position: absolute; left: 12px; bottom: 12px; width: 180px; height: 120px; border-radius: 8px;
-  background: rgba(255, 255, 255, .85); border: 1px solid rgba(102, 126, 234, .3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .1); overflow: hidden; cursor: pointer; touch-action: none; }
-.irg-mini svg { display: block; pointer-events: none; }
-.irg-mini-view { position: absolute; box-sizing: border-box; border: 2px solid #667eea; background: rgba(102, 126, 234, .15);
-  border-radius: 2px; pointer-events: none; }
-.irg-mini--dark { background: rgba(17, 24, 39, .85); border-color: rgba(129, 140, 248, .35); }
 </style>

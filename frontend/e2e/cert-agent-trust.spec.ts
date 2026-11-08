@@ -39,7 +39,10 @@ test("安裝指令預設驗證伺服器、不驗證要明講；清單顯示每�
     await expect(page.locator("tr", { hasText: `${tag}-pinned` }).getByTestId("cert-agent-tls")).toHaveText("釘選");
     await expect(page.locator("tr", { hasText: `${tag}-legacy` }).getByTestId("cert-agent-tls")).toHaveText("未驗證（舊版）");
 
-    await page.locator("tr", { hasText: `${tag}-legacy` }).getByRole("button", { name: "檢視代理連線 Key 與安裝指令" }).click();
+    // 「未驗證」標籤本身就是入口：點了打開那台的安裝指令（使用者 2026-11-07：「未驗證，但沒地方啟用」）
+    const tlsTag = page.locator("tr", { hasText: `${tag}-legacy` }).getByTestId("cert-agent-tls");
+    await expect(tlsTag).toHaveAttribute("data-fixable", "1");
+    await tlsTag.click();
     const dlg = page.locator(".n-modal").last();
     const cmd = dlg.getByTestId("cert-install-oneliner");
     // e2e 走 http：讀不到伺服器憑證 → 釘選反灰、預設系統 CA 驗證，指令不帶 -k

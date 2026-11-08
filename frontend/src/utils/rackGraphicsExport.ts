@@ -397,8 +397,9 @@ export function buildRacksSvg(
       const lw = Math.min(GROUP_LABEL_PX - 8, m.label.length * 6.4 + 12);
       const ly = y0 + m.h / 2;
       p.push(`<g class="rack-group"><path d="${path}" fill="none" stroke="${m.color}" stroke-width="2"/>${ticks}`
-        + `<rect x="${lx}" y="${ly - 9}" width="${lw}" height="18" rx="4" fill="${m.color}"/>`
-        + `<text x="${lx + 6}" y="${ly + 4}" font-size="11" font-weight="bold" fill="#ffffff">${esc(m.label)}</text></g>`);
+        // 外框樣式（同畫面）：群組色邊框＋淡底、深色字
+        + `<rect x="${lx}" y="${ly - 9}" width="${lw}" height="18" rx="4" fill="${m.color}" fill-opacity="0.15" stroke="${m.color}"/>`
+        + `<text x="${lx + 6}" y="${ly + 4}" font-size="11" font-weight="bold" fill="#1f2937">${esc(m.label)}</text></g>`);
     }
   }
   if (defs.size) p.splice(defsAt, 0, `<defs>${[...defs].join("")}</defs>`);
@@ -506,7 +507,7 @@ export function buildRacksDrawio(
     const railX = rackLeft + colW + sw + side + 6;
     for (const m of marks) {
       cells.push(`<mxCell id="grp${n++}" value="" style="shape=partialRectangle;whiteSpace=wrap;html=1;left=0;top=1;right=1;bottom=1;fillColor=none;strokeColor=${m.color};strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="${railX + m.lane * GROUP_LANE_PX}" y="${top + m.y}" width="6" height="${m.h}" as="geometry"/></mxCell>`);
-      cells.push(`<mxCell id="gl${n++}" value="${esc(m.label)}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${m.color};strokeColor=none;fontColor=#ffffff;fontStyle=1;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1"><mxGeometry x="${railX + lanes * GROUP_LANE_PX + 4}" y="${top + m.y + m.h / 2 - 9}" width="${GROUP_LABEL_PX - 8}" height="18" as="geometry"/></mxCell>`);
+      cells.push(`<mxCell id="gl${n++}" value="${esc(m.label)}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=${m.color};fillOpacity=15;strokeColor=${m.color};fontColor=#1f2937;fontStyle=1;fontSize=11;align=left;spacingLeft=6;" vertex="1" parent="1"><mxGeometry x="${railX + lanes * GROUP_LANE_PX + 4}" y="${top + m.y + m.h / 2 - 9}" width="${GROUP_LABEL_PX - 8}" height="18" as="geometry"/></mxCell>`);
     }
   }
   return (

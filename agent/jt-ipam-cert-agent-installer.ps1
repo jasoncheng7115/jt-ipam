@@ -154,6 +154,8 @@ if (Test-Path -LiteralPath $CONFIG_PATH) {
         foreach ($l in $lines) { $out.Add($l); if ($l -match '^AGENT_KEY=') { $out.Add("CERT_SHA256=$CertSha256") } }
         Set-Content -LiteralPath $CONFIG_PATH -Value $out -Encoding UTF8
         Write-Step "Pinned the jt-ipam server certificate in the existing config"
+        # the pin given now wins over what the agent learned about jt-ipam by itself
+        Remove-Item -LiteralPath (Join-Path $DATA_DIR "trust") -Force -ErrorAction SilentlyContinue
     }
 } else {
     Write-Step "Writing config"
@@ -190,6 +192,7 @@ REMOVE_OLD_CERT=false
 #   DEPLOY_3_RELOAD=powershell -Command "Restart-Service MyApp"
 "@
     Set-Content -LiteralPath $CONFIG_PATH -Value $config -Encoding UTF8
+    Remove-Item -LiteralPath (Join-Path $DATA_DIR "trust") -Force -ErrorAction SilentlyContinue
 }
 
 Write-Step "Restricting permissions on the config (it holds the agent key)"

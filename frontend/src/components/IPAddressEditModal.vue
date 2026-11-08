@@ -762,9 +762,11 @@ const seenColumns = computed<DataTableColumns<SeenRow>>(() => seenColumnsAll.val
   .map((c: any) => (seenNarrow.value ? { ...c, minWidth: SEEN_NARROW_MIN[c.key] ?? c.minWidth } : c)));
 const seenColumnsAll = computed<DataTableColumns<SeenRow>>(() => [
   {
-    title: t("addresses.seen_col_source"), key: "label", minWidth: 120,
+    title: t("addresses.seen_col_source"), key: "label", minWidth: 150,
     sorter: (a, b) => a.label.localeCompare(b.label),
-    render: (r) => h("span", { class: "nowrap" }, r.label),
+    // 放不下時只在括號前換行（「設備介面位址（LibreNMS）」以前不換行、溢出壓到時間欄）
+    render: (r) => h("span", { class: "seen-label" },
+      r.label.split(/(?=[（(])/).map((part) => h("span", { class: "nowrap" }, part))),
   },
   {
     title: t("addresses.seen_col_time"), key: "at", minWidth: 150,
@@ -2005,6 +2007,7 @@ async function remove() {
 }
 /* 各來源最後出現：對齊比較；最新那一列加粗，一眼看出誰最近還看得到它 */
 .seen-table :deep(.nowrap) { white-space: nowrap; }
+.seen-table :deep(.seen-label) { white-space: normal; }
 .seen-table :deep(.mono) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: nowrap; }
 .seen-table :deep(.dim) { color: color-mix(in srgb, currentColor 70%, transparent); }
 .seen-table :deep(tr.seen-latest td) { font-weight: 600; }

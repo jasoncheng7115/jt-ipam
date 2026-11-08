@@ -15,13 +15,15 @@ const url = () => (props.llm[`ai_${props.role}_url`] as string) || "";
 const provider = () => (props.llm[`ai_${props.role}_provider`] as string) || "ollama";
 const keySet = () => !!props.llm[`ai_${props.role}_api_key_set`];
 
-// 打開但還沒填位址時，畫面要維持打開（後端只在有位址時才算「有自己的 server」）
-const separate = ref(!!url());
+// 打開但還沒填位址時，畫面要維持打開（後端只在有位址時才算「有自己的 server」）。
+// 先選了 OpenAI 相容端點或填了金鑰、還沒填位址就重新整理，開關也要是開的
+const separate = ref(!!url() || provider() === "openai" || keySet());
 watch(() => url(), (v) => { if (v) separate.value = true; });
 
 function toggle(on: boolean) {
   separate.value = on;
-  if (!on && url()) emit("patch", { [k("url")]: "" });
+  // 關掉一律清掉：只選了供應商或只填了金鑰、還沒填位址的半套設定也不要留著
+  if (!on && (url() || provider() === "openai" || keySet())) emit("patch", { [k("url")]: "" });
 }
 
 const providerOptions = [

@@ -13,7 +13,7 @@ import {
 import { useI18n } from "vue-i18n";
 import { apiClient, apiErrMsg } from "@/api/client";
 import { fmtDateTime } from "@/utils/datetime";
-import { AiAuditIcon, DownloadIcon, EyeIcon, FirewallIcon, OkIcon, RefreshIcon, renderIcon } from "@/icons";
+import { AiAuditIcon, DownloadIcon, EyeIcon, FirewallIcon, OkIcon, RefreshIcon, renderIcon, CancelIcon, CheckIcon } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import { renderMarkdown } from "@/utils/markdown";
 import { downloadTextFile } from "@/utils/investigateReport";
@@ -260,8 +260,8 @@ const cols: DataTableColumns<Change> = autoSort([
              :placeholder="t('fw_changes.ack_ph')" />
     <template #footer>
       <n-space justify="end">
-        <n-button @click="ackTarget = null">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" :loading="ackBusy" @click="submitAck">
+        <n-button @click="ackTarget = null"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" :loading="ackBusy" @click="submitAck"><template #icon><n-icon><CheckIcon /></n-icon></template>
           {{ t("common.confirm") }}
         </n-button>
       </n-space>

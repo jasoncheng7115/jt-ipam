@@ -21,7 +21,7 @@ import { rackTypeFill as colorFor, RACK_DEVICE_TYPES } from "@/utils/rackColors"
 import { exportRacksDrawio, exportRacksPng, exportRacksSvg,
   type ExportDiagram } from "@/utils/rackGraphicsExport";
 import { exportTable, type ExportColumn } from "@/utils/tableExport";
-import { ExportIcon, GroupIcon, RacksIcon } from "@/icons";
+import { ExportIcon, GroupIcon, RacksIcon, SyncIcon } from "@/icons";
 import { useExportBusy } from "@/composables/useExportBusy";
 import { getRackNameAlign, type RackNameAlign } from "@/api/basic";
 
@@ -653,6 +653,33 @@ const placedGroups = computed<PlacedGroup[]>(() => {
   return out;
 });
 const groupLanes = computed(() => placedGroups.value.reduce((a, g) => Math.max(a, g.lane + 1), 0));
+/**
+ * 括線右邊是一欄共用的標籤欄：另一面提示（背 ×N）與群組標籤都放這裡，對齊各自的 U 位。
+ * 以前是兩條軌並排，群組先占掉一大塊，背面提示被推到很遠，同一排沒有群組的機櫃又貼著機櫃，
+ * 整排對不齊（使用者 2026-11-06 截圖）。現在有群組的機櫃只多讓出括線那幾 px。
+ */
+const labelColX = computed(() => (groupLanes.value ? groupLanes.value * GROUP_LANE_PX + 4 : 0));
+// 群組標籤與背面提示的晶片同一條左緣（背面提示前面有 8px 自己的小括線）
+const sideRailW = computed(() => labelColX.value + (placedGroups.value.length ? GROUP_LABEL_PX + 8 : 58));
+const showSideRail = computed(() => placedGroups.value.length > 0 || railHints.value.length > 0);
+const railHeight = computed(() => cells.value.reduce((a, c) => a + c.px, 0));
+/** 群組標籤的中心 y：預設在括線中間；跟背面提示或別的群組標籤撞在同一高度時，往上下找空位 */
+const groupLabelY = computed(() => {
+  const HALF = 12;
+  const taken: number[] = railHints.value.map((h) => h.top + h.height / 2);
+  const out = new Map<string, number>();
+  for (const g of placedGroups.value) {
+    const center = g.top + g.height / 2;
+    const cands = [center];
+    for (let k = 1; k <= 40; k++) cands.push(center + 2 * HALF * k, center - 2 * HALF * k);
+    const ok = (y: number) => y >= HALF && y <= railHeight.value - HALF && taken.every((c) => Math.abs(c - y) >= 2 * HALF);
+    const inSpan = cands.find((y) => y >= g.top && y <= g.top + g.height && ok(y));
+    const y = inSpan ?? cands.find(ok) ?? center;
+    out.set(g.id, y);
+    taken.push(y);
+  }
+  return out;
+});
 const groupHl = ref<Set<string>>(new Set());
 const openGroup = ref<string | null>(null);
 function groupLabel(g: GroupBracket): string {
@@ -836,7 +863,7 @@ function goGroup(id: string) {
                       <span class="face-pop__name">{{ d.name }}</span>
                       <span class="face-pop__m">{{ [t(`devices.type_${d.type}`), d.model].filter(Boolean).join(" · ") }}</span>
                     </button>
-                    <n-button size="small" type="primary" block @click="switchToOther(h)">
+                    <n-button size="small" type="primary" block @click="switchToOther(h)"><template #icon><n-icon><SyncIcon /></n-icon></template>
                       {{ t(otherFace === "rear" ? "racks.switch_to_rear" : "racks.switch_to_front") }}
                     </n-button>
                   </div>
@@ -855,10 +882,10 @@ function goGroup(id: string) {
             </div>
           </template>
         </div>
-        <!-- 裝置群組軌：同一群組的成員用同色括線框起來；只有在有群組時才占寬度 -->
-        <div v-if="placedGroups.length" class="group-rail" data-testid="rack-group-rail"
-             :style="{ paddingTop: 6 + topPx + 'px', width: groupLanes * GROUP_LANE_PX + GROUP_LABEL_PX + 'px' }">
-          <div class="group-rail__in" :style="{ height: cells.reduce((a, c) => a + c.px, 0) + 'px' }">
+        <!-- 框外右側：裝置群組的括線貼著機櫃，右邊一欄共用的標籤欄放背面提示與群組標籤（見 labelColX） -->
+        <div v-if="showSideRail" class="side-rail" data-testid="rack-side-rail"
+             :style="{ paddingTop: 6 + topPx + 'px', width: sideRailW + 'px' }">
+          <div class="side-rail__in" :style="{ height: railHeight + 'px' }">
             <template v-for="g in placedGroups" :key="g.id">
               <i class="group-bracket" aria-hidden="true"
                  :style="{ top: g.top + 'px', height: g.height + 'px', left: g.lane * GROUP_LANE_PX + 'px', '--grp': g.color }">
@@ -868,7 +895,7 @@ function goGroup(id: string) {
                          :show="openGroup === g.id" @update:show="(v: boolean) => (openGroup = v ? g.id : null)">
                 <template #trigger>
                   <button type="button" class="group-chip" data-testid="rack-group-chip" :title="groupLabel(g)"
-                          :style="{ top: g.top + g.height / 2 + 'px', left: groupLanes * GROUP_LANE_PX + 4 + 'px', background: g.color }"
+                          :style="{ top: (groupLabelY.get(g.id) ?? g.top + g.height / 2) + 'px', left: labelColX + 8 + 'px', '--grp': g.color }"
                           @mouseenter="groupHl = new Set(g.members.map((m) => String(m.device_id)))"
                           @mouseleave="groupHl = new Set()">
                     <span class="group-chip__name">{{ g.name }}</span><span class="group-chip__n">{{ g.here }}/{{ g.total }}</span>
@@ -897,17 +924,13 @@ function goGroup(id: string) {
                 </div>
               </n-popover>
             </template>
-          </div>
-        </div>
-        <!-- 另一面的提示軌：對齊 U 位／層，跨多 U 用括線；只有在有提示時才占寬度 -->
-        <div v-if="railHints.length" class="face-rail" :style="{ paddingTop: 6 + topPx + 'px' }">
-          <div class="face-rail__in" :style="{ height: cells.reduce((a, c) => a + c.px, 0) + 'px' }">
+            <!-- 另一面的提示：對齊 U 位／層，跨多 U 用括線 -->
             <n-popover v-for="h in railHints" :key="h.key" trigger="click" placement="right" :width="300"
                        :show="openHint === h.key" @update:show="(v: boolean) => (openHint = v ? h.key : null)">
               <template #trigger>
                 <button type="button" class="face-hint" data-testid="rack-face-hint"
                         :class="{ 'is-span': h.height > 30 }"
-                        :style="{ top: h.top + 'px', height: h.height + 'px' }">
+                        :style="{ top: h.top + 'px', height: h.height + 'px', left: labelColX + 'px' }">
                   <span class="face-chip">{{ hintLabel(h) }}</span>
                 </button>
               </template>
@@ -919,7 +942,7 @@ function goGroup(id: string) {
                   <span class="face-pop__name">{{ d.name }}</span>
                   <span class="face-pop__m">{{ [t(`devices.type_${d.type}`), d.model].filter(Boolean).join(" · ") }}</span>
                 </button>
-                <n-button size="small" type="primary" block @click="switchToOther(h)">
+                <n-button size="small" type="primary" block @click="switchToOther(h)"><template #icon><n-icon><SyncIcon /></n-icon></template>
                   {{ t(otherFace === "rear" ? "racks.switch_to_rear" : "racks.switch_to_front") }}
                 </n-button>
               </div>
@@ -944,24 +967,23 @@ function goGroup(id: string) {
 <style scoped>
 .rd-card-title { display: inline-flex; align-items: center; gap: 8px; }
 /* 裝置群組軌：括線開口朝左（朝向機櫃裡的成員），每台成員一個刻度；標籤在所有軌道的右邊 */
-.group-rail { flex: 0 0 auto; }
-.group-rail__in { position: relative; }
+.side-rail { flex: 0 0 auto; }
+.side-rail__in { position: relative; }
 .group-bracket { position: absolute; width: 7px; border: 2px solid var(--grp); border-left: 0;
   border-radius: 0 3px 3px 0; box-sizing: border-box; }
 .group-tick { position: absolute; left: -2px; width: 7px; height: 2px; margin-top: -1px; background: var(--grp); }
+/* 外框樣式（群組色的邊框＋淡底）：跟實心藍的「背 ×N」分得開，也不像警示 */
 .group-chip { position: absolute; transform: translateY(-50%); display: inline-flex; gap: 4px; align-items: center;
-  max-width: 146px; border: 0; border-radius: 4px; padding: 4px 6px; color: #fff; cursor: pointer;
-  font: 600 11px/1 system-ui, sans-serif; z-index: 1; }
+  max-width: 146px; border: 1px solid var(--grp); border-radius: 4px; padding: 3px 6px; color: inherit; cursor: pointer;
+  background: color-mix(in srgb, var(--grp) 18%, transparent); font: 600 11px/1 system-ui, sans-serif; z-index: 1; }
 .group-chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .group-chip__n { flex: 0 0 auto; opacity: .9; font-variant-numeric: tabular-nums; }
-.group-chip:hover, .group-chip:focus-visible { filter: brightness(.92); box-shadow: 0 0 0 2px rgba(0, 0, 0, .15); }
+.group-chip:hover, .group-chip:focus-visible { background: color-mix(in srgb, var(--grp) 34%, transparent); }
 .group-pop__link { text-align: left; background: none; border: 0; padding: 2px 0; cursor: pointer; font: inherit;
   color: var(--primary-color, #18a058); text-decoration: none; }
 .group-pop__link:hover { text-decoration: underline; }
 /* 另一面的提示軌（背 ×N／前 ×N）：框外右側，對齊 U 位；跨多 U 用左側括線 */
-.face-rail { flex: 0 0 auto; width: 58px; }
-.face-rail__in { position: relative; }
-.face-hint { position: absolute; left: 0; right: 0; display: flex; align-items: center; padding: 0 0 0 8px;
+.face-hint { position: absolute; display: flex; align-items: center; padding: 0 0 0 8px;
   background: none; border: 0; cursor: pointer; font: inherit; }
 .face-hint::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 3px; border-radius: 2px;
   background: #5b6ee1; }

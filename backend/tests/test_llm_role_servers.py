@@ -153,6 +153,23 @@ async def test_api_exposes_patches_and_never_logs_the_key(client, auth_headers, 
     assert bad.status_code == 422
 
 
+async def test_provider_chosen_before_the_url_is_kept(client, auth_headers, db_session) -> None:
+    """使用者 2026-11-07：選了「OpenAI 相容端點」，顯示「已儲存」後又跳回 Ollama。畫面每改一欄就存一次，
+    先選供應商、還沒填位址時，讀回設定只在有位址時才讀供應商 → 讀回空的、畫面退回預設 Ollama。
+    供應商與金鑰要照實讀回；有沒有自己的 server 仍然只看位址（沒位址就沿用對話那台）。"""
+    await _llm(db_session)
+    r = await client.patch("/api/v1/system/llm", headers=auth_headers, json={"ai_interpret_provider": "openai"})
+    assert r.status_code == 200, r.text
+    assert r.json()["ai_interpret_provider"] == "openai"
+    r = await client.patch("/api/v1/system/llm", headers=auth_headers, json={"ai_interpret_api_key": "sk-early"})
+    assert r.json()["ai_interpret_api_key_set"] is True and r.json()["ai_interpret_provider"] == "openai"
+    d = (await client.get("/api/v1/system/llm", headers=auth_headers)).json()
+    assert (d["ai_interpret_provider"], d["ai_interpret_url"]) == ("openai", "")
+    from app.services.system_config import get_llm_config, role_config
+    cfg = await get_llm_config(db_session)
+    assert role_config(cfg, "interpret").url == cfg.url, "還沒填位址：照樣用對話那台"
+
+
 # ── 請求真的送到那一台 ────────────────────────────────────────────────
 
 async def test_interpret_goes_to_the_interpret_server(db_session, admin_user, sent) -> None:
@@ -247,3 +264,32 @@ async def test_system_transfer_carries_every_llm_key(db_session) -> None:
     assert out["ai_interpret_api_key_enc"] == {"__plain__": "sk-judge"}
     back = transform_settings_in("llm", out)
     assert _dec(back["ai_audit_api_key_enc"], _role_key_aad("audit")) == "sk-audit"
+
+
+async def test_embedding_model_list_comes_from_the_embedding_server(client, auth_headers, db_session, monkeypatch) -> None:
+    """使用者 2026-11-07：嵌入模型可以接另一台，但嵌入模型的下拉選單一直問對話那台 → 挑不到那一台上的嵌入模型。
+    role=embedding：有嵌入位址就問那一台，沒有就問對話那台。"""
+    from app.api.v1.endpoints import system_settings as ss
+    urls: list[str] = []
+
+    class _Tags:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json() -> dict[str, Any]:
+            return {"models": [{"name": "granite-embedding:278m"}]}
+
+    async def _fake(method, url, **kw):
+        urls.append(url)
+        return _Tags()
+    monkeypatch.setattr(ss, "safe_request", _fake)
+    await _llm(db_session)
+    await client.get("/api/v1/system/llm/models", headers=auth_headers, params={"role": "embedding"})
+    assert urls[-1] == "http://chat.invalid:11434/api/tags", "沒填嵌入位址＝對話那台"
+    await set_llm_config(db_session, embedding_base_url="http://embed.invalid:11434")
+    await db_session.commit()
+    r = await client.get("/api/v1/system/llm/models", headers=auth_headers, params={"role": "embedding"})
+    assert r.status_code == 200, r.text
+    assert urls[-1] == "http://embed.invalid:11434/api/tags"
+    assert r.json()["models"][0]["name"] == "granite-embedding:278m"

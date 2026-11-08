@@ -402,7 +402,8 @@ const allCols = computed<DataTableColumns<ScanAgent>>(() => autoSort([
     title: t("certTrust.col"), key: "tls", width: 130,
     sorter: (a, b) => (a.tls_mode ?? "").localeCompare(b.tls_mode ?? ""),
     render: (r) => renderTlsState(!!r.last_seen_at, r.tls_mode, "scan-agent-tls",
-      (st) => (st === "pinned" || st === "ca" ? t(`certTrust.hint_${st}`) : t(`scanAgentHelp.trust_fix_${st}`)), t),
+      (st) => (st === "pinned" || st === "ca" ? t(`certTrust.hint_${st}`) : t(`scanAgentHelp.trust_fix_${st}`)), t,
+      () => { showHelp.value = true; }),
   },
   {
     title: t("cols.source_ip"), key: "source_ip", width: 150,
@@ -682,7 +683,7 @@ onMounted(async () => {
                   </n-checkbox>
                   <n-popover v-if="!probeAvailable(p.key)" trigger="click" placement="right">
                     <template #trigger>
-                      <n-button text size="tiny" type="primary" class="probe-help-btn">
+                      <n-button text size="tiny" type="primary" class="probe-help-btn"><template #icon><n-icon><InfoIcon /></n-icon></template>
                         {{ t("scan_probes.install_help") }}
                       </n-button>
                     </template>

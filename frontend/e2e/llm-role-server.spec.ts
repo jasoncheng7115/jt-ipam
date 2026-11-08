@@ -71,3 +71,41 @@ test("判讀接自己的 LLM Server：模型清單問那一台，關掉回到繼
 
   await patchApi(page, { ai_interpret_url: "", ai_interpret_model: "" });
 });
+
+test("先選 OpenAI 相容端點、還沒填位址：存完不跳回 Ollama，重新整理也還在（使用者 2026-11-07）", async ({ page }) => {
+  await login(page);
+  await patchApi(page, { ai_interpret_url: "" });
+  await page.goto("/llm");
+  const card = page.getByTestId("interpret-card");
+  await card.getByTestId("interpret-server-switch").click();
+  const saved = page.waitForResponse((r) => r.url().endsWith("/api/v1/system/llm") && r.request().method() === "PATCH");
+  await card.getByTestId("interpret-server").locator(".n-base-selection").first().click();
+  await page.locator(".n-base-select-option:visible", { hasText: "OpenAI" }).click();
+  expect((await (await saved).json()).ai_interpret_provider).toBe("openai");
+  await page.waitForTimeout(800);
+  await expect(card.getByTestId("interpret-server").locator(".n-base-selection").first()).toContainText("OpenAI");
+  await page.reload();
+  await expect(page.getByTestId("interpret-server").locator(".n-base-selection").first()).toContainText("OpenAI");
+  // 關掉＝清掉半套設定
+  const off = page.waitForResponse((r) => r.url().endsWith("/api/v1/system/llm") && r.request().method() === "PATCH");
+  await page.getByTestId("interpret-server-switch").click();
+  expect((await (await off).json()).ai_interpret_provider).not.toBe("openai");   // 沒設定時 API 回預設的 ollama
+  await expect(page.getByTestId("interpret-server")).toContainText("沿用基本設定的 LLM Server");
+  await page.reload();
+  await expect(page.getByTestId("interpret-server")).toContainText("沿用基本設定的 LLM Server");
+});
+
+
+test("嵌入模型位址在選單上面；填了另一台，嵌入模型清單改問那一台（使用者 2026-11-07）", async ({ page }) => {
+  await login(page);
+  await patchApi(page, { embedding_base_url: "" });
+  await page.goto("/llm");
+  const url = page.getByTestId("embedding-url");
+  const sel = page.getByTestId("embedding-model");
+  await expect(url).toBeVisible({ timeout: 15_000 });
+  expect((await url.boundingBox())!.y, "位址要在模型選單上面").toBeLessThan((await sel.boundingBox())!.y);
+  const asked = page.waitForRequest((r) => r.url().includes("/api/v1/system/llm/models") && r.url().includes("role=embedding"));
+  await url.locator("input").fill("http://embed.invalid:11434");
+  await asked;                                   // 停一下之後向嵌入那台要清單
+  await patchApi(page, { embedding_base_url: "" });
+});

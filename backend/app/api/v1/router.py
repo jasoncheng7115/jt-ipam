@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     addresses,
     adguard,
     advanced,
+    agent_trust,
     ai,
     ai_audit,
     anomaly,
@@ -176,6 +177,7 @@ api_v1_router.include_router(import_external.router)
 api_v1_router.include_router(scan_agents.router)
 api_v1_router.include_router(scan_agent_relay.router)
 api_v1_router.include_router(certificates.router)
+api_v1_router.include_router(agent_trust.router)
 api_v1_router.include_router(cert_agents.router)
 api_v1_router.include_router(cert_push.router)
 api_v1_router.include_router(dns.router)

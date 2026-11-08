@@ -283,6 +283,12 @@ class OPNsenseDriver(_ExplicitVerify):
             have.add(der)
             steps.ok("import_ca", descr)
 
+    def soft_verify_endpoints(self, api: tuple[str, int], custom: tuple[str, int] | None) -> list[tuple[str, str, int]]:
+        """沒填確認位址、又勾了「推完重啟網頁管理介面」：使用者等於說這張是管理介面在用的 → 推完看 API 網址。
+        是新憑證就算確認；還是舊的只警示、不換回 —— 也可能換的其實是 HAProxy 之類在用的憑證，而這個選項預設是開的，
+        換回去會傷到真的在用它的服務（使用者 2026-11-07：真機推送成功卻一直顯示「未確認」）。"""
+        return [("admin", api[0], api[1])] if not custom and self.opt.get("restart_webgui", True) is not False else []
+
     async def push(self, bundle: Bundle, steps: Steps) -> Rollback | None:
         uuid = str(self.opt.get("cert_uuid") or "").strip()
         if not uuid:

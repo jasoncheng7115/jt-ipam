@@ -737,7 +737,20 @@ async def build_topology(
                     spots = [x for x in spots if x not in facing]
                 small = [(sw, pt) for sw, pt in spots
                          if len(by_port[(sw, pt)]) <= UPLINK_MAC_THRESHOLD]
+                bond: list[tuple[str, str]] = []
                 if small:
+                    # 網卡綁定（bond / LACP）跨兩台交換器：兩張卡共用一個 MAC，兩台各在一個埠學到它
+                    # （實機 11-07：檔案伺服器、日誌伺服器只畫出一邊）。每台取最乾淨的埠；
+                    # 那些埠背後的 MAC 集合完全一樣（直連就是只有它自己）才算 —— 朝外的路不會跟存取埠一模一樣
+                    per_sw: dict[str, tuple[str, str]] = {}
+                    for x in sorted(small, key=lambda x: (len(by_port[x]), x[1])):
+                        per_sw.setdefault(x[0], x)
+                    picked = list(per_sw.values())
+                    if len(picked) >= 2 and all(by_port[x] == by_port[picked[0]] for x in picked):
+                        bond = sorted(picked)
+                if bond:
+                    sw_id, port = bond[0]
+                elif small:
                     # 有「乾淨」的埠就用它（同時看到多個時取 MAC 最少的那個）
                     sw_id, port = min(small, key=lambda x: (len(by_port[x]), x[1]))
                 elif len(spots) == 1 and ruled_out_uplink:
@@ -757,24 +770,28 @@ async def build_topology(
                     if len(inner) != 1:
                         continue                               # 分不出內外 → 不猜
                     sw_id, port = inner[0]
-                if sw_id not in visible_device_ids or (peer, sw_id) in l2_seen:
-                    continue                                   # 交換器不在圖上就不畫線
-                macs_here = by_port[(sw_id, port)]
-                direct = len(macs_here) == 1
-                l2_seen.add((peer, sw_id))
-                if peer in switch_ids and direct:
-                    adjacency.add((min(sw_id, peer), max(sw_id, peer)))
-                edges.append({"data": {
-                    "id": f"l2:{peer}:{sw_id}:{port}",
-                    "source": peer, "target": sw_id,
-                    "label": port, "kind": "l2", "via": "fdb", "evidence": EV_LEARNED,
-                    "port": port, "direct": direct,
-                    "port_mac_count": len(macs_here),
-                    "vlan": vlan_of.get((sw_id, port, mac)),
-                    # 哪張網卡：前端用來分辨「兩張卡各接一台」（雙接）
-                    "mac": ":".join(mac[i:i + 2] for i in range(0, len(mac), 2)) if len(mac) == 12 else mac,
-                    "nic": mac_nic.get(mac),
-                }})
+                ends = bond or [(sw_id, port)]
+                for sw_id, port in ends:
+                    if sw_id not in visible_device_ids or (peer, sw_id) in l2_seen:
+                        continue                               # 交換器不在圖上就不畫線
+                    macs_here = by_port[(sw_id, port)]
+                    direct = len(macs_here) == 1
+                    l2_seen.add((peer, sw_id))
+                    if peer in switch_ids and direct:
+                        adjacency.add((min(sw_id, peer), max(sw_id, peer)))
+                    edges.append({"data": {
+                        "id": f"l2:{peer}:{sw_id}:{port}",
+                        "source": peer, "target": sw_id,
+                        "label": port, "kind": "l2", "via": "fdb", "evidence": EV_LEARNED,
+                        "port": port, "direct": direct,
+                        "port_mac_count": len(macs_here),
+                        "vlan": vlan_of.get((sw_id, port, mac)),
+                        # 哪張網卡：前端用來分辨「兩張卡各接一台」（雙接）
+                        "mac": ":".join(mac[i:i + 2] for i in range(0, len(mac), 2)) if len(mac) == 12 else mac,
+                        "nic": mac_nic.get(mac),
+                        # 同一張（綁定的）網卡插在兩台交換器：前端照雙接畫（只有綁定的才帶）
+                        **({"bond": True} if bond else {}),
+                    }})
 
             # ② 骨幹：兩台交換器直連的判準（Breitbart 等人的 FDB 拓樸推導條件）
             #

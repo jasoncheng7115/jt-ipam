@@ -268,7 +268,7 @@ export async function getCertAgentStatus(): Promise<{ agents: CertAgentStatus[] 
 
 // ── 憑證推送目標（0227）：伺服器主動把憑證推到防火牆 ──
 export type CertPushKind = "fortigate" | "opnsense" | "paloalto" | "pfsense";
-export interface CertPushStep { step: string; ok: boolean; code?: string; detail?: string }
+export interface CertPushStep { step: string; ok: boolean; warn?: boolean; code?: string; detail?: string }
 export interface CertPushTarget {
   id: string; name: string; enabled: boolean; kind: CertPushKind;
   certificate_id: string; certificate_name: string | null;

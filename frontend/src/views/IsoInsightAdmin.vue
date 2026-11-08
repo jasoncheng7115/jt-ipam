@@ -682,8 +682,8 @@ onMounted(() => { void refresh(); void loadOptions(); });
               <n-form-item :label="t('isoinsight.username_param')"><n-input v-model:value="form.username_param" /></n-form-item>
               <n-form-item :label="t('isoinsight.password_param')"><n-input v-model:value="form.password_param" /></n-form-item>
             </div>
-            <n-form-item :label="t('isoinsight.lease_path')"><n-input v-model:value="form.lease_path" /></n-form-item>
-            <div class="form-hint" style="margin: -8px 0 10px">{{ t("isoinsight.paths_hint") }}</div>
+            <n-form-item :label="t('isoinsight.lease_path')" :show-feedback="false"><n-input v-model:value="form.lease_path" /></n-form-item>
+            <div class="form-hint" style="margin: 4px 0 16px">{{ t("isoinsight.paths_hint") }}</div>
             <n-form-item :label="t('isoinsight.auth_mode')">
               <div class="iso-full">
                 <n-radio-group v-model:value="form.auth_mode">

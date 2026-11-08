@@ -18,7 +18,7 @@ import {
   type DataTableColumns,
 } from "naive-ui";
 import { NIcon } from "naive-ui";
-import { RequestsIcon, OkIcon, CancelIcon, SendIcon } from "@/icons";
+import { RequestsIcon, OkIcon, CancelIcon, SendIcon, FailIcon } from "@/icons";
 import {
   listRequests,
   createRequest,
@@ -319,8 +319,8 @@ onMounted(() => {
     </n-form>
     <template #action>
       <n-space>
-        <n-button @click="showReject = false">{{ t("common.cancel") }}</n-button>
-        <n-button type="error" @click="doReject">{{ t("request_detail.reject_btn") }}</n-button>
+        <n-button @click="showReject = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="error" @click="doReject"><template #icon><n-icon><FailIcon /></n-icon></template>{{ t("request_detail.reject_btn") }}</n-button>
       </n-space>
     </template>
   </n-modal>

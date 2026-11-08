@@ -97,8 +97,8 @@
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="saving" @click="save">{{ t("common.save") }}</n-button>
+          <n-button @click="show = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="saving" @click="save"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -143,7 +143,7 @@ import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { listSubnets } from "@/api/subnets";
 import { ESXi, type ESXiDiagStep, type ESXiInstance, type ESXiPayload } from "@/api/esxi";
 import { apiErrMsg } from "@/api/client";
-import { DeleteIcon, EditIcon, PlusIcon, RefreshIcon, SyncIcon, TestIcon, VirtualizationIcon } from "@/icons";
+import { DeleteIcon, EditIcon, PlusIcon, RefreshIcon, SyncIcon, TestIcon, VirtualizationIcon, CancelIcon, SaveIcon } from "@/icons";
 import { useTablePagination } from "@/composables/useTablePagination";
 import { fmtDateTime } from "@/utils/datetime";
 

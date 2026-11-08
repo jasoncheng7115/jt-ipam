@@ -7,7 +7,7 @@ import { computed, h, onMounted, ref, watch } from "vue";
 import {
   NButton, NCard, NDataTable, NIcon, NInput, NPagination, NSelect, NSpace, NTag, NText,
 } from "naive-ui";
-import { IPChangesIcon } from "@/icons";
+import { IPChangesIcon, RefreshIcon } from "@/icons";
 import type { DataTableColumns } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
@@ -253,7 +253,7 @@ const columns = computed<DataTableColumns<IPChangeLog>>(() => [
       <!-- 兩顆動作綁成同一個 flex 子項：換行時要一起換，
            不然會出現「重新整理留在上一行、匯出自己掉到下一行」的破碎排法 -->
       <n-space align="center" :size="8" :wrap-item="false">
-        <n-button @click="load" :loading="loading">{{ t("common.refresh") }}</n-button>
+        <n-button @click="load" :loading="loading"><template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}</n-button>
         <ExportButton :columns="columns" :rows="rows" filename="ip-changes"
                       :title="t('nav.ip_changes')" />
       </n-space>

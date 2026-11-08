@@ -20,7 +20,7 @@ import {
   listIsc, createIsc, updateIsc, deleteIsc, type IscDhcpServer, type IscDhcpWrite, type IscFileStatus,
 } from "@/api/dhcpStandalone";
 import {
-  IscDhcpIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon,
+  IscDhcpIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SaveIcon, CancelIcon, GoToIcon,
 } from "@/icons";
 import { autoSort } from "@/composables/useTableSort";
 import ColumnPicker from "@/components/ColumnPicker.vue";
@@ -224,7 +224,7 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); });
       <ol class="isc-steps">
         <li>
           {{ t("isc_dhcp.step_agent") }}
-          <n-button text type="primary" size="small" @click="router.push({ name: 'scan_agents' })">
+          <n-button text type="primary" size="small" @click="router.push({ name: 'scan_agents' })"><template #icon><n-icon><GoToIcon /></n-icon></template>
             {{ t("isc_dhcp.go_agents") }}
           </n-button>
         </li>

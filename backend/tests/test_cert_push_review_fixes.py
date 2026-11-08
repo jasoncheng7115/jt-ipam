@@ -333,3 +333,76 @@ async def test_opnsense_without_verify_address_is_unverified(client, auth_header
     before = dev.certs["u-1"]["crt"]
     r = await engine.push_target(db_session, t, probe=_probe_by_host({("192.0.2.1", 8443): ["a" * 64]}))
     assert r["status"] == "unverified" and dev.certs["u-1"]["crt"] != before
+
+
+# ── 沒確認到的步驟不可以打勾（使用者 2026-11-07：狀態寫「已推送（未確認）」，彈出來卻全是綠勾）──────
+
+def _verify_steps(r):  # type: ignore[no-untyped-def]
+    return [s for s in r["steps"] if s["step"] == "verify"]
+
+
+async def test_unconfirmed_verify_steps_are_warnings_with_a_reason(client, auth_headers, db_session, monkeypatch) -> None:
+    dev = StrictPanos()
+    monkeypatch.setattr(engine, "make_http", lambda target, secret: dev)
+    t, _fp = await _kind_target(db_session, client, auth_headers, "paloalto", {"profile": "gp-portal"})
+    r = await engine.push_target(db_session, t, probe=_probe_by_host({("192.0.2.1", 8443): ["a" * 64]}))
+    v = _verify_steps(r)
+    assert v and all(s.get("warn") for s in v), r["steps"]
+    assert v[-1]["code"] == "certpush_verify_no_address"
+
+
+async def test_verify_turned_off_says_so(client, auth_headers, db_session, fg) -> None:
+    cid, _fp = await _cert_with_version(client, auth_headers)
+    t = await _target(db_session, cid)
+    t.options = {**(t.options or {}), "verify": False}
+    await db_session.commit()
+    r = await engine.push_target(db_session, t, probe=_probe_by_host({}))
+    assert r["status"] == "unverified"
+    v = _verify_steps(r)
+    assert v and v[-1].get("warn") and v[-1]["code"] == "certpush_verify_disabled"
+
+
+async def test_unreachable_before_and_after_is_a_warning(client, auth_headers, db_session, fg) -> None:
+    cid, _fp = await _cert_with_version(client, auth_headers)
+    t = await _target(db_session, cid)
+    r = await engine.push_target(db_session, t, probe=_probe_by_host({("192.0.2.1", 8443): [None]}))
+    assert r["status"] == "unverified"
+    v = _verify_steps(r)
+    assert v and v[-1].get("warn") and v[-1]["code"] == "certpush_verify_unreachable"
+
+
+# ── OPNsense 換的是網頁管理介面的憑證時：推完看 API 網址（使用者 2026-11-07 真機推送成功卻一直「未確認」）──
+
+async def test_opnsense_webgui_cert_is_confirmed_on_the_api_address(client, auth_headers, db_session, monkeypatch) -> None:
+    """有勾「推完重啟網頁管理介面」又沒填確認位址：推完連 API 網址看一次，是新憑證就算確認。"""
+    dev = StrictOPNsense()
+    monkeypatch.setattr(engine, "make_http", lambda target, secret: dev)
+    t, fp = await _kind_target(db_session, client, auth_headers, "opnsense", {"cert_uuid": "u-1", "restart_webgui": True})
+    r = await engine.push_target(db_session, t, probe=_probe_by_host({("192.0.2.1", 8443): ["a" * 64, fp]}))
+    assert r["status"] == "ok", r["steps"]
+    v = [s for s in r["steps"] if s["step"] == "verify"]
+    assert v[-1]["ok"] and not v[-1].get("warn")
+
+
+async def test_opnsense_webgui_still_old_is_a_warning_not_a_rollback(client, auth_headers, db_session, monkeypatch) -> None:
+    """管理介面還是舊憑證：可能換的其實是別的服務（HAProxy）用的憑證 → 只警示，不換回（換回會傷到真的服務）。"""
+    dev = StrictOPNsense()
+    monkeypatch.setattr(engine, "make_http", lambda target, secret: dev)
+    monkeypatch.setattr(engine, "VERIFY_TRIES", 1)
+    t, fp = await _kind_target(db_session, client, auth_headers, "opnsense", {"cert_uuid": "u-1", "restart_webgui": True})
+    r = await engine.push_target(db_session, t, probe=_probe_by_host({("192.0.2.1", 8443): ["a" * 64]}))
+    assert r["status"] == "unverified"
+    v = [s for s in r["steps"] if s["step"] == "verify"]
+    assert v[-1].get("warn") and v[-1]["code"] == "certpush_verify_webgui_old"
+    assert not any(s["step"] == "rollback" for s in r["steps"])
+    crt = base64.b64decode(dev.certs["u-1"]["crt"]).decode()
+    assert "BEGIN CERTIFICATE" in crt and t.last_fingerprint == fp
+
+
+async def test_opnsense_without_webgui_restart_still_needs_an_address(client, auth_headers, db_session, monkeypatch) -> None:
+    dev = StrictOPNsense()
+    monkeypatch.setattr(engine, "make_http", lambda target, secret: dev)
+    t, _fp = await _kind_target(db_session, client, auth_headers, "opnsense", {"cert_uuid": "u-1", "restart_webgui": False})
+    r = await engine.push_target(db_session, t, probe=_probe_by_host({("192.0.2.1", 8443): ["a" * 64]}))
+    v = [s for s in r["steps"] if s["step"] == "verify"]
+    assert r["status"] == "unverified" and v[-1]["code"] == "certpush_verify_no_address"

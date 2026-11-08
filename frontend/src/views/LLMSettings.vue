@@ -48,12 +48,33 @@ const modelOptions = computed(() => {
 
 // 嵌入模型名稱慣例含 "embed"（qwen3-embedding / nomic-embed-text / mxbai-embed…）
 const isEmbedModel = (name: string) => /embed/i.test(name);
+// 嵌入模型可以接另一台（嵌入模型位址）：有填就向那一台要清單，沒填就用對話那台的（使用者 2026-11-07：
+// 以前一律列對話那台的模型，挑不到另一台上的嵌入模型）
+const embedModels = ref<OllamaModel[] | null>(null);
+const embedModelsError = ref<string | null>(null);
+let embedTimer: ReturnType<typeof setTimeout> | null = null;
+async function loadEmbedModels() {
+  if (!llm.value?.enabled || !llm.value?.embedding_base_url) { embedModels.value = null; embedModelsError.value = null; return; }
+  try {
+    const res = await listOllamaModels("embedding");
+    embedModels.value = res.models;
+    embedModelsError.value = res.error_detail || res.error ? srvText(res.error_detail, res.error ?? "") : null;
+  } catch (e) { embedModels.value = []; embedModelsError.value = apiErrMsg(e); }
+}
+watch(() => llm.value?.embedding_base_url, () => {
+  if (embedTimer) clearTimeout(embedTimer);
+  embedTimer = setTimeout(() => { void loadEmbedModels(); }, 600);   // 位址是邊打邊存的，停一下再問
+});
 // 嵌入模型下拉：只有嵌入模型可選，其餘反灰（目前已選的仍保留可見）
-const embeddingModelOptions = computed(() =>
-  modelOptions.value.map((o) => ({
-    ...o,
-    disabled: !isEmbedModel(o.value) && o.value !== llm.value?.embedding_model,
-  })));
+const embeddingModelOptions = computed(() => {
+  const src = embedModels.value
+    ? embedModels.value.map((m) => ({ label: m.parameter_size ? `${m.name} (${m.parameter_size})` : m.name, value: m.name }))
+    : modelOptions.value;
+  const cur = llm.value?.embedding_model;
+  const opts = cur && !src.some((o) => o.value === cur)
+    ? [...src, { label: t("llm_settings.model_not_found", { model: cur }), value: cur }] : src;
+  return opts.map((o) => ({ ...o, disabled: !isEmbedModel(o.value) && o.value !== cur }));
+});
 // 對話模型下拉：反過來把嵌入模型反灰
 const chatModelOptions = computed(() =>
   modelOptions.value.map((o) => ({
@@ -256,7 +277,7 @@ async function load() {
   catch (e) { msg.error(apiErrMsg(e)); }
   // 未啟用連接時不要自動去抓清單（否則會冒出「無法連上 LLM 伺服器」錯誤）
   if (llm.value?.enabled) {
-    void loadModels(); void doCheckEmbedding(); void loadIndexStatus();
+    void loadModels(); void doCheckEmbedding(); void loadIndexStatus(); void loadEmbedModels();
     void loadRoleModels("interpret"); void loadRoleModels("audit");
   }
 }
@@ -467,6 +488,20 @@ onMounted(() => { void load(); void loadTools(); void loadSubnets(); });
         </div>
       </div>
       <div>
+        <!-- 嵌入與對話模型常常是分開部署的（GitHub issue #33），位址自然不同。
+             留空＝沿用上面那個位址，既有安裝升上來行為不變。先選位址再選模型（使用者 2026-11-07），
+             模型清單也是向這個位址要的。 -->
+        <div style="margin-bottom: 12px">
+          <label>{{ t("llm_settings.embedding_url") }}</label>
+          <n-input
+            :value="llm.embedding_base_url ?? ''"
+            :placeholder="llm.url"
+            data-testid="embedding-url"
+            @update:value="(v: string) => patch({ embedding_base_url: v })"
+          />
+          <p class="hint">{{ t("llm_settings.embedding_url_hint") }}</p>
+          <p v-if="embedModelsError" class="hint" style="color:#e88080">{{ embedModelsError }}</p>
+        </div>
         <n-space align="center" style="margin-bottom: 4px">
           <label style="margin: 0">{{ t("llm_settings.embedding_model") }}</label>
           <n-button text size="tiny" :loading="embedBusy" @click="doCheckEmbedding">
@@ -477,22 +512,12 @@ onMounted(() => { void load(); void loadTools(); void loadSubnets(); });
         <n-select
           :value="llm.embedding_model"
           :options="embeddingModelOptions"
+          data-testid="embedding-model"
           :loading="modelsLoading"
           :placeholder="t('llm_settings.pick_model')"
           filterable
           @update:value="(v: string) => patch({ embedding_model: v })"
         />
-        <!-- 嵌入與對話模型常常是分開部署的（GitHub issue #33），位址自然不同。
-             留空＝沿用上面那個位址，既有安裝升上來行為不變。 -->
-        <div style="margin-top: 8px">
-          <label>{{ t("llm_settings.embedding_url") }}</label>
-          <n-input
-            :value="llm.embedding_base_url ?? ''"
-            :placeholder="llm.url"
-            @update:value="(v: string) => patch({ embedding_base_url: v })"
-          />
-          <p class="hint">{{ t("llm_settings.embedding_url_hint") }}</p>
-        </div>
         <!-- 選錯嵌入模型時唯一的症狀是「語意搜尋永遠沒有結果」，畫面上沒有任何線索
              指向維度不合 —— 所以要能當場問一次、把實際維度講出來。 -->
         <p v-if="embedResult" class="hint" :style="embedResult.ok ? 'color:#18a058' : 'color:#e88080'">

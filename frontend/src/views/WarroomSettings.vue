@@ -328,11 +328,11 @@ onMounted(load);
           </n-tag>
         </n-space>
       </n-form-item>
-      <n-form-item :label="t('warroom_settings.principal')">
+      <n-form-item :label="t('warroom_settings.principal')" :show-feedback="false">
         <n-select v-model:value="s.principal_user_id" :options="users" filterable clearable
                   :placeholder="t('warroom_settings.principal_ph')" style="max-width: 420px" />
       </n-form-item>
-      <p class="wrs-hint wrs-hint--block">{{ t("warroom_settings.principal_hint") }}</p>
+      <p class="wrs-hint wrs-hint--block" style="margin: 4px 0 16px">{{ t("warroom_settings.principal_hint") }}</p>
       <n-alert v-if="needPrincipal" type="error" :bordered="false" class="wrs-alert" data-testid="wrs-need-principal">
         {{ t("warroom_settings.principal_required") }}
       </n-alert>

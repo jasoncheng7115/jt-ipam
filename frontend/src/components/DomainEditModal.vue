@@ -115,7 +115,7 @@ async function save() {
            :title="isEdit ? t('domains.edit_title', { name: domain?.name }) : t('domains.add')"
            @update:show="(v: boolean) => emit('update:show', v)">
     <n-form label-placement="top">
-      <n-form-item v-if="!isEdit" :label="t('domains.name')">
+      <n-form-item v-if="!isEdit" :label="t('domains.name')" :show-feedback="false">
         <n-input-group>
           <n-input v-model:value="form.name" placeholder="example.com" maxlength="300" data-testid="domain-name"
                    @keydown.enter.prevent="runProbe" />
@@ -126,7 +126,7 @@ async function save() {
           </n-button>
         </n-input-group>
       </n-form-item>
-      <div v-if="!isEdit" class="hint" style="margin: -12px 0 12px">{{ t("domains.name_hint") }}<br>{{ t("domains.probe_hint") }}</div>
+      <div v-if="!isEdit" class="hint" style="margin: 4px 0 16px">{{ t("domains.name_hint") }}<br>{{ t("domains.probe_hint") }}</div>
       <div v-if="probeNote" class="probe-note" data-testid="domain-probe-note">{{ probeNote }}</div>
       <n-form-item :label="t('domains.registrar')">
         <n-input v-model:value="form.registrar" maxlength="128" :placeholder="t('domains.from_rdap_ph')" />
@@ -135,17 +135,17 @@ async function save() {
                    :validation-status="urlBad ? 'error' : undefined">
         <n-input v-model:value="form.registrar_url" maxlength="2048" placeholder="https://" />
       </n-form-item>
-      <n-form-item :label="t('domains.registrar_account')">
+      <n-form-item :label="t('domains.registrar_account')" :show-feedback="false">
         <n-input v-model:value="form.registrar_account" maxlength="128" />
       </n-form-item>
-      <div class="hint" style="margin: -12px 0 12px">{{ t("domains.no_password_hint") }}</div>
+      <div class="hint" style="margin: 4px 0 16px">{{ t("domains.no_password_hint") }}</div>
       <n-form-item :label="t('domains.dns_provider')">
         <n-input v-model:value="form.dns_provider" maxlength="128" :placeholder="t('domains.dns_provider_ph')" />
       </n-form-item>
-      <n-form-item :label="t('domains.expires_manual')">
+      <n-form-item :label="t('domains.expires_manual')" :show-feedback="false">
         <jt-date-picker v-model:value="form.expires_at" type="date" clearable style="width: 100%" />
       </n-form-item>
-      <div class="hint" style="margin: -12px 0 12px">{{ t("domains.expires_manual_hint") }}</div>
+      <div class="hint" style="margin: 4px 0 16px">{{ t("domains.expires_manual_hint") }}</div>
       <n-form-item :label="t('domains.auto_renew')">
         <n-select v-model:value="renew" :options="renewOpts" />
       </n-form-item>

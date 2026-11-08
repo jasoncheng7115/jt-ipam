@@ -49,6 +49,9 @@ Environment variables (/etc/jt-ipam-rustdesk-agent.env):
   JT_IPAM_PIN           sha256//<base64> of the jt-ipam server's public key (the install command shown in
                         jt-ipam sets it): talk only to that server, also with a self-signed certificate
   JT_IPAM_INSECURE      =1 to skip TLS verification entirely (not recommended; use JT_IPAM_PIN)
+  JT_IPAM_AUTO_PIN      =0 to keep the settings above as they are. By default an agent that does not verify
+                        jt-ipam switches to verifying it by itself and follows a certificate change signed by
+                        this jt-ipam (what it learned is kept in jt-ipam-trust next to this program)
   JT_IPAM_AUTO_UPDATE   =0 to disable self-update (default on)
   JT_IPAM_RUSTDESK_DIR  hbbs working directory when it is not the official deb's /var/lib/rustdesk-server
   JT_RD_ALLOW_DELETE    =1 to allow deleting old registrations (written by the installer's --allow-delete)
@@ -78,7 +81,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-AGENT_VERSION = "1.3.0"
+AGENT_VERSION = "1.4.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INSECURE = os.environ.get("JT_IPAM_INSECURE", "") in ("1", "true", "yes")
@@ -146,23 +149,26 @@ def _spki_pin(der: bytes) -> str:
     return "sha256//" + base64.b64encode(hashlib.sha256(der[i:end]).digest()).decode()
 
 
-def _check_pin(sock: ssl.SSLSocket) -> None:
-    if not PIN:
+def _check_pin(sock: ssl.SSLSocket, pin: str | None = None) -> None:
+    want = PIN if pin is None else pin                 # pin：還沒採用、先試連一次的候選公鑰
+    if not want:
         return
     try:
         got = _spki_pin(sock.getpeercert(binary_form=True) or b"")
     except (IndexError, ValueError):
         got = ""
-    if not hmac.compare_digest(got.encode(), PIN.encode()):
+    if not hmac.compare_digest(got.encode(), want.encode()):
         sock.close()
         raise ssl.SSLError("server certificate does not match JT_IPAM_PIN "
                            "(not the jt-ipam server this agent was installed for)")
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    pin: str | None = None
+
     def connect(self) -> None:
         super().connect()
-        _check_pin(self.sock)
+        _check_pin(self.sock, self.pin)
 
 
 class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
@@ -178,18 +184,177 @@ def _urlopen(req: urllib.request.Request, timeout: float):  # type: ignore[no-un
 
 
 def _verify_signature(data: bytes, sig_b64: str) -> bool:
+    """自我更新的簽章：jt-ipam 的程式簽章金鑰（內建在這支程式裡）。"""
+    return _rsa_verify(AGENT_SIGNING_N, AGENT_SIGNING_E, data, sig_b64)
+
+
+# ── 不必重裝就改成驗證 jt-ipam（2026-11-07）──────────────────────────────────────
+# 1.0.20 以前裝的代理不驗證伺服器。與其要客戶逐台重跑安裝指令，代理自己來（JT_IPAM_AUTO_PIN，預設開）：
+# 抓 jt-ipam 的信任資料（目前憑證的公鑰，用這台 jt-ipam 自己的身分金鑰簽章；抓的時候不帶代理金鑰），
+# 先試一般 CA 驗證、不行就釘選公鑰，**用新設定真的連得上才換**。同時記下身分金鑰：之後 jt-ipam 換憑證，
+# 新的公鑰要有那把身分金鑰的簽章、而且用它真的連得上，才跟著換。
+# 學到的存在程式旁邊的 jt-ipam-trust（RustDesk 代理只有程式目錄可寫），優先於環境變數；安裝程式會清掉。
+AUTO_PIN = os.environ.get("JT_IPAM_AUTO_PIN", "true").strip().lower() not in ("0", "false", "no", "off")
+TRUST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jt-ipam-trust")
+TRUST_IDENTITY: tuple[int, int] | None = None          # 身分公鑰 (n, e)
+_PIN_FORMAT = re.compile(r"sha256//[A-Za-z0-9+/]{43}=")
+_TRUST_NEXT = {"maintain": 0.0, "recover": 0.0}
+
+
+def _rsa_verify(n: int, e: int, data: bytes, sig_b64: str) -> bool:
     """RSA PKCS#1 v1.5 / SHA-256 驗章，純 Python：不靠 openssl，也就不會因為主機沒裝而跳過。"""
     try:
         sig = base64.b64decode(sig_b64.strip(), validate=True)
     except (ValueError, TypeError):
         return False
-    k = (AGENT_SIGNING_N.bit_length() + 7) // 8
+    k = (n.bit_length() + 7) // 8
     s = int.from_bytes(sig, "big")
-    if len(sig) != k or s >= AGENT_SIGNING_N:
+    if len(sig) != k or s >= n:
         return False
     t = _SHA256_DIGEST_INFO + hashlib.sha256(data).digest()
+    if k < len(t) + 11:
+        return False
     want = b"\x00\x01" + b"\xff" * (k - len(t) - 3) + b"\x00" + t
-    return hmac.compare_digest(pow(s, AGENT_SIGNING_E, AGENT_SIGNING_N).to_bytes(k, "big"), want)
+    return hmac.compare_digest(pow(s, e, n).to_bytes(k, "big"), want)
+
+
+def _trust_load() -> None:
+    global PIN, INSECURE, TRUST_IDENTITY
+    try:
+        with open(TRUST_FILE, encoding="utf-8") as f:
+            kv = dict(line.rstrip("\n").split("=", 1) for line in f if "=" in line)
+    except OSError:
+        return
+    mode, pin = kv.get("TRUST_MODE"), kv.get("TRUST_PIN", "")
+    if mode == "pinned" and _PIN_FORMAT.fullmatch(pin):
+        PIN, INSECURE = pin, False
+    elif mode == "ca":
+        PIN, INSECURE = "", False
+    else:
+        return
+    try:
+        TRUST_IDENTITY = (int.from_bytes(base64.b64decode(kv["TRUST_N"], validate=True), "big"),
+                          int.from_bytes(base64.b64decode(kv["TRUST_E"], validate=True), "big"))
+    except (KeyError, ValueError):
+        TRUST_IDENTITY = None
+
+
+def _trust_save(mode: str, pin: str, n_b64: str, e_b64: str) -> bool:
+    tmp = TRUST_FILE + ".new"
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"TRUST_MODE={mode}\nTRUST_PIN={pin}\nTRUST_N={n_b64}\nTRUST_E={e_b64}\n")
+        os.replace(tmp, TRUST_FILE)
+    except OSError as exc:
+        print(f"[trust] cannot save {TRUST_FILE}: {exc}", file=sys.stderr, flush=True)
+        return False
+    _trust_load()
+    return True
+
+
+def _trust_get(how: str, pin: str = "") -> bytes | None:
+    """jt-ipam 的信任資料；how = insecure / ca / pin。不帶代理金鑰（還不確定對面是誰）。"""
+    req = urllib.request.Request(f"{SERVER}/api/v1/agent-trust", method="GET")  # noqa: S310
+    ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    if how != "ca":
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    try:
+        if how == "pin":
+            conn = type("_TrustPinned", (_PinnedHTTPSConnection,), {"pin": pin})
+            handler = _PinnedHTTPSHandler(context=ctx)
+            handler.https_open = lambda r: handler.do_open(conn, r, context=ctx)  # type: ignore[method-assign]
+            resp = urllib.request.build_opener(handler).open(req, timeout=20)
+        else:
+            resp = urllib.request.urlopen(req, timeout=20, context=ctx)  # noqa: S310
+        with resp:
+            return resp.read(65536)
+    except (OSError, ValueError):
+        return None
+
+
+def _trust_parse(raw: bytes | None) -> dict[str, str] | None:
+    """一行一個 key=value，最後是 sig=（簽的是它之前的所有位元組）；格式不對 → None。"""
+    try:
+        text = (raw or b"").decode("ascii")
+        i = text.index("\nsig=")
+        f = dict(line.split("=", 1) for line in text[:i].split("\n") if "=" in line)
+        f["_body"], f["_sig"] = text[:i + 1], text[i + 5:].strip()
+        f["_n"] = str(int.from_bytes(base64.b64decode(f["identity_n"], validate=True), "big"))
+        f["_e"] = str(int.from_bytes(base64.b64decode(f["identity_e"], validate=True), "big"))
+        if f.get("jt-ipam-agent-trust") != "1" or not _PIN_FORMAT.fullmatch(f.get("spki_pin", "")):
+            return None
+        return f
+    except (ValueError, KeyError, UnicodeDecodeError):
+        return None
+
+
+def _trust_maintain() -> None:
+    """記下 jt-ipam 的身分（一次）；不驗證的代理也趁這時改成驗證。失敗一小時後再試，絕不丟例外。"""
+    if not SERVER.startswith("https://") or not AUTO_PIN or TRUST_IDENTITY is not None:
+        return
+    now = time.monotonic()
+    if now < _TRUST_NEXT["maintain"]:
+        return
+    _TRUST_NEXT["maintain"] = now + 3600
+    try:
+        mode = _tls_mode()
+        f = _trust_parse(_trust_get("pin", PIN) if mode == "pinned" else _trust_get(mode))
+        if f is None or not _rsa_verify(int(f["_n"]), int(f["_e"]), f["_body"].encode(), f["_sig"]):
+            return
+        n_b64, e_b64, pin = f["identity_n"], f["identity_e"], f["spki_pin"]
+        if mode == "pinned":
+            if pin == PIN:
+                _trust_save("pinned", pin, n_b64, e_b64)
+        elif mode == "ca":
+            _trust_save("ca", "", n_b64, e_b64)
+        elif f.get("auto_pin") != "1":
+            pass                                         # jt-ipam 關掉了自動改成驗證
+        elif _trust_get("ca") is not None:
+            if _trust_save("ca", "", n_b64, e_b64):
+                print("[trust] now verifying jt-ipam's certificate (certificate authorities)", flush=True)
+        elif _trust_get("pin", pin) is not None:
+            if _trust_save("pinned", pin, n_b64, e_b64):
+                print(f"[trust] now only talking to the jt-ipam server with public key {pin}", flush=True)
+    except Exception as exc:  # noqa: BLE001 — 這只是加強，不能讓代理停下來
+        print(f"[trust] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+
+
+def _trust_cert_error(exc: BaseException) -> bool:
+    reason = getattr(exc, "reason", exc)
+    return isinstance(exc, ssl.SSLError) or isinstance(reason, ssl.SSLError)
+
+
+def _trust_recover() -> bool:
+    """驗證過的連線因為憑證失敗：jt-ipam 換了憑證、而且有記下的身分簽章 → 跟著換（True＝換了，馬上重試）。"""
+    if TRUST_IDENTITY is None or _tls_mode() == "insecure":
+        return False
+    now = time.monotonic()
+    if now < _TRUST_NEXT["recover"]:
+        return False
+    _TRUST_NEXT["recover"] = now + 300
+    try:
+        f = _trust_parse(_trust_get("insecure"))
+        if f is None or (int(f["_n"]), int(f["_e"])) != TRUST_IDENTITY:
+            return False
+        if not _rsa_verify(*TRUST_IDENTITY, f["_body"].encode(), f["_sig"]):
+            print("[trust] the server's certificate changed but the change is not signed by this jt-ipam; "
+                  "not following it", file=sys.stderr, flush=True)
+            return False
+        pin = f["spki_pin"]
+        if pin == PIN or int(f.get("not_after", "0")) <= time.time() or _trust_get("pin", pin) is None:
+            return False
+        if _trust_save("pinned", pin, f["identity_n"], f["identity_e"]):
+            print(f"[trust] jt-ipam changed its certificate; following it (signed by this jt-ipam): {pin}", flush=True)
+            return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"[trust] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+    return False
+
+
+_trust_load()
 
 
 def _req(method: str, path: str, body: dict | None = None,
@@ -1644,6 +1809,7 @@ def main() -> int:
           f"tls={_tls_mode()} auto_update={AUTO_UPDATE}", flush=True)
     while True:
         try:
+            _trust_maintain()
             wait = poll_once()
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
@@ -1657,7 +1823,7 @@ def main() -> int:
                 wait = 30
         except Exception as exc:  # noqa: BLE001 — stay resilient, retry
             print(f"[poll] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-            wait = 30
+            wait = 1 if _trust_cert_error(exc) and _trust_recover() else 30
         time.sleep(wait)
 
 

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def _steps() -> set[str]:
     src = "".join((ROOT / "backend/app/services/cert_push" / f).read_text() for f in ("engine.py", "drivers.py"))
     # 步驟名稱出現的寫法：steps.ok/fail("x")、self._ok("x")、PushError("x")、_xml("x")、patch("x")、step="x"
-    return set(re.findall(r'(?:steps\.(?:ok|fail)|_ok|PushError|_xml|patch)\(\s*"([a-z_]+)"', src)) | \
+    return set(re.findall(r'(?:steps\.(?:ok|fail|warn)|_ok|PushError|_xml|patch)\(\s*"([a-z_]+)"', src)) | \
         set(re.findall(r'\bstep(?::\s*str)?\s*=\s*"([a-z_]+)"', src))
 
 

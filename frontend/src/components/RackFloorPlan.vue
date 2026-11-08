@@ -9,7 +9,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { NButton, NIcon, NSpace, NEmpty, NPopconfirm, NSlider, NInputNumber, useMessage } from "naive-ui";
-import { RacksIcon, EditIcon, SaveIcon, DeleteIcon, PlusIcon, CancelIcon } from "@/icons";
+import { RacksIcon, EditIcon, SaveIcon, DeleteIcon, PlusIcon, CancelIcon, FitIcon } from "@/icons";
 import {
   listRacksByLocation, getFloorplanObjectURL, uploadFloorplan,
   deleteFloorplan, setRackPositions, type Rack,
@@ -382,7 +382,7 @@ async function save() {
                       style="width: 92px" :show-button="false">
         <template #suffix>%</template>
       </n-input-number>
-      <n-button size="tiny" @click="resetView">{{ t("racks.fp_reset_view") }}</n-button>
+      <n-button size="tiny" @click="resetView"><template #icon><n-icon><FitIcon /></n-icon></template>{{ t("racks.fp_reset_view") }}</n-button>
     </div>
 
   </div>

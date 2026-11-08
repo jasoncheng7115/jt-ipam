@@ -82,7 +82,7 @@ import {
 import {
   ElevationTracker, elevationUi, initialElevationState, type ElevationState,
 } from "@/rdweb/elevation";
-import { AdminIcon, PasteIcon, SendIcon } from "@/icons";
+import { AdminIcon, PasteIcon, SendIcon, CopyIcon, LoginIcon } from "@/icons";
 import { RustDeskIcon, CancelIcon, RefreshIcon, KeyIcon, LockIcon, ExpandIcon, ReduceIcon, DeleteIcon } from "@/icons";
 import { CheckIcon, ChevronDownIcon, QualityIcon, renderIcon, ResolutionIcon, ScreensIcon } from "@/icons";
 import ConnElapsed from "@/components/ConnElapsed.vue";
@@ -1568,7 +1568,7 @@ onBeforeUnmount(() => {
                data-testid="rdweb-clip-pending" @close="clipPending = null">
         <span class="rdw-clip-pending">
           {{ t("rdweb.clip_copy_prompt") }}
-          <n-button size="tiny" type="primary" data-testid="rdweb-clip-copy" @click="copyPending">
+          <n-button size="tiny" type="primary" data-testid="rdweb-clip-copy" @click="copyPending"><template #icon><n-icon><CopyIcon /></n-icon></template>
             {{ t("rdweb.clip_copy_button") }}
           </n-button>
         </span>
@@ -1619,7 +1619,7 @@ onBeforeUnmount(() => {
                     {{ t("rdweb.saved_cred_del_confirm") }}
                   </n-popconfirm>
                 </n-space>
-                <n-button size="small" type="primary" data-testid="rdweb-retry-submit" @click="submitPassword">
+                <n-button size="small" type="primary" data-testid="rdweb-retry-submit" @click="submitPassword"><template #icon><n-icon><LoginIcon /></n-icon></template>
                   {{ t("rdweb.login") }}
                 </n-button>
               </n-space>
@@ -1630,7 +1630,7 @@ onBeforeUnmount(() => {
                        :input-props="{ autocomplete: 'one-time-code', inputmode: 'numeric' }"
                        @keyup.enter="submit2fa" />
               <n-space justify="end" style="margin-top:10px">
-                <n-button size="small" type="primary" @click="submit2fa">{{ t("rdweb.login") }}</n-button>
+                <n-button size="small" type="primary" @click="submit2fa"><template #icon><n-icon><LoginIcon /></n-icon></template>{{ t("rdweb.login") }}</n-button>
               </n-space>
             </n-card>
             <!-- G.7：Linux 受控端沒有桌面：作業系統帳號密碼（需要時加 RustDesk 密碼），同一條連線再登入一次 -->
@@ -1659,7 +1659,7 @@ onBeforeUnmount(() => {
               <div class="rdw-note" style="margin-top:6px">{{ t("rdweb.os_login_note") }}</div>
               <n-space justify="end" style="margin-top:10px">
                 <n-button size="small" type="primary" :disabled="!osReady" data-testid="rdweb-os-submit"
-                          @click="submitOsLogin">{{ t("rdweb.login") }}</n-button>
+                          @click="submitOsLogin"><template #icon><n-icon><LoginIcon /></n-icon></template>{{ t("rdweb.login") }}</n-button>
               </n-space>
             </n-card>
             <!-- G.6：Windows 的工作階段選擇（受控端要等這個才送畫面） -->
@@ -1681,7 +1681,7 @@ onBeforeUnmount(() => {
               </n-radio-group>
               <div class="rdw-note" style="margin-top:8px">{{ t("rdweb.win_session_note") }}</div>
               <n-space justify="end" style="margin-top:10px">
-                <n-button size="small" type="primary" data-testid="rdweb-winsession-submit" @click="submitWinSession">
+                <n-button size="small" type="primary" data-testid="rdweb-winsession-submit" @click="submitWinSession"><template #icon><n-icon><CheckIcon /></n-icon></template>
                   {{ t("rdweb.win_session_submit") }}
                 </n-button>
               </n-space>
@@ -1690,7 +1690,7 @@ onBeforeUnmount(() => {
               <n-spin :size="22" />
               <div>{{ t("rdweb.waiting_approval") }}</div>
               <n-popconfirm @positive-click="disconnect">
-                <template #trigger><n-button size="small" ghost>{{ t("common.cancel") }}</n-button></template>
+                <template #trigger><n-button size="small" ghost><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button></template>
                 {{ t("rdweb.cancel_confirm") }}
               </n-popconfirm>
             </div>
@@ -1729,7 +1729,7 @@ onBeforeUnmount(() => {
           <n-button v-if="typing.active" size="small" type="warning" data-testid="rdweb-type-stop" @click="stopTyping">
             <template #icon><n-icon :component="CancelIcon" /></template>{{ t("rdweb.type_stop") }}
           </n-button>
-          <n-button v-else size="small" @click="sendTextDlg.show = false">{{ t("common.cancel") }}</n-button>
+          <n-button v-else size="small" @click="sendTextDlg.show = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
           <n-button size="small" :disabled="!canSendText || typing.active" data-testid="rdweb-type-submit"
                     @click="submitTypeText">
             <template #icon><n-icon :component="KeyIcon" /></template>{{ t("rdweb.send_text_type") }}
@@ -1762,7 +1762,7 @@ onBeforeUnmount(() => {
       <div class="rdw-note" style="margin-top:4px">{{ t("rdweb.elev_audit_note") }}</div>
       <template #footer>
         <n-space justify="end">
-          <n-button size="small" data-testid="rdweb-elev-logon-cancel" @click="closeElevLogon">
+          <n-button size="small" data-testid="rdweb-elev-logon-cancel" @click="closeElevLogon"><template #icon><n-icon><CancelIcon /></n-icon></template>
             {{ t("common.cancel") }}
           </n-button>
           <n-button size="small" type="primary" :disabled="!elevDlg.username.trim()"

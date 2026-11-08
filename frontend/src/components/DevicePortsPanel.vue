@@ -7,7 +7,7 @@ import {
 } from "naive-ui";
 import { Physical, type DevicePort, type PortTrace } from "@/api/phase3";
 import { listDevices } from "@/api/basic";
-import { PlusIcon, EditIcon, DeleteIcon, LinkIcon, RefreshIcon, PhysicalIcon, ExportIcon } from "@/icons";
+import { PlusIcon, EditIcon, DeleteIcon, LinkIcon, RefreshIcon, PhysicalIcon, ExportIcon, CancelIcon, SaveIcon } from "@/icons";
 
 import { useExportBusy } from "@/composables/useExportBusy";
 import { useTablePagination } from "@/composables/useTablePagination";
@@ -336,8 +336,8 @@ onMounted(() => { void refresh(); });
         <n-form-item :label="t('common.description')"><n-input v-model:value="form.description" type="textarea" :rows="2" /></n-form-item>
       </n-form>
       <template #footer>
-        <n-space justify="end"><n-button @click="showEdit = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" @click="submit">{{ t("common.save") }}</n-button></n-space>
+        <n-space justify="end"><n-button @click="showEdit = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" @click="submit"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button></n-space>
       </template>
     </n-modal>
 
@@ -357,8 +357,8 @@ onMounted(() => { void refresh(); });
         </n-space>
       </n-form>
       <template #footer>
-        <n-space justify="end"><n-button @click="showConnect = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" @click="doConnect">{{ t("ports.connect") }}</n-button></n-space>
+        <n-space justify="end"><n-button @click="showConnect = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" @click="doConnect"><template #icon><n-icon><LinkIcon /></n-icon></template>{{ t("ports.connect") }}</n-button></n-space>
       </template>
     </n-modal>
 

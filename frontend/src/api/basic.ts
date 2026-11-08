@@ -289,6 +289,15 @@ export async function setCertExpiryDays(days: number): Promise<void> {
   await apiClient.put("/api/v1/system/cert-expiry-alert", { days });
 }
 
+/** 升級後的代理自動改成驗證 jt-ipam（先試 CA、不行就釘選憑證）。預設開。 */
+export async function getAgentAutoPin(): Promise<boolean> {
+  const { data } = await apiClient.get<{ enabled: boolean }>("/api/v1/system/agent-auto-pin");
+  return !!data.enabled;
+}
+export async function setAgentAutoPin(enabled: boolean): Promise<void> {
+  await apiClient.put("/api/v1/system/agent-auto-pin", { enabled });
+}
+
 export type RackNameAlign = "left" | "center" | "right";
 export async function getRackNameAlign(): Promise<RackNameAlign> {
   try {

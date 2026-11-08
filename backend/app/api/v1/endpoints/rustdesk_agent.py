@@ -34,6 +34,7 @@ from app.schemas.rustdesk import (
     RustDeskReport,
     RustDeskTestResultIn,
 )
+from app.services import agent_trust
 from app.services import rustdesk as rustdesk_svc
 
 router = APIRouter(prefix="/rustdesk/agent", tags=["rustdesk-agent"])
@@ -106,7 +107,9 @@ async def agent_poll(
 ) -> RustDeskAgentPollOut:
     srv = await _server_from_key(session, x_agent_key)
     _touch(srv, request, payload.version)
-    srv.agent_tls_mode = x_agent_tls if x_agent_tls in ("pinned", "ca", "insecure") else None
+    srv.agent_tls_mode = await agent_trust.record_tls_mode(
+        session, request, object_type="rustdesk_server", object_id=srv.id, name=srv.name,
+        old=srv.agent_tls_mode, header=x_agent_tls)
     if payload.hostname:
         srv.agent_hostname = payload.hostname
     kc = payload.key_checks

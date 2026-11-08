@@ -29,7 +29,7 @@ import { listSections } from "@/api/sections";
 import { listScanAgents } from "@/api/phase3";
 import { listVLANs, listVRFs, listLocations, type VLAN, type VRF } from "@/api/basic";
 import type { Subnet, Section, ScanScope } from "@/types";
-import { EditIcon, PlusIcon, SaveIcon, CancelIcon } from "@/icons";
+import { EditIcon, PlusIcon, SaveIcon, CancelIcon, InfoIcon } from "@/icons";
 import { probeInstall } from "@/utils/probeInstall";
 import { useCustomers } from "@/composables/useCustomers";
 import ConsoleEgressSelect from "@/components/ConsoleEgressSelect.vue";
@@ -447,7 +447,7 @@ async function submit() {
                   <n-popover v-if="probeUnsupported(p.key)" trigger="click" placement="right">
                     <template #trigger>
                       <n-button text size="tiny" type="primary" style="font-size:11px"
-                                @click.stop.prevent>
+                                @click.stop.prevent><template #icon><n-icon><InfoIcon /></n-icon></template>
                         {{ t("scan_probes.install_help") }}
                       </n-button>
                     </template>

@@ -17,7 +17,7 @@ import CardTitle from "@/components/CardTitle.vue";
 import { getRackDiagram } from "@/api/racks";
 import { usePinned } from "@/composables/usePinned";
 import { RACK_DEVICE_TYPES, rackTypeFill } from "@/utils/rackColors";
-import { RacksIcon, SettingsIcon } from "@/icons";
+import { RacksIcon, SettingsIcon, CancelIcon, SaveIcon } from "@/icons";
 
 const props = defineProps<{
   locations: { id: string; name: string }[];
@@ -138,7 +138,7 @@ const rackOptions = computed(() => props.racks.map((r) => ({
 
     <n-empty v-if="!configured" :description="t('dashboard.racks_empty')">
       <template #extra>
-        <n-button size="small" type="primary" data-testid="dash-racks-settings" @click="openSettings">{{ t("dashboard.racks_settings") }}</n-button>
+        <n-button size="small" type="primary" data-testid="dash-racks-settings" @click="openSettings"><template #icon><n-icon><SettingsIcon /></n-icon></template>{{ t("dashboard.racks_settings") }}</n-button>
       </template>
     </n-empty>
     <n-empty v-else-if="!wanted.length" :description="t('dashboard.racks_none')" />
@@ -185,20 +185,20 @@ const rackOptions = computed(() => props.racks.map((r) => ({
           <n-select v-model:value="formRacks" :options="rackOptions" multiple filterable clearable
                     data-testid="dash-racks-pick" />
         </n-form-item>
-        <n-form-item :label="t('dashboard.racks_scale')">
+        <n-form-item :label="t('dashboard.racks_scale')" :show-feedback="false">
           <div class="dr-scale">
             <n-slider v-model:value="formScale" :min="SCALE_MIN" :max="SCALE_MAX" :step="0.1"
                       :format-tooltip="(v: number) => `${Math.round(v * 100)}%`" data-testid="dash-racks-scale" />
             <span class="dr-scale-v">{{ Math.round(formScale * 100) }}%</span>
           </div>
         </n-form-item>
-        <div class="dr-hint">{{ t("dashboard.racks_scale_hint") }}</div>
+        <div class="dr-hint" style="margin: 4px 0 16px">{{ t("dashboard.racks_scale_hint") }}</div>
         <div class="dr-hint">{{ t("dashboard.racks_hint", { n: MAX }) }}</div>
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" data-testid="dash-racks-save" @click="save">{{ t("common.save") }}</n-button>
+          <n-button @click="show = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" data-testid="dash-racks-save" @click="save"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>

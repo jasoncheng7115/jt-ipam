@@ -14,7 +14,7 @@ import {
   downloadDeviceTemplate, previewDeviceImport, runDeviceImport,
   type DeviceImportMessage, type DeviceImportPreview, type DeviceImportRow,
 } from "@/api/deviceImport";
-import { DownloadIcon, UploadIcon } from "@/icons";
+import { DownloadIcon, UploadIcon, CancelIcon } from "@/icons";
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ (e: "update:show", v: boolean): void; (e: "queued", taskId: string): void }>();
@@ -158,8 +158,8 @@ const fatalText = computed(() => {
 
     <template #footer>
       <n-space justify="end">
-        <n-button @click="emit('update:show', false)">{{ t("common.cancel") }}</n-button>
-        <n-button type="primary" :disabled="!canRun" :loading="busy && !!preview" data-testid="device-import-run" @click="run">
+        <n-button @click="emit('update:show', false)"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+        <n-button type="primary" :disabled="!canRun" :loading="busy && !!preview" data-testid="device-import-run" @click="run"><template #icon><n-icon><UploadIcon /></n-icon></template>
           {{ preview && canRun ? t("device_import.run_n", { n: preview.created + preview.updated }) : t("device_import.run") }}
         </n-button>
       </n-space>

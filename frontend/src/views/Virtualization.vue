@@ -13,7 +13,7 @@ import {
 } from "naive-ui";
 import {
   VirtualizationIcon, RefreshIcon, SyncIcon, PlusIcon, TestIcon, DeleteIcon, FirewallIcon,
-  EditIcon, CloneIcon, AdvancedIcon, DevicesIcon,
+  EditIcon, CloneIcon, AdvancedIcon, DevicesIcon, CancelIcon, GoToIcon, SaveIcon,
 } from "@/icons";
 import { Virt, type ProxmoxInstance } from "@/api/phase3";
 import { listSubnets } from "@/api/subnets";
@@ -626,7 +626,7 @@ onMounted(() => {
       {{ t("virt.other_platform_hint", { n: otherPlatformCount,
             name: otherPlatform ? t(PLATFORMS[otherPlatform.key].nav) : "" }) }}
       <n-button text type="primary" size="small" style="margin-left:6px"
-                @click="goOtherPlatform">{{ t("virt.other_platform_go") }}</n-button>
+                @click="goOtherPlatform"><template #icon><n-icon><GoToIcon /></n-icon></template>{{ t("virt.other_platform_go") }}</n-button>
     </n-alert>
     <n-tabs v-model:value="tab" type="line">
       <n-tab-pane v-if="!adminMode" name="clusters">
@@ -746,8 +746,8 @@ onMounted(() => {
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showCluster = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" @click="submitCluster">{{ t("common.save") }}</n-button>
+          <n-button @click="showCluster = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" @click="submitCluster"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -828,8 +828,8 @@ onMounted(() => {
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showPx = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" @click="submitPx">{{ t("common.save") }}</n-button>
+          <n-button @click="showPx = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" @click="submitPx"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button>
         </n-space>
       </template>
     </n-modal>

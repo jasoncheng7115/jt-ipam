@@ -106,6 +106,8 @@ else
 fi
 
 echo "==> Writing config ${ENVFILE}"
+# The server check chosen on this run wins over what the agent learned by itself (jt-ipam-trust next to it)
+[[ -n "$TRUST_GIVEN" ]] && rm -f "${DEST}/jt-ipam-trust"
 umask 077
 cat > "$ENVFILE" <<EOF
 JT_IPAM_URL=${JT_IPAM_URL}

@@ -29,6 +29,7 @@ from app.models.address import IPAddress
 from app.models.scan_agent import ScanAgent
 from app.models.subnet import Subnet
 from app.schemas.base import Paginated, StrictModel
+from app.services import agent_trust
 
 router = APIRouter(prefix="/scan-agents", tags=["scan-agents"])
 
@@ -603,7 +604,9 @@ async def agent_poll(
                             else (request.client.host if request.client else None))
     if x_agent_version:
         agent.agent_version = x_agent_version[:32]
-    agent.tls_mode = x_agent_tls if x_agent_tls in ("pinned", "ca", "insecure") else None
+    agent.tls_mode = await agent_trust.record_tls_mode(
+        session, request, object_type="scan_agent", object_id=agent.id, name=agent.name,
+        old=agent.tls_mode, header=x_agent_tls)
     # 代理用 X-Agent-Probes 回報它「裝得起」哪些（逗號分隔）→ UI 反灰用
     if x_agent_probes is not None:
         agent.available_probes = scan_probes.normalize_probes(

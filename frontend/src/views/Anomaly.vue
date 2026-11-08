@@ -20,7 +20,7 @@ import {
 } from "@/api/phase3";
 import {
   AiAuditIcon, AnomalyIcon, DownloadIcon, ExportIcon, EyeIcon, EyeOffIcon, IdentifyIcon, InfoIcon, PendingIcon, SettingsIcon,
-  TestIcon, renderIcon,
+  TestIcon, renderIcon, CancelIcon, PlusIcon, SaveIcon,
 } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import { renderMarkdown } from "@/utils/markdown";
@@ -1057,8 +1057,8 @@ onMounted(() => { void loadIgnorable(); void loadLast(); });
                 :placeholder="t('anomaly.scope_none')" />
       <template #footer>
         <n-space justify="end">
-          <n-button @click="scopeShow = false">{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" :loading="scopeSaving" @click="saveScope">
+          <n-button @click="scopeShow = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
+          <n-button type="primary" :loading="scopeSaving" @click="saveScope"><template #icon><n-icon><SaveIcon /></n-icon></template>
             {{ t("common.save") }}
           </n-button>
         </n-space>
@@ -1117,8 +1117,8 @@ onMounted(() => { void loadIgnorable(); void loadLast(); });
                         @click="removeSchedTime(i)">✕</n-button>
             </div>
             <n-button size="small" quaternary :disabled="!sched.schedule_enabled"
-                      @click="patchSched({ times: [...sched.times, '12:00'] })">
-              + {{ t("anomaly.sched_add_time") }}
+                      @click="patchSched({ times: [...sched.times, '12:00'] })"><template #icon><n-icon><PlusIcon /></n-icon></template>
+              {{ t("anomaly.sched_add_time") }}
             </n-button>
           </div>
           <p class="sched-hint">{{ t("anomaly.sched_times_hint") }}</p>
@@ -1130,7 +1130,7 @@ onMounted(() => { void loadIgnorable(); void loadLast(); });
       </n-space>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="schedShow = false">{{ t("common.close") }}</n-button>
+          <n-button @click="schedShow = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.close") }}</n-button>
         </n-space>
       </template>
     </n-modal>

@@ -299,11 +299,11 @@ onMounted(load);
     <!-- 新增 WAN 位址 -->
     <n-modal v-model:show="addrForm.show" preset="card" style="width: 480px; max-width: 95vw" :title="t('circuits.wan_add')">
       <n-form label-placement="top">
-        <n-form-item :label="t('circuits.wan_target')">
+        <n-form-item :label="t('circuits.wan_target')" :show-feedback="false">
           <n-input v-model:value="addrForm.target" placeholder="203.0.113.0/29 / 203.0.113.2" maxlength="64"
                    data-testid="circuit-wan-target" @keyup.enter="saveAddress" />
         </n-form-item>
-        <div class="hint" style="margin: -12px 0 12px">{{ t("circuits.wan_target_hint") }}</div>
+        <div class="hint" style="margin: 4px 0 16px">{{ t("circuits.wan_target_hint") }}</div>
         <n-form-item :label="t('circuits.wan_role')">
           <n-radio-group v-model:value="addrForm.role" size="small">
             <n-radio-button value="wan">{{ t("circuits.addr_role_wan") }}</n-radio-button>
