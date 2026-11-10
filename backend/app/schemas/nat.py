@@ -101,4 +101,6 @@ class NATRead(NATBase):
     # 位址文字（清單才填）：IP 頁要寫「外部 IP:埠 → 內部 IP:埠」，只有 id 看不出是哪個位址
     src_ip: str | None = None
     dst_ip: str | None = None
+    # 裝置名稱（清單才填）：表格不靠前端只載第一頁的裝置選單找名稱（issue #58 連帶）
+    device_name: str | None = None
     external_id: str | None = None

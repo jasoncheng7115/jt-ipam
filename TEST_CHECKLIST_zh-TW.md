@@ -1791,6 +1791,8 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 ## 8. 近期功能點檢
 
+- [ ] **NAT 的 IP / 裝置選單超過一頁**（#58，`e2e/nat-ip-picker.spec.ts`、`tests/test_nat_list_names.py`）：IP 超過 500 個時打字搜尋選得到不在第一頁的；編輯時已選的顯示位址；表格顯示位址與裝置名稱不是 ID
+
 - [ ] **Windows 派送代理在中文版 Windows**（`tests/test_powershell_agents.py`）：.ps1 只用 ASCII；在繁中 Windows（PowerShell 5.1）實際跑一次：自動釘選、跟上簽過章的換證、拒絕冒牌
 
 - [ ] **IP 拓樸圖縮圖總覽**（`e2e/topology-minimap.spec.ts`）：四種模式都有縮圖；隱藏的節點不畫；點縮圖畫面移過去；關係圖的縮圖照常

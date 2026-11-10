@@ -213,6 +213,10 @@ export interface NAT {
   type: string;
   src_ip_id: string | null;
   dst_ip_id: string | null;
+  /** 清單才帶：位址與裝置的文字（表格不靠只載第一頁的選單找名稱，issue #58） */
+  src_ip?: string | null;
+  dst_ip?: string | null;
+  device_name?: string | null;
   src_port: number | null;
   dst_port: number | null;
   src_interface: string | null;

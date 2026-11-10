@@ -2,12 +2,11 @@
   <n-card>
     <template #header>
       <CardTitle :icon="VirtualizationIcon" :text="t('openstack.page_title')">
-        <n-tag size="small" type="warning" :bordered="false" style="margin-left:8px">Beta</n-tag>
       </CardTitle>
     </template>
 
-    <!-- 沒有長期實機運作過就要說出來 -->
-    <n-alert type="warning" :bordered="false" :show-icon="true" style="margin-bottom:12px">
+    <!-- 驗證到什麼程度要說清楚（2026-11-10 CubeCOS 開發團隊已實際搭配 jt-ipam 測試，拿掉 Beta） -->
+    <n-alert type="info" :bordered="false" :show-icon="true" style="margin-bottom:12px">
       {{ t("openstack.beta_note") }}
     </n-alert>
 
@@ -241,7 +240,7 @@
 
 <script setup lang="ts">
 /**
- * Bigstack CubeCOS／OpenStack 整合設定（唯讀，Beta）。
+ * Bigstack CubeCOS／OpenStack 整合設定（唯讀）。
  *
  * VM 與網卡寫進共用的虛擬化資料表（和 Proxmox、VMware、Hyper-V 同一套），所以拓樸、AI 對話、
  * MCP 的 list_vms 不必為了新平台改。這一頁只管連線設定、測試、同步，以及 Neutron 子網路對應。

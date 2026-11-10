@@ -8704,7 +8704,7 @@
   },
   "openstack": {
     "page_title": "CubeCOS / OpenStack",
-    "beta_note": "Beta: verified against DevStack and the official documentation, not yet run for long on a production OpenStack or CubeCOS. Read-only: nothing is ever written to the platform. Use \"Test\" first to see which services are reachable and which fields are visible, and report any problem.",
+    "beta_note": "Tested with jt-ipam by the CubeCOS developers; plain OpenStack is verified against DevStack. Read-only: nothing is ever written to the platform. Use \"Test\" first to see which services are reachable and which fields are visible.",
     "instances": "Connections",
     "create_title": "Add CubeCOS / OpenStack connection",
     "edit_title": "Edit CubeCOS / OpenStack connection",

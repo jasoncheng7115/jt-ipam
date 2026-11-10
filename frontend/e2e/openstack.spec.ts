@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { inst, mockOpenStack, mockOpenStackVms, newMock } from "./helpers/openstackMocks";
 
 /**
- * CubeCOS／OpenStack 整合（Beta，唯讀）：整合頁、測試結果、立即同步、子網路對應、CubeCOS 節點、
+ * CubeCOS／OpenStack 整合（唯讀）：整合頁、測試結果、立即同步、子網路對應、CubeCOS 節點、
  * 虛擬機清單的專案欄、IP 詳細資料的「OpenStack 網卡」。
  * 所有 /api/v1/openstack-instances 端點都用 page.route 模擬：不需要真的 OpenStack。
  */
@@ -26,6 +26,9 @@ test("清單、選單、新增（應用程式憑證）、編輯（密碼留空�
   await mockOpenStack(page, m);
   await login(page);
   await page.goto("/openstack");
+  // 2026-11-10 CubeCOS 開發團隊已實際搭配 jt-ipam 測試：不再標 Beta，說明改成已實測
+  await expect(page.locator(".n-alert", { hasText: "CubeCOS 開發團隊已實際搭配 jt-ipam 測試" })).toBeVisible();
+  await expect(page.locator(".n-card-header").first()).not.toContainText("Beta");
 
   const table = page.getByTestId("os-table");
   await expect(table.locator("tr", { hasText: "lab-cube" })).toContainText("Bigstack CubeCOS", FIRST);

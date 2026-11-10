@@ -12,11 +12,12 @@ import {
 import {
   listNATs, createNAT, updateNAT, deleteNAT, bulkDeleteNATs, type NAT,
 } from "@/api/phase3";
-import { listAddresses, getAddress } from "@/api/addresses";
-import { listSubnets } from "@/api/subnets";
+import { getAddress } from "@/api/addresses";
+import { getSubnet } from "@/api/subnets";
+import { useIpOptions } from "@/composables/useIpOptions";
+import { useDeviceOptions } from "@/composables/useDeviceOptions";
 import { useCustomers } from "@/composables/useCustomers";
 import type { IPAddress } from "@/types";
-import { listDevices } from "@/api/basic";
 import { listFirewalls, type OPNsenseFirewall } from "@/api/integrations";
 import { useRoute, useRouter } from "vue-router";
 import { useFocusRow } from "@/composables/useFocusRow";
@@ -119,9 +120,13 @@ function blankForm() {
 }
 const form = ref(blankForm());
 
-const addrOpts = ref<{ label: string; value: string }[]>([]);
-const deviceOpts = ref<{ label: string; value: string }[]>([]);
-const subnetCidr = ref<Record<string, string>>({});   // subnet_id → cidr，給 IP 細節彈窗顯示子網路
+// 來源／目的 IP、裝置的下拉：搜尋走後端（GitHub issue #58：以前一次載 500 個 IP、預設 200 台裝置，
+// 超過的選不到、打字也搜不到）。表格上的位址與裝置名稱由清單 API 帶，不靠這些選單。
+const srcIp = useIpOptions();
+const dstIp = useIpOptions();
+const devForm = useDeviceOptions();
+const devFilter = useDeviceOptions();
+const subnetCidr = ref<Record<string, string>>({});   // subnet_id → cidr，給 IP 細節彈窗顯示子網路（用到才查）
 const { labelFor: customerLabelFor, ensureLoaded: ensureCustomersLoaded } = useCustomers();
 const firewalls = ref<OPNsenseFirewall[]>([]);
 
@@ -167,6 +172,10 @@ async function loadIpDetail(ipId: string) {
   try {
     const a = await getAddress(ipId);
     ipDetailCache.value = { ...ipDetailCache.value, [ipId]: a };
+    const sid = (a as { subnet_id?: string | null }).subnet_id;
+    if (sid && !subnetCidr.value[sid]) {
+      try { subnetCidr.value = { ...subnetCidr.value, [sid]: String((await getSubnet(sid)).cidr) }; } catch { /* 顯示不出子網路就算了 */ }
+    }
   } catch {
     ipDetailCache.value = { ...ipDetailCache.value, [ipId]: "error" };
   }
@@ -198,9 +207,9 @@ function ipDetailCard(ipId: string) {
     ipDetailRow(t("common.description"), d.description),
   ].filter(Boolean));
 }
-function ipLinkCell(ipId: string | null) {
+function ipLinkCell(ipId: string | null, text?: string | null) {
   if (!ipId) return "—";
-  const label = addrOpts.value.find((o) => o.value === ipId)?.label ?? ipId.slice(0, 8) + "…";
+  const label = text || ipId.slice(0, 8) + "…";
   const link = h("a", {
     href: "#",
     style: "color: var(--primary-color, #18a058); text-decoration: none;",
@@ -234,9 +243,9 @@ function aliasCell(name: string | null, fwId?: string | null) {
   }, `@${name}`) });
 }
 
-function deviceLinkCell(devId: string | null) {
+function deviceLinkCell(devId: string | null, name?: string | null) {
   if (!devId) return "—";
-  const label = deviceOpts.value.find((o) => o.value === devId)?.label ?? devId.slice(0, 8) + "…";
+  const label = name || devId.slice(0, 8) + "…";
   return h("a", {
     href: "#",
     style: "color: var(--primary-color, #18a058); text-decoration: none;",
@@ -250,22 +259,9 @@ function deviceLinkCell(devId: string | null) {
 async function loadOpts() {
   try {
     void ensureCustomersLoaded();
-    const [addr, dev, fws, subs] = await Promise.all([
-      listAddresses({ pageSize: 500 }),
-      listDevices(),
-      listFirewalls().catch(() => ({ items: [] as OPNsenseFirewall[] })),
-      listSubnets({ page: 1, pageSize: 500 }).catch(() => ({ items: [] as any[] })),
-    ]);
-    subnetCidr.value = Object.fromEntries((subs.items ?? []).map((s: any) => [s.id, s.cidr]));
-    addrOpts.value = addr.items.map((a: any) => ({
-      label: `${a.ip}${a.hostname ? " — " + a.hostname : ""}`,
-      value: a.id,
-    }));
-    deviceOpts.value = dev.items.map((d: any) => ({
-      label: `${d.name}${d.type ? " (" + d.type + ")" : ""}`,
-      value: d.id,
-    }));
+    const fws = await listFirewalls().catch(() => ({ items: [] as OPNsenseFirewall[] }));
     firewalls.value = (fws.items ?? []) as OPNsenseFirewall[];
+    void devFilter.search();
   } catch { /* 先靜默；refresh 會報網路問題 */ }
 }
 
@@ -300,6 +296,7 @@ function openCreate() {
   editing.value = null;
   form.value = blankForm();
   show.value = true;
+  void srcIp.search(); void dstIp.search(); void devForm.search();
 }
 function openEdit(r: NAT, view = false) {
   viewOnly.value = view;
@@ -318,6 +315,10 @@ function openEdit(r: NAT, view = false) {
     filter_rule: r.filter_rule ?? "",
   };
   show.value = true;
+  // 已選的位址／裝置不一定在第一批搜尋結果裡：補抓，選單才不會顯示 UUID
+  void srcIp.search().then(() => srcIp.ensure(r.src_ip_id));
+  void dstIp.search().then(() => dstIp.ensure(r.dst_ip_id));
+  void devForm.search().then(() => devForm.ensure(r.device_id));
 }
 async function submit() {
   try {
@@ -380,20 +381,20 @@ const allCols = computed<DataTableColumns<NAT>>(() => autoSort([
   { title: t("nat.protocol"), key: "protocol", width: 100 },
   {
     title: t("nat.src_ip"), key: "src_ip_id", width: 110,
-    render: (r) => r.src_ip_id ? ipLinkCell(r.src_ip_id) : (aliasCell(r.src_alias, r.source_firewall_id) ?? "—"),
+    render: (r) => r.src_ip_id ? ipLinkCell(r.src_ip_id, r.src_ip) : (aliasCell(r.src_alias, r.source_firewall_id) ?? "—"),
   },
   { title: t("nat.src_interface"), key: "src_interface", width: 130, render: (r) => r.src_interface ?? "—" },
   { title: t("nat.src_port"), key: "src_port", width: 110,
     render: (r) => r.src_port != null ? String(r.src_port) : (aliasCell(r.src_port_alias, r.source_firewall_id) ?? "—") },
   {
     title: t("nat.dst_ip"), key: "dst_ip_id", width: 150,
-    render: (r) => r.dst_ip_id ? ipLinkCell(r.dst_ip_id) : (aliasCell(r.dst_alias, r.source_firewall_id) ?? aliasCell(r.redirect_alias, r.source_firewall_id) ?? "—"),
+    render: (r) => r.dst_ip_id ? ipLinkCell(r.dst_ip_id, r.dst_ip) : (aliasCell(r.dst_alias, r.source_firewall_id) ?? aliasCell(r.redirect_alias, r.source_firewall_id) ?? "—"),
   },
   { title: t("nat.dst_port"), key: "dst_port", width: 110,
     render: (r) => r.dst_port != null ? String(r.dst_port) : (aliasCell(r.dst_port_alias, r.source_firewall_id) ?? "—") },
   {
     title: t("nav.devices"), key: "device_id", width: 150, ellipsis: { tooltip: true },
-    render: (r) => deviceLinkCell(r.device_id),
+    render: (r) => deviceLinkCell(r.device_id, r.device_name),
   },
   { title: t("common.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   {
@@ -455,7 +456,7 @@ onMounted(() => { void refresh(); void loadOpts(); });
       <ExportButton :columns="cols" :rows="rows" filename="nat" :title="t('nav.nat')" />
       <n-select
         v-model:value="filterDeviceId"
-        :options="deviceOpts"
+        :options="devFilter.options.value" remote :loading="devFilter.loading.value" @search="devFilter.onSearch"
         :placeholder="t('nat.filter_device')"
         clearable filterable
         style="width: 220px"
@@ -554,12 +555,14 @@ onMounted(() => { void refresh(); void loadOpts(); });
         </n-space>
         <div class="jt-nat-hint">{{ t("nat.enabled_hint") }}</div>
         <n-form-item :label="t('nat.device')">
-          <n-select :disabled="viewOnly" v-model:value="form.device_id" :options="deviceOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.device_id" :options="devForm.options.value" filterable remote clearable
+                    :loading="devForm.loading.value" @search="devForm.onSearch" data-testid="nat-device-select"
                     :placeholder="t('nat.device_placeholder')" />
         </n-form-item>
         <!-- 來源相關欄位放一起 -->
         <n-form-item :label="t('nat.src_ip')">
-          <n-select :disabled="viewOnly" v-model:value="form.src_ip_id" :options="addrOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.src_ip_id" :options="srcIp.options.value" filterable remote clearable
+                    :loading="srcIp.loading.value" @search="srcIp.onSearch" data-testid="nat-src-ip-select"
                     :placeholder="t('nat.src_ip_placeholder')" />
         </n-form-item>
         <n-form-item :label="t('nat.src_interface')">
@@ -578,7 +581,8 @@ onMounted(() => { void refresh(); void loadOpts(); });
         </n-space>
         <!-- 目的相關欄位放一起 -->
         <n-form-item :label="t('nat.dst_ip')">
-          <n-select :disabled="viewOnly" v-model:value="form.dst_ip_id" :options="addrOpts" filterable clearable
+          <n-select :disabled="viewOnly" v-model:value="form.dst_ip_id" :options="dstIp.options.value" filterable remote clearable
+                    :loading="dstIp.loading.value" @search="dstIp.onSearch" data-testid="nat-dst-ip-select"
                     :placeholder="t('nat.dst_ip_placeholder')" />
         </n-form-item>
         <n-space :size="12" align="end" class="jt-nat-row">

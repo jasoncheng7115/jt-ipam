@@ -1,7 +1,7 @@
 import { apiClient } from "./client";
 
 /**
- * Bigstack CubeCOS／OpenStack 整合（唯讀，Beta）。
+ * Bigstack CubeCOS／OpenStack 整合（唯讀）。
  *
  * Keystone v3 取權杖，之後只對 Nova／Neutron／CubeCOS 發 GET；不會寫入平台。
  * 路徑要自帶 /api/v1 首碼（client 的 baseURL 是 "/"）。

@@ -8704,7 +8704,7 @@
   },
   "openstack": {
     "page_title": "CubeCOS / OpenStack",
-    "beta_note": "Beta：開発時は DevStack と公式ドキュメントで検証しており、本番の OpenStack や CubeCOS で長期運用した実績はまだありません。読み取りのみで、プラットフォームに書き込むことはありません。まず「テスト」で各サービスに接続できるか、どの項目が見えるかを確認し、問題があれば報告してください。",
+    "beta_note": "CubeCOS の開発チームが jt-ipam と組み合わせて実際にテスト済みです。一般の OpenStack は DevStack で検証しています。読み取りのみで、プラットフォームに書き込むことはありません。まず「テスト」で各サービスに接続できるか、どの項目が見えるかを確認してください。",
     "instances": "接続",
     "create_title": "CubeCOS / OpenStack 接続を追加",
     "edit_title": "CubeCOS / OpenStack 接続を編集",

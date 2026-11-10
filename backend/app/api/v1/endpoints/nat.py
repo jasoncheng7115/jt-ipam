@@ -178,12 +178,20 @@ async def list_nat(
                 select(IPAddress.id, IPAddress.ip).where(in_values(IPAddress.id, ip_ids)))).all():
             ip_text[iid] = str(ip).split("/")[0]
 
+    from app.models.device import Device
+    dev_ids = {r.device_id for r in rows if r.device_id is not None}
+    dev_name: dict[uuid.UUID, str] = {}
+    if dev_ids:
+        dev_name = {i: n for i, n in (await session.execute(
+            select(Device.id, Device.name).where(in_values(Device.id, dev_ids)))).all()}
+
     items: list[NATRead] = []
     for r in rows:
         kind, fw_id, label = _parse_origin(r.source_origin, fw_names)
         m = NATRead.model_validate(r)
         m.src_ip = ip_text.get(r.src_ip_id) if r.src_ip_id else None
         m.dst_ip = ip_text.get(r.dst_ip_id) if r.dst_ip_id else None
+        m.device_name = dev_name.get(r.device_id) if r.device_id else None
         m.source_kind = kind
         m.source_firewall_id = fw_id
         m.source_label = label

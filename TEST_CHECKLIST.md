@@ -2457,6 +2457,8 @@ happy path of "an upload succeeded" is not enough.
 
 ## 8. Recent feature spot-checks
 
+- [ ] **NAT IP / device pickers beyond one page** (#58, `e2e/nat-ip-picker.spec.ts`, `tests/test_nat_list_names.py`): with over 500 addresses, typing finds ones beyond the first page; editing shows the selected address; the table shows addresses and device names, not IDs
+
 - [ ] **Windows certificate agent on Chinese Windows** (`tests/test_powershell_agents.py`): .ps1 files are plain ASCII; one real run on Traditional Chinese Windows (PowerShell 5.1): pins by itself, follows a signed certificate change, refuses forged ones
 
 - [ ] **IP topology minimap** (`e2e/topology-minimap.spec.ts`): every mode has it; hidden nodes are left out; clicking it moves the view; the relation graph minimap still works

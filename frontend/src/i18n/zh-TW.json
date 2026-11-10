@@ -8704,7 +8704,7 @@
   },
   "openstack": {
     "page_title": "CubeCOS / OpenStack",
-    "beta_note": "Beta：開發時以 DevStack 與官方文件驗證，尚未在正式的 OpenStack 或 CubeCOS 環境長期運作過。只會讀取，不會寫入平台。請先按「測試」確認每個服務連得到、看得到哪些欄位，遇到問題請回報。",
+    "beta_note": "CubeCOS 開發團隊已實際搭配 jt-ipam 測試；一般 OpenStack 以 DevStack 驗證。只會讀取，不會寫入平台。請先按「測試」確認每個服務連得到、看得到哪些欄位。",
     "instances": "連線",
     "create_title": "新增 CubeCOS / OpenStack 連線",
     "edit_title": "編輯 CubeCOS / OpenStack 連線",

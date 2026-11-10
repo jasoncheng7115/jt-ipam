@@ -4,6 +4,14 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [Unreleased]
+
+### 修正
+- NAT 規則：來源 IP、目的 IP 與裝置的下拉只載第一頁（500 個位址、200 台裝置），站台大一點時後面的選不到，打字也搜不到（[#58](https://github.com/jasoncheng7115/jt-ipam/issues/58)）。現在改成到後端搜尋，編輯時已選的那筆不在第一批結果裡也會補抓；表格上的位址與裝置名稱由清單 API 帶，不再顯示 ID 前 8 碼。
+
+### 變更
+- CubeCOS / OpenStack 整合不再標示 Beta：CubeCOS 開發團隊已實際搭配 jt-ipam 測試過。整合頁、README、功能列表、整合說明與 API 手冊都已更新；一般 OpenStack 仍以 DevStack 驗證。
+
 ## [1.0.21] - 2026-11-08
 
 > **Windows 派送代理：** 1.0.20 附的 1.2.0 完全無法執行，中文版 Windows 上還另外被註解弄壞（見「修正」）。已經更新到 1.2.0 的代理沒辦法再自己更新，請在那台主機上再執行一次安裝指令。Linux 派送代理、掃描代理、RustDesk 代理不受影響。

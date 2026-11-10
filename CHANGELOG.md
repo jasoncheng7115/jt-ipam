@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [Unreleased]
+
+### Fixed
+- NAT rules: the source IP, destination IP and device pickers only loaded the first page (500 addresses, 200 devices), so on larger sites the rest could not be picked or even found by typing ([#58](https://github.com/jasoncheng7115/jt-ipam/issues/58)). They now search on the server and, when editing, look up the selected one if it is not among the first results. The table shows addresses and device names from the list API instead of an 8-character ID.
+
+### Changed
+- CubeCOS / OpenStack integration is no longer marked Beta: the CubeCOS developers tested it with jt-ipam. The integration page, README, feature list, integration guide and API manual say so; plain OpenStack remains verified against DevStack.
+
 ## [1.0.21] - 2026-11-08
 
 > **Windows certificate agents:** 1.2.0, shipped with 1.0.20, cannot run at all, and on Chinese Windows the agent was also broken by its comments (see Fixed). An agent that already updated to it cannot update itself again: run its install command on that host once more. Linux, scan and RustDesk agents are not affected.
