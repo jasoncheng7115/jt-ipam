@@ -1791,6 +1791,8 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 ## 8. 近期功能點檢
 
+- [ ] **IP 位址頁的未納管提示**（`e2e/unmanaged-hint.spec.ts`、`tests/test_unmanaged_summary.py`）：掃描代理有看到未登錄位址時顯示數量、子網路與開關位置；一般帳號看不到代理設定；關掉後不再出現
+
 - [ ] **表格隔行底色**（`e2e/striped-rows.spec.ts`、`src/stores/__tests__/stripedRows.test.ts`）：佈景選單打開後偶數列有底色、右側操作欄同色；重新整理還在；關掉恢復；深色主題也看一次
 
 - [ ] **email 空白的帳號能登入、預設 admin email 存得進去**（`tests/test_user_email_optional.py`）：建一個沒有 email 的帳號登入 → /me 200；編輯 admin（email 是 admin@localhost）只改密碼 → 存得進去

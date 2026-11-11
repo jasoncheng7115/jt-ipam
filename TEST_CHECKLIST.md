@@ -2457,6 +2457,8 @@ happy path of "an upload succeeded" is not enough.
 
 ## 8. Recent feature spot-checks
 
+- [ ] **Unmanaged note on the IP addresses page** (`e2e/unmanaged-hint.spec.ts`, `tests/test_unmanaged_summary.py`): with unrecorded sightings it shows the count, subnets and where the setting is; non-admins get no agent settings; once closed it stays closed
+
 - [ ] **Striped table rows** (`e2e/striped-rows.spec.ts`, `src/stores/__tests__/stripedRows.test.ts`): from the theme menu, even rows get a tint including the fixed action column; it survives a reload; turning it off restores; check the dark theme too
 
 - [ ] **Accounts without email sign in; the default admin email saves** (`tests/test_user_email_optional.py`): an account with no email signs in and /me is 200; editing admin (email admin@localhost) to change only the password saves

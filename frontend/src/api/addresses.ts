@@ -186,6 +186,20 @@ export interface UnmanagedAddress {
   hostname: string | null;
 }
 
+export interface UnmanagedSummary {
+  count: number;
+  subnets: { subnet_id: string; cidr: string; count: number }[];
+  /** 只有管理員才有（一般帳號是 null） */
+  agents_total: number | null;
+  agents_auto_create: number | null;
+}
+
+/** 掃描代理最近看到、但沒有 IP 紀錄的位址有幾個（「IP 位址」總表的提示用；客戶 2026-11-11） */
+export async function getUnmanagedSummary(): Promise<UnmanagedSummary> {
+  const { data } = await apiClient.get<UnmanagedSummary>("/api/v1/addresses/unmanaged-summary");
+  return data;
+}
+
 export async function listUnmanaged(subnetId: string): Promise<UnmanagedAddress[]> {
   const { data } = await apiClient.get<UnmanagedAddress[]>("/api/v1/addresses/unmanaged",
                                                            { params: { subnet_id: subnetId } });

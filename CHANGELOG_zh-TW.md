@@ -4,6 +4,12 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
+## [Unreleased]
+
+### 變更
+- **「IP 位址」頁提示未納管的位址**（客戶新站台開了掃描，IP 清單卻是空的，畫面上沒有任何說明）。掃描代理看到沒有 IP 紀錄的位址時，上方說明有幾個、在哪些子網路，以及怎麼自動收錄（掃描代理的「自動收錄未登錄的 IP」，預設關閉是為了讓「未授權 IP」偵測有作用），並附上到掃描代理與各子網路的按鈕。可以關掉，在這台瀏覽器不再出現。新端點 `GET /api/v1/addresses/unmanaged-summary`。
+- 子網路 IP 指示計的「未納管」圖例寫出那個開關的名稱與位置；儀表板異動趨勢與 DNS 比對群組的「排除 DHCP 範圍」說明，補上沒有整合的 DHCP 伺服器要在哪裡手動新增範圍（子網路頁「位址範圍（集區）」›「新增範圍」，用途選「DHCP 集區」）。
+
 ## [1.0.22] - 2026-11-11
 
 > **編輯 admin 帳號之後登不進去：** 1.0.21 以前可能把 admin 的 email 存成空白，而 email 空白的帳號登入會 HTTP 500。升級後就會修好；升級前要先登入的話，在 jt-ipam 主機上執行：`sudo -u postgres psql jt_ipam -c "UPDATE users SET email='admin@localhost' WHERE username='admin' AND email='';"`

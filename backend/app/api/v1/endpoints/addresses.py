@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import (
@@ -414,6 +414,54 @@ async def list_unmanaged(
     for r in rows:
         r["vendor"] = vendors.get(mac_prefix(r["mac"]) or "") if r.get("mac") else None
     return rows
+
+
+@router.get("/unmanaged-summary")
+async def unmanaged_summary(
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """掃描代理最近看到、但 IPAM 沒有記錄的位址有幾個（看得到的子網路裡），給「IP 位址」總表的提示用。
+
+    客戶 2026-11-11：新站台開了掃描，IP 位址頁卻是空的 —— 掃描代理預設不自動收錄（未授權 IP 偵測才有意義），
+    掃到的只記成「未納管」，只在子網路頁出現，畫面上沒有任何地方說要去哪裡開。
+    一個分組查詢（不逐子網路算）；管理員另外附上有幾台代理開了自動收錄（一般帳號不給代理設定的資訊）。
+    """
+    from sqlalchemy import exists, func
+
+    from app.models.scan_agent import ScanAgent
+    from app.models.subnet import Subnet
+    from app.models.unmanaged_sighting import UnmanagedSighting
+    from app.services.permission import visible_ids
+    from app.services.unmanaged import GRID_WINDOW
+
+    since = datetime.now(UTC) - GRID_WINDOW
+    vis = await visible_ids(session, user=user, object_type="subnet", required="read")
+    host = func.host(UnmanagedSighting.ip)
+    registered = exists().where(IPAddress.subnet_id == UnmanagedSighting.subnet_id, func.host(IPAddress.ip) == host)
+    n = func.count(func.distinct(host))
+    stmt = (select(UnmanagedSighting.subnet_id, Subnet.cidr, n.label("n"))
+            .join(Subnet, Subnet.id == UnmanagedSighting.subnet_id)
+            .where(UnmanagedSighting.source == "scanner", UnmanagedSighting.last_seen_at >= since,
+                   Subnet.archived_at.is_(None), ~registered)
+            .group_by(UnmanagedSighting.subnet_id, Subnet.cidr)
+            .order_by(n.desc(), Subnet.cidr))
+    if vis is not None:
+        if not vis:
+            return {"count": 0, "subnets": [], "agents_total": None, "agents_auto_create": None}
+        stmt = stmt.where(in_values(UnmanagedSighting.subnet_id, vis))
+    rows = (await session.execute(stmt)).all()
+    agents_total = agents_auto = None
+    if user.is_admin:
+        agents_total = int(await session.scalar(select(func.count()).select_from(ScanAgent)) or 0)
+        agents_auto = int(await session.scalar(
+            select(func.count()).select_from(ScanAgent).where(ScanAgent.auto_create_ips.is_(True))) or 0)
+    return {
+        "count": sum(int(r.n) for r in rows),
+        "subnets": [{"subnet_id": str(r.subnet_id), "cidr": str(r.cidr), "count": int(r.n)} for r in rows[:5]],
+        "agents_total": agents_total,
+        "agents_auto_create": agents_auto,
+    }
 
 
 @router.get("/export.csv")

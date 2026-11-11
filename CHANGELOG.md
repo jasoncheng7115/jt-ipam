@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [Unreleased]
+
+### Changed
+- **The IP addresses page points out unmanaged addresses** (a customer's new site had scanning on and an empty IP list, with nothing saying why). When scan agents have seen addresses that have no IP record, a note says how many and where, how to record them automatically ("Record unregistered IPs automatically" on the scan agent, off by default so that unauthorised-IP detection works) and links to the scan agents and the subnets. It can be closed and stays closed in that browser. New endpoint `GET /api/v1/addresses/unmanaged-summary`.
+- The "Unmanaged" legend of the subnet IP grid names that setting and where it is; the "exclude DHCP ranges" options of the dashboard trend and DNS compare groups say where to add a DHCP range by hand for a DHCP server without an integration (subnet page, "Address ranges (pools)" > "Add range", purpose "DHCP pool").
+
 ## [1.0.22] - 2026-11-11
 
 > **If you cannot sign in after editing the admin account:** 1.0.21 and earlier could leave the admin email empty, and an account with an empty email gets HTTP 500 at sign-in. Upgrading fixes it. To get back in before upgrading, run on the jt-ipam host: `sudo -u postgres psql jt_ipam -c "UPDATE users SET email='admin@localhost' WHERE username='admin' AND email='';"`

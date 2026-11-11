@@ -15,18 +15,19 @@ import {
   NPopconfirm,
   NTooltip,
   NProgress,
+  NAlert,
   useMessage,
   type DataTableColumns,
   type SelectOption,
   type DataTableRowKey,
 } from "naive-ui";
-import { listAddresses, bulkDeleteAddresses } from "@/api/addresses";
+import { listAddresses, bulkDeleteAddresses, getUnmanagedSummary, type UnmanagedSummary } from "@/api/addresses";
 import { listSubnets, getSubnetUsage } from "@/api/subnets";
 import type { SubnetUsage } from "@/types";
 import { listSections } from "@/api/sections";
 import { useCustomers } from "@/composables/useCustomers";
 import type { IPAddress, Subnet } from "@/types";
-import { AddressesIcon, RefreshIcon, DeleteIcon, DevicesIcon, CancelIcon } from "@/icons";
+import { AddressesIcon, RefreshIcon, DeleteIcon, DevicesIcon, CancelIcon, ScanAgentsIcon, SubnetsIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import { useBulkCreateDevices } from "@/composables/useBulkCreateDevices";
 import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
@@ -448,7 +449,20 @@ async function refresh() {
 let pendingOpenId: string | null =
   typeof route.query.open === "string" ? route.query.open : null;
 
+// 掃描代理看到、但沒有紀錄的位址（客戶 2026-11-11：新站台開了掃描，這頁卻是空的，不知道要去哪裡開）。
+// 預設不自動收錄是刻意的（未授權 IP 偵測），所以只提示、可以關掉；關掉存在這台瀏覽器
+const UM_HINT_KEY = "unmanaged_hint_dismissed";
+const umSummary = ref<UnmanagedSummary | null>(null);
+const umHintDismissed = ref(false);
+try { umHintDismissed.value = localStorage.getItem(UM_HINT_KEY) === "1"; } catch { /* 私密視窗 */ }
+const showUmHint = computed(() => !umHintDismissed.value && (umSummary.value?.count ?? 0) > 0);
+function dismissUmHint() {
+  umHintDismissed.value = true;
+  try { localStorage.setItem(UM_HINT_KEY, "1"); } catch { /* 私密視窗 */ }
+}
+
 onMounted(() => {
+  getUnmanagedSummary().then((s) => { umSummary.value = s; }).catch(() => { umSummary.value = null; });
   void loadDhcpRanges();
   void loadSubnets();
   void loadSections();
@@ -465,6 +479,23 @@ onMounted(() => {
         <span>{{ t("nav.addresses") }}</span>
       </n-space>
     </template>
+    <n-alert v-if="showUmHint && umSummary" type="info" :bordered="false" closable style="margin-bottom: 12px"
+             data-testid="unmanaged-hint" @close="dismissUmHint">
+      <div>{{ t("addresses.um_hint", { n: umSummary.count }) }}</div>
+      <div style="margin-top: 4px">{{ isAdmin ? t("addresses.um_hint_admin") : t("addresses.um_hint_user") }}</div>
+      <n-space size="small" style="margin-top: 8px" :wrap-item="false">
+        <n-button v-if="isAdmin" size="small" type="primary" ghost data-testid="unmanaged-hint-agents"
+                  @click="router.push({ name: 'scan_agents' })">
+          <template #icon><n-icon><ScanAgentsIcon /></n-icon></template>
+          {{ t("addresses.um_hint_go_agents") }}
+        </n-button>
+        <n-button v-for="sn in umSummary.subnets" :key="sn.subnet_id" size="small"
+                  @click="router.push({ name: 'subnet-detail', params: { id: sn.subnet_id } })">
+          <template #icon><n-icon><SubnetsIcon /></n-icon></template>
+          {{ t("addresses.um_hint_subnet", { cidr: sn.cidr, n: sn.count }) }}
+        </n-button>
+      </n-space>
+    </n-alert>
     <n-space style="margin-bottom: 12px" align="center">
       <n-button @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
