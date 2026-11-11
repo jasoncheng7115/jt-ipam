@@ -380,6 +380,7 @@
     "search": "検索…",
     "language": "言語",
     "theme": {
+      "striped_rows": "表の行を交互に色分け",
       "light": "ライト",
       "dark": "ダーク",
       "auto": "自動"

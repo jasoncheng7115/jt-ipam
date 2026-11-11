@@ -46,7 +46,7 @@ import {
   ScanAgentsIcon, SnmpIcon, WebhooksIcon, LockIcon, KeyIcon,
   MigrationIcon, ImportIcon, PluginsIcon, ExportIcon, TerminalIcon, TestIcon,
   // topbar / user menu
-  LogoutIcon, AccountIcon, LanguageIcon, ThemeDarkIcon, ThemeLightIcon, ThemeAutoIcon, MenuIcon,
+  LogoutIcon, AccountIcon, LanguageIcon, ThemeDarkIcon, ThemeLightIcon, ThemeAutoIcon, MenuIcon, CheckIcon, ListIcon,
   renderIcon, GoToIcon,
 } from "@/icons";
 import { User as UserOutline } from "@iconoir/vue";
@@ -440,14 +440,23 @@ const themeOptions = computed(() => [
 // 窄螢幕時語言 / 佈景改用 icon 觸發的下拉（n-dropdown 用 key）
 const localeMenuOptions = computed(() => localeOptions.map((o) => ({ label: o.label, key: o.value })));
 // 選單項目也要有圖示（使用者 2026-10-20），跟按鈕上的圖示同一套
-const themeMenuOptions = computed(() => themeOptions.value.map((o) => ({
-  label: o.label, key: o.value, icon: renderIcon(THEME_ICONS[o.value]) })));
+const themeMenuOptions = computed(() => [
+  ...themeOptions.value.map((o) => ({ label: o.label, key: o.value, icon: renderIcon(THEME_ICONS[o.value]) })),
+  // 表格隔行底色（客戶 2026-11-11：淺色一整片白，資料多時眼睛難對焦）：放在佈景選單裡，跟淺色／深色同一個地方，
+  // 一鍵切換；每個人、每台瀏覽器自己決定（localStorage）。開著的時候圖示是勾勾
+  { type: "divider", key: "d-striped" },
+  { label: t("topbar.theme.striped_rows"), key: "striped", props: { "data-testid": "theme-striped-rows" } as never,
+    icon: renderIcon(ui.stripedRows ? CheckIcon : ListIcon) },
+]);
 const currentLocaleLabel = computed(() => localeOptions.find((o) => o.value === locale.value)?.label ?? "");
 const currentThemeLabel = computed(() => themeOptions.value.find((o) => o.value === theme.value)?.label ?? "");
 const currentThemeIcon = computed(() => THEME_ICONS[theme.value as keyof typeof THEME_ICONS] ?? ThemeLightIcon);
 // n-dropdown @select 會帶 (key, option)，需包一層只取 key（避免把 option 當成 setLocale 的第二參數）
 function pickLocale(k: string | number) { ui.setLocale(String(k) as "zh-TW" | "en-US" | "ja-JP"); }
-function pickTheme(k: string | number) { ui.setTheme(String(k) as "light" | "dark" | "auto"); }
+function pickTheme(k: string | number) {
+  if (k === "striped") { ui.setStripedRows(!ui.stripedRows); return; }
+  ui.setTheme(String(k) as "light" | "dark" | "auto");
+}
 
 const userMenuOptions = computed(() => [
   { label: t("topbar.user_menu.profile"),     key: "profile",     icon: renderIcon(UserOutline, 16) },

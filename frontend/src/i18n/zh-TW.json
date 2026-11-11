@@ -380,6 +380,7 @@
     "search": "搜尋…",
     "language": "語言",
     "theme": {
+      "striped_rows": "表格隔行底色",
       "light": "淺色",
       "dark": "深色",
       "auto": "自動"

@@ -380,6 +380,7 @@
     "search": "Search…",
     "language": "Language",
     "theme": {
+      "striped_rows": "Striped table rows",
       "light": "Light",
       "dark": "Dark",
       "auto": "Auto"

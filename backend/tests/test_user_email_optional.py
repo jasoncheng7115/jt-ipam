@@ -77,3 +77,26 @@ async def test_ldap_user_without_email_gets_none_invented(db_session, admin_user
                                        actor_ip=None, actor_user_agent=None, request_id=None)
     row = await db_session.get(User, user.id)
     assert row.email == ""
+
+
+async def test_account_without_email_can_log_in(client, auth_headers) -> None:
+    """2026-11-11 客戶：清空 email 之後登入 500 —— /me 的格式還要求 email 至少 3 個字元。
+    以前只驗了「建得起來」，沒驗「登得進去」。"""
+    body = _body()
+    assert (await client.post("/api/v1/users", json=body, headers=auth_headers)).status_code == 201
+    r = await client.post("/api/v1/auth/login", json={"username": body["username"], "password": body["password"]})
+    assert r.status_code == 200, r.text
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {r.json()['access_token']}"})
+    assert me.status_code == 200, me.text
+    assert me.json()["email"] == ""
+
+
+@pytest.mark.parametrize("addr", ["admin@localhost", "admin@local", "ops@lan"])
+async def test_internal_single_label_domains_are_accepted(client, auth_headers, addr) -> None:
+    """安裝程式建的 admin 預設是 admin@localhost：網域沒有「.」也要過，否則改密碼時連帶被 email 擋下
+    （客戶只好把 email 清空，結果就登不進去）。內部常見 .local / .lan 這類單段網域。"""
+    uid = (await client.post("/api/v1/users", json=_body(), headers=auth_headers)).json()["id"]
+    r = await client.patch(f"/api/v1/users/{uid}", json={"email": addr, "password": "AnotherPassword2026!"},
+                           headers=auth_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["email"] == addr

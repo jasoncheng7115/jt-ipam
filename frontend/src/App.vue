@@ -112,7 +112,11 @@ const lightOverrides = {
   LayoutHeader: { color: "#ffffff", borderColor: "#e6e9f0" },
   Card: { color: "#ffffff", borderColor: "#e8ebf2" },
   Menu: _menuActive,
-  DataTable: { thColor: TH_LIGHT, borderColor: "#eef1f6", tdColorHover: "#f7f9fc" },
+  // 隔行色只在使用者打開「表格隔行底色」時才用到（App.vue 下方的 html[data-striped] 規則）。
+  // naive 預設的太淡、幾乎看不出來；要不透明，固定在右側的操作欄才不會透出底下的欄位
+  DataTable: { thColor: TH_LIGHT, borderColor: "#eef1f6", tdColorHover: "#f7f9fc",
+               tdColorStriped: "#f4f7fb", tdColorStripedModal: "#f4f7fb", tdColorStripedPopover: "#f4f7fb" },
+  Table: { tdColorStriped: "#f4f7fb", tdColorStripedModal: "#f4f7fb", tdColorStripedPopover: "#f4f7fb" },
   Radio: _radioShape,
   Tabs: { ..._tabsShape, tabTextColorActiveLine: PRIMARY, tabTextColorActiveBar: PRIMARY, barColor: PRIMARY,
           tabTextColorLine: "#334155", tabTextColorBar: "#334155" },
@@ -157,7 +161,9 @@ const darkOverrides = {
     itemTextColorChildActive: "#34d399",
     itemIconColorChildActive: "#34d399",
   },
-  DataTable: { thColor: TH_DARK_BASE, borderColor: "rgba(255,255,255,0.07)", tdColorHover: "rgba(255,255,255,0.04)" },
+  DataTable: { thColor: TH_DARK_BASE, borderColor: "rgba(255,255,255,0.07)", tdColorHover: "rgba(255,255,255,0.04)",
+               tdColorStriped: "#152131", tdColorStripedModal: "#152131", tdColorStripedPopover: "#152131" },
+  Table: { tdColorStriped: "#152131", tdColorStripedModal: "#152131", tdColorStripedPopover: "#152131" },
   Radio: _radioShape,
   Tabs: { ..._tabsShape, tabTextColorActiveLine: "#34d399", tabTextColorActiveBar: "#34d399", barColor: "#34d399",
           tabTextColorLine: "#c3cfdf", tabTextColorBar: "#c3cfdf" },
@@ -235,6 +241,18 @@ html[data-theme="dark"] { --jt-tabs-strip: rgba(148, 197, 255, 0.05); --jt-tabs-
 /* 標題在左的描述表格：標題不折字（iPad 寬度下「CIDR」「閘道」被擠成一字一行），寬度讓內容欄去換行。
    手機版另外改成上下排（下面 640px 的區塊會蓋過這條） */
 .n-descriptions.n-descriptions--left-label-placement .n-descriptions-table-header { white-space: nowrap; }
+
+/* 表格隔行底色（客戶 2026-11-11：淺色一整片白，資料多時眼睛難對焦）。每個人在右上角佈景選單自己開，存在瀏覽器。
+   顏色用表格本身的隔行色變數（上方 themeOverrides），跟著淺色／深色／對話框換色；滑過那一列用比隔行色深的顏色 */
+html { --jt-stripe-hover: #e9f0f8; }
+html[data-theme="dark"] { --jt-stripe-hover: #1b2a3d; }
+html[data-striped="1"] .n-data-table .n-data-table-tbody .n-data-table-tr:not(.n-data-table-tr--summary):nth-child(even) > .n-data-table-td {
+  background-color: var(--n-merged-td-color-striped);
+}
+html[data-striped="1"] .n-data-table .n-data-table-tbody .n-data-table-tr:not(.n-data-table-tr--summary):hover > .n-data-table-td {
+  background-color: var(--jt-stripe-hover);
+}
+html[data-striped="1"] .n-table tbody tr:nth-child(even) > td { background-color: var(--n-td-color-striped); }
 
 /* 卡片柔和陰影：淺色模式給層次感（深色靠表面/邊框對比，黑陰影本就不明顯） */
 .n-card { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 6px rgba(16, 24, 40, 0.05); }

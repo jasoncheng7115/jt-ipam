@@ -4,13 +4,30 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
-## [Unreleased]
+## [1.0.22] - 2026-11-11
+
+> **If you cannot sign in after editing the admin account:** 1.0.21 and earlier could leave the admin email empty, and an account with an empty email gets HTTP 500 at sign-in. Upgrading fixes it. To get back in before upgrading, run on the jt-ipam host: `sudo -u postgres psql jt_ipam -c "UPDATE users SET email='admin@localhost' WHERE username='admin' AND email='';"`
 
 ### Fixed
-- NAT rules: the source IP, destination IP and device pickers only loaded the first page (500 addresses, 200 devices), so on larger sites the rest could not be picked or even found by typing ([#58](https://github.com/jasoncheng7115/jt-ipam/issues/58)). They now search on the server and, when editing, look up the selected one if it is not among the first results. The table shows addresses and device names from the list API instead of an 8-character ID.
+
+#### Accounts
+- **An account without an email could not sign in** (HTTP 500). Email has been optional since 1.0.16, but the signed-in user's data still required at least three characters.
+- Saving a user (for example to change the password) rejected the installer's default admin email `admin@localhost`, because the check wanted a dot in the domain; clearing the field to get past it then led to the sign-in error above.
+  - Single-label internal domains such as `@localhost`, `@local` and `@lan` are accepted.
+
+#### NAT rules ([#58](https://github.com/jasoncheng7115/jt-ipam/issues/58))
+- The source IP, destination IP and device pickers loaded only the first page (500 addresses, 200 devices), so on larger sites the rest could not be picked or found by typing.
+  - They now search on the server, and when editing they look up the selected one if it is not among the first results.
+- The table shows addresses and device names from the list API instead of an 8-character ID.
 
 ### Changed
-- CubeCOS / OpenStack integration is no longer marked Beta: the CubeCOS developers tested it with jt-ipam. The integration page, README, feature list, integration guide and API manual say so; plain OpenStack remains verified against DevStack.
+
+#### Striped table rows
+- "Striped table rows" in the theme menu at the top right tints every other row, which makes long lists easier to follow in the light theme.
+- Off by default and stored in the browser, so each person decides; works in both themes, fixed columns stay opaque and hovering still highlights a row.
+
+#### Integrations
+- CubeCOS / OpenStack is no longer marked Beta: the CubeCOS developers tested it with jt-ipam. Plain OpenStack remains verified against DevStack.
 
 ## [1.0.21] - 2026-11-08
 

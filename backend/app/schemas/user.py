@@ -16,8 +16,9 @@ class UserMe(StrictModel):
 
     id: uuid.UUID
     username: str
-    # 不用 EmailStr — 內部部署常用 .local / .lan TLD（reserved domains）
-    email: Annotated[str, StringConstraints(min_length=3, max_length=255)]
+    # 不用 EmailStr — 內部部署常用 .local / .lan TLD（reserved domains）。
+    # 可以是空的：email 從 2026-10-22 起是選用的，以前這裡還要求至少 3 個字元，沒填 email 的帳號一登入就 500
+    email: Annotated[str, StringConstraints(max_length=255)]
     display_name: str | None
     auth_provider: str
     is_active: bool

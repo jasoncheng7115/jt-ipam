@@ -2457,6 +2457,10 @@ happy path of "an upload succeeded" is not enough.
 
 ## 8. Recent feature spot-checks
 
+- [ ] **Striped table rows** (`e2e/striped-rows.spec.ts`, `src/stores/__tests__/stripedRows.test.ts`): from the theme menu, even rows get a tint including the fixed action column; it survives a reload; turning it off restores; check the dark theme too
+
+- [ ] **Accounts without email sign in; the default admin email saves** (`tests/test_user_email_optional.py`): an account with no email signs in and /me is 200; editing admin (email admin@localhost) to change only the password saves
+
 - [ ] **NAT IP / device pickers beyond one page** (#58, `e2e/nat-ip-picker.spec.ts`, `tests/test_nat_list_names.py`): with over 500 addresses, typing finds ones beyond the first page; editing shows the selected address; the table shows addresses and device names, not IDs
 
 - [ ] **Windows certificate agent on Chinese Windows** (`tests/test_powershell_agents.py`): .ps1 files are plain ASCII; one real run on Traditional Chinese Windows (PowerShell 5.1): pins by itself, follows a signed certificate change, refuses forged ones

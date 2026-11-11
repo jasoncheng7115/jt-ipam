@@ -19,10 +19,13 @@ export const useUiStore = defineStore("ui", () => {
     "zh-TW";
 
   const storedPageSize = Number(localStorage.getItem("page_size")) || 50;
+  // 表格隔行底色（客戶 2026-11-11：淺色一整片白，資料多時眼睛難對焦）。每個人、每台瀏覽器自己決定，預設關
+  const storedStriped = localStorage.getItem("table_striped") === "1";
 
   const theme = ref<Theme>(storedTheme);
   const locale = ref<Locale>(storedLocale);
   const pageSize = ref<number>(storedPageSize);
+  const stripedRows = ref<boolean>(storedStriped);
   const systemDark = ref<boolean>(detectSystemDark());
 
   if (typeof window !== "undefined") {
@@ -72,6 +75,11 @@ export const useUiStore = defineStore("ui", () => {
     if (persist) void persistPref({ page_size: value });
   }
 
+  function setStripedRows(value: boolean) {
+    stripedRows.value = value;
+    localStorage.setItem("table_striped", value ? "1" : "0");
+  }
+
   // 啟動 / 登入後呼叫：用後端偏好覆寫本地（跨裝置同步），不回寫。
   async function hydrateFromServer() {
     if (!getAccessToken()) return;
@@ -95,5 +103,13 @@ export const useUiStore = defineStore("ui", () => {
     { immediate: true },
   );
 
-  return { theme, locale, pageSize, effectiveTheme, setTheme, setLocale, setPageSize, hydrateFromServer };
+  // <html data-striped="1">：全站表格的偶數列套用表格本身的隔行色（App.vue）
+  watch(stripedRows, (on) => {
+    if (typeof document === "undefined") return;
+    if (on) document.documentElement.dataset.striped = "1";
+    else delete document.documentElement.dataset.striped;
+  }, { immediate: true });
+
+  return { theme, locale, pageSize, stripedRows, effectiveTheme, setTheme, setLocale, setPageSize, setStripedRows,
+           hydrateFromServer };
 });

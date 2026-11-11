@@ -59,7 +59,9 @@ class UserRead(StrictModel):
         return str(v).split("/", 1)[0]
 
 
-_EMAIL_RE = __import__("re").compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# 網域不要求有「.」：安裝程式建的 admin 是 admin@localhost，內部也常用 .local / .lan 這類單段網域
+# （2026-11-11 客戶：改密碼時預設 email 被擋，只好清空，結果登不進去）
+_EMAIL_RE = __import__("re").compile(r"^[^@\s]+@[^@\s.][^@\s]*$")
 
 
 def _clean_email(v: str | None) -> str:

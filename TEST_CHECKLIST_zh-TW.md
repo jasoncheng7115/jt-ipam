@@ -1791,6 +1791,10 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 ## 8. 近期功能點檢
 
+- [ ] **表格隔行底色**（`e2e/striped-rows.spec.ts`、`src/stores/__tests__/stripedRows.test.ts`）：佈景選單打開後偶數列有底色、右側操作欄同色；重新整理還在；關掉恢復；深色主題也看一次
+
+- [ ] **email 空白的帳號能登入、預設 admin email 存得進去**（`tests/test_user_email_optional.py`）：建一個沒有 email 的帳號登入 → /me 200；編輯 admin（email 是 admin@localhost）只改密碼 → 存得進去
+
 - [ ] **NAT 的 IP / 裝置選單超過一頁**（#58，`e2e/nat-ip-picker.spec.ts`、`tests/test_nat_list_names.py`）：IP 超過 500 個時打字搜尋選得到不在第一頁的；編輯時已選的顯示位址；表格顯示位址與裝置名稱不是 ID
 
 - [ ] **Windows 派送代理在中文版 Windows**（`tests/test_powershell_agents.py`）：.ps1 只用 ASCII；在繁中 Windows（PowerShell 5.1）實際跑一次：自動釘選、跟上簽過章的換證、拒絕冒牌

@@ -4,13 +4,30 @@
 [Keep a Changelog](https://keepachangelog.com/)；版本對應
 `frontend/package.json` / `backend/app/version.py`。
 
-## [Unreleased]
+## [1.0.22] - 2026-11-11
+
+> **編輯 admin 帳號之後登不進去：** 1.0.21 以前可能把 admin 的 email 存成空白，而 email 空白的帳號登入會 HTTP 500。升級後就會修好；升級前要先登入的話，在 jt-ipam 主機上執行：`sudo -u postgres psql jt_ipam -c "UPDATE users SET email='admin@localhost' WHERE username='admin' AND email='';"`
 
 ### 修正
-- NAT 規則：來源 IP、目的 IP 與裝置的下拉只載第一頁（500 個位址、200 台裝置），站台大一點時後面的選不到，打字也搜不到（[#58](https://github.com/jasoncheng7115/jt-ipam/issues/58)）。現在改成到後端搜尋，編輯時已選的那筆不在第一批結果裡也會補抓；表格上的位址與裝置名稱由清單 API 帶，不再顯示 ID 前 8 碼。
+
+#### 帳號
+- **沒有 email 的帳號無法登入**（HTTP 500）。email 從 1.0.16 起是選填，但登入後回傳的使用者資料仍要求至少 3 個字元。
+- 儲存使用者（例如改密碼）時，安裝程式預設的 admin email `admin@localhost` 被判成格式錯誤，因為檢查要求網域要有「.」；把 email 清空才存得進去，結果就踩到上面的登入錯誤。
+  - 現在接受 `@localhost`、`@local`、`@lan` 這類單段的內部網域。
+
+#### NAT 規則（[#58](https://github.com/jasoncheng7115/jt-ipam/issues/58)）
+- 來源 IP、目的 IP 與裝置的下拉只載第一頁（500 個位址、200 台裝置），站台大一點時後面的選不到，打字也搜不到。
+  - 現在改到後端搜尋；編輯時已選的那筆不在第一批結果裡也會補抓。
+- 表格上的位址與裝置名稱由清單 API 帶，不再顯示 ID 前 8 碼。
 
 ### 變更
-- CubeCOS / OpenStack 整合不再標示 Beta：CubeCOS 開發團隊已實際搭配 jt-ipam 測試過。整合頁、README、功能列表、整合說明與 API 手冊都已更新；一般 OpenStack 仍以 DevStack 驗證。
+
+#### 表格隔行底色
+- 右上角佈景選單的「表格隔行底色」讓表格一行白、一行淡色，淺色主題下資料很多時比較好對焦。
+- 預設關閉、存在瀏覽器，每個人自己決定；淺色、深色都適用，固定欄位不透明，滑過整列照樣反白。
+
+#### 整合
+- CubeCOS / OpenStack 不再標示 Beta：CubeCOS 開發團隊已實際搭配 jt-ipam 測試。一般 OpenStack 仍以 DevStack 驗證。
 
 ## [1.0.21] - 2026-11-08
 
