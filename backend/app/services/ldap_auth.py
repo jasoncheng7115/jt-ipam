@@ -112,6 +112,10 @@ class LDAPUserInfo:
     display_name: str | None
     is_admin: bool   # 透過 admin_groups 判定
     raw_attrs: dict[str, Any]
+    #: 目錄回的直接所屬群組（memberOf），給「測試登入」顯示
+    groups: list[str] | None = None
+    #: 判定成管理員是靠哪一個設定值、怎麼比對到的（direct / name / nested）；沒比對到是 None
+    admin_via: dict[str, str] | None = None
 
 
 def normalize_dn(dn: str | None) -> str:
@@ -278,6 +282,66 @@ def _bind_admin_conn(cfg: LdapConfig, server: Server) -> Connection:
     return conn
 
 
+#: AD 的 LDAP_MATCHING_RULE_IN_CHAIN：連巢狀群組一起比對（memberOf 只列直接所屬的群組）
+_IN_CHAIN = "1.2.840.113556.1.4.1941"
+
+
+def _first_rdn_value(dn: str) -> str:
+    """`CN=IPAM Admins,OU=Groups,DC=corp` → `IPAM Admins`（跳脫的逗號不切）。"""
+    m = re.match(r"\s*[^=]+=((?:\\.|[^,\\])*)", dn or "")
+    return m.group(1).replace("\\", "").strip() if m else ""
+
+
+def _dc_root(dn: str) -> str:
+    return ",".join(p for p in normalize_dn(dn).split(",") if p.lower().startswith("dc="))
+
+
+def resolve_admin(cfg: LdapConfig, conn: Any, user_dn: str, groups: list[str]) -> dict[str, str] | None:
+    """依「管理員群組」設定判斷是不是管理員；比對到回 {group, via}，沒有回 None。
+
+    客戶 2026-11-12：設了對應，登入登出都沒有變成管理員。以前只認「完整 DN、而且是直接所屬」：
+    - 設定值寫群組名稱（`IPAM-Admins`）而不是 DN → 永遠比對不到 → 現在不含 `=` 的值當名稱，比對群組 DN 的第一段
+    - 使用者是經由別的群組間接屬於管理員群組 → memberOf 只列直接所屬 → AD 改用 in-chain 比對規則再查一次
+      （OpenLDAP 不支援這個規則，查詢失敗就當沒比對到）
+    """
+    wanted = [g.strip() for g in cfg.admin_groups if g and g.strip()]
+    if not wanted:
+        return None
+    dns = {normalize_dn(g).lower(): g for g in wanted if "=" in g}
+    names = {g.lower(): g for g in wanted if "=" not in g}
+    for g in groups:
+        nd = normalize_dn(str(g)).lower()
+        if nd in dns:
+            return {"group": dns[nd], "via": "direct"}
+        cn = _first_rdn_value(str(g)).lower()
+        if cn and cn in names:
+            return {"group": names[cn], "via": "name"}
+    if conn is None:
+        return None
+    member = escape_filter_chars(user_dn)
+    for orig in dns.values():
+        try:
+            conn.search(search_base=normalize_dn(orig), search_filter=f"(member:{_IN_CHAIN}:={member})",
+                        search_scope=BASE, attributes=[], time_limit=int(cfg.timeout))
+            if conn.entries:
+                return {"group": orig, "via": "nested"}
+        except LDAPException:
+            continue
+    root = _dc_root(user_dn)
+    for orig in names.values():
+        if not root:
+            break
+        try:
+            conn.search(search_base=root, search_scope=SUBTREE, attributes=[], time_limit=int(cfg.timeout),
+                        size_limit=1, search_filter=(f"(&(objectClass=group)(cn={escape_filter_chars(orig)})"
+                                                     f"(member:{_IN_CHAIN}:={member}))"))
+            if conn.entries:
+                return {"group": orig, "via": "nested"}
+        except LDAPException:
+            continue
+    return None
+
+
 def _authenticate_sync(cfg: LdapConfig, username: str, password: str) -> LDAPUserInfo:
     if not cfg.search_base:
         raise LDAPNotConfigured("LDAP search base not set")
@@ -307,6 +371,9 @@ def _authenticate_sync(cfg: LdapConfig, username: str, password: str) -> LDAPUse
         entry = conn.entries[0]
         user_dn = entry.entry_dn
         attrs = entry.entry_attributes_as_dict
+        groups = [str(g) for g in (attrs.get(cfg.attr_member_of) or [])]
+        # 巢狀群組要用服務帳號再查一次，所以趁連線還開著先判斷（密碼錯的話結果不會被用到）
+        admin_via = resolve_admin(cfg, conn, user_dn, groups)
     finally:
         try:
             conn.unbind()
@@ -345,10 +412,8 @@ def _authenticate_sync(cfg: LdapConfig, username: str, password: str) -> LDAPUse
     # 3. 解析屬性
     email = (attrs.get(cfg.attr_email) or [None])[0]
     display_name = (attrs.get(cfg.attr_display_name) or [None])[0]
-    groups = attrs.get(cfg.attr_member_of) or []
-    # 群組 DN 比對前都正規化並忽略大小寫：設定裡手打的常有逗號後空白，AD 回來的 memberOf 沒有
-    wanted = {normalize_dn(g).lower() for g in cfg.admin_groups if g}
-    is_admin = any(normalize_dn(str(g)).lower() in wanted for g in groups)
+    # 群組 DN 比對前都正規化並忽略大小寫：設定裡手打的常有逗號後空白，AD 回來的 memberOf 沒有（resolve_admin）
+    is_admin = admin_via is not None
 
     return LDAPUserInfo(
         dn=user_dn,
@@ -357,6 +422,8 @@ def _authenticate_sync(cfg: LdapConfig, username: str, password: str) -> LDAPUse
         display_name=display_name,
         is_admin=is_admin,
         raw_attrs=attrs,
+        groups=groups,
+        admin_via=admin_via,
     )
 
 

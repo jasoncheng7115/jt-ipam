@@ -227,7 +227,8 @@ onMounted(() => {
         <template #icon><n-icon><RefreshIcon /></n-icon></template>
         {{ t("common.refresh") }}
       </n-button>
-      <n-button type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openCreate">
+      <n-button type="primary" :disabled="!_authBtn.canCreate('location')"
+                :title="_authBtn.canCreate('location') ? undefined : t('errors.create_needs_write')" @click="openCreate">
         <template #icon><n-icon><PlusIcon /></n-icon></template>
         {{ t("common.create") }}
       </n-button>

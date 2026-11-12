@@ -15,7 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
+from app.api.v1.dependencies import CurrentUser, require_object_perm
+from app.api.v1.write_guards import require_create, require_move, require_visible
 from app.core.audit import append_audit
 from app.core.config import get_settings
 from app.core.db import get_session
@@ -32,6 +33,7 @@ from app.schemas.location import (
     RackRead,
     RackUpdate,
 )
+from app.services.permission import get_object_permission, has_permission
 
 router = APIRouter(tags=["locations"])
 
@@ -151,14 +153,15 @@ async def get_location(
     return LocationRead.model_validate(obj)
 
 
-@router.post("/locations", response_model=LocationRead, status_code=201,
-             dependencies=[Depends(require_admin)])
+@router.post("/locations", response_model=LocationRead, status_code=201)
 async def create_location(
     payload: LocationCreate,
     user: CurrentUser,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> LocationRead:
+    # 照角色授權（萬用的機房寫入權），不是只看「管理員」開關；單位只是顯示歸屬，要看得到
+    await require_create(session, user, "location", parents={"customer": payload.customer_id})
     obj = Location(**payload.model_dump())
     session.add(obj)
     try:
@@ -180,7 +183,7 @@ async def create_location(
 
 
 @router.patch("/locations/{location_id}", response_model=LocationRead,
-              dependencies=[Depends(require_admin)])
+              dependencies=[Depends(require_object_perm("location", "write", path_param="location_id"))])
 async def update_location(
     location_id: uuid.UUID,
     payload: LocationUpdate,
@@ -193,6 +196,8 @@ async def update_location(
         raise HTTPException(404, detail="Location not found")
     before = {"name": obj.name, "address": obj.address}
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("customer_id") != obj.customer_id:
+        await require_visible(session, user, "customer", changes.get("customer_id"), not_found="customer not found")
     for k, v in changes.items():
         setattr(obj, k, v)
     await append_audit(
@@ -210,7 +215,7 @@ async def update_location(
 
 
 @router.delete("/locations/{location_id}", status_code=204,
-               dependencies=[Depends(require_admin)])
+               dependencies=[Depends(require_object_perm("location", "admin", path_param="location_id"))])
 async def delete_location(
     location_id: uuid.UUID,
     user: CurrentUser,
@@ -235,7 +240,7 @@ async def delete_location(
 
 # ─────────────────── 機房平面圖 ───────────────────
 @router.post("/locations/{location_id}/floorplan", response_model=LocationRead,
-             dependencies=[Depends(require_admin)])
+             dependencies=[Depends(require_object_perm("location", "write", path_param="location_id"))])
 async def upload_floorplan(
     location_id: uuid.UUID,
     user: CurrentUser,
@@ -292,7 +297,7 @@ async def get_floorplan(
 
 
 @router.delete("/locations/{location_id}/floorplan", status_code=204,
-               dependencies=[Depends(require_admin)])
+               dependencies=[Depends(require_object_perm("location", "write", path_param="location_id"))])
 async def delete_floorplan(
     location_id: uuid.UUID,
     user: CurrentUser,
@@ -318,7 +323,7 @@ async def delete_floorplan(
 
 
 @router.put("/locations/{location_id}/rack-positions",
-            dependencies=[Depends(require_admin)])
+            dependencies=[Depends(require_object_perm("location", "write", path_param="location_id"))])
 async def set_rack_positions(
     location_id: uuid.UUID,
     payload: RackPositionsUpdate,
@@ -415,14 +420,15 @@ async def list_racks(
     )
 
 
-@router.post("/racks", response_model=RackRead, status_code=201,
-             dependencies=[Depends(require_admin)])
+@router.post("/racks", response_model=RackRead, status_code=201)
 async def create_rack(
     payload: RackCreate,
     user: CurrentUser,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> RackRead:
+    # 機櫃的萬用寫入權，或對選的機房有寫入權（被指派某個機房的人可以在那裡新增機櫃）
+    await require_create(session, user, "rack", parents={"location": payload.location_id})
     obj = Rack(**payload.model_dump())
     session.add(obj)
     await session.flush()
@@ -441,7 +447,7 @@ async def create_rack(
 
 
 @router.patch("/racks/{rack_id}", response_model=RackRead,
-              dependencies=[Depends(require_admin)])
+              dependencies=[Depends(require_object_perm("rack", "write", path_param="rack_id"))])
 async def update_rack(
     rack_id: uuid.UUID,
     payload: RackUpdate,
@@ -455,6 +461,11 @@ async def update_rack(
     before = {"name": obj.name, "u_height": obj.u_height,
               "location_id": str(obj.location_id) if obj.location_id else None}
     changes = payload.model_dump(exclude_unset=True)
+    if "location_id" in changes and changes["location_id"] != obj.location_id:
+        # 機房是機櫃的權限上層：搬過去要對機櫃 admin、對目的地 write（看不到的機房跟不存在一樣）
+        await require_visible(session, user, "location", changes["location_id"], not_found="location not found")
+        await require_move(session, user, object_type="rack", object_id=obj.id,
+                           dest_type="location", dest_id=changes["location_id"])
     # 縮小 U 高前防呆：不可低於既有裝置的最高 U
     if "u_height" in changes and changes["u_height"] < obj.u_height:
         from app.services.rack import RackPlacementError, assert_rack_height_ok
@@ -488,7 +499,7 @@ class RackLevelOp(StrictModel):
     dry_run: bool = False
 
 
-@router.post("/racks/{rack_id}/levels", dependencies=[Depends(require_admin)])
+@router.post("/racks/{rack_id}/levels", dependencies=[Depends(require_object_perm("rack", "write", path_param="rack_id"))])
 async def rack_level_op(
     rack_id: uuid.UUID,
     payload: RackLevelOp,
@@ -528,7 +539,7 @@ async def rack_level_op(
 
 
 @router.delete("/racks/{rack_id}", status_code=204,
-               dependencies=[Depends(require_admin)])
+               dependencies=[Depends(require_object_perm("rack", "admin", path_param="rack_id"))])
 async def delete_rack(
     rack_id: uuid.UUID,
     user: CurrentUser,
@@ -564,6 +575,9 @@ async def _bulk(session: AsyncSession, model_cls: type[Any], object_type: str, u
         obj = await session.get(model_cls, oid)
         if obj is None:
             errors.append({"id": str(oid), "error": "not_found"}); continue
+        if not has_permission(await get_object_permission(session, user=user, object_type=object_type,
+                                                          object_id=obj.id), "admin"):
+            errors.append({"id": str(oid), "error": "no_permission"}); continue
         await append_audit(
             session, actor_user_id=str(user.id),
             actor_ip=actor_ip, actor_user_agent=actor_ua,
@@ -577,7 +591,7 @@ async def _bulk(session: AsyncSession, model_cls: type[Any], object_type: str, u
     return {"deleted": deleted, "failed": len(errors), "errors": errors[:50]}
 
 
-@router.post("/locations/bulk-delete", dependencies=[Depends(require_admin)])
+@router.post("/locations/bulk-delete")
 async def bulk_delete_locations(
     payload: _BulkDelete, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -588,7 +602,7 @@ async def bulk_delete_locations(
         getattr(request.state, "request_id", None))
 
 
-@router.post("/racks/bulk-delete", dependencies=[Depends(require_admin)])
+@router.post("/racks/bulk-delete")
 async def bulk_delete_racks(
     payload: _BulkDelete, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],

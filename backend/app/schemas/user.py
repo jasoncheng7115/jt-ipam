@@ -35,6 +35,8 @@ class UserMe(StrictModel):
     has_global_read: bool = True
     # 是否擁有任一 write/admin 授權；前端用來反灰「新增/編輯/刪除」按鈕（純唯讀→False）
     can_edit: bool = True
+    # 可以新增的物件類型（照角色授權；2026-11-12 以前機房／機櫃／裝置的新增只看 is_admin）
+    create_types: list[str] = []
     # 獨立的「連線管理權限」：可對可檢視且已啟用 SSH/RDP 的 IP 開連線
     can_ssh: bool = False
     # 後端是否裝了 RDP/VNC 選用相依（aardwolf）；前端用來隱藏對應入口

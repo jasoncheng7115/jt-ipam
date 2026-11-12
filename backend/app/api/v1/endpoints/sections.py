@@ -12,10 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import (
     CurrentUser,
-    require_admin,
     require_object_perm,
 )
-from app.api.v1.write_guards import require_move, require_visible
+from app.api.v1.write_guards import require_create, require_move, require_visible
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.sqlin import in_values
@@ -23,7 +22,7 @@ from app.models.section import Section
 from app.models.subnet import Subnet
 from app.schemas.base import Paginated, StrictModel
 from app.schemas.section import SectionCreate, SectionRead, SectionUpdate
-from app.services.permission import visible_ids
+from app.services.permission import get_object_permission, has_permission, visible_ids
 
 
 async def _subnet_counts_by_section(
@@ -99,7 +98,6 @@ async def get_section(
     "",
     response_model=SectionRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],   # 建立 Section 限 admin（A01：頂層命名空間嚴格）
 )
 async def create_section(
     payload: SectionCreate,
@@ -107,6 +105,10 @@ async def create_section(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SectionRead:
+    # 區段是頂層命名空間（A01）：要萬用的區段寫入權（「系統管理員」角色有），不是只看「管理員」開關。
+    # 上層區段要看得到；單位是權限上層，要有寫入權
+    await require_create(session, user, "section", parents={"section": payload.parent_id},
+                         tenant=("customer", payload.customer_id), wildcard_only=True)
     section = Section(**payload.model_dump())
     session.add(section)
     try:
@@ -219,7 +221,7 @@ class _BulkDelete(StrictModel):
     ids: list[uuid.UUID]
 
 
-@router.post("/bulk-delete", dependencies=[Depends(require_admin)])
+@router.post("/bulk-delete")
 async def bulk_delete_sections(
     payload: _BulkDelete, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -235,6 +237,9 @@ async def bulk_delete_sections(
         s = await session.get(Section, sid)
         if s is None:
             errors.append({"id": str(sid), "error": "not_found"}); continue
+        if not has_permission(await get_object_permission(session, user=user, object_type="section",
+                                                          object_id=s.id), "admin"):
+            errors.append({"id": str(sid), "error": "no_permission"}); continue
         await append_audit(
             session, actor_user_id=str(user.id),
             actor_ip=actor_ip, actor_user_agent=actor_ua,

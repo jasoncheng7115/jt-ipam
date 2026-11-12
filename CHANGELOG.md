@@ -6,6 +6,17 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 
 ## [Unreleased]
 
+### Fixed
+- **Roles now count for rooms, racks, devices, customers and sections** (customer report: LDAP accounts in the built-in System administrator role could not add a rack, the button said admin was required, and only turning on the account's Admin switch helped). These write endpoints only looked at the Admin switch, so the grants that roles give were never used. Now:
+  - System administrator can add, edit and delete all of them; Network operator can add and edit devices (deleting needs admin on the device); a user granted one room can add racks and devices in that room.
+  - Adding needs write for that kind of item, or write on the parent you choose (a rack's room; a device's rack, room or customer). Sections, customers and rooms need it for the whole kind.
+  - A parent you cannot see is reported as not found; putting a device under a customer needs write on that customer; moving a rack to another room or a device to another customer needs admin on it and write on the destination.
+  - Bulk delete checks each item. Device import and leases stay admin-only.
+  - The Add buttons follow the same rule (new `create_types` in `GET /auth/me`) and, when disabled, say which permission is missing.
+- **LDAP admin groups match more ways** (same customer: admin groups were set, yet signing out and in left the account a regular user). Only the full DN of a group the user was directly in used to match. Now a line without `=` is a group name, and on Active Directory a user who is in the group through another group matches too.
+  - Test auth in System Settings shows whether the user is an admin, which setting matched and how, and the groups the directory returned.
+  - The Admin switch's note on external accounts says where the groups are set, that sign-in rewrites the switch, and that roles in Permissions are enough for managing data.
+
 ### Changed
 - **The IP addresses page points out unmanaged addresses** (a customer's new site had scanning on and an empty IP list, with nothing saying why). When scan agents have seen addresses that have no IP record, a note says how many and where, how to record them automatically ("Record unregistered IPs automatically" on the scan agent, off by default so that unauthorised-IP detection works) and links to the scan agents and the subnets. It can be closed and stays closed in that browser. New endpoint `GET /api/v1/addresses/unmanaged-summary`.
 - The "Unmanaged" legend of the subnet IP grid names that setting and where it is; the "exclude DHCP ranges" options of the dashboard trend and DNS compare groups say where to add a DHCP range by hand for a DHCP server without an integration (subnet page, "Address ranges (pools)" > "Add range", purpose "DHCP pool").

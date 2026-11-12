@@ -493,6 +493,7 @@ async def me(
         out.has_visibility = True
         out.has_global_read = True
         out.can_edit = True
+        out.create_types = ["customer", "section", "subnet", "ip", "device", "rack", "location"]
     else:
         from app.services.permission import has_any_write, visible_ids
         has_vis = False
@@ -507,6 +508,8 @@ async def me(
         out.has_visibility = has_vis
         out.has_global_read = has_global
         out.can_edit = await has_any_write(session, user=user)
+        from app.services.permission import creatable_types
+        out.create_types = await creatable_types(session, user=user)
     return out
 
 

@@ -2457,6 +2457,9 @@ happy path of "an upload succeeded" is not enough.
 
 ## 8. Recent feature spot-checks
 
+- [ ] **Roles manage rooms, racks and devices** (`tests/test_role_based_writes.py`, `e2e/role-based-writes.spec.ts`): a non-admin account in the System administrator role can add racks and devices; Network operator can add devices but not racks; for Read-only viewer, Add rack is disabled and says which permission is missing
+- [ ] **LDAP admin groups** (`tests/test_ldap_admin_groups.py`, `tests/test_ldap_real_directory.py` against Samba AD): a setting can be a DN or a group name; membership through a nested group counts; Test auth shows the match and the groups the directory returned
+
 - [ ] **Unmanaged note on the IP addresses page** (`e2e/unmanaged-hint.spec.ts`, `tests/test_unmanaged_summary.py`): with unrecorded sightings it shows the count, subnets and where the setting is; non-admins get no agent settings; once closed it stays closed
 
 - [ ] **Striped table rows** (`e2e/striped-rows.spec.ts`, `src/stores/__tests__/stripedRows.test.ts`): from the theme menu, even rows get a tint including the fixed action column; it survives a reload; turning it off restores; check the dark theme too

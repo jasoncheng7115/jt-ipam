@@ -31,7 +31,8 @@ docker exec jtipam-samba-dc bash -c "
   samba-tool user setpassword 'hv1\$' --newpassword='Hv1-Machine-Pass-2026!' >/dev/null
 "
 # LDAP／AD 登入的真機測試（tests/test_ldap_real_directory.py）：客戶的 AD 允許不加密的簡單綁定，Samba 預設不允許；
-# 測試用帳號 user07（顯示名稱有空白、屬於「IPAM Admins」群組，群組名稱也有空白）與 plain08
+# 測試用帳號 user07（顯示名稱有空白、屬於「IPAM Admins」群組，群組名稱也有空白）與 plain08；
+# nest09 只在「Net Team」裡，「Net Team」再是「IPAM Admins」的成員（巢狀群組：memberOf 只列直接所屬，客戶 2026-11-12）
 docker exec jtipam-samba-dc bash -c "grep -q 'require strong auth' /etc/samba/smb.conf || sed -i '/^\\[global\\]/a\\\\tldap server require strong auth = no' /etc/samba/smb.conf"
 docker restart jtipam-samba-dc >/dev/null
 for _ in $(seq 1 60); do
@@ -43,5 +44,9 @@ docker exec jtipam-samba-dc bash -c "
   samba-tool group add 'IPAM Admins' >/dev/null
   samba-tool group addmembers 'IPAM Admins' user07 >/dev/null
   samba-tool user create plain08 'Plain08-Pass-2026!' >/dev/null
+  samba-tool user create nest09 'Nest09-Pass-2026!' >/dev/null
+  samba-tool group add 'Net Team' >/dev/null
+  samba-tool group addmembers 'Net Team' nest09 >/dev/null
+  samba-tool group addmembers 'IPAM Admins' 'Net Team' >/dev/null
 "
 echo "KDC: $(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' jtipam-samba-dc)  realm CORP.TEST  user svc-ipam@CORP.TEST"

@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
+from app.api.v1.dependencies import CurrentUser, require_object_perm
+from app.api.v1.write_guards import require_create
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.sqlin import in_values
@@ -145,14 +146,15 @@ async def customer_summary(
     }
 
 
-@router.post("", response_model=CustomerRead, status_code=201,
-             dependencies=[Depends(require_admin)])
+@router.post("", response_model=CustomerRead, status_code=201)
 async def create_customer(
     payload: CustomerCreate,
     user: CurrentUser,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CustomerRead:
+    # 單位是最上層：只有萬用的單位寫入權（例如「系統管理員」角色）能新增
+    await require_create(session, user, "customer")
     obj = Customer(**payload.model_dump())
     session.add(obj)
     try:
@@ -175,7 +177,7 @@ async def create_customer(
 
 
 @router.patch("/{cid}", response_model=CustomerRead,
-              dependencies=[Depends(require_admin)])
+              dependencies=[Depends(require_object_perm("customer", "write", path_param="cid"))])
 async def update_customer(
     cid: uuid.UUID,
     payload: CustomerUpdate,
@@ -209,7 +211,7 @@ async def update_customer(
 
 
 @router.delete("/{cid}", status_code=204,
-               dependencies=[Depends(require_admin)])
+               dependencies=[Depends(require_object_perm("customer", "admin", path_param="cid"))])
 async def delete_customer(
     cid: uuid.UUID,
     user: CurrentUser,

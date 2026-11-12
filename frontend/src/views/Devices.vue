@@ -648,7 +648,8 @@ onMounted(async () => {
         <template #icon><n-icon><UploadIcon /></n-icon></template>
         {{ t("device_import.open") }}
       </n-button>
-      <n-button type="primary" :disabled="_authBtn.me?.can_edit === false" @click="openCreate">
+      <n-button type="primary" :disabled="!_authBtn.canCreate('device')"
+                :title="_authBtn.canCreate('device') ? undefined : t('errors.create_needs_write')" @click="openCreate">
         <template #icon><n-icon><PlusIcon /></n-icon></template>
         {{ t("common.create") }}
       </n-button>

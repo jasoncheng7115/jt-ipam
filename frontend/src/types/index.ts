@@ -21,6 +21,8 @@ export interface UserMe {
   has_visibility?: boolean;
   has_global_read?: boolean;
   can_edit?: boolean;
+  /** 可以新增的物件類型（照角色授權，例如「系統管理員」角色＝全部、「網路操作員」＝子網路／IP／裝置） */
+  create_types?: string[];
   ai_enabled?: boolean;
   /** 資料庫結構落後於程式（只給 admin）—— 落後時畫面會到處 500 */
   schema_behind?: boolean;

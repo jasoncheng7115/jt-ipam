@@ -165,6 +165,45 @@ async def has_any_write(session: AsyncSession, *, user: User) -> bool:
     return row is not None
 
 
+# 建立時可以掛的上層（write_guards.require_create 的 parents／tenant）；區段、單位、機房只看萬用授權
+_CREATE_PARENTS: dict[str, list[str]] = {
+    "customer": [], "section": [], "location": [],
+    "rack": ["location"],
+    "device": ["rack", "location", "customer"],
+    "subnet": ["section", "customer"],
+    "ip": ["subnet", "section", "customer"],
+}
+
+
+async def creatable_types(session: AsyncSession, *, user: User) -> list[str]:
+    """使用者可以新增哪些類型（前端決定「新增」按鈕能不能按）。
+
+    跟 require_create 同一套規則：這個類型（或它的上層類型）有萬用寫入權，或對某個可以掛的上層
+    （含那個上層的上層）有寫入權。只是決定按鈕，真正的判斷在端點。
+    """
+    if user.is_admin:
+        return list(_ALL_TYPES)
+    conds = _principal_conds(user, await _user_group_ids(session, user.id))
+    rows = (await session.execute(
+        select(Permission.object_type, Permission.object_id)
+        .where(or_(*conds), Permission.level.in_(("write", "admin")))
+    )).all()
+    wildcard = {t for t, oid in rows if oid is None}
+    scoped = {t for t, oid in rows if oid is not None}
+    out = []
+    for t in _ALL_TYPES:
+        if t in wildcard or set(_ANCESTOR_TYPES[t]) & wildcard:
+            out.append(t)
+            continue
+        reach: set[str] = set()
+        for p in _CREATE_PARENTS[t]:
+            reach.add(p)
+            reach.update(_ANCESTOR_TYPES[p])
+        if reach & scoped:
+            out.append(t)
+    return out
+
+
 async def can_use_ssh(session: AsyncSession, *, user: User, ip: Any) -> bool:
     """是否可對此 IP 開 SSH 終端機（deny-by-default）。
 

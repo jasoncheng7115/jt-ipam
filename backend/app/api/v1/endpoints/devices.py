@@ -13,7 +13,8 @@ from sqlalchemy import String, func, or_, select
 from sqlalchemy import false as sa_false
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_admin, require_object_perm
+from app.api.v1.dependencies import CurrentUser, require_object_perm
+from app.api.v1.write_guards import require_create, require_move, require_visible
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.os_fingerprint import wazuh_os_display
@@ -572,8 +573,23 @@ async def get_device(
     return d
 
 
-@router.post("", response_model=DeviceRead, status_code=201,
-             dependencies=[Depends(require_admin)])
+async def _can(session: AsyncSession, user: Any, object_type: str, object_id: uuid.UUID, level: str) -> bool:
+    from app.services.permission import get_object_permission, has_permission
+    return has_permission(await get_object_permission(session, user=user, object_type=object_type,  # type: ignore[arg-type]
+                                                       object_id=object_id), level)  # type: ignore[arg-type]
+
+
+async def _require_primary_ip_write(session: AsyncSession, user: Any, ip_id: uuid.UUID | None) -> None:
+    """設主要 IP 會順便把那個 IP 的裝置欄指回來＝改到 IP：看不到回 404，不能寫回 403。"""
+    if ip_id is None or user.is_admin:
+        return
+    await require_visible(session, user, "ip", ip_id, not_found="IP not found")
+    if not await _can(session, user, "ip", ip_id, "write"):
+        raise HTTPException(403, detail=ui_detail("primary_ip_write_required",
+                                                  "Write permission on the primary IP is required"))
+
+
+@router.post("", response_model=DeviceRead, status_code=201)
 async def create_device(
     payload: DeviceCreate,
     user: CurrentUser,
@@ -583,6 +599,11 @@ async def create_device(
     # 自訂欄位、類型來源、機櫃 U 位防呆、主要 IP 雙向連結：與 AI 工具 create_device 共用（services/device_write）
     from app.services.device_groups import GroupError
     from app.services.device_write import PlacementError, create_device_checked
+    # 照角色授權：裝置的萬用寫入權（系統管理員、網路操作員），或對選的機櫃／機房／單位有寫入權。
+    # 機櫃與機房要看得到；單位要能寫（不能把裝置塞進別人的範圍）
+    await require_create(session, user, "device", parents={"rack": payload.rack_id, "location": payload.location_id},
+                         tenant=("customer", payload.customer_id))
+    await _require_primary_ip_write(session, user, payload.primary_ip_id)
     try:
         obj = await create_device_checked(session, payload)
     except CustomFieldError as exc:
@@ -607,7 +628,7 @@ async def create_device(
 
 
 @router.patch("/{device_id}", response_model=DeviceRead,
-              dependencies=[Depends(require_admin)])
+              dependencies=[Depends(require_object_perm("device", "write", path_param="device_id"))])
 async def update_device(
     device_id: uuid.UUID,
     payload: DeviceUpdate,
@@ -620,6 +641,15 @@ async def update_device(
         raise HTTPException(404, detail="Device not found")
     before = {"name": obj.name, "type": obj.type, "vendor": obj.vendor, "model": obj.model}
     changes = payload.model_dump(exclude_unset=True)
+    # 換位置：機櫃與機房要看得到；換單位＝換權限上層，對裝置要 admin、對目的地要 write
+    for f, t in (("rack_id", "rack"), ("location_id", "location")):
+        if f in changes and changes[f] != getattr(obj, f):
+            await require_visible(session, user, t, changes[f], not_found=f"{t} not found")
+    if "customer_id" in changes and changes["customer_id"] != obj.customer_id:
+        await require_move(session, user, object_type="device", object_id=obj.id,
+                           dest_type="customer", dest_id=changes["customer_id"])
+    if changes.get("primary_ip_id") and changes["primary_ip_id"] != obj.primary_ip_id:
+        await _require_primary_ip_write(session, user, changes["primary_ip_id"])
     if "custom_fields" in changes:
         try:
             changes["custom_fields"] = await validate_custom_fields(
@@ -660,7 +690,8 @@ async def update_device(
     return DeviceRead.model_validate(obj)
 
 
-@router.delete("/{device_id}", status_code=204, dependencies=[Depends(require_admin)])
+@router.delete("/{device_id}", status_code=204,
+               dependencies=[Depends(require_object_perm("device", "admin", path_param="device_id"))])
 async def delete_device(
     device_id: uuid.UUID,
     user: CurrentUser,
@@ -691,7 +722,7 @@ class _DeviceBulkDeletePayload(StrictModel):
     ids: list[uuid.UUID]
 
 
-@router.post("/bulk-delete", dependencies=[Depends(require_admin)])
+@router.post("/bulk-delete")
 async def bulk_delete_devices(
     payload: _DeviceBulkDeletePayload,
     user: CurrentUser,
@@ -711,6 +742,8 @@ async def bulk_delete_devices(
         obj = await session.get(Device, did)
         if obj is None:
             errors.append({"id": str(did), "error": "not_found"}); continue
+        if not await _can(session, user, "device", obj.id, "admin"):
+            errors.append({"id": str(did), "error": "no_permission"}); continue
         await append_audit(
             session, actor_user_id=str(user.id),
             actor_ip=actor_ip, actor_user_agent=actor_ua,

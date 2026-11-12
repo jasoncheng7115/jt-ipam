@@ -120,9 +120,17 @@ export const useAuthStore = defineStore("auth", () => {
     clearTracked();
   }
 
+  /** 這個帳號能不能新增某一類物件（照角色授權，不是只看「管理員」開關；真正的判斷在後端） */
+  function canCreate(type: "customer" | "section" | "subnet" | "ip" | "device" | "rack" | "location"): boolean {
+    if (!me.value) return false;
+    if (me.value.is_admin) return true;
+    return (me.value.create_types ?? []).includes(type);
+  }
+
   return {
     accessToken,
     me,
+    canCreate,
     mfaToken,
     mfaSetup,
     pendingRecoveryCodes,

@@ -59,7 +59,16 @@ export async function testLdap(): Promise<{ bound: boolean; server: string; port
   const { data } = await apiClient.post("/api/v1/system/ldap/test", {});
   return data;
 }
-export async function testLdapAuth(username: string, password: string): Promise<{ ok: boolean; dn: string; username: string; display_name: string | null; email: string | null; is_admin: boolean }> {
+export interface LdapAuthTestResult {
+  ok: boolean; dn: string; username: string; display_name: string | null; email: string | null; is_admin: boolean;
+  /** 有沒有設定「管理員群組」；沒有＝管理員身分由使用者頁的開關決定 */
+  admin_groups_configured?: boolean;
+  /** 比對到的設定值與方式：direct（DN）／name（群組名稱）／nested（經由別的群組） */
+  admin_via?: { group: string; via: "direct" | "name" | "nested" } | null;
+  /** 目錄回的直接所屬群組 */
+  groups?: string[];
+}
+export async function testLdapAuth(username: string, password: string): Promise<LdapAuthTestResult> {
   const { data } = await apiClient.post("/api/v1/system/ldap/test-auth", { username, password });
   return data;
 }

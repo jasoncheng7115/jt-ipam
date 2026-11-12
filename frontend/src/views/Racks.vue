@@ -86,7 +86,8 @@ function togglePinRoom() {
     pinnedRoom.value = roomId.value; localStorage.setItem(PINNED_ROOM_KEY, roomId.value);
   }
 }
-const isAdmin = computed(() => !!auth.me?.is_admin);
+// 照角色授權（2026-11-12 客戶：掛「系統管理員」角色仍不能新增機櫃）；能不能改哪一座由後端判斷
+const isAdmin = computed(() => auth.canCreate("rack"));
 // 合併單卡模式：機房內所有機櫃排進同一張卡（不分卡片），存 localStorage（每瀏覽器）
 const MERGED_VIEW_KEY = "jt_rack_merged";
 const mergedView = ref<boolean>(localStorage.getItem(MERGED_VIEW_KEY) === "1");
@@ -947,7 +948,7 @@ function doMergedExport(key: string) {
       <n-space style="margin-bottom: 8px" align="center">
         <n-input v-model:value="filterQ" :placeholder="t('common.filter')" clearable style="width: 180px" />
         <n-button type="primary" @click="openCreate" :disabled="!isAdmin"
-                  :title="isAdmin ? undefined : t('errors.admin_required')">
+                  :title="isAdmin ? undefined : t('errors.create_needs_write')">
           <template #icon><n-icon><PlusIcon /></n-icon></template>
           {{ t("racks.add") }}
         </n-button>

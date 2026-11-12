@@ -87,3 +87,34 @@ async def can_write(session: AsyncSession, user: Any, object_type: str, object_i
         return True
     level = await get_object_permission(session, user=user, object_type=object_type, object_id=object_id)  # type: ignore[arg-type]
     return has_permission(level, "write")
+
+
+async def require_create(session: AsyncSession, user: Any, object_type: str, *,
+                         parents: dict[str, uuid.UUID | None] | None = None,
+                         tenant: tuple[str, uuid.UUID | None] | None = None,
+                         wildcard_only: bool = False) -> None:
+    """建立物件：照角色授權判斷，不是只看「管理員」開關（客戶 2026-11-12：掛了「系統管理員」角色仍不能新增機櫃）。
+
+    - `parents`：只影響放在哪裡的上層（機櫃的機房、裝置的機櫃）→ 至少要看得到
+    - `tenant`：權限繼承的單位 → 要寫入權（同 require_parent_write，不能把資料塞進別人的範圍）
+    - 本身：這個類型有萬用寫入權（例如「系統管理員」「網路操作員」角色），或對其中一個上層有寫入權
+      （例如部門管理員被指派了某個機房，就能在那個機房新增機櫃）
+    - `wildcard_only`：頂層命名空間（區段）只看萬用寫入權，上層的授權不算
+    """
+    if getattr(user, "is_admin", False):
+        return
+    from app.services.permission import visible_ids
+    refs = {k: v for k, v in (parents or {}).items() if v is not None}
+    for t, i in refs.items():
+        await require_visible(session, user, t, i, not_found=f"{t} not found")
+    if tenant is not None and tenant[1] is not None:
+        await require_parent_write(session, user, tenant[0], tenant[1])
+        refs[tenant[0]] = tenant[1]
+    if await visible_ids(session, user=user, object_type=object_type, required="write") is None:  # type: ignore[arg-type]
+        return
+    for t, i in ([] if wildcard_only else refs.items()):
+        if await can_write(session, user, t, i):
+            return
+    raise HTTPException(status_code=403, detail=ui_detail(
+        "create_needs_write", "You need write permission for this kind of object, or on the parent you chose",
+        type=object_type))

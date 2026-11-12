@@ -78,6 +78,26 @@ async def test_ad_login_with_spaced_dns(flt: str) -> None:
 
 
 @needs_ad
+@pytest.mark.parametrize("groups", [
+    ["CN=IPAM Admins, CN=Users, DC=corp, DC=test"],    # 完整 DN（逗號後空白）
+    ["ipam admins"],                                    # 只寫群組名稱（客戶 2026-11-12）
+])
+async def test_ad_admin_group_by_dn_or_name_and_through_a_nested_group(groups: list[str]) -> None:
+    """nest09 只在「Net Team」裡，「Net Team」是「IPAM Admins」的成員：memberOf 看不到 IPAM Admins，
+    要用 AD 的 in-chain 規則才查得到。以前這種帳號登入登出都還是一般使用者。"""
+    cfg = _ad(admin_groups=groups)
+    direct = await ldap_auth.authenticate(cfg, "user07", "User07-Pass-2026!")
+    assert direct.is_admin is True
+    assert direct.admin_via["via"] in ("direct", "name")  # type: ignore[index]
+    nested = await ldap_auth.authenticate(cfg, "nest09", "Nest09-Pass-2026!")
+    assert nested.groups == ["CN=Net Team,CN=Users,DC=corp,DC=test"]
+    assert nested.admin_via == {"group": groups[0], "via": "nested"}
+    plain = await ldap_auth.authenticate(cfg, "plain08", "Plain08-Pass-2026!")
+    assert plain.is_admin is False
+    assert plain.admin_via is None
+
+
+@needs_ad
 @pytest.mark.parametrize("flt", ["(uid={username})", "(sAMAccountName=username)", "(sAMAccountName=username{})"])
 async def test_ad_customer_filters_fail_cleanly(flt: str) -> None:
     """客戶這天試過的三種寫法：一律是「找不到使用者」，不可以是 DN 錯誤或 IndexError。"""

@@ -17,7 +17,7 @@ import { AdminIcon, SaveIcon, RefreshIcon, RequestsIcon, WarnIcon, DeleteIcon, O
 import { getRackEmbedConfig, revealRackEmbedToken, setRackEmbedConfig, type RackEmbedConfig } from "@/api/racks";
 import { getBackupEncryption, removeBackupEncryption, setBackupEncryption, type BackupEncryption } from "@/api/system";
 import { fmtDate } from "@/utils/datetime";
-import { getLdap, putLdap, testLdap, testLdapAuth, type LdapConfig,
+import { getLdap, putLdap, testLdap, testLdapAuth, type LdapAuthTestResult, type LdapConfig,
   getAuditForward, putAuditForward, testAuditForward, type AuditForward,
   getOidcConfig, putOidcConfig, testOidc, type OidcConfig,
   getSamlConfig, putSamlConfig, testSaml, type SamlConfig,
@@ -618,12 +618,14 @@ async function doTestSaml() {
 const ldapTestUser = ref("");
 const ldapTestPw = ref("");
 const ldapAuthTesting = ref(false);
+// 結果留在畫面上：看得出為什麼是／不是管理員（客戶 2026-11-12：設了群組對應卻一直是一般使用者）
+const ldapAuthResult = ref<LdapAuthTestResult | null>(null);
 async function doTestLdapAuth() {
   if (!ldapTestUser.value || !ldapTestPw.value) { msg.warning(t("settings.system.ldap_authtest_need")); return; }
   ldapAuthTesting.value = true;
+  ldapAuthResult.value = null;
   try {
-    const r = await testLdapAuth(ldapTestUser.value, ldapTestPw.value);
-    msg.success(`✓ ${r.dn}${r.is_admin ? ` · ${t("users.is_admin")}` : ""}${r.display_name ? " · " + r.display_name : ""}`, { duration: 8000 });
+    ldapAuthResult.value = await testLdapAuth(ldapTestUser.value, ldapTestPw.value);
     ldapTestPw.value = "";
   } catch (e) { msg.error(apiErrMsg(e)); }
   finally { ldapAuthTesting.value = false; }
@@ -1289,7 +1291,7 @@ async function doPreviewAutolink() {
         <div class="fld">
           <label>{{ t("settings.system.ldap_admin_groups") }}</label>
           <n-input v-model:value="ldapGroupsText" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }"
-                   placeholder="CN=IPAM-Admins,OU=Groups,DC=example,DC=com" />
+                   placeholder="CN=IPAM-Admins,OU=Groups,DC=example,DC=com&#10;IPAM-Admins" />
           <div class="hint" style="margin-top:4px">{{ t("settings.system.ldap_admin_groups_hint") }}</div>
         </div>
         <div class="fld">
@@ -1316,6 +1318,20 @@ async function doPreviewAutolink() {
             </n-button>
           </div>
           <div class="hint" style="margin-top:4px">{{ t("settings.system.ldap_authtest_hint") }}</div>
+          <div v-if="ldapAuthResult" class="ldap-auth-result" data-testid="ldap-auth-result">
+            <div>✓ {{ ldapAuthResult.dn }}<span v-if="ldapAuthResult.display_name"> · {{ ldapAuthResult.display_name }}</span></div>
+            <div data-testid="ldap-auth-admin">
+              <b>{{ t("users.is_admin") }}：</b>
+              <template v-if="!ldapAuthResult.admin_groups_configured">{{ t("settings.system.ldap_authtest_admin_unset") }}</template>
+              <template v-else-if="ldapAuthResult.admin_via">{{ t("settings.system.ldap_authtest_admin_yes", {
+                group: ldapAuthResult.admin_via.group, via: t(`settings.system.ldap_admin_via_${ldapAuthResult.admin_via.via}`) }) }}</template>
+              <template v-else>{{ t("settings.system.ldap_authtest_admin_no") }}</template>
+            </div>
+            <div v-if="ldapAuthResult.groups" class="hint">
+              {{ t("settings.system.ldap_authtest_groups", { n: ldapAuthResult.groups.length }) }}
+              <div v-for="g in ldapAuthResult.groups" :key="g" class="ldap-group">{{ g }}</div>
+            </div>
+          </div>
         </div>
         <div class="hint" style="line-height:1.6; margin-top:10px">{{ t("settings.system.ldap_hint") }}</div>
       </n-card>
@@ -1534,6 +1550,9 @@ async function doPreviewAutolink() {
 .ss-wrap { display: flex; flex-direction: column; gap: 16px; max-width: none; }
 /* 卡片外觀（底色／邊框／深色模式）交給 n-card，不要自己刻 —— 自己刻就會與其他頁面不一致 */
 .ss-group { border-radius: 14px; }
+/* LDAP 測試帳密的結果：DN、管理員判定、目錄回的群組（等寬字、可換行） */
+.ldap-auth-result { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; word-break: break-all; }
+.ldap-group { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .ss-h { display: inline-block; font-size: 16px; font-weight: 700; padding-left: 12px;
   line-height: 1.25; border-left: 4px solid #18a058; }
 /* 統一卡片內的垂直節奏。

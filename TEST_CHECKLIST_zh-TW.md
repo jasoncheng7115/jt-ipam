@@ -1791,6 +1791,9 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 ## 8. 近期功能點檢
 
+- [ ] **角色授權管機房、機櫃、裝置**（`tests/test_role_based_writes.py`、`e2e/role-based-writes.spec.ts`）：非管理員帳號掛「系統管理員」角色能新增機櫃與裝置；「網路操作員」能新增裝置、不能新增機櫃；「唯讀檢視者」的「新增機櫃」反灰並說明缺什麼權限
+- [ ] **LDAP 管理員群組**（`tests/test_ldap_admin_groups.py`、`tests/test_ldap_real_directory.py` 對 Samba AD）：設定值可填 DN 或群組名稱；經由巢狀群組間接所屬也判定為管理員；「測試帳密」顯示比對結果與目錄回傳的群組
+
 - [ ] **IP 位址頁的未納管提示**（`e2e/unmanaged-hint.spec.ts`、`tests/test_unmanaged_summary.py`）：掃描代理有看到未登錄位址時顯示數量、子網路與開關位置；一般帳號看不到代理設定；關掉後不再出現
 
 - [ ] **表格隔行底色**（`e2e/striped-rows.spec.ts`、`src/stores/__tests__/stripedRows.test.ts`）：佈景選單打開後偶數列有底色、右側操作欄同色；重新整理還在；關掉恢復；深色主題也看一次

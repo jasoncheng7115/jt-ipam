@@ -228,4 +228,8 @@ async def ldap_test_auth(
         "ok": True, "dn": info.dn, "username": info.username,
         "display_name": info.display_name, "email": info.email,
         "is_admin": info.is_admin,
+        # 看得出為什麼是／不是管理員（客戶 2026-11-12：設了對應卻一直是一般使用者，畫面上看不出原因）
+        "admin_groups_configured": any((g or "").strip() for g in cfg.admin_groups),
+        "admin_via": info.admin_via,
+        "groups": (info.groups or [])[:200],
     }
