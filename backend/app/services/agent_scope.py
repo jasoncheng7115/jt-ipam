@@ -30,12 +30,12 @@ async def annotate_scope(session: AsyncSession, rows: list[dict[str, Any]]) -> l
     info = {}
     live: dict[str, dict[str, Any]] = {}
     for (rid, ip_cust, sub_id, cidr, sub_cust, sec_id, sec_name, sec_cust, scan_enabled,
-         exclude, s_scan, s_lnms, s_arp, s_wazuh, s_zbx, arp_seen, kind, model) in (await session.execute(
+         exclude, s_scan, s_lnms, s_arp, s_wazuh, s_zbx, s_cmk, arp_seen, kind, model) in (await session.execute(
         select(IPAddress.id, IPAddress.customer_id, Subnet.id, Subnet.cidr, Subnet.customer_id,
                Section.id, Section.name, Section.customer_id, Subnet.scan_enabled,
                not_probed_expr(), IPAddress.last_seen_scanner, IPAddress.last_seen_librenms,
                IPAddress.last_seen_arp, IPAddress.last_seen_wazuh, IPAddress.last_seen_zabbix,
-               IPAddress.arp_seen, IPAddress.device_kind, IPAddress.device_model)
+               IPAddress.last_seen_checkmk, IPAddress.arp_seen, IPAddress.device_kind, IPAddress.device_model)
         .join(Subnet, Subnet.id == IPAddress.subnet_id)
         .join(Section, Section.id == Subnet.section_id, isouter=True)
         .where(in_values(IPAddress.id, ids))           # 大站台一次就是幾萬個
@@ -46,7 +46,7 @@ async def annotate_scope(session: AsyncSession, rows: list[dict[str, Any]]) -> l
         live[str(rid)] = {
             "last_seen_scanner": _iso(s_scan), "last_seen_librenms": _iso(s_lnms),
             "last_seen_arp": _iso(s_arp), "last_seen_wazuh": _iso(s_wazuh),
-            "last_seen_zabbix": _iso(s_zbx), "arp_seen": arp_seen or {},
+            "last_seen_zabbix": _iso(s_zbx), "last_seen_checkmk": _iso(s_cmk), "arp_seen": arp_seen or {},
             "exclude_from_ping": bool(exclude), "subnet_scan_enabled": scan_enabled,
             # 「設備類型」欄（圖示＋名稱，滑過看型號）
             "device_kind": kind, "device_model": model,
@@ -142,6 +142,7 @@ def classify_liveness(row: Any, *, minutes: int, sources: Any, now: Any) -> str:
         getattr(row, "last_seen_librenms", None) if "librenms" in use else None,
         getattr(row, "last_seen_wazuh", None) if "wazuh" in use else None,
         getattr(row, "last_seen_zabbix", None) if "zabbix" in use else None,
+        getattr(row, "last_seen_checkmk", None) if "checkmk" in use else None,
         getattr(row, "last_seen_arp", None) if ("arp" in use or "arp:librenms" in use) else None,
         *[v for k, v in (getattr(row, "arp_seen", None) or {}).items() if k in use],
     ]
@@ -151,7 +152,7 @@ def classify_liveness(row: Any, *, minutes: int, sources: Any, now: Any) -> str:
 
 #: 來源 → IPAddress 上的欄位；其餘來源（arp:／vpn:／lease:<廠牌>）在 arp_seen 裡，鍵就是來源名稱
 _SOURCE_COLUMNS = {"scanner": "last_seen_scanner", "librenms": "last_seen_librenms", "wazuh": "last_seen_wazuh",
-                   "zabbix": "last_seen_zabbix", "arp": "last_seen_arp", "arp:librenms": "last_seen_arp"}
+                   "zabbix": "last_seen_zabbix", "checkmk": "last_seen_checkmk", "arp": "last_seen_arp", "arp:librenms": "last_seen_arp"}
 
 
 def _liveness_kind(ts: list[Any], *, no_probe: bool, minutes: int, now: Any) -> str:
@@ -351,7 +352,8 @@ async def _page_from(session: AsyncSession, gaps: _Gaps, *, page: int, page_size
             "customer_name": names.get(cid) if cid else None,
             "last_seen_scanner": _iso(d.last_seen_scanner), "last_seen_librenms": _iso(d.last_seen_librenms),
             "last_seen_arp": _iso(d.last_seen_arp), "last_seen_wazuh": _iso(d.last_seen_wazuh),
-            "last_seen_zabbix": _iso(d.last_seen_zabbix), "arp_seen": d.arp_seen or {},
+            "last_seen_zabbix": _iso(d.last_seen_zabbix), "last_seen_checkmk": _iso(d.last_seen_checkmk),
+            "arp_seen": d.arp_seen or {},
             "exclude_from_ping": bool(excl), "subnet_scan_enabled": scan_en,
             "device_kind": kind, "device_model": model,
             "status": st,
@@ -366,7 +368,7 @@ async def _page_details(session: AsyncSession, ids: list[str]) -> dict[str, Any]
         return {}
     rows = (await session.execute(select(
         IPAddress.id, IPAddress.last_seen_scanner, IPAddress.last_seen_librenms, IPAddress.last_seen_arp,
-        IPAddress.last_seen_wazuh, IPAddress.last_seen_zabbix, IPAddress.arp_seen,
+        IPAddress.last_seen_wazuh, IPAddress.last_seen_zabbix, IPAddress.last_seen_checkmk, IPAddress.arp_seen,
     ).where(in_values(IPAddress.id, [uuid.UUID(i) for i in ids])))).all()
     return {str(r.id): r for r in rows}
 

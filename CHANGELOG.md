@@ -6,7 +6,16 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 
 ## [Unreleased]
 
+### Added
+- **Checkmk integration** (Admin > External integrations > Checkmk), the same read-only monitoring complement as Zabbix:
+  - Host-to-IP mapping as a hostname source, host state as liveness evidence (only UP counts, timed by Checkmk's last check; on by default, also on upgraded sites), scheduled downtimes, and the addresses Checkmk does not monitor.
+  - It reads only the monitoring data, so an automation user with the built-in Guest user role is enough; the Setup data would need more rights and returns nothing, without an error, when they are missing.
+  - The site URL can be pasted straight from the browser; a URL without the site name is refused on save. Test connection shows the version, edition, site and how many hosts are visible.
+  - Also in IP change assessment, the IP probe page, the war room's monitoring coverage, the uptime bar and system export / import.
+  - Tested against Checkmk 2.4 (Raw) and 2.5 (Community); `scripts/checkmk-test-target/run.sh` starts both.
+
 ### Fixed
+- The uptime bar never carried forward a day that only Wazuh or Zabbix had proved online; those sources expire, so they now count like the scan agent (found while adding Checkmk).
 - **Roles now count for rooms, racks, devices, customers and sections** (customer report: LDAP accounts in the built-in System administrator role could not add a rack, the button said admin was required, and only turning on the account's Admin switch helped). These write endpoints only looked at the Admin switch, so the grants that roles give were never used. Now:
   - System administrator can add, edit and delete all of them; Network operator can add and edit devices (deleting needs admin on the device); a user granted one room can add racks and devices in that room.
   - Adding needs write for that kind of item, or write on the parent you choose (a rack's room; a device's rack, room or customer). Sections, customers and rooms need it for the whole kind.

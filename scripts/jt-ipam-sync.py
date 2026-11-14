@@ -91,6 +91,7 @@ async def _run() -> int:
     from app.models.virt import ProxmoxInstance, VirtCluster
     from app.models.wazuh import WazuhInstance
     from app.models.zabbix import ZabbixInstance
+    from app.models.checkmk import CheckmkInstance
     from app.models.windows_dhcp import WindowsDhcpServer
     from app.models.dhcp_standalone import IscDhcpServer, KeaDhcpServer
     from app.models.isoinsight import IsoInsightSource
@@ -109,6 +110,7 @@ async def _run() -> int:
     from app.services import proxmox as proxmox_svc
     from app.services import wazuh as wazuh_svc
     from app.services import zabbix as zabbix_svc
+    from app.services import checkmk as checkmk_svc
     from app.services import windows_dhcp as windows_dhcp_svc
     from app.services import kea_dhcp as kea_dhcp_svc
     from app.services import technitium_dhcp as technitium_dhcp_svc
@@ -324,6 +326,33 @@ async def _run() -> int:
                 await _hb(session, kind="zabbix.sync", target_type="zabbix_instance",
                           target_id=inst.id, target_label=name, ok=False, error=str(exc))
 
+        # ── Checkmk ──
+        cmks = (
+            await session.execute(
+                select(CheckmkInstance).where(CheckmkInstance.enabled.is_(True))
+            )
+        ).scalars().all()
+        for inst in cmks:
+            interval = timedelta(seconds=inst.sync_interval_seconds)
+            if inst.last_sync_at and not _sync_due(inst.last_sync_at, interval):
+                continue
+            name = inst.name
+            try:
+                summary = await checkmk_svc.sync_instance(session, inst)
+                await session.commit()
+                log.info("checkmk %s: %s", name, summary)
+                await _hb(session, kind="checkmk.sync", target_type="checkmk_instance",
+                          target_id=inst.id, target_label=name, ok=True,
+                          summary=summary if isinstance(summary, dict) else None)
+            except Exception as exc:
+                await session.rollback()
+                inst.last_error = str(exc)[:2000]
+                await session.commit()
+                log.error("checkmk %s sync failed: %s", name, exc)
+                failed += 1
+                await _hb(session, kind="checkmk.sync", target_type="checkmk_instance",
+                          target_id=inst.id, target_label=name, ok=False, error=str(exc))
+
         # ── LibreNMS ──
         lns = (
             await session.execute(
@@ -387,7 +416,7 @@ async def _run() -> int:
             # 就永遠不會有人知道，而且畫面上完全看不出少了誰。
             for kind, model in (
                 ("librenms", LibreNMSInstance), ("wazuh", WazuhInstance),
-                ("zabbix", ZabbixInstance), ("adguard", AdGuardInstance),
+                ("zabbix", ZabbixInstance), ("checkmk", CheckmkInstance), ("adguard", AdGuardInstance),
                 ("proxmox", ProxmoxInstance), ("esxi", ESXiInstance), ("hyperv", HyperVInstance),
                 ("openstack", OpenStackInstance),
                 ("opnsense", OPNsenseFirewall), ("pfsense", PfSenseFirewall),

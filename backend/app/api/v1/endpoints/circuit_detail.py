@@ -50,7 +50,7 @@ device_router = APIRouter(tags=["devices"])
 # 「最近使用」的時間窗與來源欄位：跟 IP 變更評估的「舊位址仍有設備在用」一致
 ACTIVITY_WINDOW = timedelta(days=7)
 _SEEN_FIELDS = ("last_seen_scanner", "last_seen_librenms", "last_seen_arp", "last_seen_wazuh",
-                "last_seen_zabbix", "last_seen_ocs")
+                "last_seen_zabbix", "last_seen_checkmk", "last_seen_ocs")
 # 一段子網路最多逐一列出幾個已登記的位址（ISP 給的多半是 /32～/27；誤掛大網段時不要整片撈）
 MAX_IPS_PER_SUBNET = 256
 

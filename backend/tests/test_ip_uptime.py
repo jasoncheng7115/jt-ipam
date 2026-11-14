@@ -425,3 +425,20 @@ async def test_transition_is_carried_when_its_source_still_exists(
 
     out = await get_address_uptime(ipa.id, admin_user, db_session, days=30)
     assert len([i for i in out["items"] if i["status"] == "up"]) >= 10
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("src", ["wazuh", "zabbix", "checkmk"])
+async def test_monitoring_sources_carry_forward_like_the_scanner(db_session, admin_user, src: str) -> None:
+    """Wazuh／Zabbix／Checkmk 也是會過期的證據：「上線（zabbix）」之後的日子要延續（2026-11-14 加 Checkmk 時發現沒有）。
+
+    以前延續只認掃描代理、LibreNMS 與防火牆的逐來源證據，這三個來源證明上線的轉換之後一片空白。
+    """
+    ipa = await _mk_ip(db_session, admin_user)
+    now = datetime.now(UTC)
+    setattr(ipa, f"last_seen_{src}", now)
+    db_session.add(_ev(ipa, now - timedelta(days=10), f"online ({src})"))
+    await db_session.commit()
+
+    out = await get_address_uptime(ipa.id, admin_user, db_session, days=30)
+    assert len([i for i in out["items"] if i["status"] == "up"]) >= 10, src

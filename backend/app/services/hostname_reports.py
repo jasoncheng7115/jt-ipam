@@ -247,6 +247,7 @@ ORIGIN_MODELS: dict[str, tuple[str, str]] = {
     "hyperv": ("app.models.hyperv", "HyperVInstance"),
     "openstack": ("app.models.openstack", "OpenStackInstance"),
     "zabbix": ("app.models.zabbix", "ZabbixInstance"),
+    "checkmk": ("app.models.checkmk", "CheckmkInstance"),
     "wazuh": ("app.models.wazuh", "WazuhInstance"),
     "adguard": ("app.models.adguard", "AdGuardInstance"),
     "ocs": ("app.models.ocs", "OcsServer"),

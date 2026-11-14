@@ -51,7 +51,7 @@ MAX_FOCUS = 50
 MAX_VMS = 2
 RACKED_TYPES = ("server", "switch", "storage", "firewall", "router")
 #: IP 記錄上「某個來源最近一次看到它」的欄位（焦點來源）
-SEEN_FIELDS = ("scanner", "arp", "librenms", "wazuh", "zabbix", "ocs", "dns")
+SEEN_FIELDS = ("scanner", "arp", "librenms", "wazuh", "zabbix", "checkmk", "ocs", "dns")
 ROWS = ("physical", "virtual", "address")
 
 

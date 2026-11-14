@@ -705,6 +705,8 @@ const seenRows = computed<SeenRow[]>(() => {
     jump: "wazuh", live: ["wazuh"], why: t("addresses.seen_why_wazuh") });
   if (a.last_seen_zabbix) rows.push({ key: "zabbix", label: "Zabbix", at: a.last_seen_zabbix, live: ["zabbix"],
     why: t("addresses.seen_why_zabbix") });
+  if (a.last_seen_checkmk) rows.push({ key: "checkmk", label: "Checkmk", at: a.last_seen_checkmk, live: ["checkmk"],
+    why: t("addresses.seen_why_checkmk") });
   if (a.last_seen_ocs) rows.push({ key: "ocs", label: t("addresses.seen_src_ocs"), at: a.last_seen_ocs,
     jump: "ocs", live: ["ocs"], why: t("addresses.seen_why_ocs") });
   // RustDesk 客戶端的最後心跳（沒有心跳過的用 jt-ipam 最後看到它上線的時間）。不列入上線判定

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 HOSTNAME_KEY = "hostname_precedence"
 # 預設：人工最優先，其次 DNS、LibreNMS、OPNsense、掃描、Proxmox
-DEFAULT_ORDER: list[str] = ["manual", "dns", "librenms", "opnsense", "pfsense", "fortigate", "paloalto", "checkpoint", "mikrotik", "windows_dhcp", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "scanner", "netbios", "mdns", "proxmox", "hyperv", "openstack", "zabbix", "wazuh", "adguard", "ocs", "rustdesk"]
+DEFAULT_ORDER: list[str] = ["manual", "dns", "librenms", "opnsense", "pfsense", "fortigate", "paloalto", "checkpoint", "mikrotik", "windows_dhcp", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "scanner", "netbios", "mdns", "proxmox", "hyperv", "openstack", "zabbix", "checkmk", "wazuh", "adguard", "ocs", "rustdesk"]
 
 # 排序／停用／快取的共通機制在 services/precedence.py；
 # 這裡只留 hostname 特有的部分：觀測表、pin、重算與異動記錄。

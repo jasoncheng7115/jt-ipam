@@ -40,6 +40,7 @@ from app.models.change_impact import (
     ImpactService,
     ImpactServiceEndpoint,
 )
+from app.models.checkmk import CheckmkHost, CheckmkInstance
 from app.models.checkpoint import (
     CheckPointGateway,
     CheckPointObject,
@@ -161,6 +162,8 @@ __all__ = [
     "ChangePlan",
     "ChangePlanRevision",
     "ChangeTask",
+    "CheckmkHost",
+    "CheckmkInstance",
     "Circuit",
     "CircuitType",
     "Contact",

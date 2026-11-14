@@ -46,6 +46,7 @@ SEV_RANK = {"high": 0, "medium": 1, "low": 2}
 #: IP 記錄上「誰在什麼時候看到它」的欄位 → 來源代碼（畫面翻成名稱）
 SEEN_FIELDS = (("last_seen_scanner", "scanner"), ("last_seen_librenms", "librenms"), ("last_seen_arp", "arp"),
                ("last_seen_dns", "dns"), ("last_seen_wazuh", "wazuh"), ("last_seen_zabbix", "zabbix"),
+               ("last_seen_checkmk", "checkmk"),
                ("last_seen_ocs", "ocs"))
 MAX_FACTS = 3
 DASH = "—"

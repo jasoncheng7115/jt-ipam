@@ -227,6 +227,7 @@ const INTEGRATION_ITEMS: [string, string, Component][] = [
   ["openstack_admin", "nav.openstack_admin", VirtualizationIcon],
   ["wazuh", "nav.wazuh", WazuhIcon],
   ["zabbix", "nav.zabbix", LibreNMSIcon],
+  ["checkmk", "nav.checkmk", LibreNMSIcon],
   ["ocs", "nav.ocs", DevicesIcon],
   ["graylog_dsv", "nav.graylog_dsv", ExportIcon],
 ];
@@ -236,7 +237,7 @@ const INTEGRATION_PRESENCE_KEY: Record<string, string> = {
   fortigate: "fortigate", paloalto: "paloalto", checkpoint: "checkpoint", mikrotik: "mikrotik", snmp: "snmp",
   windows_dhcp: "windows_dhcp",
   kea_dhcp: "kea_dhcp", isc_dhcp: "isc_dhcp", technitium_dhcp: "technitium", isoinsight: "isoinsight", rustdesk: "rustdesk", virt_admin: "proxmox", esxi_admin: "esxi", hyperv_admin: "hyperv", openstack_admin: "openstack",
-  wazuh: "wazuh", zabbix: "zabbix", ocs: "ocs", graylog_dsv: "graylog",
+  wazuh: "wazuh", zabbix: "zabbix", checkmk: "checkmk", ocs: "ocs", graylog_dsv: "graylog",
 };
 /** 已設定的整合在名稱後面加一個勾（使用者 2026-10-07）；選單是 render 函式，樣式要寫在行內 */
 function integrationLabel(key: string, labelKey: string) {

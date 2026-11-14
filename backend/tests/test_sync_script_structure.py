@@ -26,6 +26,8 @@ BLOCK_MARKERS = [
     "HyperVInstance",              # Hyper-V（直連主機或 SCVMM）
     "OpenStackInstance",           # Bigstack CubeCOS／OpenStack
     "WazuhInstance",
+    "ZabbixInstance",
+    "CheckmkInstance",
     "LibreNMSInstance",
     "AdGuardInstance",
     "FortiGateFirewall",

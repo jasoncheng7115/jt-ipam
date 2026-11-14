@@ -92,6 +92,7 @@ class MissingAgentRow(StrictModel):
     last_seen_arp: str | None = None
     last_seen_wazuh: str | None = None
     last_seen_zabbix: str | None = None
+    last_seen_checkmk: str | None = None
     arp_seen: dict[str, str] = {}
     exclude_from_ping: bool = False
     subnet_scan_enabled: bool | None = None

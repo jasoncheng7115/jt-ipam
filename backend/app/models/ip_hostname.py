@@ -20,7 +20,7 @@ from app.models.base import Base, UUIDPrimaryKeyMixin
 # netbios / mdns 由掃描代理分別以 nmblookup / avahi-resolve 取得，是獨立於 scanner(rDNS) 的來源。
 # ⚠️ 新整合要加進來：apply_observation 以前把不認得的來源一律當成 manual，MikroTik 就這樣
 # 把租約名稱寫成「手動輸入」，蓋過使用者真正填的值、而且永遠清不掉（2026-09-26 稽核）。
-HOSTNAME_SOURCES = ("manual", "scanner", "librenms", "dns", "proxmox", "opnsense", "pfsense", "wazuh", "adguard", "netbios", "mdns", "windows_dhcp", "fortigate", "paloalto", "checkpoint", "zabbix", "ocs", "mikrotik", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "rustdesk", "hyperv", "openstack")
+HOSTNAME_SOURCES = ("manual", "scanner", "librenms", "dns", "proxmox", "opnsense", "pfsense", "wazuh", "adguard", "netbios", "mdns", "windows_dhcp", "fortigate", "paloalto", "checkpoint", "zabbix", "checkmk", "ocs", "mikrotik", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "rustdesk", "hyperv", "openstack")
 
 
 class IPHostnameObservation(Base, UUIDPrimaryKeyMixin):

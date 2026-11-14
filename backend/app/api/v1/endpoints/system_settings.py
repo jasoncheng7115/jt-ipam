@@ -846,6 +846,7 @@ async def _liveness_candidates(
     """
     from sqlalchemy import func, select
 
+    from app.models.checkmk import CheckmkInstance
     from app.models.checkpoint_gaia import CheckPointGaiaTarget
     from app.models.firewall import OPNsenseFirewall
     from app.models.fortigate import FortiGateFirewall
@@ -867,6 +868,7 @@ async def _liveness_candidates(
         "librenms": await _has(LibreNMSInstance),
         "wazuh": await _has(WazuhInstance),
         "zabbix": await _has(ZabbixInstance),
+        "checkmk": await _has(CheckmkInstance),
         "opnsense": await _has(OPNsenseFirewall),
         "pfsense": await _has(PfSenseFirewall),
         "fortigate": await _has(FortiGateFirewall),
@@ -2225,6 +2227,7 @@ async def integration_presence(
 
     from app.models.adguard import AdGuardInstance
     from app.models.certificate import CertAgent
+    from app.models.checkmk import CheckmkInstance
     from app.models.checkpoint import CheckPointServer
     from app.models.dhcp_standalone import IscDhcpServer, KeaDhcpServer
     from app.models.dns import DNSServer
@@ -2271,6 +2274,7 @@ async def integration_presence(
         ("rustdesk", RustDeskServer),
         ("wazuh", WazuhInstance),
         ("zabbix", ZabbixInstance),
+        ("checkmk", CheckmkInstance),
         ("ocs", OcsServer),
         # SNMP 收集（0217）：有收集目標才算已設定（只有憑證、沒有目標＝還沒開始收）
         ("snmp", SnmpTarget),

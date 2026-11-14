@@ -2245,6 +2245,15 @@ What this section tests is the thing the chain itself cannot catch. Verifying th
 - [ ] **Addresses not monitored**: asking with a subnet scope answers only for those subnets; an empty scope
   returns empty rather than falling back to global
 
+## 7f-2. Checkmk integration: **whenever the Checkmk sync or the not-monitored list changes**
+
+- [ ] **Both versions on real targets**: `bash scripts/checkmk-test-target/run.sh` starts 2.4 and 2.5; run `tests/test_checkmk_real.py` with the line it prints (a guest automation user sees all 5 hosts, the `0.0.0.0` placeholder is not an address, a wrong secret gives `cmk_auth`, a wrong site `cmk_no_site`)
+- [ ] **URL forms**: `https://host/site`, the whole browser address and a full `api/1.0` / `api/v1` all work; a host without a site is refused on save (`cmk_need_site`)
+- [ ] **Write-only secret**: responses carry only `has_api_secret`; an empty secret on edit keeps the old one
+- [ ] **Existing addresses only**, and no wrong match in overlapping ranges when a scope is set
+- [ ] **Liveness evidence**: only UP stamps `last_seen_checkmk`, with Checkmk's last check time; DOWN, not checked yet and active checks off never do (`tests/test_checkmk.py`)
+- [ ] **Screen** (`E2E_CHECKMK_URL=… e2e/checkmk.spec.ts`): create, test connection (version, site, host count), sync, host list (state, folder, several addresses), addresses not monitored, delete
+
 ## 7g. Evidence contract: **whenever a source is added or changed**
 
 What this section guards: **a new source must answer whether its evidence expires**.
@@ -2456,6 +2465,9 @@ happy path of "an upload succeeded" is not enough.
 - [ ] **AI**: get_device returns the group (members, role, shared IPs), get_ip_detail returns `device_group`
 
 ## 8. Recent feature spot-checks
+
+- [ ] **Checkmk integration** (`tests/test_checkmk.py`, `tests/test_checkmk_real.py`, `e2e/checkmk.spec.ts`): run every item of "7f-2. Checkmk integration"; both the 2.4 and 2.5 targets must pass
+- [ ] **Uptime bar carries forward Wazuh / Zabbix / Checkmk** (`tests/test_ip_uptime.py`): a day only those sources proved online is carried forward into the following days without observations
 
 - [ ] **Roles manage rooms, racks and devices** (`tests/test_role_based_writes.py`, `e2e/role-based-writes.spec.ts`): a non-admin account in the System administrator role can add racks and devices; Network operator can add devices but not racks; for Read-only viewer, Add rack is disabled and says which permission is missing
 - [ ] **LDAP admin groups** (`tests/test_ldap_admin_groups.py`, `tests/test_ldap_real_directory.py` against Samba AD): a setting can be a DN or a group name; membership through a nested group counts; Test auth shows the match and the groups the directory returned

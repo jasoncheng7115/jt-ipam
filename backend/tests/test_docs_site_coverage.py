@@ -30,7 +30,7 @@ PRODUCT_NAMES: dict[str, list[str]] = {
     "snmp": ["SNMP"],
     "windows_dhcp": ["Windows DHCP"], "kea_dhcp": ["Kea"], "isc_dhcp": ["ISC DHCP"], "isoinsight": ["ISOinsight"],
     "technitium": ["Technitium"], "rustdesk": ["RustDesk"], "proxmox": ["Proxmox VE"], "esxi": ["ESXi"], "hyperv": ["Hyper-V"], "openstack": ["OpenStack", "CubeCOS"],
-    "wazuh": ["Wazuh"], "zabbix": ["Zabbix"], "ocs": ["OCS Inventory"], "graylog": ["Graylog"],
+    "wazuh": ["Wazuh"], "zabbix": ["Zabbix"], "checkmk": ["Checkmk"], "ocs": ["OCS Inventory"], "graylog": ["Graylog"],
 }
 
 #: 主要功能：(中文, 英文, 日文) 名稱，首頁與三份 README 都要寫到

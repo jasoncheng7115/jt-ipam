@@ -26,7 +26,7 @@ from app.services import arp_seen as arp_seen_svc
 from app.services.evidence import is_aging
 
 KEY = "device"
-_COLUMNS = ("last_seen_scanner", "last_seen_librenms", "last_seen_wazuh", "last_seen_zabbix")
+_COLUMNS = ("last_seen_scanner", "last_seen_librenms", "last_seen_wazuh", "last_seen_zabbix", "last_seen_checkmk")
 
 
 def _ts(v: Any) -> datetime | None:

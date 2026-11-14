@@ -19,7 +19,7 @@ from app.services.change_impact.model import Evidence, Finding, TargetAddr
 
 ACTIVITY_WINDOW = timedelta(days=7)
 _SEEN_FIELDS = ("last_seen_scanner", "last_seen_librenms", "last_seen_arp", "last_seen_wazuh",
-                "last_seen_zabbix", "last_seen_ocs")
+                "last_seen_zabbix", "last_seen_checkmk", "last_seen_ocs")
 
 
 async def compute_overlap(ctx: Ctx) -> None:
@@ -230,6 +230,7 @@ _INTEGRATION_URLS: tuple[tuple[str, str, str, str], ...] = (
     ("app.models.openstack", "OpenStackInstance", "auth_url", "openstack"),
     ("app.models.openstack", "OpenStackInstance", "cubecos_url", "openstack"),
     ("app.models.zabbix", "ZabbixInstance", "api_url", "zabbix"),
+    ("app.models.checkmk", "CheckmkInstance", "api_url", "checkmk"),
     ("app.models.wazuh", "WazuhInstance", "api_url", "wazuh"),
     ("app.models.dns", "DNSServer", "api_url", "dns_server"),
     ("app.models.dns", "DNSServer", "server_address", "dns_server"),

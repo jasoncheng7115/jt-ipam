@@ -24,6 +24,7 @@ INTEGRATIONS: tuple[tuple[str, str, str, str], ...] = (
     ("librenms", "LibreNMS", "app.models.librenms", "LibreNMSInstance"),
     ("wazuh", "Wazuh", "app.models.wazuh", "WazuhInstance"),
     ("zabbix", "Zabbix", "app.models.zabbix", "ZabbixInstance"),
+    ("checkmk", "Checkmk", "app.models.checkmk", "CheckmkInstance"),
     ("adguard", "AdGuard Home", "app.models.adguard", "AdGuardInstance"),
     ("proxmox", "Proxmox VE", "app.models.virt", "ProxmoxInstance"),
     ("esxi", "VMware", "app.models.esxi", "ESXiInstance"),

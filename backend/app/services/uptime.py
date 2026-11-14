@@ -133,16 +133,19 @@ async def uptime_for_ips(
         uuid.UUID, tuple[str | None, bool, datetime, bool, bool, set[str]]
     ] = {}
     if ip_ids:
-        for i, st, seen_s, seen_l, created, aseen in (await session.execute(
+        for i, st, seen_s, seen_l, created, aseen, seen_w, seen_z, seen_c in (await session.execute(
             select(
                 IPAddress.id, IPAddress.effective_status,
                 IPAddress.last_seen_scanner, IPAddress.last_seen_librenms,
                 IPAddress.created_at, IPAddress.arp_seen,
+                IPAddress.last_seen_wazuh, IPAddress.last_seen_zabbix, IPAddress.last_seen_checkmk,
             ).where(in_values(IPAddress.id, ip_ids))
         )).all():
             # 「有存活來源」刻意不含 LibreNMS 的 ARP：它沒有時間概念，不能回填整段綠色。
-            # 防火牆自己的 ARP／VPN 表會逾時淘汰，算數。
-            extra = _aging_keys(aseen)
+            # 防火牆自己的 ARP／VPN 表會逾時淘汰，算數。Wazuh／Zabbix／Checkmk 也會過期：以前沒列進來，
+            # 「上線（zabbix）」的日子永遠不往後延續（2026-11-14 加 Checkmk 時發現）
+            extra = _aging_keys(aseen) | {n for n, t in (("wazuh", seen_w), ("zabbix", seen_z),
+                                                          ("checkmk", seen_c)) if t}
             cur_rows[i] = (st, bool(seen_s or seen_l or extra), created,
                            bool(seen_s), bool(seen_l), extra)
 

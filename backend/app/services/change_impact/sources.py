@@ -96,6 +96,7 @@ _SPECS: tuple[tuple[str, str, str, tuple[str, ...], str, tuple[str, ...]], ...] 
     ("app.models.openstack", "OpenStackInstance", "openstack", ("virt",), "sync_interval_seconds",
      ("vms", "interfaces", "ports")),
     ("app.models.zabbix", "ZabbixInstance", "zabbix", ("monitoring",), "sync_interval_seconds", ("hosts",)),
+    ("app.models.checkmk", "CheckmkInstance", "checkmk", ("monitoring",), "sync_interval_seconds", ("hosts",)),
     ("app.models.wazuh", "WazuhInstance", "wazuh", ("monitoring",), "sync_interval_seconds", ("agents",)),
     ("app.models.ocs", "OcsServer", "ocs", ("monitoring",), "sync_interval_seconds", ("inventory",)),
     # ISOinsight：租約有真正的起訖時間，也保留對不到 IP 記錄的租約（services/isoinsight）；IPv6 只存觀察、未驗證
@@ -120,7 +121,7 @@ PRESENCE_KIND = {
     "fortigate": "fortigate", "paloalto": "paloalto", "mikrotik": "mikrotik", "windows_dhcp": "windows_dhcp",
     "kea_dhcp": "kea_dhcp", "isc_dhcp": "isc_dhcp", "isoinsight": "isoinsight", "rustdesk": "rustdesk",
     "technitium": "technitium", "checkpoint": "checkpoint",
-    "proxmox": "proxmox", "esxi": "esxi", "hyperv": "hyperv", "openstack": "openstack", "wazuh": "wazuh", "zabbix": "zabbix", "ocs": "ocs",
+    "proxmox": "proxmox", "esxi": "esxi", "hyperv": "hyperv", "openstack": "openstack", "wazuh": "wazuh", "zabbix": "zabbix", "checkmk": "checkmk", "ocs": "ocs",
 }
 NOT_SOURCES = {
     "graylog": "只把 IPAM 的資料匯出給 Graylog 查表，本身不存任何引用；改址後匯出內容自動跟著變",

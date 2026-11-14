@@ -38,7 +38,7 @@ export const VENDOR_LABEL: Record<string, string> = {
   mikrotik: "MikroTik", librenms: "LibreNMS", windows_dhcp: "Windows DHCP", kea_dhcp: "Kea DHCP",
   technitium: "Technitium DHCP",
   isc_dhcp: "ISC DHCP", isoinsight: "ISOinsight", proxmox: "Proxmox", vmware: "VMware", wazuh: "Wazuh", rustdesk: "RustDesk",
-  ocs: "OCS", zabbix: "Zabbix",
+  ocs: "OCS", zabbix: "Zabbix", checkmk: "Checkmk",
   // SNMP 收集（0217）：`arp:snmp`、`iface:snmp`；`arp:snmp_live`（設備標成 reachable 的項目）見 evidenceVendorLabel
   snmp: "SNMP",
 };
@@ -122,6 +122,12 @@ export function monitorLines(d: D | null | undefined, h: SectionHelpers,
       `Zabbix ${z.name ?? z.host}（${label(h, `zabbix.${z.status}`, z.status ?? "—")}）`,
       z.available === "up" ? h.t("topology.status_up") : z.available === "down" ? h.t("topology.status_down") : null,
       z.maintenance ? h.t("zabbix.maintenance") : null,
+    ]));
+  }
+  for (const c of (m.checkmk ?? []) as D[]) {
+    out.push(join([
+      `Checkmk ${c.host}（${label(h, `checkmk.state_${c.state}`, c.state ?? "—")}）`,
+      c.downtime ? h.t("checkmk.downtime") : null,
     ]));
   }
   return out;
@@ -450,6 +456,10 @@ export function integrationTables(d: D | null | undefined, h: SectionHelpers,
     mon.push(["Zabbix", z.name ?? z.host, label(h, `zabbix.${z.status}`, z.status ?? "—"),
               join([z.available === "up" ? h.t("topology.status_up") : z.available === "down" ? h.t("topology.status_down") : null,
                     z.maintenance ? h.t("zabbix.maintenance") : null]) || null]);
+  }
+  for (const c of (m.checkmk ?? []) as D[]) {
+    mon.push(["Checkmk", c.host, label(h, `checkmk.state_${c.state}`, c.state ?? "—"),
+              join([c.downtime ? h.t("checkmk.downtime") : null, c.folder]) || null]);
   }
   out.push(table("mon", h.t("investigate.sec_mon"), [c("system"), c("name"), c("status"), c("note")], mon));
 

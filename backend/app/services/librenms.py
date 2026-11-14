@@ -1190,7 +1190,8 @@ async def recompute_effective_status(
     rows = (await session.execute(select(
         IPAddress.id, IPAddress.ip, IPAddress.subnet_id, IPAddress.mac, IPAddress.effective_status,
         IPAddress.last_seen_scanner, IPAddress.last_seen_librenms, IPAddress.last_seen_arp,
-        IPAddress.last_seen_wazuh, IPAddress.last_seen_zabbix, IPAddress.arp_seen))).all()
+        IPAddress.last_seen_wazuh, IPAddress.last_seen_zabbix, IPAddress.last_seen_checkmk,
+        IPAddress.arp_seen))).all()
     # 從沒對應過 ARP 記錄的舊資料：補一次起點（之後由 sync_arp 維護）—— 一次查完
     need = {str(r.ip).split("/")[0] for r in rows if not r.last_seen_arp and r.mac}
     arp_start: dict[str, datetime] = {}
@@ -1209,6 +1210,7 @@ async def recompute_effective_status(
     use_a = "arp" in sources or "arp:librenms" in sources
     use_w = "wazuh" in sources
     use_z = "zabbix" in sources
+    use_c = "checkmk" in sources
     observations: list[dict[str, Any]] = []
     status_rows: list[dict[str, Any]] = []
     arp_rows: list[dict[str, Any]] = []
@@ -1233,6 +1235,8 @@ async def recompute_effective_status(
         w_fresh = use_w and bool(w_seen and w_seen >= cutoff)
         z_seen = ip.last_seen_zabbix
         z_fresh = use_z and bool(z_seen and z_seen >= cutoff)
+        c_seen = ip.last_seen_checkmk
+        c_fresh = use_c and bool(c_seen and c_seen >= cutoff)
         # 防火牆逐來源證據（arp:/vpn:/lease:）—— 會過期的才有資格宣稱上線
         d_seen, d_src = arp_seen_svc.newest_aging(ip, sources)
         d_fresh = bool(d_seen and d_seen >= cutoff)
@@ -1240,12 +1244,12 @@ async def recompute_effective_status(
         new_status: str
         # 翻轉記錄的來源（#49）：上線＝讓它上線的那個來源；失聯＝系統判定證據過期
         flip_src = "system"
-        if s_fresh or l_fresh or w_fresh or z_fresh or d_fresh:
+        if s_fresh or l_fresh or w_fresh or z_fresh or c_fresh or d_fresh:
             # 會老化的證據：掃描代理實際探測、LibreNMS／Wazuh 的裝置狀態、
             # 防火牆表上此刻還在的項目
             fresh_srcs = [n for n, ok in (
                 ("scanner", s_fresh), ("librenms", l_fresh), ("wazuh", w_fresh),
-                ("zabbix", z_fresh), (d_src or "", d_fresh),
+                ("zabbix", z_fresh), ("checkmk", c_fresh), (d_src or "", d_fresh),
             ) if ok and n]
             new_status = "online" if len(fresh_srcs) > 1 else f"online ({fresh_srcs[0]})"
             # 逐來源鍵（arp:opnsense、lease:kea…）記廠牌，跟各整合自己寫的異動記錄一致
@@ -1256,7 +1260,7 @@ async def recompute_effective_status(
             new_status = "online (arp)"
             flip_src = "librenms"         # last_seen_arp 只有 LibreNMS 的 ARP 同步會寫
         elif ((use_s and s_seen) or (use_l and l_seen) or (use_a and a_seen)
-              or (use_w and w_seen) or (use_z and z_seen) or d_seen):
+              or (use_w and w_seen) or (use_z and z_seen) or (use_c and c_seen) or d_seen):
             # 有被採信的來源看過它，但都過期 → 離線
             new_status = "offline"
         else:
@@ -1266,7 +1270,7 @@ async def recompute_effective_status(
         # arp_only 的日子不算可用 —— ARP 沒有時間概念（見 models/ip_liveness）。
         # 同一天同一個 IP 只有一列，旗標用 OR 累積（一天內先看到上線、後判定離線，兩者都要留下）；
         # 今天已經記過同樣旗標的不再寫
-        up = bool(s_fresh or l_fresh or w_fresh or z_fresh or d_fresh)
+        up = bool(s_fresh or l_fresh or w_fresh or z_fresh or c_fresh or d_fresh)
         down = new_status == "offline"
         arp_only = new_status == "online (arp)"
         before = have_today.get(ip.id)

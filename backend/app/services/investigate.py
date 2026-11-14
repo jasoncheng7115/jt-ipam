@@ -246,6 +246,21 @@ async def _sec_zabbix(c: _Ctx) -> list[dict[str, Any]] | None:
     }) for h, iname in rows] or None
 
 
+async def _sec_checkmk(c: _Ctx) -> list[dict[str, Any]] | None:
+    from app.models.checkmk import CheckmkHost, CheckmkInstance
+    rows = (await c.session.execute(
+        select(CheckmkHost, CheckmkInstance.name)
+        .join(CheckmkInstance, CheckmkInstance.id == CheckmkHost.instance_id)
+        .where(or_(CheckmkHost.jt_ipam_address_id == c.ipa.id,
+                   and_(CheckmkHost.ip == c.ip, CheckmkHost.jt_ipam_address_id.is_(None))))
+        .order_by(CheckmkHost.last_seen_at.desc().nulls_last()).limit(5)
+    )).all()
+    return [_compact({
+        "name": h.alias or h.host_name, "host": h.host_name, "state": h.state, "downtime": bool(h.downtime),
+        "folder": h.folder, "last_check": _dt(h.last_check), "last_seen_at": _dt(h.last_seen_at), "instance": iname,
+    }) for h, iname in rows] or None
+
+
 async def _sec_arp(c: _Ctx) -> list[dict[str, Any]]:
     """ARP：這個位址在網路上被哪些 MAC 用過（換過 MAC 常代表換了機器）。
 
@@ -537,6 +552,7 @@ async def _sec_last_seen(c: _Ctx) -> dict[str, Any] | None:
         ("arp", ipa.last_seen_arp, ("arp", "arp:librenms")),
         ("wazuh", ipa.last_seen_wazuh, ("wazuh",)),
         ("zabbix", ipa.last_seen_zabbix, ("zabbix",)),
+        ("checkmk", ipa.last_seen_checkmk, ("checkmk",)),
         ("ocs", ipa.last_seen_ocs, ("ocs",)),
     ]
     peer = await matched_peer(c.session, ipa.id)
@@ -935,7 +951,8 @@ async def collect_dossier(
     if ident:
         out["identity"] = ident
     # 監控涵蓋：誰在看這台
-    for key, fn in (("wazuh", _sec_wazuh), ("librenms", _sec_librenms), ("zabbix", _sec_zabbix)):
+    for key, fn in (("wazuh", _sec_wazuh), ("librenms", _sec_librenms), ("zabbix", _sec_zabbix),
+                    ("checkmk", _sec_checkmk)):
         v = await _safe(c, key, fn)
         if v:
             out["monitoring"][key] = v

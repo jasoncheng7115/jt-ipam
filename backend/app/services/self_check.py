@@ -626,6 +626,7 @@ async def _integration_errors(session: AsyncSession) -> Check:
     from sqlalchemy import select
 
     from app.models.adguard import AdGuardInstance
+    from app.models.checkmk import CheckmkInstance
     from app.models.checkpoint import CheckPointServer
     from app.models.checkpoint_gaia import CheckPointGaiaTarget
     from app.models.firewall import OPNsenseFirewall
@@ -645,7 +646,7 @@ async def _integration_errors(session: AsyncSession) -> Check:
         (FortiGateFirewall, "FortiGate"), (PaloAltoFirewall, "Palo Alto"),
         (CheckPointServer, "Check Point"), (CheckPointGaiaTarget, "Check Point Gaia"),
         (MikroTikRouter, "MikroTik"), (LibreNMSInstance, "LibreNMS"),
-        (ZabbixInstance, "Zabbix"), (WazuhInstance, "Wazuh"),
+        (ZabbixInstance, "Zabbix"), (CheckmkInstance, "Checkmk"), (WazuhInstance, "Wazuh"),
         (AdGuardInstance, "AdGuard"), (ProxmoxInstance, "Proxmox"),
     ):
         for obj in (await session.execute(select(model))).scalars().all():

@@ -104,7 +104,7 @@ export const IP_CHANGE_EVENT_TYPES = [
 export const IP_CHANGE_SOURCES = [
   "manual", "user", "system", "scanner", "librenms", "dns",
   "proxmox", "esxi", "hyperv", "openstack", "opnsense", "pfsense", "fortigate", "paloalto", "checkpoint", "mikrotik",
-  "wazuh", "zabbix", "ocs", "adguard", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "windows_dhcp", "rustdesk",
+  "wazuh", "zabbix", "checkmk", "ocs", "adguard", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "windows_dhcp", "rustdesk",
   // SNMP 收集（0217）：ARP 補 MAC 時寫的異動記錄
   "snmp",
 ] as const;

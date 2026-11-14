@@ -27,7 +27,7 @@ EVENT_INTEGRATION = "integration.sync_failed"
 # 這三個的路由名稱與類型代碼不一樣，湊出來的連結會 404 ——
 # 通知點了打不開，比沒有連結更糟（使用者會以為功能壞了）。
 _INTEGRATION_ROUTE = {
-    "librenms": "/librenms", "wazuh": "/wazuh", "zabbix": "/zabbix",
+    "librenms": "/librenms", "wazuh": "/wazuh", "zabbix": "/zabbix", "checkmk": "/checkmk",
     "adguard": "/adguard", "proxmox": "/virt-admin", "esxi": "/esxi", "hyperv": "/hyperv", "openstack": "/openstack",
     "opnsense": "/firewall", "pfsense": "/pfsense", "fortigate": "/fortigate",
     "paloalto": "/paloalto", "checkpoint": "/checkpoint", "checkpoint_gaia": "/checkpoint",

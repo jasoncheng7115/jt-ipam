@@ -89,6 +89,7 @@ RULES: dict[str, Rule] = {
     "nat.translation": _r("nat", "change_required", "high", "review", "explicit", "NAT_TRANSLATION"),
     "nat.translation_disabled": _r("nat", "reference_only", "info", "informational", "explicit", "NAT_TRANSLATION_DISABLED"),
     "monitoring.zabbix_host": _r("monitoring", "change_required", "medium", "review", "explicit", "ZABBIX_HOST"),
+    "monitoring.checkmk_host": _r("monitoring", "change_required", "medium", "review", "explicit", "CHECKMK_HOST"),
     # 代理會自己回報新位址；綁了固定位址（registerIP）的另有 wazuh_register_ip 要覆核
     "monitoring.wazuh_agent": _r("monitoring", "reference_only", "low", "informational", "explicit", "WAZUH_AGENT"),
     "monitoring.librenms_device": _r("monitoring", "change_required", "medium", "review", "explicit", "LIBRENMS_DEVICE"),

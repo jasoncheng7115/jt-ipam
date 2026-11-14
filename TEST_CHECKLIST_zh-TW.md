@@ -1621,6 +1621,15 @@ DHCP 伺服器在中間挖洞的範圍存成好幾段，洞本身寫進 `dhcp_ex
 - [ ] **主機名稱收斂**：兩台 Zabbix 主機指向同一 IP 時不得每輪互相覆寫（看異動記錄不該洗版）
 - [ ] **未監控的位址**：帶子網路範圍問就只回那些網段；空範圍回空而不是退化成全域
 
+## 7f-2. Checkmk 整合：**只要動到 Checkmk 同步或未監控的位址就要跑**
+
+- [ ] **真機兩個版本**：`bash scripts/checkmk-test-target/run.sh` 起 2.4 與 2.5，照印出的那行跑 `tests/test_checkmk_real.py`（guest 角色的自動化帳號看得到全部 5 台、`0.0.0.0` 佔位不當位址、錯密碼 `cmk_auth`、錯網站 `cmk_no_site`）
+- [ ] **網址寫法**：`https://主機/網站`、瀏覽器整串網址、完整 `api/1.0`／`api/v1` 都要能用；只有主機時存檔就擋（`cmk_need_site`）
+- [ ] **自動化密碼只進不出**：回應只有 `has_api_secret`；編輯時留空＝不變更
+- [ ] **只標既有 IP、不新建**，限定範圍時重疊網段不誤掛
+- [ ] **上線證據**：只有 UP 才蓋 `last_seen_checkmk`，時間是 Checkmk 的最後檢查時間；DOWN、尚未檢查、主動檢查關掉的都不蓋（`tests/test_checkmk.py`）
+- [ ] **畫面**（`E2E_CHECKMK_URL=… e2e/checkmk.spec.ts`）：新增、測試連線（版本、網站、主機數）、同步、主機清單（狀態、資料夾、多個位址）、未監控的位址、刪除
+
 ## 7g. 證據契約：**只要新增/修改任何「來源」就要跑**
 
 這一節守的是：**新來源必須先回答「它的證據會不會過期」**。少了這道門的代價付過了：
@@ -1790,6 +1799,9 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 - [ ] **AI**：get_device 帶群組（成員、角色、共用 IP），get_ip_detail 帶 `device_group`
 
 ## 8. 近期功能點檢
+
+- [ ] **Checkmk 整合**（`tests/test_checkmk.py`、`tests/test_checkmk_real.py`、`e2e/checkmk.spec.ts`）：照「7f-2. Checkmk 整合」逐項跑，2.4 與 2.5 兩個測試靶都要過
+- [ ] **上線長條圖延續 Wazuh／Zabbix／Checkmk**（`tests/test_ip_uptime.py`）：只有這些來源證明上線的日子，之後沒有觀測的日子要往後延續
 
 - [ ] **角色授權管機房、機櫃、裝置**（`tests/test_role_based_writes.py`、`e2e/role-based-writes.spec.ts`）：非管理員帳號掛「系統管理員」角色能新增機櫃與裝置；「網路操作員」能新增裝置、不能新增機櫃；「唯讀檢視者」的「新增機櫃」反灰並說明缺什麼權限
 - [ ] **LDAP 管理員群組**（`tests/test_ldap_admin_groups.py`、`tests/test_ldap_real_directory.py` 對 Samba AD）：設定值可填 DN 或群組名稱；經由巢狀群組間接所屬也判定為管理員；「測試帳密」顯示比對結果與目錄回傳的群組

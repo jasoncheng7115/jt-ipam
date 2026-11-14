@@ -197,7 +197,7 @@ export function ringLayout(
 /** 整合類型 → 設定頁的路由名稱（關係圖明細的「開啟原始物件」） */
 export const INTEGRATION_PAGE: Record<string, string> = {
   librenms: "librenms", opnsense: "firewall_admin", pfsense: "pfsense", fortigate: "fortigate", paloalto: "paloalto",
-  checkpoint: "checkpoint", mikrotik: "mikrotik", proxmox: "virt_admin", esxi: "esxi_admin", hyperv: "hyperv_admin", openstack: "openstack_admin", zabbix: "zabbix",
+  checkpoint: "checkpoint", mikrotik: "mikrotik", proxmox: "virt_admin", esxi: "esxi_admin", hyperv: "hyperv_admin", openstack: "openstack_admin", zabbix: "zabbix", checkmk: "checkmk",
   wazuh: "wazuh", dns_server: "dns", kea_dhcp: "kea_dhcp", isc_dhcp: "isc_dhcp", technitium: "technitium_dhcp",
   windows_dhcp: "windows_dhcp", ocs: "ocs", adguard: "adguard", isoinsight: "isoinsight", rustdesk: "rustdesk",
   scan_agent: "scan_agents", webhook: "webhooks", snmp: "snmp",
@@ -216,6 +216,7 @@ export function subjectLink(n: { type: string; subject_id?: string | null; kind?
     case "integration": return n.kind && INTEGRATION_PAGE[n.kind] ? { name: INTEGRATION_PAGE[n.kind] } : null;
     case "librenms_device": return { name: "librenms" };
     case "zabbix_host": return { name: "zabbix" };
+    case "checkmk_host": return { name: "checkmk" };
     case "wazuh_agent": return { name: "wazuh" };
     case "ocs_computer": return { name: "ocs" };
     case "rustdesk_peer": return { name: "rustdesk" };

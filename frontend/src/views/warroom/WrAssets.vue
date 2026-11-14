@@ -29,7 +29,7 @@ const cov = computed(() => props.data.coverage as Coverage);
 const chg = computed(() => props.data.change as Change);
 const VM_STATES = ["running", "other", "stopped", "unknown"] as const;
 const PLATFORM: Record<string, string> = { proxmox: "Proxmox VE", vmware: "VMware vSphere", "hyper-v": "Hyper-V", openstack: "OpenStack" };
-const SYSTEM: Record<string, string> = { wazuh: "Wazuh", zabbix: "Zabbix", ocs: "OCS Inventory" };
+const SYSTEM: Record<string, string> = { wazuh: "Wazuh", zabbix: "Zabbix", checkmk: "Checkmk", ocs: "OCS Inventory" };
 const CHANGE = [
   { key: "blocked", tone: "coral" }, { key: "needs_review", tone: "lilac" }, { key: "incomplete", tone: "ink" },
 ] as const;

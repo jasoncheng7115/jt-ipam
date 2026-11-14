@@ -34,7 +34,7 @@ GROUP_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("network_data", ("arp_entries", "fdb_entries", "librenms_", "wireless_", "snmp_")),
     ("physical", ("devices", "device_", "racks", "cables", "cable_", "locations", "circuits", "circuit_", "providers",
                   "power_")),
-    ("integrations", ("virtual_machines", "vm_interfaces", "virt_clusters", "proxmox_", "esxi_", "hyperv_", "openstack_", "zabbix_", "wazuh_",
+    ("integrations", ("virtual_machines", "vm_interfaces", "virt_clusters", "proxmox_", "esxi_", "hyperv_", "openstack_", "zabbix_", "checkmk_", "wazuh_",
                       "ocs_", "rustdesk_", "scan_agents", "agent_probe_jobs", "cert_", "certificates", "jump_hosts",
                       "ssh_credentials")),
     ("ipam", ("sections", "subnets", "ip_", "vlans", "vlan_domains", "vrfs", "customers", "asns", "tenant",

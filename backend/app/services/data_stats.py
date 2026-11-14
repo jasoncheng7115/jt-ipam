@@ -67,6 +67,7 @@ STATS: list[tuple[str, list[tuple[str, list[tuple[str, Cond]]]]]] = [
         ("virtual_machines", [("virtual_machines", None)]),
         ("librenms_devices", [("librenms_devices", None)]),
         ("zabbix_hosts", [("zabbix_hosts", None)]),
+        ("checkmk_hosts", [("checkmk_hosts", None)]),
         ("wazuh_agents", [("wazuh_agents", None)]),
         ("rustdesk_peers", [("rustdesk_peers", None)]),
         ("scan_agents", [("scan_agents", None)]),

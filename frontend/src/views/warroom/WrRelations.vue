@@ -53,7 +53,7 @@ const TYPE_ICON: Record<string, Component> = {
 };
 const BRAND: Record<string, string> = {
   proxmox: "Proxmox VE", vmware: "VMware", "hyper-v": "Hyper-V", hyperv: "Hyper-V", openstack: "OpenStack",
-  kvm: "KVM", xenserver: "XenServer", librenms: "LibreNMS", wazuh: "Wazuh", zabbix: "Zabbix", ocs: "OCS Inventory",
+  kvm: "KVM", xenserver: "XenServer", librenms: "LibreNMS", wazuh: "Wazuh", zabbix: "Zabbix", checkmk: "Checkmk", ocs: "OCS Inventory",
   opnsense: "OPNsense", pfsense: "pfSense", phpipam: "phpIPAM", isoinsight: "ISOinsight",
 };
 function srcName(s: string): string {

@@ -260,7 +260,7 @@ function impactTagColor(impact: string | null) {
 /** 同名的物件分得出來（規劃人員：兩個同名的主機、兩個同一個新位址）：監控／盤點類前面加來源，
  *  新位址那兩筆標出是 IPAM 紀錄還是使用跡象 */
 const ROLE_PRODUCT: Record<string, string> = {
-  librenms_device: "LibreNMS", zabbix_host: "Zabbix", wazuh_agent: "Wazuh", ocs_computer: "OCS",
+  librenms_device: "LibreNMS", zabbix_host: "Zabbix", checkmk_host: "Checkmk", wazuh_agent: "Wazuh", ocs_computer: "OCS",
   rustdesk_peer: "RustDesk",
 };
 function roleOf(n: RelationNode): string | null {

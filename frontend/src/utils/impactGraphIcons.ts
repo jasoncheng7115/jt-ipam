@@ -15,7 +15,7 @@ export const TYPE_ICON: Record<string, Component> = {
   dns_record: Globe, adguard_entry: Globe,
   fw_rule: Shield, fw_object: ShieldCheck, nat_translation: RefreshDouble,
   virtual_machine: Box, device: Server, service: Cloud,
-  librenms_device: Activity, zabbix_host: Activity, wazuh_agent: Fingerprint, ocs_computer: Computer,
+  librenms_device: Activity, zabbix_host: Activity, checkmk_host: Activity, wazuh_agent: Fingerprint, ocs_computer: Computer,
   rustdesk_peer: Laptop,
   ip_address: IpAddressTag, address: IpAddressTag, subnet: Network, ip_range: Network,
   dhcp_reservation: DataTransferBoth, dhcp_pool: DataTransferBoth, dhcp_lease: DataTransferBoth,

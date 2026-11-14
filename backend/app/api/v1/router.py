@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     cert_agents,
     cert_push,
     certificates,
+    checkmk,
     checkpoint,
     checkpoint_gaia,
     circuit_detail,
@@ -214,6 +215,8 @@ api_v1_router.include_router(ocs.view_router)
 api_v1_router.include_router(wazuh.router)
 api_v1_router.include_router(zabbix.router)
 api_v1_router.include_router(zabbix.view_router)
+api_v1_router.include_router(checkmk.router)
+api_v1_router.include_router(checkmk.view_router)
 api_v1_router.include_router(windows_dhcp.router)
 api_v1_router.include_router(dhcp_standalone.kea_router)
 api_v1_router.include_router(dhcp_standalone.isc_router)

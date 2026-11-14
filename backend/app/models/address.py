@@ -148,6 +148,8 @@ class IPAddress(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     last_seen_wazuh: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: Zabbix 最後一次回報這台主機可用（server 端輪詢維護，會過期）
     last_seen_zabbix: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Checkmk 最後一次檢查到這台主機 UP（監控核心輪詢維護，會過期）
+    last_seen_checkmk: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: OCS Inventory 最後一次盤點到這個 IP。**顯示用、不進上線判定** ——
     #: 盤點時間不是活性訊號（機器關機後 agent 不會回報，但上次盤點時間還在）。
     last_seen_ocs: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

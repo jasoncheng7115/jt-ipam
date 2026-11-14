@@ -306,7 +306,8 @@ def newest_evidence(ip: IPAddress, sources: set[str]) -> datetime | None:
     """被採信、而且會過期的來源最近一次看到它的時間（判上線的證據）。"""
     from app.services import arp_seen
     cands = [ts for name, ts in (("scanner", ip.last_seen_scanner), ("librenms", ip.last_seen_librenms),
-                                 ("wazuh", ip.last_seen_wazuh), ("zabbix", ip.last_seen_zabbix))
+                                 ("wazuh", ip.last_seen_wazuh), ("zabbix", ip.last_seen_zabbix),
+                                 ("checkmk", ip.last_seen_checkmk))
              if name in sources and ts]
     d_seen, _src = arp_seen.newest_aging(ip, sources)
     if d_seen:

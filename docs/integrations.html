@@ -608,7 +608,7 @@
     <span class="k"><span class="zh">防火牆與路由</span><span class="en">Firewalls &amp; routers</span><span class="ja">ファイアウォールとルーター</span></span><span class="v"><a href="#ig-opnsense">OPNsense</a><a href="#ig-pfsense">pfSense</a><a href="#ig-fortigate">FortiGate</a><a href="#ig-paloalto">Palo Alto</a><a href="#ig-checkpoint">Check Point</a><a href="#ig-mikrotik">MikroTik RouterOS</a></span>
     <span class="k"><span class="zh">DNS</span><span class="en">DNS</span><span class="ja">DNS</span></span><span class="v"><a href="#ig-powerdns">PowerDNS</a><a href="#ig-bind9">BIND9</a><a href="#ig-unbound">Unbound</a><a href="#ig-windows-dns">Windows DNS</a><a href="#ig-ucs">Univention UCS</a><a href="#ig-adguard">AdGuard Home</a></span>
     <span class="k"><span class="zh">DHCP</span><span class="en">DHCP</span><span class="ja">DHCP</span></span><span class="v"><a href="#ig-windows-dhcp">Windows DHCP</a><a href="#ig-kea">Kea DHCP</a><a href="#ig-isc-dhcp">ISC DHCP</a><a href="#ig-technitium">Technitium DHCP</a><a href="#ig-isoinsight">ISOinsight</a></span>
-    <span class="k"><span class="zh">監控</span><span class="en">Monitoring</span><span class="ja">監視</span></span><span class="v"><a href="#ig-librenms">LibreNMS</a><a href="#ig-zabbix">Zabbix</a><a href="#ig-snmp">SNMP</a></span>
+    <span class="k"><span class="zh">監控</span><span class="en">Monitoring</span><span class="ja">監視</span></span><span class="v"><a href="#ig-librenms">LibreNMS</a><a href="#ig-zabbix">Zabbix</a><a href="#ig-checkmk">Checkmk</a><a href="#ig-snmp">SNMP</a></span>
     <span class="k"><span class="zh">虛擬化</span><span class="en">Virtualization</span><span class="ja">仮想化</span></span><span class="v"><a href="#ig-proxmox">Proxmox VE</a><a href="#ig-vmware">VMware ESXi / vCenter</a><a href="#ig-hyperv">Hyper-V / SCVMM</a><a href="#ig-openstack">CubeCOS / OpenStack</a></span>
     <span class="k"><span class="zh">資安與資產</span><span class="en">Security &amp; assets</span><span class="ja">セキュリティと資産</span></span><span class="v"><a href="#ig-wazuh">Wazuh</a><a href="#ig-ocs">OCS Inventory NG</a><a href="#ig-rustdesk">RustDesk Server</a></span>
     <span class="k"><span class="zh">參考資料</span><span class="en">Reference data</span><span class="ja">参照データ</span></span><span class="v"><a href="#ig-ripe">RIPE</a><a href="#ig-twnic">TWNIC</a><a href="#ig-geoip">MaxMind GeoIP</a><a href="#ig-oui">IEEE OUI</a><a href="#ig-recog">Recog</a></span>
@@ -1203,6 +1203,37 @@
     </ul></div>
   </div>
   <p class="ig-where"><span class="zh">設定位置：管理 &gt; 外部系統整合 &gt; Zabbix</span><span class="en">Where: Admin &gt; External integrations &gt; Zabbix</span><span class="ja">設定場所：管理 &gt; 外部システム連携 &gt; Zabbix</span></p>
+</article>
+<article class="ig" id="ig-checkmk">
+  <div class="ig-h"><h3>Checkmk</h3><span class="ig-tags"><span class="tag ro"><span class="zh">唯讀</span><span class="en">Read only</span><span class="ja">読み取りのみ</span></span><span class="tag">REST API</span></span></div>
+  <p class="ig-lead"><span class="zh">跟 Zabbix 一樣是監控面的唯讀補充：主機與 IP 的對應、主機狀態、停機排程，以及監控涵蓋落差（IPAM 知道、Checkmk 卻沒在監控的位址）。只讀監控資料，不改動 Checkmk 的任何東西。</span><span class="en">A read-only complement on the monitoring side, like Zabbix: host to IP mapping, host state, scheduled downtimes, and a monitoring coverage gap (addresses IPAM knows that Checkmk does not monitor). It only reads monitoring data; nothing in Checkmk is changed.</span><span class="ja">Zabbix と同じく監視側を補う読み取り専用の連携です：ホストと IP の対応、ホストの状態、予定停止、監視の抜け（IPAM は把握しているが Checkmk が監視していないアドレス）。監視データを読むだけで、Checkmk 側は一切変更しません。</span></p>
+  <div class="ig-grid">
+    <div><h4><span class="zh">取得的資料</span><span class="en">What it reads</span><span class="ja">取得するデータ</span></h4><ul>
+      <li><span class="zh">主機：名稱、別名、監控用的位址與額外位址、資料夾、網站（分散式監控）</span><span class="en">Hosts: name, alias, monitoring address and additional addresses, folder, site (distributed monitoring)</span><span class="ja">ホスト：名前、エイリアス、監視に使うアドレスと追加のアドレス、フォルダー、サイト（分散監視）</span></li>
+      <li><span class="zh">主機狀態（UP / DOWN / 無法到達 / 尚未檢查）與最後檢查時間</span><span class="en">Host state (UP / DOWN / unreachable / not checked yet) and the last check time</span><span class="ja">ホストの状態（UP / DOWN / 到達不能 / 未チェック）と最終チェック時刻</span></li>
+      <li><span class="zh">停機排程（scheduled downtime）</span><span class="en">Scheduled downtimes</span><span class="ja">予定停止（ダウンタイム）</span></li>
+      <li><span class="zh">主機群組與標籤</span><span class="en">Host groups and labels</span><span class="ja">ホストグループとラベル</span></li>
+    </ul></div>
+    <div><h4><span class="zh">管理效益</span><span class="en">Management benefit</span><span class="ja">管理上の効果</span></h4><ul>
+      <li><span class="zh">既有 IP 取得 Checkmk 的主機名稱，作為主機名稱來源之一</span><span class="en">Existing IP records get the Checkmk host name as one of the host name sources</span><span class="ja">既存の IP に Checkmk のホスト名が入り、ホスト名のソースの 1 つになります</span></li>
+      <li><span class="zh">主機 UP 才算上線證據，時間用 Checkmk 實際檢查的時間；DOWN、尚未檢查、關掉主動檢查的都不算</span><span class="en">Only UP counts as liveness evidence, timed by Checkmk's actual check; DOWN, not checked yet and hosts with active checks off never count</span><span class="ja">UP だけを死活の根拠にし、時刻は Checkmk が実際にチェックした時刻を使います。DOWN、未チェック、アクティブチェックが無効なホストは数えません</span></li>
+      <li><span class="zh">監控涵蓋落差：列出有主機名稱、卻沒被這套 Checkmk 監控的位址</span><span class="en">Coverage gap: lists addresses with a known host name that this Checkmk does not monitor</span><span class="ja">監視の抜け：ホスト名がわかっているのに、この Checkmk で監視されていないアドレスを一覧します</span></li>
+      <li><span class="zh">IP 變更評估會列出用舊位址監控這台的 Checkmk 主機</span><span class="en">IP change assessment lists the Checkmk hosts that monitor the machine at its old address</span><span class="ja">IP 変更評価で、古いアドレスで監視している Checkmk のホストを挙げます</span></li>
+    </ul></div>
+    <div><h4><span class="zh">需要準備</span><span class="en">What to prepare</span><span class="ja">準備するもの</span></h4><ul>
+      <li><span class="zh">網站網址：瀏覽器開 Checkmk 時的網址到網站名稱為止（例如 <code>https://checkmk.example.com/mysite</code>）；分散式監控填中央網站</span><span class="en">The site URL: what you open Checkmk with, up to the site name (for example <code>https://checkmk.example.com/mysite</code>); the central site with distributed monitoring</span><span class="ja">サイトの URL：ブラウザで Checkmk を開く URL のサイト名まで（例：<code>https://checkmk.example.com/mysite</code>）。分散監視では中央サイト</span></li>
+      <li><span class="zh">在 Setup &gt; Users &gt; Users 新增一個帳號，身分驗證選 Automation secret for machine accounts，角色選內建的 Guest user（唯讀、看得到全部主機）</span><span class="en">A user added under Setup &gt; Users &gt; Users with "Automation secret for machine accounts" and the built-in Guest user role (read-only, sees every host)</span><span class="ja">Setup &gt; Users &gt; Users でユーザーを追加し、認証に Automation secret for machine accounts、ロールに組み込みの Guest user（読み取り専用、全ホストが見える）を選びます</span></li>
+      <li><span class="zh">Checkmk 2.0 以上，Raw / Community 與付費版都可以（2.4 與 2.5 實測過）</span><span class="en">Checkmk 2.0 or newer, Raw / Community or a commercial edition (tested with 2.4 and 2.5)</span><span class="ja">Checkmk 2.0 以降、Raw / Community または商用エディション（2.4 と 2.5 で検証済み）</span></li>
+      <li><span class="zh">重疊網段時設定「限定子網路範圍」，落差清單也只算範圍內</span><span class="en">"Limit to subnets" for overlapping networks; the gap list then covers only that scope</span><span class="ja">重複するネットワークでは「対象サブネットを限定」を設定します。抜けの一覧もその範囲だけになります</span></li>
+    </ul></div>
+    <div><h4><span class="zh">限制與注意</span><span class="en">Limits and notes</span><span class="ja">制限と注意</span></h4><ul>
+      <li><span class="zh">角色不是 Guest user 時只看得到聯絡群組裡的主機，Checkmk 不會報錯；「測試連線」顯示看得到幾台</span><span class="en">With a role other than Guest user only the hosts of the contact groups are visible and Checkmk reports no error; Test connection shows how many are visible</span><span class="ja">Guest user 以外のロールではコンタクトグループのホストしか見えず、Checkmk はエラーを返しません。接続テストで見えている台数を確認できます</span></li>
+      <li><span class="zh">只讀監控資料，不讀「設定」：讀設定要更高的權限</span><span class="en">It reads monitoring data, not the Setup configuration, which would need more permissions</span><span class="ja">監視データだけを読み、設定（Setup）は読みません。設定を読むにはより強い権限が必要なためです</span></li>
+      <li><span class="zh">不新建 IP，只對應既有紀錄，而且要唯一命中；主機名稱解析不到時沒有位址，不對應</span><span class="en">Never creates IP records; it only matches existing ones on a unique match; a host whose name does not resolve has no address and is not matched</span><span class="ja">IP は作成せず、既存のレコードに一意に一致した場合だけ対応付けます。名前を解決できないホストはアドレスが無いため対応付けません</span></li>
+      <li><span class="zh">不提供 ARP / FDB，請用 LibreNMS 或 SNMP 收集</span><span class="en">No ARP / FDB; use LibreNMS or SNMP collection</span><span class="ja">ARP / FDB はありません。LibreNMS か SNMP 収集を使ってください</span></li>
+    </ul></div>
+  </div>
+  <p class="ig-where"><span class="zh">設定位置：管理 &gt; 外部系統整合 &gt; Checkmk</span><span class="en">Where: Admin &gt; External integrations &gt; Checkmk</span><span class="ja">設定場所：管理 &gt; 外部システム連携 &gt; Checkmk</span></p>
 </article>
 
 <article class="ig" id="ig-snmp">

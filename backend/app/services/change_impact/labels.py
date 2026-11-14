@@ -11,7 +11,7 @@ from typing import Any
 PRODUCT: dict[str, str] = {
     "librenms": "LibreNMS", "opnsense": "OPNsense", "pfsense": "pfSense", "fortigate": "FortiGate",
     "paloalto": "Palo Alto", "checkpoint": "Check Point", "mikrotik": "MikroTik", "proxmox": "Proxmox VE",
-    "esxi": "VMware ESXi", "cert_push": "憑證推送", "hyperv": "Hyper-V", "openstack": "OpenStack", "zabbix": "Zabbix", "wazuh": "Wazuh", "dns_server": "DNS", "kea_dhcp": "Kea DHCP",
+    "esxi": "VMware ESXi", "cert_push": "憑證推送", "hyperv": "Hyper-V", "openstack": "OpenStack", "zabbix": "Zabbix", "checkmk": "Checkmk", "wazuh": "Wazuh", "dns_server": "DNS", "kea_dhcp": "Kea DHCP",
     "isc_dhcp": "ISC DHCP", "technitium": "Technitium", "windows_dhcp": "Windows DHCP", "ocs": "OCS Inventory",
     "adguard": "AdGuard Home", "isoinsight": "ISOinsight", "rustdesk": "RustDesk", "scan_agent": "掃描代理",
     "cert_agent": "憑證代理", "webhook": "Webhook", "snmp": "SNMP",

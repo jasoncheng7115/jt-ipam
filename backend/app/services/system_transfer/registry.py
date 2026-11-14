@@ -116,6 +116,8 @@ CATEGORY: dict[str, str] = {
     "scan_agents": "integrations",
     "zabbix_instances": "integrations",
     "zabbix_hosts": "synced",
+    "checkmk_instances": "integrations",
+    "checkmk_hosts": "synced",
     # 探測工作是執行紀錄（工具頁的兩分鐘就過期；IP 探測的歷次結果也屬歷史），與稽核／背景作業同歸短暫資料
     "agent_probe_jobs": "operational",
     # 掃描代理每一輪的耗時（負載面板的趨勢，只保留 7 天）

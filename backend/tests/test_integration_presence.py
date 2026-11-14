@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # 選單 key → 狀態鍵（前端 MainLayout.vue 的 INTEGRATION_PRESENCE_KEY 對照表要跟這裡一致）
 MENU_KEYS = {
     "dns", "adguard", "librenms", "opnsense", "pfsense", "fortigate", "paloalto", "checkpoint", "mikrotik", "snmp",
-    "windows_dhcp", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "rustdesk", "proxmox", "esxi", "hyperv", "openstack", "wazuh", "zabbix", "ocs", "graylog",
+    "windows_dhcp", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "rustdesk", "proxmox", "esxi", "hyperv", "openstack", "wazuh", "zabbix", "checkmk", "ocs", "graylog",
 }
 
 

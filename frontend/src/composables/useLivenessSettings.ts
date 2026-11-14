@@ -97,6 +97,7 @@ export function classifyAddressLiveness(addr: {
   last_seen_dns?: string | null;
   last_seen_wazuh?: string | null;
   last_seen_zabbix?: string | null;
+  last_seen_checkmk?: string | null;
   /** 防火牆給的逐來源觀測時間（`arp:opnsense` / `lease:pfsense` …） */
   arp_seen?: Record<string, string> | null;
   exclude_from_ping?: boolean | null;
@@ -125,6 +126,7 @@ type EvidenceFields = {
   last_seen_dns?: string | null;
   last_seen_wazuh?: string | null;
   last_seen_zabbix?: string | null;
+  last_seen_checkmk?: string | null;
   arp_seen?: Record<string, string> | null;
 };
 
@@ -136,6 +138,7 @@ function countedTimes(addr: EvidenceFields): number[] {
     use.includes("librenms") ? addr.last_seen_librenms : null,
     use.includes("wazuh") ? addr.last_seen_wazuh : null,
     use.includes("zabbix") ? addr.last_seen_zabbix : null,
+    use.includes("checkmk") ? addr.last_seen_checkmk : null,
     // last_seen_dns（AdGuard）刻意不算：它只代表「AdGuard 的設定裡有這個 IP」（固定用戶端、
     // DNS 改寫），每輪同步都蓋成現在 —— 關機的機器也一直亮綠燈（2026-09-26 稽核）。後端也不採用。
     use.includes("arp") || use.includes("arp:librenms") ? addr.last_seen_arp : null,
@@ -185,6 +188,7 @@ export function isArpOnlyEvidence(addr: {
   last_seen_arp?: string | null;
   last_seen_wazuh?: string | null;
   last_seen_zabbix?: string | null;
+  last_seen_checkmk?: string | null;
   arp_seen?: Record<string, string> | null;
 }): boolean {
   if (!addr.last_seen_arp) return false;
@@ -192,5 +196,5 @@ export function isArpOnlyEvidence(addr: {
   // 就不算「只靠 ARP」。DHCP 租約（lease:*）不算，租期比開機時間長得多。
   const fw = Object.keys(addr.arp_seen || {}).some((k) => !k.startsWith("lease:"));
   return !addr.last_seen_scanner && !addr.last_seen_librenms
-    && !addr.last_seen_wazuh && !addr.last_seen_zabbix && !fw;
+    && !addr.last_seen_wazuh && !addr.last_seen_zabbix && !addr.last_seen_checkmk && !fw;
 }

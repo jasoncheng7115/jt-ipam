@@ -909,7 +909,7 @@ async def monitoring(ctx: Ctx) -> None:
     texts = [r.ip_text for r in ctx.roots]
     by_text = {r.ip_text: r for r in ctx.roots}
     by_id = {r.ip_id: r for r in ctx.roots}
-    # Zabbix 與 LibreNMS 的清單是全域讀取（比照各自的唯讀頁面）
+    # Zabbix、Checkmk 與 LibreNMS 的清單是全域讀取（比照各自的唯讀頁面）
     if ctx.global_read:
         for h in (await ctx.session.execute(text("""
             SELECT h.id, h.host, h.name, host(h.ip) AS ip, h.jt_ipam_address_id, h.instance_id, h.synced_at
@@ -926,6 +926,24 @@ async def monitoring(ctx: Ctx) -> None:
                                    label=(h.name or h.host)[:300], payload={"host": h.host, "ip": h.ip},
                                    observed_at=h.synced_at, freshness=src.freshness if src else "unknown"))
             ctx.find(Finding("monitoring.zabbix_host", "zabbix_host", (h.name or h.host)[:300], [key],
+                             subject_id=h.id, match_kind="exact", params={"address": root.ip_text},
+                             strength=ctx.strength_for(src, root)))
+        # Checkmk：同 Zabbix（主機的監控位址寫在 Checkmk 的設定裡，改址要一起改）
+        for h in (await ctx.session.execute(text("""
+            SELECT h.id, h.host_name, h.alias, host(h.ip) AS ip, h.jt_ipam_address_id, h.instance_id, h.synced_at
+              FROM checkmk_hosts h WHERE h.jt_ipam_address_id = ANY(:ids) OR host(h.ip) = ANY(:texts)
+        """), {"ids": ids, "texts": texts})).all():
+            root = by_id.get(h.jt_ipam_address_id) or by_text.get(h.ip)
+            if root is None:
+                continue
+            src = ctx.source("checkmk", h.instance_id)
+            if ctx.in_scope(src, root) is False:
+                continue
+            key = ctx.add(Evidence(key=f"checkmk_host:{h.id}", source_type="monitoring", object_type="checkmk_host",
+                                   object_id=h.id, integration_ref=f"checkmk:{h.instance_id}",
+                                   label=h.host_name[:300], payload={"host": h.host_name, "alias": h.alias, "ip": h.ip},
+                                   observed_at=h.synced_at, freshness=src.freshness if src else "unknown"))
+            ctx.find(Finding("monitoring.checkmk_host", "checkmk_host", h.host_name[:300], [key],
                              subject_id=h.id, match_kind="exact", params={"address": root.ip_text},
                              strength=ctx.strength_for(src, root)))
         dev = ctx.scenario.device_id

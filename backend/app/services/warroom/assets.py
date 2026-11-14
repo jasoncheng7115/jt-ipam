@@ -5,7 +5,7 @@
 - 「實體主機」＝叢集裡不重複的節點（沒有獨立的主機表）
 - 虛擬化是全域基礎設施資料（REST 上也只給有全域讀取的人）：只被指派部分物件的帳號回 forbidden
 - 監控覆蓋（管理員限定）：執行中、而且對得到 IPAM 位址的 VM，有沒有被各套已設定的監控／盤點系統涵蓋
-  （Wazuh：有 active 代理；Zabbix：有監控中的主機；OCS：盤點過）。對不到位址的 VM 另外算，不當成缺口也不當成涵蓋
+  （Wazuh：有 active 代理；Zabbix：有監控中的主機；Checkmk：有這台主機；OCS：盤點過）。對不到位址的 VM 另外算，不當成缺口也不當成涵蓋
 - IP 變更評估（管理員限定；功能關閉時回 disabled）：還在進行中的計畫，依最近一次評估的結論分
   有阻擋項／需要覆核／證據不完整
 """
@@ -96,6 +96,7 @@ async def _clusters(session: AsyncSession, page: int, only: set[Any] | None) -> 
 async def _coverage(session: AsyncSession, only: set[Any] | None) -> tuple[dict[str, Any], int | None]:
     """(段落, 監控缺口：至少一套系統沒涵蓋的執行中 VM 數)"""
     from app.models.address import IPAddress
+    from app.models.checkmk import CheckmkHost, CheckmkInstance
     from app.models.ocs import OcsServer
     from app.models.wazuh import WazuhAgent, WazuhInstance
     from app.models.zabbix import ZabbixHost, ZabbixInstance
@@ -117,6 +118,10 @@ async def _coverage(session: AsyncSession, only: set[Any] | None) -> tuple[dict[
         covered = {r[0] for r in (await session.execute(select(ZabbixHost.jt_ipam_address_id).where(
             ZabbixHost.status == "monitored", in_values(ZabbixHost.jt_ipam_address_id, ip_ids)))).all()} if ip_ids else set()
         systems.append(("zabbix", covered))
+    if await session.scalar(select(func.count()).select_from(CheckmkInstance).where(CheckmkInstance.enabled.is_(True))):
+        covered = {r[0] for r in (await session.execute(select(CheckmkHost.jt_ipam_address_id).where(
+            in_values(CheckmkHost.jt_ipam_address_id, ip_ids)))).all()} if ip_ids else set()
+        systems.append(("checkmk", covered))
     if await session.scalar(select(func.count()).select_from(OcsServer).where(OcsServer.enabled.is_(True))):
         covered = {r[0] for r in (await session.execute(select(IPAddress.id).where(
             in_values(IPAddress.id, ip_ids),

@@ -109,6 +109,10 @@ COLUMN_SECRETS: dict[str, list[tuple[str, str, str, Callable[[dict[str, Any]], b
         ("api_password", "api_password_enc", "api_password_nonce",
          _aad_id("zabbix_instance:{id}:api_password")),
     ],
+    "checkmk_instances": [
+        ("api_secret", "api_secret_enc", "api_secret_nonce",
+         _aad_id("checkmk_instance:{id}:api_secret")),
+    ],
     "windows_dhcp_servers": [
         ("password", "password_enc", "password_nonce",
          _aad_id("windows_dhcp_server:{id}:password")),

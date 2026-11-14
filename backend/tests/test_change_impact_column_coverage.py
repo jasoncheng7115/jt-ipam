@@ -52,6 +52,7 @@ COVERED: set[tuple[str, str]] = {
     # 監控與資產
     ("librenms_devices", "hostname"), ("librenms_devices", "primary_ip"),
     ("zabbix_hosts", "host"), ("zabbix_hosts", "ip"),
+    ("checkmk_hosts", "host_name"), ("checkmk_hosts", "ip"),
     ("wazuh_agents", "ip"), ("wazuh_agents", "register_ip"),
     ("rustdesk_peers", "hostname"),
     ("vm_interfaces", "primary_ip"),
@@ -70,7 +71,7 @@ COVERED: set[tuple[str, str]] = {
     ("checkpoint_servers", "api_url"), ("checkpoint_gateways", "ipv4_address"),
     # Check Point 第二階段：閘道 Gaia API 的網址、閘道 DHCP 發給用戶端的預設閘道（adapters_net.dhcp）
     ("checkpoint_gaia_targets", "gaia_url"), ("checkpoint_dhcp_subnets", "default_gateway"),
-    ("librenms_instances", "api_url"), ("zabbix_instances", "api_url"), ("wazuh_instances", "api_url"),
+    ("librenms_instances", "api_url"), ("zabbix_instances", "api_url"), ("checkmk_instances", "api_url"), ("wazuh_instances", "api_url"),
     ("ocs_servers", "base_url"), ("ocs_servers", "db_host"),
     ("rustdesk_servers", "client_address"), ("rustdesk_servers", "hbbs_host"), ("rustdesk_servers", "relay_host"),
     # SNMP 收集目標的管理位址覆寫（0217，代理連這個位址讀設備）

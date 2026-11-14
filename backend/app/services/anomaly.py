@@ -1366,7 +1366,7 @@ _LIVE_FIELDS: dict[str, tuple[str, str | None]] = {
 #: 一列有好幾個 IP 的類別（`ips: [{ip, ip_address_id}]`）→ 附 `live_ips: {ip: 依據}`
 _LIVE_LISTS = ("mac_drifts", "mac_drift_reference")
 _LIVE_COLS = ("last_seen_scanner", "last_seen_librenms", "last_seen_arp", "last_seen_wazuh",
-              "last_seen_zabbix")
+              "last_seen_zabbix", "last_seen_checkmk")
 
 
 def _ip_text(v: Any) -> str | None:

@@ -24,7 +24,7 @@ ARP 快取一直留著那筆記錄（v0.5.206/0.5.207 修）。當時的問題�
 |---|---|---|
 | `asserted` | 人宣告的意圖，不是觀測 | manual |
 | `probed` | 我們主動去探、當場得到回應 | scanner |
-| `monitored` | 第三方系統維護、且**由對方負責過期**的狀態證據 | librenms、zabbix、wazuh、防火牆的 ARP 表／VPN 連線 |
+| `monitored` | 第三方系統維護、且**由對方負責過期**的狀態證據 | librenms、zabbix、checkmk、wazuh、防火牆的 ARP 表／VPN 連線 |
 | `learned` | 被動學到的對應關係，**不代表現在還成立** | arp、fdb、dns、dhcp、虛擬化平台的設定 |
 
 `learned` 一律 `aging=False`：它們回答的是「這個對應曾經被學到」，不是「現在活著」。
@@ -73,6 +73,7 @@ SOURCES: dict[str, Source] = {s.name: s for s in (
     # 第三方監控：裝置狀態由對方輪詢維護，會過期
     _s("librenms", TIER_MONITORED, aging=True),
     _s("zabbix", TIER_MONITORED, aging=True),
+    _s("checkmk", TIER_MONITORED, aging=True),
     _s("wazuh", TIER_MONITORED, aging=True),
 
     # 被動學到的對應：不代表現在還活著
@@ -188,7 +189,7 @@ SOURCES: dict[str, Source] = {s.name: s for s in (
 #: 實際會餵進上線判定的來源（在 ip_addresses 上有對應的 last_seen_* 欄位）。
 #: 這是「有登記」與「真的有資料進來」的交集 —— 不要把只登記、沒接線的來源列進設定頁。
 LIVENESS_SOURCES: tuple[str, ...] = (
-    "scanner", "librenms", "wazuh", "zabbix",
+    "scanner", "librenms", "wazuh", "zabbix", "checkmk",
     # 舊的籠統 "arp" 保留在清單裡：既有站台存下來的設定不會因為升級被丟掉。
     # 它對應的是 LibreNMS 寫的 `last_seen_arp`，語意等同 `arp:librenms`。
     "arp",
@@ -209,6 +210,8 @@ SOURCES_ADDED_LATER: tuple[str, ...] = (
     "iface:opnsense", "iface:pfsense", "iface:fortigate", "iface:mikrotik", "iface:librenms", "device",
     # 2026-10-15 SNMP 收集（0217）：會過期的兩個升級後自動採信；arp:snmp 不會過期，本來就不在預設裡
     "arp:snmp_live", "iface:snmp",
+    # 2026-11-14 Checkmk：跟 Zabbix 一樣是會過期的監控證據
+    "checkmk",
 )
 
 #: 存在 `ip_addresses.arp_seen` JSONB 裡的那些（其餘各有自己的 last_seen_* 欄位）。
