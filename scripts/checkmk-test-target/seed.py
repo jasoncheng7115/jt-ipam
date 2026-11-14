@@ -4,13 +4,16 @@ import json
 import sys
 import urllib.request
 
+if not sys.argv[1].startswith(("http://", "https://")):
+    sys.exit("usage: seed.py http://<容器 IP>:5000/cmk")
 B = f"{sys.argv[1]}/check_mk/api/1.0"
 AUTH = "Basic " + base64.b64encode(b"cmkadmin:Cmk-Admin-2026!").decode()
 def call(method, path, body=None, headers=None):
     h = {"Authorization": AUTH, "Accept": "application/json", "Content-Type": "application/json", **(headers or {})}
-    r = urllib.request.Request(B + path, data=json.dumps(body).encode() if body is not None else None, headers=h, method=method)
+    # 網址在上面已限定 http(s)，只打 run.sh 剛起的測試容器
+    r = urllib.request.Request(B + path, data=json.dumps(body).encode() if body is not None else None, headers=h, method=method)  # noqa: S310
     try:
-        with urllib.request.urlopen(r) as resp:
+        with urllib.request.urlopen(r) as resp:  # noqa: S310
             t = resp.read().decode(); return resp.status, (json.loads(t) if t else None), resp.headers
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()[:400], e.headers
