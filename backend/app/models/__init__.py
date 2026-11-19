@@ -23,7 +23,7 @@ from app.models.audit import AuditLog
 from app.models.background_task import BackgroundTask
 from app.models.base import Base
 from app.models.cert_push_target import CertPushTarget
-from app.models.certificate import CertAgent, Certificate, CertVersion
+from app.models.certificate import CertAgent, CertDeployNotice, Certificate, CertVersion
 from app.models.change_impact import (
     ChangePlan,
     ChangePlanRevision,
@@ -84,6 +84,7 @@ from app.models.ip_range import IPRange
 from app.models.ip_request import IPRequest, IPRequestEvent, IPRequestStageApproval
 from app.models.isoinsight import IsoInsightLease, IsoInsightSource, IsoInsightSyncRun
 from app.models.jump_host import JumpHost
+from app.models.k8s import K8sCidr, K8sCluster, K8sHostname, K8sIPPool, K8sNode, K8sServiceIP
 from app.models.librenms import ARPEntry, FDBEntry, LibreNMSDevice, LibreNMSInstance
 from app.models.location import Location, Rack
 from app.models.maintenance import MaintenanceScope, MaintenanceSuppression, MaintenanceWindow
@@ -156,6 +157,7 @@ __all__ = [
     "Cable",
     "CableTermination",
     "CertAgent",
+    "CertDeployNotice",
     "CertPushTarget",
     "CertVersion",
     "Certificate",
@@ -214,6 +216,12 @@ __all__ = [
     "ImpactServiceEndpoint",
     "IntegrationOwnAddress",
     "JumpHost",
+    "K8sCidr",
+    "K8sCluster",
+    "K8sHostname",
+    "K8sIPPool",
+    "K8sNode",
+    "K8sServiceIP",
     "LibreNMSDevice",
     "LibreNMSInstance",
     "Location",

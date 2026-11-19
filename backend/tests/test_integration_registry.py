@@ -14,7 +14,7 @@ SYNC = Path(__file__).resolve().parents[2] / "scripts" / "jt-ipam-sync.py"
 def test_registry_matches_the_sync_health_list() -> None:
     src = SYNC.read_text(encoding="utf-8")
     block = src[src.index("insts: list = []"):src.index("check_integration_health(session, insts)")]
-    sync_kinds = set(re.findall(r'\("([a-z_]+)",\s*[A-Z]\w+\)', block))
+    sync_kinds = set(re.findall(r'\("([a-z0-9_]+)",\s*[A-Z]\w+\)', block))
     assert len(sync_kinds) >= 20, "偵測方式失效了：同步腳本的名單只抓到很少幾個"
     assert {k for k, *_ in reg.INTEGRATIONS} == sync_kinds
 

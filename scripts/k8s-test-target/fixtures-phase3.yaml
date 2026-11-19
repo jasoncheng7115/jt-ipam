@@ -1,0 +1,44 @@
+# 第三階段的測試資料（kind 叢集；CRD 是上游的那一份）：Egress IP、Antrea ExternalIPPool、Multus 的 host-local 與 static。
+# OVN 的 EgressIP 沒有 status 子資源，status 直接寫在物件裡；Antrea Egress 有，由 run.sh 補（實機上都是控制器寫的）
+apiVersion: k8s.ovn.org/v1
+kind: EgressIP
+metadata: {name: egress-prod}
+spec:
+  egressIPs: ["203.0.113.150", "203.0.113.151"]
+  namespaceSelector: {matchLabels: {env: prod}}
+status:
+  items: [{node: jtipam-control-plane, egressIP: 203.0.113.150}]
+---
+apiVersion: cilium.io/v2
+kind: CiliumEgressGatewayPolicy
+metadata: {name: to-internet}
+spec:
+  selectors: [{podSelector: {matchLabels: {app: web}}}]
+  destinationCIDRs: ["0.0.0.0/0"]
+  egressGateway: {nodeSelector: {matchLabels: {egress: "true"}}, egressIP: 203.0.113.152}
+---
+apiVersion: crd.antrea.io/v1beta2
+kind: ExternalIPPool
+metadata: {name: external}
+spec:
+  ipRanges: [{start: 203.0.113.160, end: 203.0.113.169}, {cidr: 203.0.113.176/29}]
+  nodeSelector: {}
+---
+apiVersion: crd.antrea.io/v1beta2
+kind: Egress
+metadata: {name: web-egress}
+spec:
+  appliedTo: {podSelector: {matchLabels: {app: web}}}
+  egressIPs: [203.0.113.154]
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata: {name: storage, namespace: jt-demo}
+spec:
+  config: '{"cniVersion": "0.3.1", "type": "macvlan", "master": "eth0", "ipam": {"type": "host-local", "ranges": [[{"subnet": "203.0.113.64/28", "rangeStart": "203.0.113.66", "rangeEnd": "203.0.113.78", "gateway": "203.0.113.65"}]]}}'
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata: {name: legacy-db, namespace: jt-demo}
+spec:
+  config: '{"cniVersion": "0.3.1", "name": "legacy", "plugins": [{"type": "macvlan", "master": "eth0", "ipam": {"type": "static", "addresses": [{"address": "203.0.113.90/24"}]}}]}'

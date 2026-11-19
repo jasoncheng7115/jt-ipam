@@ -14,7 +14,7 @@ import ja from "../ja-JP.json";
 const CATEGORIES = [
   "ip_conflicts", "mac_drifts", "ghost_ips", "unauthorized_ips", "rogue_dhcp",
   "external_exposure", "dangling_dns", "duplicate_ip_records", "suspicious_changes",
-  "fw_rule_rot", "arp_only_liveness", "stale_device_links", "mac_flapping", "identity_changes",
+  "fw_rule_rot", "arp_only_liveness", "stale_device_links", "mac_flapping", "identity_changes", "k8s_conflicts",
   "dns_compare_mismatch", "arp_flux", "l2_subnet_bleed",
 ];
 

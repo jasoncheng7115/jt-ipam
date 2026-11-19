@@ -374,12 +374,11 @@ async def _audit_and_notify(session: AsyncSession, target: CertPushTarget, cert:
             title=f"憑證推送失敗：{target.name}", body=f"{cert.name if cert else ''} → {target.kind} {target.api_url}（{error}）",
             link="/certificates", title_key="notif.cert_push_failed",
             params={"target": target.name, "certificate": cert.name if cert else "", "error": error or ""})
-    elif status == "ok":
-        await notify_admins_event(
-            session, event="cert.deployed", severity="info",
-            title=f"憑證已推送：{target.name}", body=f"{cert.name if cert else ''} → {target.kind} {target.api_url}",
-            link="/certificates", title_key="notif.cert_pushed",
-            params={"target": target.name, "certificate": cert.name if cert else ""})
+    elif status == "ok" and cert is not None and fp:
+        # 成功先記下來，跟同一批的代理一起合併成一則通知（services/cert_deploy_digest）
+        from app.services import cert_deploy_digest
+        await cert_deploy_digest.record(session, cert=cert.name, fingerprint=fp, target=target.name,
+                                        service=target.kind, source="push")
 
 
 async def due_targets(session: AsyncSession, now: datetime | None = None) -> list[CertPushTarget]:

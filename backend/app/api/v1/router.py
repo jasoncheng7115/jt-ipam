@@ -49,6 +49,7 @@ from app.api.v1.endpoints import (
     ip_requests,
     isoinsight,
     jump_hosts,
+    k8s,
     librenms,
     locations,
     macs,
@@ -217,6 +218,9 @@ api_v1_router.include_router(zabbix.router)
 api_v1_router.include_router(zabbix.view_router)
 api_v1_router.include_router(checkmk.router)
 api_v1_router.include_router(checkmk.view_router)
+api_v1_router.include_router(k8s.router)
+api_v1_router.include_router(k8s.view_router)
+api_v1_router.include_router(k8s.ip_router)
 api_v1_router.include_router(windows_dhcp.router)
 api_v1_router.include_router(dhcp_standalone.kea_router)
 api_v1_router.include_router(dhcp_standalone.isc_router)

@@ -1,0 +1,94 @@
+# 第二階段的測試資料（kind 叢集；CRD 是上游的那一份）。沒有對應的控制器，status 由 run.sh 用 --subresource=status 補上
+apiVersion: v1
+kind: Namespace
+metadata: {name: infra}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: web}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: openshift-ingress}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: openshift-console}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata: {name: jt-test}
+spec: {controllerName: example.com/jt-test}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: gw, namespace: infra}
+spec:
+  gatewayClassName: jt-test
+  listeners:
+    - name: https
+      hostname: "*.apps.example.com"
+      port: 443
+      protocol: HTTPS
+      tls: {certificateRefs: [{name: wildcard-tls}]}
+      allowedRoutes: {namespaces: {from: All}}
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes: {namespaces: {from: All}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: blog, namespace: web}
+spec:
+  parentRefs: [{name: gw, namespace: infra}]
+  hostnames: ["blog.apps.example.com"]
+  rules: [{backendRefs: [{name: blog, port: 80}]}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata: {name: rpc, namespace: infra}
+spec:
+  parentRefs: [{name: gw}]
+  hostnames: ["rpc.apps.example.com"]
+  rules: [{backendRefs: [{name: rpc, port: 9000}]}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: router-default, namespace: openshift-ingress}
+spec:
+  type: LoadBalancer
+  selector: {app: router}
+  ports: [{name: https, port: 443, protocol: TCP}]
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata: {name: console, namespace: openshift-console}
+spec:
+  host: console.apps.example.com
+  to: {kind: Service, name: console}
+  tls: {termination: reencrypt}
+---
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata: {name: default-ipv4-ippool}
+spec: {cidr: 10.244.0.0/16, natOutgoing: true, ipipMode: Never, vxlanMode: CrossSubnet, blockSize: 26}
+---
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata: {name: routable}
+spec: {cidr: 10.80.0.0/16, natOutgoing: false, ipipMode: Never, vxlanMode: Never, blockSize: 26}
+---
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata: {name: lb}
+spec: {cidr: 203.0.113.224/28, allowedUses: [LoadBalancer]}
+---
+apiVersion: whereabouts.cni.cncf.io/v1alpha1
+kind: IPPool
+metadata: {name: 203.0.113.96-27, namespace: kube-system}
+spec:
+  range: 203.0.113.96/27
+  allocations:
+    "1": {id: c1, podref: jt-demo/db-0, ifname: net1}
+    "3": {id: c2, podref: jt-demo/db-1}

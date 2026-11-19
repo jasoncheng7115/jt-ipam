@@ -1,0 +1,20 @@
+# 測試資料：一個 LoadBalancer（MetalLB 會發 IP；kind 沒有 LB 控制器時維持 pending）與一個 externalIPs 的 Service
+apiVersion: v1
+kind: Namespace
+metadata: {name: jt-demo}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: jt-demo}
+spec:
+  type: LoadBalancer
+  selector: {app: web}
+  ports: [{name: http, port: 80, targetPort: 8080, protocol: TCP}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: legacy, namespace: jt-demo}
+spec:
+  selector: {app: legacy}
+  externalIPs: ["192.0.2.50"]
+  ports: [{name: https, port: 443, protocol: TCP}]

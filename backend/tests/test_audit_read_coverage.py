@@ -23,6 +23,7 @@ _AUDIT = re.compile(r"\w*audit\w*\(", re.IGNORECASE)
 
 EXEMPT: dict[str, str] = {
     "locations.py::get_floorplan": "地點的平面圖圖片，畫面顯示用（同一張圖在地點頁本來就看得到）",
+    "k8s.py::readonly_manifest": "固定的範本（唯讀 ServiceAccount 的 YAML），沒有站台資料也沒有機密；原始碼裡就有同一份",
 }
 
 

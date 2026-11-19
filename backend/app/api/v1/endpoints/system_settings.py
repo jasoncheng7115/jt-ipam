@@ -850,6 +850,7 @@ async def _liveness_candidates(
     from app.models.checkpoint_gaia import CheckPointGaiaTarget
     from app.models.firewall import OPNsenseFirewall
     from app.models.fortigate import FortiGateFirewall
+    from app.models.k8s import K8sCluster
     from app.models.librenms import LibreNMSInstance
     from app.models.mikrotik import MikroTikRouter
     from app.models.paloalto import PaloAltoFirewall
@@ -869,6 +870,7 @@ async def _liveness_candidates(
         "wazuh": await _has(WazuhInstance),
         "zabbix": await _has(ZabbixInstance),
         "checkmk": await _has(CheckmkInstance),
+        "k8s": await _has(K8sCluster),
         "opnsense": await _has(OPNsenseFirewall),
         "pfsense": await _has(PfSenseFirewall),
         "fortigate": await _has(FortiGateFirewall),
@@ -1557,6 +1559,7 @@ def _gather_version_info() -> dict[str, Any]:
         "pgvector", "mcp",
         "aardwolf", "websockets", "pillow", "fpdf2", "certifi",
         "structlog", "python-json-logger",
+        "packaging", "pyyaml",          # SBOM（services/sbom）直接用到
     ]
     versions: dict[str, str | None] = {}
     for p in pkgs:
@@ -1671,6 +1674,30 @@ async def system_doctor_report(
     """同一份診斷的純文字版 —— 給「下載記錄檔」用，可直接貼進工單。"""
     from app.services.self_check import run_checks
     return (await run_checks(session)).as_text()
+
+
+@router.get("/sbom")
+async def download_sbom(
+    user: CurrentUser, request: Request, session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    """這個站台的軟體物料清單（CycloneDX 1.5 JSON）：實際安裝的 Python 套件＋打包進畫面的 npm 套件。
+
+    給弱點管理工具（例如 Dependency-Track）匯入。只有管理員（router 已掛 require_admin）：裡面有精確的套件版本，
+    所以下載要留稽核。
+    """
+    import asyncio
+    import json as _json
+
+    from app.services import sbom
+    bom = await asyncio.to_thread(sbom.build)
+    await append_audit(
+        session, actor_user_id=str(user.id), actor_ip=request.client.host if request.client else None,
+        actor_user_agent=request.headers.get("user-agent"), object_type="system", object_id=None,
+        action="download", diff={"what": "sbom", "components": len(bom["components"]), "file": sbom.filename()},
+        request_id=getattr(request.state, "request_id", None))
+    await session.commit()
+    return Response(_json.dumps(bom, indent=1), media_type="application/vnd.cyclonedx+json",
+                    headers={"Content-Disposition": f'attachment; filename="{sbom.filename()}"'})
 
 
 @router.get("/version")
@@ -2236,6 +2263,7 @@ async def integration_presence(
     from app.models.fortigate import FortiGateFirewall
     from app.models.hyperv import HyperVInstance
     from app.models.isoinsight import IsoInsightSource
+    from app.models.k8s import K8sCluster
     from app.models.librenms import LibreNMSInstance
     from app.models.mikrotik import MikroTikRouter
     from app.models.ocs import OcsServer
@@ -2275,6 +2303,7 @@ async def integration_presence(
         ("wazuh", WazuhInstance),
         ("zabbix", ZabbixInstance),
         ("checkmk", CheckmkInstance),
+        ("k8s", K8sCluster),
         ("ocs", OcsServer),
         # SNMP 收集（0217）：有收集目標才算已設定（只有憑證、沒有目標＝還沒開始收）
         ("snmp", SnmpTarget),

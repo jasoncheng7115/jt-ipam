@@ -1,0 +1,90 @@
+name: Release SBOM
+
+# 推送版本 tag（v1.2.3）時：產生這一版的軟體物料清單（CycloneDX 1.5），用官方函式庫對 schema 驗證，
+# 附在這個 tag 的 GitHub Release（沒有就建一個，說明取自 CHANGELOG.md 那一版的段落）。
+#
+# 後端相依只寫下限，客戶安裝時 pip 會裝當下的版本 → 這份是「發版當下 CI 裝到的那組」；
+# 站台上實際的清單到「管理 > 版本資訊」下載，或 `jt-ipam.sh sbom`（同一份程式 backend/app/services/sbom.py）。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to (re)generate the SBOM for, e.g. v1.0.23"
+        required: true
+
+permissions:
+  contents: write        # 建 release、上傳附件
+
+jobs:
+  sbom:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # 只裝執行時的相依（跟客戶安裝一樣是 `pip install -e .`），驗證工具另外裝、不進清單
+      - name: Backend packages
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e .
+      # node_modules 裡的 package.json 才有授權資訊
+      - name: Frontend packages
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate
+        run: |
+          v="${TAG#v}"
+          grep -q "__version__ = \"$v\"" backend/app/version.py || { echo "tag $TAG does not match backend/app/version.py" >&2; exit 1; }
+          bash scripts/jt-ipam.sh sbom --output "jt-ipam-$v.sbom.cdx.json"
+          echo "FILE=jt-ipam-$v.sbom.cdx.json" >> "$GITHUB_ENV"
+          echo "VER=$v" >> "$GITHUB_ENV"
+
+      - name: Validate against the CycloneDX 1.5 schema
+        run: |
+          python -m venv /tmp/cdx
+          /tmp/cdx/bin/pip install "cyclonedx-python-lib[json-validation]>=8"
+          /tmp/cdx/bin/python - "$FILE" <<'PY'
+          import sys
+          from cyclonedx.schema import SchemaVersion
+          from cyclonedx.validation.json import JsonStrictValidator
+          err = JsonStrictValidator(SchemaVersion.V1_5).validate_str(open(sys.argv[1], encoding="utf-8").read())
+          if err is not None:
+              sys.exit(f"invalid SBOM: {err}")
+          print("valid CycloneDX 1.5")
+          PY
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum "$FILE" > "$FILE.sha256"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" "$FILE.sha256" --clobber
+          else
+            awk -v v="$VER" '
+              $0 ~ "^## \\[" v "\\]" { on = 1; next }
+              on && /^## \[/ { exit }
+              on { print }' CHANGELOG.md > notes.md
+            [ -s notes.md ] || echo "See CHANGELOG.md." > notes.md
+            gh release create "$TAG" --title "jt-ipam $VER" --notes-file notes.md --verify-tag --latest \
+              "$FILE" "$FILE.sha256"
+          fi

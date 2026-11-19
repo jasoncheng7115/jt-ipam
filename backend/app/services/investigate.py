@@ -261,6 +261,32 @@ async def _sec_checkmk(c: _Ctx) -> list[dict[str, Any]] | None:
     }) for h, iname in rows] or None
 
 
+async def _sec_k8s(c: _Ctx) -> list[dict[str, Any]] | None:
+    """Kubernetes：這個位址是哪個叢集的節點、哪個 Service／Pod 在用、哪些網域名稱指向它。"""
+    from app.models.k8s import K8sCluster, K8sHostname, K8sNode, K8sServiceIP
+    out: list[dict[str, Any]] = []
+    for n, cname in (await c.session.execute(
+            select(K8sNode, K8sCluster.name).join(K8sCluster, K8sCluster.id == K8sNode.cluster_id)
+            .where(or_(K8sNode.jt_ipam_address_id == c.ipa.id,
+                       and_(K8sNode.ip == c.ip, K8sNode.jt_ipam_address_id.is_(None)))).limit(5))).all():
+        out.append(_compact({"kind": "node", "cluster": cname, "name": n.name, "roles": n.roles, "ready": n.ready,
+                             "kubelet_version": n.kubelet_version, "last_seen_at": _dt(n.synced_at)}))
+    for s, cname in (await c.session.execute(
+            select(K8sServiceIP, K8sCluster.name).join(K8sCluster, K8sCluster.id == K8sServiceIP.cluster_id)
+            .where(or_(K8sServiceIP.jt_ipam_address_id == c.ipa.id,
+                       and_(K8sServiceIP.ip == c.ip, K8sServiceIP.jt_ipam_address_id.is_(None)))).limit(10))).all():
+        out.append(_compact({"kind": s.kind, "cluster": cname, "name": f"{s.namespace}/{s.name}",
+                             "last_seen_at": _dt(s.synced_at)}))
+    for h, cname in (await c.session.execute(
+            select(K8sHostname, K8sCluster.name).join(K8sCluster, K8sCluster.id == K8sHostname.cluster_id)
+            .where(or_(K8sHostname.jt_ipam_address_id == c.ipa.id,
+                       and_(K8sHostname.ip == c.ip, K8sHostname.jt_ipam_address_id.is_(None))))
+            .order_by(K8sHostname.host).limit(10))).all():
+        out.append(_compact({"kind": h.kind, "cluster": cname, "name": f"{h.namespace}/{h.name}", "host": h.host,
+                             "last_seen_at": _dt(h.synced_at)}))
+    return out or None
+
+
 async def _sec_arp(c: _Ctx) -> list[dict[str, Any]]:
     """ARP：這個位址在網路上被哪些 MAC 用過（換過 MAC 常代表換了機器）。
 
@@ -553,6 +579,7 @@ async def _sec_last_seen(c: _Ctx) -> dict[str, Any] | None:
         ("wazuh", ipa.last_seen_wazuh, ("wazuh",)),
         ("zabbix", ipa.last_seen_zabbix, ("zabbix",)),
         ("checkmk", ipa.last_seen_checkmk, ("checkmk",)),
+        ("k8s", ipa.last_seen_k8s, ("k8s",)),
         ("ocs", ipa.last_seen_ocs, ("ocs",)),
     ]
     peer = await matched_peer(c.session, ipa.id)
@@ -952,7 +979,7 @@ async def collect_dossier(
         out["identity"] = ident
     # 監控涵蓋：誰在看這台
     for key, fn in (("wazuh", _sec_wazuh), ("librenms", _sec_librenms), ("zabbix", _sec_zabbix),
-                    ("checkmk", _sec_checkmk)):
+                    ("checkmk", _sec_checkmk), ("k8s", _sec_k8s)):
         v = await _safe(c, key, fn)
         if v:
             out["monitoring"][key] = v

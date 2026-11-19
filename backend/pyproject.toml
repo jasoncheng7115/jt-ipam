@@ -38,6 +38,9 @@ dependencies = [
     "python-multipart>=0.0.31",    # 表單
     # requests／sentry-sdk 帶進來的：寫下限，既有站台升級時 pip 才會換掉有漏洞的版本（2.7 有 3 個 CVE）
     "urllib3>=2.8.0",
+    # SBOM（services/sbom）直接用到：解析套件的相依宣告、讀 pnpm-lock.yaml。本來就隨其他套件裝進來，寫明比較穩
+    "packaging>=24",
+    "pyyaml>=6.0",
     # geoip2 → aiohttp／yarl 帶進來的：6.7.1 有 CVE-2026-104874（2026-10-14 pip-audit），寫下限讓既有站台升級時換掉
     "multidict>=6.9.1",
     # geoip2 帶進來的：3.14.3 有 3 個 CVE（2026-10-20 pip-audit），寫下限讓既有站台升級時換掉
@@ -116,6 +119,7 @@ dev = [
     "mypy>=1.13",
     "bandit[toml]>=1.8",           # SAST
     "pip-audit>=2.7",              # CVE 掃描
+    "cyclonedx-python-lib[json-validation]>=8",  # tests/test_sbom.py 以 CycloneDX 1.5 schema 嚴格驗證
     "types-redis",
 ]
 

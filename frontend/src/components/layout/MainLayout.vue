@@ -225,6 +225,7 @@ const INTEGRATION_ITEMS: [string, string, Component][] = [
   ["esxi_admin", "nav.esxi_admin", VirtualizationIcon],
   ["hyperv_admin", "nav.hyperv_admin", VirtualizationIcon],
   ["openstack_admin", "nav.openstack_admin", VirtualizationIcon],
+  ["k8s_admin", "nav.k8s_admin", VirtualizationIcon],
   ["wazuh", "nav.wazuh", WazuhIcon],
   ["zabbix", "nav.zabbix", LibreNMSIcon],
   ["checkmk", "nav.checkmk", LibreNMSIcon],
@@ -236,7 +237,7 @@ const INTEGRATION_PRESENCE_KEY: Record<string, string> = {
   dns: "dns", adguard: "adguard", librenms: "librenms", firewall_admin: "opnsense", pfsense: "pfsense",
   fortigate: "fortigate", paloalto: "paloalto", checkpoint: "checkpoint", mikrotik: "mikrotik", snmp: "snmp",
   windows_dhcp: "windows_dhcp",
-  kea_dhcp: "kea_dhcp", isc_dhcp: "isc_dhcp", technitium_dhcp: "technitium", isoinsight: "isoinsight", rustdesk: "rustdesk", virt_admin: "proxmox", esxi_admin: "esxi", hyperv_admin: "hyperv", openstack_admin: "openstack",
+  kea_dhcp: "kea_dhcp", isc_dhcp: "isc_dhcp", technitium_dhcp: "technitium", isoinsight: "isoinsight", rustdesk: "rustdesk", virt_admin: "proxmox", esxi_admin: "esxi", hyperv_admin: "hyperv", openstack_admin: "openstack", k8s_admin: "k8s",
   wazuh: "wazuh", zabbix: "zabbix", checkmk: "checkmk", ocs: "ocs", graylog_dsv: "graylog",
 };
 /** 已設定的整合在名稱後面加一個勾（使用者 2026-10-07）；選單是 render 函式，樣式要寫在行內 */

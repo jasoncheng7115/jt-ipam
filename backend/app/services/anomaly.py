@@ -51,6 +51,8 @@ class AnomalyReport:
     fw_rule_rot: list[dict[str, Any]] = field(default_factory=list)
     arp_only_liveness: list[dict[str, Any]] = field(default_factory=list)
     stale_device_links: list[dict[str, Any]] = field(default_factory=list)
+    #: Kubernetes 佔用的位址跟 IPAM 打架（services/k8s.conflicts）
+    k8s_conflicts: list[dict[str, Any]] = field(default_factory=list)
     mac_flapping: list[dict[str, Any]] = field(default_factory=list)
     identity_changes: list[dict[str, Any]] = field(default_factory=list)
     #: 同一台主機的多張網卡回應同一個 IP（ARP flux，2026-10-09 從 IP 衝突分出來）
@@ -76,6 +78,7 @@ class AnomalyReport:
             "ghost_ips": self.ghost_ips,
             "arp_only_liveness": self.arp_only_liveness,
             "stale_device_links": self.stale_device_links,
+            "k8s_conflicts": self.k8s_conflicts,
             "mac_flapping": self.mac_flapping,
             "identity_changes": self.identity_changes,
             "unauthorized_ips": self.unauthorized_ips,
@@ -93,7 +96,7 @@ class AnomalyReport:
                 + len(self.rogue_dhcp) + len(self.external_exposure)
                 + len(self.fw_rule_rot) + len(self.arp_only_liveness)
                 + len(self.dangling_dns) + len(self.duplicate_ip_records)
-                + len(self.suspicious_changes) + len(self.stale_device_links)
+                + len(self.suspicious_changes) + len(self.stale_device_links) + len(self.k8s_conflicts)
                 + len(self.mac_flapping) + len(self.identity_changes)
                 + len(self.arp_flux) + len(self.l2_subnet_bleed)
                 + len(self.dns_compare_mismatch)
@@ -1360,13 +1363,14 @@ _LIVE_FIELDS: dict[str, tuple[str, str | None]] = {
     "duplicate_ip_records": ("ip", None),
     "arp_only_liveness": ("ip", "ip_address_id"),
     "stale_device_links": ("ip", "ip_id"),
+    "k8s_conflicts": ("ip", "ip_address_id"),
     "mac_flapping": ("ip", "ip_id"),
     "identity_changes": ("ip", "ip_id"),
 }
 #: 一列有好幾個 IP 的類別（`ips: [{ip, ip_address_id}]`）→ 附 `live_ips: {ip: 依據}`
 _LIVE_LISTS = ("mac_drifts", "mac_drift_reference")
 _LIVE_COLS = ("last_seen_scanner", "last_seen_librenms", "last_seen_arp", "last_seen_wazuh",
-              "last_seen_zabbix", "last_seen_checkmk")
+              "last_seen_zabbix", "last_seen_checkmk", "last_seen_k8s")
 
 
 def _ip_text(v: Any) -> str | None:
@@ -2231,6 +2235,12 @@ async def _drop_own_nic_flips(session: AsyncSession, rows: list[Any]) -> list[An
     return out
 
 
+async def detect_k8s_conflicts(session: AsyncSession) -> list[dict[str, Any]]:
+    """Kubernetes 佔用的位址跟 IPAM 的規劃打架（規則見 services/k8s.conflicts）。沒有設定叢集就是空的。"""
+    from app.services.k8s import conflicts
+    return await conflicts(session)
+
+
 async def detect_stale_device_links(session: AsyncSession) -> list[dict[str, Any]]:
     """IP 掛著某台裝置，但證據顯示那個位址已經是別台機器在用 —— 關聯多半已經過期。
 
@@ -2330,6 +2340,7 @@ async def run_detection(
         stale_device_links=await detect_stale_device_links(session),
         mac_flapping=await detect_mac_flapping(session),
         identity_changes=await detect_identity_changes(session),
+        k8s_conflicts=await detect_k8s_conflicts(session),
     )
     # 清單超過上限時只列最近看到的那些；總數另外帶著，畫面才講得出「還有多少沒列出」
     report.unauthorized_total = int(unauth_meta.get("total") or len(report.unauthorized_ips))
@@ -2370,6 +2381,7 @@ _NOTIFY_CATEGORIES: tuple[tuple[str, str, str, str], ...] = (
     ("fw_rule_rot", "防火牆規則劣化", "anomaly.fw_rot", "fw_rule_rot"),
     ("mac_flapping", "IP 頻繁更換 MAC", "anomaly.mac_flapping", "mac_flapping"),
     ("identity_changes", "類型或 OS 突變", "anomaly.identity_changes", "identity_changes"),
+    ("k8s_conflicts", "Kubernetes 位址衝突", "anomaly.k8s_conflicts", "k8s_conflicts"),
 )
 
 #: 所有異常類別（戰情室 AI 情報的重大事件警示從這裡挑；觀測表的 category 就是這些鍵）

@@ -183,6 +183,7 @@ export interface IPAddress {
   /** Zabbix 最後一次回報這台主機可用 */
   last_seen_zabbix?: string | null;
   last_seen_checkmk?: string | null;
+  last_seen_k8s?: string | null;
   /** 防火牆給的逐來源觀測時間：`{"arp:opnsense": "…", "lease:pfsense": "…"}` */
   arp_seen?: Record<string, string> | null;
   last_seen_dns: string | null;

@@ -1630,6 +1630,25 @@ DHCP 伺服器在中間挖洞的範圍存成好幾段，洞本身寫進 `dhcp_ex
 - [ ] **上線證據**：只有 UP 才蓋 `last_seen_checkmk`，時間是 Checkmk 的最後檢查時間；DOWN、尚未檢查、主動檢查關掉的都不蓋（`tests/test_checkmk.py`）
 - [ ] **畫面**（`E2E_CHECKMK_URL=… e2e/checkmk.spec.ts`）：新增、測試連線（版本、網站、主機數）、同步、主機清單（狀態、資料夾、多個位址）、未監控的位址、刪除
 
+## 7f-3. Kubernetes 整合：**只要動到 Kubernetes 同步、集區或衝突就要跑**
+
+- [ ] **真機兩個叢集**：`bash scripts/k8s-test-target/run.sh` 起 k3s（MetalLB、內建 Traefik）與 kind（上游的 Cilium、Gateway API、Calico、Whereabouts、OpenShift Route CRD），照印出的那行跑 `tests/test_k8s_real.py`（唯讀帳號讀得到節點、Service、集區、名稱；寫入一律 403；錯 token `k8s_auth`、錯 CA `k8s_tls_failed`；Traefik 把 MetalLB 發的位址寫回 Ingress）
+- [ ] **第一版唯讀帳號**：用第一階段的 ClusterRole（測試靶裡的 `readonly-phase1.yaml`）同步照跑，後來加的資源列為缺少的權限（`資源.group`），叢集頁顯示提示，但叢集沒裝的資源不列（沒權限時沒裝的也回 403，要靠 discovery 判斷）；套用目前的設定檔後提示消失
+- [ ] **唯讀帳號設定**：`deploy/k8s/jt-ipam-readonly.yaml` 只有 get / list；整合頁下載的是同一份
+- [ ] **kubeconfig**：token 與用戶端憑證可用；exec／auth-provider、指向本機檔案的、沒有憑證的都有清楚的錯誤代碼
+- [ ] **對應與上線**：節點只標既有 IP、Ready 才蓋 `last_seen_k8s`；providerID 連到既有 VM（`tests/test_k8s.py`）
+- [ ] **位址集區**：落在子網路裡的建成用途「保留」的位址範圍；DHCP 自動範圍的對帳不會刪掉它們；集區不見或關掉選項就移除
+- [ ] **衝突**：未登記、在 DHCP 範圍裡、集區含使用中位址、不可路由的叢集網段重疊、名稱在 IPAM DNS 裡指向別的位址都會列在異常偵測「Kubernetes 位址衝突」
+- [ ] **網域名稱**：Ingress（rules 與 tls 的 hosts）、Gateway 的 listener、HTTPRoute / GRPCRoute 經由掛的 Gateway、OpenShift Route 經由 `openshift-ingress/router-<名稱>`；萬用字元保留但不比對 DNS；「IPAM DNS」欄顯示一致 / 指向別的位址 / 沒有記錄（會追 CNAME）；完整名稱會出現在對外開放服務的 FQDN 檢視
+- [ ] **Calico 與 Whereabouts**：Calico 的 Workload 集區變成 Pod 網段（沒有 NAT 也沒有封裝才算可路由），LoadBalancer 集區變成位址集區；Whereabouts 集區建成位址範圍，配置變成 Pod 位址（位移以 `range` 裡寫的位址為基準）
+- [ ] **跨叢集衝突**：兩個叢集同一個位址、集區重疊、可路由的 Pod 網段重疊，兩個叢集的「衝突」頁籤都看得到（detail 寫另一邊），異常偵測只列一次；節點位址落在 IPAM 子網路裡卻沒紀錄是 `node_unregistered`
+- [ ] **選用資源壞掉**：選用資源回 5xx（CRD 的轉換 webhook 不在）只略過那一項，寫進叢集的錯誤、列在 `optional_errors`；節點與其他資料照常同步
+- [ ] **Egress IP 與 Multus**：OVN-Kubernetes EgressIP（spec 的每個位址、status 帶節點）、Cilium egress gateway（egressGateway 與 egressGateways；只寫網卡的沒有位址）、Antrea Egress 與 ExternalIPPool（先讀 v1beta2、退回 v1beta1；用途 LoadBalancer / Egress）；Multus 的 host-local 網段變成集區、static 位址變成 Pod 位址，Whereabouts 與壞掉的設定略過；API 位址是 IP 時多一列 `apiserver`（主機名稱不解析），IP 變更評估出 `virt.k8s_apiserver`（高）
+- [ ] **可路由的 Pod 網段**：可路由的 Pod 網段（Calico 判斷或叢集開關）不算衝突，顯示重疊的子網路；在裡面的 IP，IP 詳細資料卡片會提示
+- [ ] **IP 變更評估**：有 Ingress / Gateway / Route 名稱的位址，每個叢集一筆 `virt.k8s_hostname`，列出名稱（`tests/test_change_impact_k8s.py`）
+- [ ] **AI**：`list_k8s` 依 cluster、ip、host、subnet_cidr 查；`get_ip_detail` 帶 `kubernetes`；跟 REST 檢視一樣要全域讀取
+- [ ] **畫面**（`E2E_K8S_DIR=… e2e/k8s.spec.ts`）：token 與 kubeconfig 兩種新增、測試連線逐項（含第二階段的項目）、同步後各頁籤（網域名稱、集區用途、可路由欄）、下載唯讀帳號設定、可路由開關、刪除
+
 ## 7g. 證據契約：**只要新增/修改任何「來源」就要跑**
 
 這一節守的是：**新來源必須先回答「它的證據會不會過期」**。少了這道門的代價付過了：
@@ -1799,6 +1818,12 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 - [ ] **AI**：get_device 帶群組（成員、角色、共用 IP），get_ip_detail 帶 `device_group`
 
 ## 8. 近期功能點檢
+
+- [ ] **Kubernetes 整合**（`tests/test_k8s.py`、`tests/test_k8s_real.py`、`e2e/k8s.spec.ts`）：照「7f-3. Kubernetes 整合」逐項跑，k3s 與 kind 兩個測試靶都要過
+
+- [ ] **憑證更換成功一批一則**（`tests/test_cert_deploy_digest.py`）：代理回報換好、推送成功都不立刻通知，先記在 cert_deploy_notices；同一張憑證同一版安靜 10 分鐘（或最早一筆等滿 1 小時）由排程送一則，列出全部目標；同一目標回報兩次只算一次；推送失敗仍立刻通知
+
+- [ ] **SBOM**（`tests/test_sbom.py`、`scripts/tests/test_jt_ipam_cli.sh`、`e2e/sbom-download.spec.ts`）：「管理 > 版本資訊」下載與 `jt-ipam.sh sbom` 都是 CycloneDX 1.5、通過官方 schema 嚴格驗證；Python 版本是實際安裝的、不含 jt-ipam 自己；前端只有打包進畫面的套件（沒有 vitest、playwright）；非管理員 403；推送版本 tag 後確認 GitHub Release 上有 `jt-ipam-版本.sbom.cdx.json` 與 `.sha256`
 
 - [ ] **Checkmk 整合**（`tests/test_checkmk.py`、`tests/test_checkmk_real.py`、`e2e/checkmk.spec.ts`）：照「7f-2. Checkmk 整合」逐項跑，2.4 與 2.5 兩個測試靶都要過
 - [ ] **上線長條圖延續 Wazuh／Zabbix／Checkmk**（`tests/test_ip_uptime.py`）：只有這些來源證明上線的日子，之後沒有觀測的日子要往後延續

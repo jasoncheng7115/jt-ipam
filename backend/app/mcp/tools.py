@@ -161,6 +161,7 @@ def _ip_fields(o: IPAddress) -> dict[str, Any]:
         "last_seen_scanner": _iso(o.last_seen_scanner), "last_seen_librenms": _iso(o.last_seen_librenms),
         "last_seen_arp": _iso(o.last_seen_arp), "last_seen_wazuh": _iso(o.last_seen_wazuh),
         "last_seen_zabbix": _iso(o.last_seen_zabbix), "last_seen_checkmk": _iso(o.last_seen_checkmk),
+        "last_seen_k8s": _iso(o.last_seen_k8s),
         "last_seen_ocs": _iso(o.last_seen_ocs),
         "last_seen_dns": _iso(o.last_seen_dns),
         "dhcp_reserved": bool(o.dhcp_reserved), "in_dhcp_lease": bool(o.in_dhcp_lease),
@@ -2249,6 +2250,8 @@ async def get_ip_detail(session: AsyncSession, *, user: User, ip: str) -> dict[s
         "ocs_hardware": obj.ocs_hw,
         # RustDesk Server（開源版）：對應到這個 IP 的 RustDesk ID 與線上狀態（不帶連線網址）
         "rustdesk": await _rustdesk_brief(session, obj.id),
+        # Kubernetes：哪個叢集的節點、哪個 Service／Pod 在用、哪些網域名稱指向它（同 IP 詳細頁的卡片）
+        "kubernetes": await _k8s_brief(session, obj.id),
         # OS 偵測（依來源優先序 scanner/librenms/wazuh 解析）+ 探測項目
         **_os,
         "effective_probes": await _effective_probes(session, sub, obj),
@@ -3606,6 +3609,115 @@ async def list_vms(
     return {"scope": scope, "count": total, **_page_meta(total, len(out)), "vms": out}
 
 
+async def _k8s_brief(session: AsyncSession, ip_id: Any) -> dict[str, Any] | None:
+    from app.services import k8s as k8s_svc
+    out = await k8s_svc.by_ip(session, ip_id)
+    return out if any(out.values()) else None
+
+
+async def list_k8s(
+    session: AsyncSession, *, user: User, cluster: str | None = None, ip: str | None = None,
+    host: str | None = None, subnet_cidr: str | None = None, limit: int = 200,
+) -> dict[str, Any]:
+    """Kubernetes（唯讀同步）：叢集、節點、佔用實體網段的位址（LoadBalancer／externalIPs／Whereabouts 的 Pod）、
+    位址集區、網域名稱（Ingress／Gateway／HTTPRoute／GRPCRoute／OpenShift Route）、叢集網段。
+    ip＝只看跟這個位址有關的（節點、佔用者、名稱、涵蓋它的集區與網段）；host＝名稱包含這段文字的；
+    subnet_cidr＝只看落在這個網段裡的（集區與叢集網段取有重疊的）。"""
+    from app.models.k8s import K8sCidr, K8sCluster, K8sHostname, K8sIPPool, K8sNode, K8sServiceIP
+    from app.services import k8s as k8s_svc
+    cap = _clamp_limit(limit)
+    cq = select(K8sCluster).order_by(K8sCluster.name)
+    if cluster:
+        cq = cq.where(func.lower(K8sCluster.name) == cluster.strip().lower())
+    clusters = list((await session.execute(cq)).scalars().all())
+    if cluster and not clusters:
+        raise IPAMToolError(f"找不到叫做「{cluster}」的 Kubernetes 叢集")
+    cids = [c.id for c in clusters]
+    names = {c.id: c.name for c in clusters}
+    addr = ipaddress.ip_address(ip) if ip else None
+    net = ipaddress.ip_network(subnet_cidr, strict=False) if subnet_cidr else None
+
+    async def section(model: Any, order: Any, *extra: Any) -> tuple[list[Any], int]:
+        stmt = select(model).where(in_values(model.cluster_id, cids), *extra)
+        return (list((await session.execute(stmt.order_by(*order).limit(cap))).scalars().all()),
+                await _count_rows(session, stmt))
+
+    def ip_eq(col: Any) -> list[Any]:
+        from sqlalchemy import cast, literal
+        from sqlalchemy.dialects.postgresql import INET
+        out = [func.host(col) == str(addr)] if addr else []
+        if net is not None:
+            out.append(col.op("<<=")(cast(literal(str(net)), INET)))
+        return out
+    node_rows, node_total = await section(K8sNode, (K8sNode.cluster_id, K8sNode.name), *ip_eq(K8sNode.ip))
+    svc_rows, svc_total = await section(K8sServiceIP, (K8sServiceIP.ip,), *ip_eq(K8sServiceIP.ip))
+    hn_extra = ip_eq(K8sHostname.ip) + ([K8sHostname.host.ilike(f"%{host.strip().lower()}%")] if host else [])
+    hn_rows, hn_total = await section(K8sHostname, (K8sHostname.host, K8sHostname.kind), *hn_extra)
+    pool_rows = list((await session.execute(select(K8sIPPool).where(in_values(K8sIPPool.cluster_id, cids))
+                                            .order_by(K8sIPPool.provider, K8sIPPool.name))).scalars().all())
+    cidr_rows = list((await session.execute(select(K8sCidr).where(in_values(K8sCidr.cluster_id, cids))
+                                            .order_by(K8sCidr.kind, K8sCidr.cidr))).scalars().all())
+    if addr is not None:
+        v = int(addr)
+        pool_rows = [p for p in pool_rows if any(
+            ipaddress.ip_address(b["start"]).version == addr.version
+            and int(ipaddress.ip_address(b["start"])) <= v <= int(ipaddress.ip_address(b["end"]))
+            for b in p.blocks or [])]
+        cidr_rows = [r for r in cidr_rows if addr in ipaddress.ip_network(str(r.cidr), strict=False)]
+    if net is not None:
+        def overlaps(b: dict[str, Any]) -> bool:
+            lo, hi = ipaddress.ip_address(b["start"]), ipaddress.ip_address(b["end"])
+            return lo.version == net.version and int(lo) <= int(net[-1]) and int(net[0]) <= int(hi)
+        pool_rows = [p for p in pool_rows if any(overlaps(b) for b in p.blocks or [])]
+        cidr_rows = [r for r in cidr_rows if ipaddress.ip_network(str(r.cidr), strict=False).version == net.version
+                     and ipaddress.ip_network(str(r.cidr), strict=False).overlaps(net)]
+    if host:            # 只問名稱時，其他段落不相干
+        node_rows, node_total, svc_rows, svc_total, pool_rows, cidr_rows = [], 0, [], 0, [], []
+    routable = {c.id: c.pod_network_routable for c in clusters}
+    counts: dict[tuple[str, Any], int] = {}
+    for model, key in ((K8sNode, "nodes"), (K8sServiceIP, "service_ips"), (K8sHostname, "hostnames")):
+        for cid, n in (await session.execute(select(model.cluster_id, func.count()).where(
+                in_values(model.cluster_id, cids)).group_by(model.cluster_id))).all():
+            counts[(key, cid)] = int(n)
+
+    def block(rows: list[Any], total: int, items: list[dict[str, Any]]) -> dict[str, Any]:
+        return {**_page_meta(total, len(rows)), "items": items}
+    return {
+        "clusters": [{
+            "name": c.name, "api_url": c.api_url, "server_version": c.server_version, "enabled": c.enabled,
+            "last_sync_at": _iso(c.last_sync_at), "last_error": c.last_error,
+            "missing_permissions": c.missing_permissions, "pod_network_routable": c.pod_network_routable,
+            "nodes": counts.get(("nodes", c.id), 0), "service_ips": counts.get(("service_ips", c.id), 0),
+            "hostnames": counts.get(("hostnames", c.id), 0),
+        } for c in clusters],
+        "nodes": block(node_rows, node_total, [{
+            "cluster": names.get(n.cluster_id), "name": n.name, "ip": _inet_host(n.ip), "roles": n.roles,
+            "ready": n.ready, "kubelet_version": n.kubelet_version, "os_image": n.os_image,
+            "provider_id": n.provider_id, "pod_cidrs": n.pod_cidrs,
+        } for n in node_rows]),
+        # kind：loadbalancer | external（spec.externalIPs）| pod（Pod 次要網卡）| egress（node＝目前在哪個節點）| apiserver
+        "service_ips": block(svc_rows, svc_total, [{
+            "cluster": names.get(r.cluster_id), "kind": r.kind, "namespace": r.namespace, "name": r.name,
+            "ip": _inet_host(r.ip), "ports": r.ports, "node": r.node,
+            "registered_in_ipam": r.jt_ipam_address_id is not None,
+        } for r in svc_rows]),
+        "pools": block(pool_rows, len(pool_rows), [{
+            "cluster": names.get(p.cluster_id), "provider": p.provider, "use": p.use, "name": p.name,
+            "blocks": p.blocks, "auto_assign": p.auto_assign, "disabled": p.disabled,
+        } for p in pool_rows]),
+        "hostnames": block(hn_rows, hn_total, [{
+            "cluster": names.get(h.cluster_id), "kind": h.kind, "namespace": h.namespace, "name": h.name,
+            "host": h.host, "ip": _inet_host(h.ip), "tls": h.tls,
+        } for h in hn_rows]),
+        # routable：能不能直接路由到實體網路（Calico 判斷得出來；None＝看不出來，照叢集的 pod_network_routable）
+        "cidrs": block(cidr_rows, len(cidr_rows), [{
+            "cluster": names.get(r.cluster_id), "kind": r.kind, "cidr": str(r.cidr), "source": r.source,
+            "routable": r.routable, "encapsulation": r.encapsulation,
+            "effective_routable": k8s_svc.effective_routable(r, bool(routable.get(r.cluster_id))),
+        } for r in cidr_rows]),
+    }
+
+
 async def list_wireless_links(session: AsyncSession, *, user: User, limit: int = 200) -> dict[str, Any]:
     """無線連線（point-to-point）：兩端裝置、SSID、距離、說明。"""
     from app.models.advanced import WirelessLink
@@ -4867,6 +4979,7 @@ async def list_anomalies(
         # 這三類也曾經漏掉（2026-10-01 補）：畫面上有、AI 問不到
         "arp_only_liveness": _an.detect_arp_only_liveness,
         "stale_device_links": _an.detect_stale_device_links,
+        "k8s_conflicts": _an.detect_k8s_conflicts,     # 2026-11-18 Kubernetes 佔用的位址跟 IPAM 打架
         "mac_flapping": _an.detect_mac_flapping,
         "identity_changes": _an.detect_identity_changes,
     }
@@ -5149,9 +5262,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_devices": {
         "fn": list_devices,
         "description": (
-            "List or search devices (name substring, type, device group). Rows have the device-list columns (primary "
-            "IP, type, vendor, model, serial, location, rack and position, customer, group). Ports, power, VLANs and integrations "
-            "are in get_device; for shelving units call list_racks (rows are levels, not U)."),
+            "List or search devices (name substring, type, device group). Rows have the device-list columns. "
+            "Ports, power, VLANs and integrations are in get_device; for shelving units call list_racks."),
         "parameters": {
             "type": "object",
             "properties": {
@@ -5338,20 +5450,17 @@ TOOLS: dict[str, dict[str, Any]] = {
     "get_ip_detail": {
         "fn": get_ip_detail,
         "description": (
-            "One IP: every field of the IP form and detail page (state, hostname, MAC/vendor, "
-            "owner, device, customer, switch port, OS, last seen per source, flags (ptr_ignore…), DHCP/gateway tags, consoles, "
-            "OCS, RustDesk), vms_with_this_mac, vms_reporting_this_ip, arp_macs (for IP conflicts), maintenance, "
+            "One IP: every field of the IP form and detail page (incl. last seen per source, flags such as ptr_ignore, "
+            "DHCP/gateway tags, OCS, RustDesk, Kubernetes), vms_with_this_mac, vms_reporting_this_ip, arp_macs (for IP conflicts), maintenance, "
             "overlapping records. No record: unregistered."),
         "parameters": {"type": "object", "properties": {"ip": {"type": "string"}}, "required": ["ip"]},
     },
     "get_subnet_detail": {
         "fn": get_subnet_detail,
         "description": (
-            "Full subnet info: every field of the subnet form (gateway, DNS, VLAN, VRF, section, customer, "
-            "location, parent, pool/full, usage threshold, scan settings, anomaly / AI review, console exit), "
-            "usage and its address ranges (DHCP pool / reserved / other). In a DHCP range, used counts records "
+            "Full subnet info: every field of the subnet form, usage and its address ranges (DHCP pool / reserved / other). In a DHCP range, used counts records "
             "in use (lease, reservation, or not offline); stale = offline records with no lease, not counted; "
-            "first_free = next address with no record. Provide subnet_id or subnet_cidr."),
+            "first_free = next address with no record."),
         "parameters": {"type": "object", "properties": {
             "subnet_id": {"type": "string"}, "subnet_cidr": {"type": "string"}}},
     },
@@ -5519,9 +5628,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "investigate_ip": {
         "fn": investigate_ip,
         "description": (
-            "Everything known about one IP in one place: the record, other records in overlapping subnets, "
-            "hostname and OS per source, device type, monitoring and endpoint agents, VM, DHCP, switch ports, "
-            "firewall evidence, last seen per source, ARP history, recent changes and contradictions. Facts only."),
+            "Everything known about one IP in one place: the record, overlapping records, hostname / OS / last seen "
+            "per source, agents, VM, DHCP, switch ports, firewall evidence, ARP, changes and contradictions. Facts only."),
         "parameters": {
             "type": "object",
             "properties": {"ip": {"type": "string", "description": "IPv4 or IPv6"}},
@@ -5542,7 +5650,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                          "ip_conflicts | arp_flux | l2_subnet_bleed | mac_drifts | ghost_ips | unauthorized_ips | "
                          "rogue_dhcp | external_exposure | dangling_dns | dns_compare_mismatch | duplicate_ip_records | suspicious_changes | "
                          "fw_rule_rot | arp_only_liveness | stale_device_links | mac_flapping | "
-                         "identity_changes (device type or OS family changed)"},
+                         "identity_changes (device type or OS family changed) | k8s_conflicts (Kubernetes addresses that clash with IPAM)"},
                 "limit": {"type": "integer", "description": "max items per kind (default 20)"},
             },
         },
@@ -5621,10 +5729,19 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_vms": {
         "fn": list_vms,
         "description": (
-            "Virtual machines (Proxmox VE, VMware, Hyper-V, CubeCOS/OpenStack): VMID, cluster, platform, node, kind, status, "
-            "resources, guest OS, primary IP, description (OpenStack: project), "
-            "linked device, NICs (MAC, IP, bridge, VLAN)."),
+            "Virtual machines (Proxmox VE, VMware, Hyper-V, CubeCOS/OpenStack) with the VM-list columns, guest OS, "
+            "description (OpenStack: project), linked device and NICs (MAC, IP, bridge, VLAN)."),
         "parameters": {"type": "object", "properties": {"subnet_cidr": {"type": "string"}, "subnet_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+    },
+    "list_k8s": {
+        "fn": list_k8s,
+        "description": (
+            "Kubernetes (read-only): nodes, LoadBalancer/externalIPs/Whereabouts pod addresses, pools, "
+            "Ingress/Gateway/Route names, cluster CIDRs."),
+        "parameters": {"type": "object", "properties": {
+            "cluster": {"type": "string"}, "ip": {"type": "string"},
+            "host": {"type": "string", "description": "domain name part"},
+            "subnet_cidr": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
     "list_wireless_links": {
         "fn": list_wireless_links,
@@ -5975,6 +6092,8 @@ GLOBAL_READ_TOOLS: frozenset[str] = frozenset({
     "list_firewall_aliases", "list_dns_servers", "list_dns_zones", "list_dns_records",
     "check_dns_consistency", "dns_lookup",
     "list_vms", "list_wireless_links", "list_vpn_tunnels",
+    # Kubernetes 的節點、佔用位址、集區、名稱（REST /k8s 的唯讀檢視是 require_global_read）
+    "list_k8s",
     "list_arp", "list_fdb", "list_circuits", "list_domains", "list_providers", "list_asns",
     "list_tenants", "list_contacts", "list_ssids", "list_cables", "cable_trace",
     "list_power",

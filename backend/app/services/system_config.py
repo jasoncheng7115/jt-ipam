@@ -1832,6 +1832,7 @@ ANOMALY_EVENTS: tuple[str, ...] = (
     "anomaly.external_exposure",
     "anomaly.dangling_dns",
     "anomaly.duplicate_ip_records",
+    "anomaly.k8s_conflicts",
     "anomaly.suspicious_changes",
     "anomaly.fw_rule_rot",
     "anomaly.mac_flapping",

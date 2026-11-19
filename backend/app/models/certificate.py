@@ -110,3 +110,18 @@ class CertAgent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     reported: Mapped[list[Any] | None] = mapped_column(JSONB)
     # 近期回報來源 IP（list of {ip, at}，去重、上限 10、保留 7 天）；多筆不同 IP＝同把 Key 被多台主機共用
     recent_sources: Mapped[list[Any] | None] = mapped_column(JSONB)
+
+
+class CertDeployNotice(Base, UUIDPrimaryKeyMixin):
+    """憑證在某個代理／推送目標換好了，等著跟同一批合併成一則通知（services/cert_deploy_digest）。"""
+
+    __tablename__ = "cert_deploy_notices"
+
+    certificate: Mapped[str] = mapped_column(String(255), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    target: Mapped[str] = mapped_column(String(128), nullable=False)
+    service: Mapped[str | None] = mapped_column(String(64))
+    #: agent（憑證派送代理）或 push（無代理推送）
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

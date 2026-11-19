@@ -1,0 +1,12 @@
+# k3s 內建的 Traefik 是真的 Ingress 控制器：它的 Service 從 MetalLB 拿到位址，再寫回 Ingress 的 status
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: shop, namespace: jt-demo}
+spec:
+  ingressClassName: traefik
+  tls: [{hosts: [shop.example.com], secretName: shop-tls}]
+  rules:
+    - host: shop.example.com
+      http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: web, port: {number: 80}}}}]}
+    - host: api.example.com
+      http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: web, port: {number: 80}}}}]}

@@ -102,6 +102,7 @@ _LABEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "wazuh_instance": ("app.models.wazuh", "WazuhInstance", "name"),
     "zabbix_instance": ("app.models.zabbix", "ZabbixInstance", "name"),
     "checkmk_instance": ("app.models.checkmk", "CheckmkInstance", "name"),
+    "k8s_cluster": ("app.models.k8s", "K8sCluster", "name"),
     "ocs_server": ("app.models.ocs", "OcsServer", "name"),
     "adguard_instance": ("app.models.adguard", "AdGuardInstance", "name"),
     "windows_dhcp_server": ("app.models.windows_dhcp", "WindowsDhcpServer", "name"),

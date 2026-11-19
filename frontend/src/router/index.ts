@@ -193,6 +193,7 @@ const routes: RouteRecordRaw[] = [
       { path: "esxi", name: "esxi_admin", component: () => import("@/views/ESXiAdmin.vue"), meta: { admin: true } },
       { path: "hyperv", name: "hyperv_admin", component: () => import("@/views/HyperVAdmin.vue"), meta: { admin: true } },
       { path: "openstack", name: "openstack_admin", component: () => import("@/views/OpenStackAdmin.vue"), meta: { admin: true } },
+      { path: "k8s", name: "k8s_admin", component: () => import("@/views/K8sAdmin.vue"), meta: { admin: true } },
       { path: "warroom-settings", name: "warroom-settings", component: () => import("@/views/WarroomSettings.vue"), meta: { admin: true } },
       { path: "cabling", name: "cabling", component: () => import("@/views/Physical.vue"), props: { mode: "cabling" } },
       { path: "power", name: "power", component: () => import("@/views/Physical.vue"), props: { mode: "power" } },

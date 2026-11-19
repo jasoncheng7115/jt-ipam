@@ -1,0 +1,47 @@
+# 第一階段（2026-11-18）的唯讀帳號：沒有 ingresses、Gateway API、routes、Calico、Whereabouts 的權限。
+# 用來測「客戶還沒重新套用 manifest」時同步照跑、列出缺的權限
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jt-ipam-ro1
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jt-ipam-ro1-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: jt-ipam-ro1
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jt-ipam-readonly1
+rules:
+  - apiGroups: [""]
+    resources: [nodes, services, namespaces]
+    verbs: [get, list]
+  - apiGroups: [networking.k8s.io]
+    resources: [servicecidrs]
+    verbs: [get, list]
+  - apiGroups: [metallb.io]
+    resources: [ipaddresspools]
+    verbs: [get, list]
+  - apiGroups: [cilium.io]
+    resources: [ciliumloadbalancerippools]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jt-ipam-readonly1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jt-ipam-readonly1
+subjects:
+  - kind: ServiceAccount
+    name: jt-ipam-ro1
+    namespace: kube-system

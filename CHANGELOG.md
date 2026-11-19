@@ -7,6 +7,31 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 ## [Unreleased]
 
 ### Added
+- **Kubernetes integration** (Admin > External integrations > Kubernetes), read-only through a ServiceAccount whose ClusterRole only has get / list (the page hands out the manifest; a pasted kubeconfig with embedded data also works, exec-plugin cloud logins are refused with a clear message). It reads what takes or clashes with real networks; Pod IPs inside the cluster are not collected.
+
+  #### What it reads
+  - **Nodes**: matched to existing IP records as a hostname source, Ready as liveness evidence (on by default, also on upgraded sites), and providerID linked to the existing OpenStack (or other) VM.
+  - **Addresses on real networks**: LoadBalancer and externalIPs addresses with the namespace and Service that uses them, Pod secondary interface addresses (Whereabouts allocations and Multus static addresses), Egress IPs (OVN-Kubernetes EgressIP with the node holding it, Cilium egress gateway, Antrea Egress), and the API server address when the API address is an IP.
+  - **Address pools**: MetalLB, Cilium and Calico (allowedUses LoadBalancer) LB pools, Antrea ExternalIPPools, Whereabouts pools and Multus host-local ranges, turned into address ranges with the purpose Reserved when they fall inside a subnet (optional per cluster, removed with the cluster).
+  - **Domain names**: Ingress, Gateway API (Gateway listeners, HTTPRoute, GRPCRoute) and OpenShift Route, with the address each name points to. They also appear in the FQDN view of exposed services.
+  - **Cluster networks**: node podCIDRs, Calico Workload pools and ServiceCIDRs. Calico pools that neither NAT nor encapsulate are marked routable; a cluster can also be marked "Pod networks are routable" (Cilium native routing, BGP). A routable Pod network shows the subnet it maps to instead of counting as a clash.
+
+  #### Where it shows up
+  - New anomaly category **Kubernetes address clashes**: addresses taken without being registered, addresses inside a DHCP range, pools that overlap DHCP or contain addresses in use, non-routable cluster networks that overlap subnets, names that point to another address in the DNS synced into IPAM, node addresses IPAM has not registered, and clashes between clusters (the same address, overlapping address pools, overlapping routable Pod networks).
+  - IP detail card: which cluster's node, which Service or Pod uses the address, which names point to it, or that it sits in a routable Pod network.
+  - IP change assessment lists nodes and the API server address (high: kubelet certificates, etcd, every kubeconfig and the API server certificate are bound to them), Services, Pods, Egress IPs, pools and the names whose DNS records must change too.
+  - AI chat / MCP: new tool `list_k8s` (by cluster, address, name or network), and `get_ip_detail` includes the Kubernetes data.
+
+  #### Upgrading the read-only account
+  - The newer resources are optional: an account still on the first ClusterRole keeps syncing, and the cluster page lists the permissions it lacks until the manifest is applied again (resources the cluster does not have are not listed).
+  - An optional resource the API cannot serve (for example a CRD whose conversion webhook is down) is skipped and shown as the cluster's error; everything else keeps syncing.
+
+  #### Tests
+  - k3s with MetalLB and its bundled Traefik (a real Ingress controller), and upstream Kubernetes in kind with the upstream Cilium, Gateway API v1.3, Calico, Whereabouts, OpenShift Route, OVN-Kubernetes EgressIP, Antrea and Multus CRDs; `scripts/k8s-test-target/run.sh` starts both.
+- Auto-created DHCP address ranges no longer remove ranges other integrations created (needed for the Kubernetes pools).
+- **Software bill of materials (SBOM)** in CycloneDX 1.5, for vulnerability tools such as Dependency-Track:
+  - Each site: Admin > Version Info > Download SBOM, or `jt-ipam.sh sbom [--output FILE]`. It lists the Python packages actually installed on that host (backend dependencies are minimum versions, so they can be newer than at release time) with licenses and the dependency graph, and the npm packages bundled into the web UI (from `pnpm-lock.yaml`, with SHA-512); development tools are left out.
+  - Each release: pushing a version tag makes CI generate the SBOM, validate it against the CycloneDX 1.5 schema and attach it (with a SHA-256) to that tag's GitHub Release, which it creates from the CHANGELOG section if needed.
 - **Checkmk integration** (Admin > External integrations > Checkmk), the same read-only monitoring complement as Zabbix:
   - Host-to-IP mapping as a hostname source, host state as liveness evidence (only UP counts, timed by Checkmk's last check; on by default, also on upgraded sites), scheduled downtimes, and the addresses Checkmk does not monitor.
   - It reads only the monitoring data, so an automation user with the built-in Guest user role is enough; the Setup data would need more rights and returns nothing, without an error, when they are missing.
@@ -27,6 +52,7 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
   - The Admin switch's note on external accounts says where the groups are set, that sign-in rewrites the switch, and that roles in Permissions are enough for managing data.
 
 ### Changed
+- **"Certificate renewed" arrives as one notice per batch** (user report: the night a certificate renewed, the notification channel got one message per agent, seven in a row). Successes from cert agents and from agentless push are recorded first; once a certificate's new version has had no further success for 10 minutes (or the first one has waited an hour), one notice lists every target that took it, for example "web-01 (pdm), pve-01 (pve), proxy-01 (nginx)". Push failures are still sent right away.
 - **The IP addresses page points out unmanaged addresses** (a customer's new site had scanning on and an empty IP list, with nothing saying why). When scan agents have seen addresses that have no IP record, a note says how many and where, how to record them automatically ("Record unregistered IPs automatically" on the scan agent, off by default so that unauthorised-IP detection works) and links to the scan agents and the subnets. It can be closed and stays closed in that browser. New endpoint `GET /api/v1/addresses/unmanaged-summary`.
 - The "Unmanaged" legend of the subnet IP grid names that setting and where it is; the "exclude DHCP ranges" options of the dashboard trend and DNS compare groups say where to add a DHCP range by hand for a DHCP server without an integration (subnet page, "Address ranges (pools)" > "Add range", purpose "DHCP pool").
 

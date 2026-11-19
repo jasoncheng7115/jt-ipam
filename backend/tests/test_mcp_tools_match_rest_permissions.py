@@ -27,6 +27,7 @@ TOOL_REST = {
     "list_isoinsight_leases": "/api/v1/isoinsight/leases",
     "list_dns_records": "/api/v1/dns/records",
     "list_vms": "/api/v1/virt/vms",
+    "list_k8s": "/api/v1/k8s",
     "list_arp": "/api/v1/librenms/arp",
     "list_fdb": "/api/v1/librenms/fdb",
     "list_nat": "/api/v1/nat",

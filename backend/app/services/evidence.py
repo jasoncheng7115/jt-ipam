@@ -74,6 +74,7 @@ SOURCES: dict[str, Source] = {s.name: s for s in (
     _s("librenms", TIER_MONITORED, aging=True),
     _s("zabbix", TIER_MONITORED, aging=True),
     _s("checkmk", TIER_MONITORED, aging=True),
+    _s("k8s", TIER_MONITORED, aging=True),
     _s("wazuh", TIER_MONITORED, aging=True),
 
     # 被動學到的對應：不代表現在還活著
@@ -189,7 +190,7 @@ SOURCES: dict[str, Source] = {s.name: s for s in (
 #: 實際會餵進上線判定的來源（在 ip_addresses 上有對應的 last_seen_* 欄位）。
 #: 這是「有登記」與「真的有資料進來」的交集 —— 不要把只登記、沒接線的來源列進設定頁。
 LIVENESS_SOURCES: tuple[str, ...] = (
-    "scanner", "librenms", "wazuh", "zabbix", "checkmk",
+    "scanner", "librenms", "wazuh", "zabbix", "checkmk", "k8s",
     # 舊的籠統 "arp" 保留在清單裡：既有站台存下來的設定不會因為升級被丟掉。
     # 它對應的是 LibreNMS 寫的 `last_seen_arp`，語意等同 `arp:librenms`。
     "arp",
@@ -212,6 +213,8 @@ SOURCES_ADDED_LATER: tuple[str, ...] = (
     "arp:snmp_live", "iface:snmp",
     # 2026-11-14 Checkmk：跟 Zabbix 一樣是會過期的監控證據
     "checkmk",
+    # 2026-11-18 Kubernetes：節點 Ready（kubelet 心跳）
+    "k8s",
 )
 
 #: 存在 `ip_addresses.arp_seen` JSONB 裡的那些（其餘各有自己的 last_seen_* 欄位）。

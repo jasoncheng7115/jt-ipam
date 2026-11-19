@@ -91,3 +91,11 @@ and a production build of the frontend; any alert outside the baseline fails the
 
 When in doubt about whether something is a security issue, report it privately
 and we will triage.
+
+## Software bill of materials (SBOM)
+
+Every site can download a CycloneDX 1.5 SBOM of what it actually runs: Admin > Version Info >
+Download SBOM, or `sudo /opt/jt-ipam/scripts/jt-ipam.sh sbom`. It lists the Python packages installed
+on that host (backend dependencies are minimum versions, so what pip installed can be newer than at
+release time) and the npm packages bundled into the web UI. For every version tag, CI attaches an SBOM
+of the release build to the GitHub Release, validated against the CycloneDX 1.5 schema.

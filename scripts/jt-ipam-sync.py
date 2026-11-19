@@ -92,6 +92,7 @@ async def _run() -> int:
     from app.models.wazuh import WazuhInstance
     from app.models.zabbix import ZabbixInstance
     from app.models.checkmk import CheckmkInstance
+    from app.models.k8s import K8sCluster
     from app.models.windows_dhcp import WindowsDhcpServer
     from app.models.dhcp_standalone import IscDhcpServer, KeaDhcpServer
     from app.models.isoinsight import IsoInsightSource
@@ -111,6 +112,7 @@ async def _run() -> int:
     from app.services import wazuh as wazuh_svc
     from app.services import zabbix as zabbix_svc
     from app.services import checkmk as checkmk_svc
+    from app.services import k8s as k8s_svc
     from app.services import windows_dhcp as windows_dhcp_svc
     from app.services import kea_dhcp as kea_dhcp_svc
     from app.services import technitium_dhcp as technitium_dhcp_svc
@@ -353,6 +355,33 @@ async def _run() -> int:
                 await _hb(session, kind="checkmk.sync", target_type="checkmk_instance",
                           target_id=inst.id, target_label=name, ok=False, error=str(exc))
 
+        # ── Kubernetes ──
+        k8ss = (
+            await session.execute(
+                select(K8sCluster).where(K8sCluster.enabled.is_(True))
+            )
+        ).scalars().all()
+        for inst in k8ss:
+            interval = timedelta(seconds=inst.sync_interval_seconds)
+            if inst.last_sync_at and not _sync_due(inst.last_sync_at, interval):
+                continue
+            name = inst.name
+            try:
+                summary = await k8s_svc.sync_cluster(session, inst)
+                await session.commit()
+                log.info("k8s %s: %s", name, summary)
+                await _hb(session, kind="k8s.sync", target_type="k8s_cluster",
+                          target_id=inst.id, target_label=name, ok=True,
+                          summary=summary if isinstance(summary, dict) else None)
+            except Exception as exc:
+                await session.rollback()
+                inst.last_error = str(exc)[:2000]
+                await session.commit()
+                log.error("k8s %s sync failed: %s", name, exc)
+                failed += 1
+                await _hb(session, kind="k8s.sync", target_type="k8s_cluster",
+                          target_id=inst.id, target_label=name, ok=False, error=str(exc))
+
         # ── LibreNMS ──
         lns = (
             await session.execute(
@@ -416,7 +445,7 @@ async def _run() -> int:
             # 就永遠不會有人知道，而且畫面上完全看不出少了誰。
             for kind, model in (
                 ("librenms", LibreNMSInstance), ("wazuh", WazuhInstance),
-                ("zabbix", ZabbixInstance), ("checkmk", CheckmkInstance), ("adguard", AdGuardInstance),
+                ("zabbix", ZabbixInstance), ("checkmk", CheckmkInstance), ("k8s", K8sCluster), ("adguard", AdGuardInstance),
                 ("proxmox", ProxmoxInstance), ("esxi", ESXiInstance), ("hyperv", HyperVInstance),
                 ("openstack", OpenStackInstance),
                 ("opnsense", OPNsenseFirewall), ("pfsense", PfSenseFirewall),
@@ -931,6 +960,16 @@ async def _run() -> int:
         except Exception as exc:
             await session.rollback()
             log.error("cert push sweep failed: %s", exc)
+
+        # ── 憑證更換成功：同一批合併成一則通知（代理與推送目標先記下來，安靜一陣子再送）──
+        try:
+            from app.services.cert_deploy_digest import flush as flush_cert_deployed
+            n = await flush_cert_deployed(session)
+            if n:
+                log.info("cert deployed digests sent: %d", n)
+        except Exception as exc:
+            await session.rollback()
+            log.error("cert deployed digest failed: %s", exc)
 
         # ── 憑證到期 / 飄移告警 ──（去重保證每輪呼叫也不洗版）
         try:

@@ -3,10 +3,12 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { NAlert, NCard, NSpace, NIcon, NButton, NSpin, NTag, useMessage } from "naive-ui";
-import { SettingsIcon, RefreshIcon } from "@/icons";
+import { SettingsIcon, RefreshIcon, DownloadIcon } from "@/icons";
+import { saveBlob } from "@/utils/saveFile";
 import {
-  getVersionInfo, checkLatestVersion, type VersionInfo, type LatestVersion,
+  getVersionInfo, checkLatestVersion, downloadSbom, type VersionInfo, type LatestVersion,
 } from "@/api/system";
+import { apiErrMsg } from "@/api/client";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -72,6 +74,17 @@ async function load() {
   }
 }
 
+// SBOM：這個站台實際安裝的套件（給 Dependency-Track 等弱點管理工具匯入）
+const sbomBusy = ref(false);
+async function getSbom() {
+  sbomBusy.value = true;
+  try {
+    const { filename, blob } = await downloadSbom();
+    saveBlob(filename, blob, "application/vnd.cyclonedx+json", { source: "sbom", audited: true });   // 後端下載時已記稽核
+  } catch (e) { msg.error(apiErrMsg(e)); }
+  finally { sbomBusy.value = false; }
+}
+
 async function check() {
   checking.value = true;
   latest.value = null;
@@ -135,6 +148,18 @@ onMounted(load);
             </n-tag>
           </n-space>
         </div>
+      </div>
+
+      <!-- 軟體物料清單：實際安裝的 Python 套件＋打包進畫面的 npm 套件 -->
+      <div class="ver-sbom" data-testid="ver-sbom">
+        <div>
+          <div class="ver-pkg-title">{{ t("version.sbom_title") }}</div>
+          <div class="ver-pkg-hint">{{ t("version.sbom_hint") }}</div>
+        </div>
+        <n-button size="small" :loading="sbomBusy" :disabled="sbomBusy" data-testid="ver-sbom-download" @click="getSbom">
+          <template #icon><n-icon><DownloadIcon /></n-icon></template>
+          {{ t("version.sbom_download") }}
+        </n-button>
       </div>
 
       <!-- 本機環境（OS / kernel / nginx / Node.js / PostgreSQL）-->
@@ -262,6 +287,10 @@ onMounted(load);
 }
 .ver-link { font-size: 13px; }
 
+.ver-sbom {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin: 20px 0 4px;
+}
 .ver-pkg-head {
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
   margin: 20px 0 12px;

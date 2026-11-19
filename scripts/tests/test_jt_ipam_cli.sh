@@ -76,6 +76,25 @@ else
     echo "  (以 root 執行測試，略過 non-root guard 斷言)"
 fi
 
+# 6. sbom：不需要 root、輸出 CycloneDX JSON（CI 沒有 .venv → 用 JT_IPAM_PYTHON 指定直譯器）
+PY="${JT_IPAM_PYTHON:-}"
+[[ -z "$PY" && -x "$HERE/../../backend/.venv/bin/python" ]] && PY="$HERE/../../backend/.venv/bin/python"
+[[ -z "$PY" ]] && PY="python3"
+set +e
+SBOM="$(JT_IPAM_PYTHON="$PY" "$SCRIPT" sbom 2>/dev/null)"; RC=$?
+set -e
+if [[ $RC -eq 0 ]] && "$PY" -c 'import json,sys; d=json.load(sys.stdin); assert d["bomFormat"]=="CycloneDX" and d["components"]' <<<"$SBOM"; then
+    ok "sbom 輸出 CycloneDX JSON"
+else
+    bad "sbom 沒有輸出 CycloneDX JSON（exit $RC）"
+fi
+run sbom --bogus
+[[ $RC -eq 2 ]] && ok "sbom 不明選項 exit 2" || bad "sbom 不明選項應 exit 2，實得 $RC"
+set +e
+OUT="$(JT_IPAM_PYTHON=/nonexistent/python "$SCRIPT" sbom 2>&1)"; RC=$?
+set -e
+[[ $RC -eq 1 ]] && grep -q "not found" <<<"$OUT" && ok "sbom 找不到直譯器時講清楚" || bad "sbom 找不到直譯器：exit $RC $OUT"
+
 echo
 echo "通過：$PASS　失敗：$FAIL"
 if [[ $FAIL -eq 0 ]]; then

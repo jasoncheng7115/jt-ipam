@@ -90,6 +90,14 @@ RULES: dict[str, Rule] = {
     "nat.translation_disabled": _r("nat", "reference_only", "info", "informational", "explicit", "NAT_TRANSLATION_DISABLED"),
     "monitoring.zabbix_host": _r("monitoring", "change_required", "medium", "review", "explicit", "ZABBIX_HOST"),
     "monitoring.checkmk_host": _r("monitoring", "change_required", "medium", "review", "explicit", "CHECKMK_HOST"),
+    # Kubernetes：節點 IP 綁在 kubelet 憑證與 etcd 上，改址要重建節點 → 高；LB 位址要改 Service 或集區
+    "virt.k8s_node": _r("virt", "change_required", "high", "review", "explicit", "K8S_NODE"),
+    "virt.k8s_service_ip": _r("virt", "change_required", "medium", "review", "explicit", "K8S_SERVICE_IP"),
+    "virt.k8s_pool": _r("virt", "change_required", "medium", "review", "explicit", "K8S_POOL"),
+    # Ingress／Gateway／Route 的名稱指向這個位址：DNS 記錄（或外部 DNS）要跟著改，否則名稱連不到服務
+    # API 位址本身是 IP：每份 kubeconfig、API 伺服器憑證的 SAN 都寫著它
+    "virt.k8s_apiserver": _r("virt", "change_required", "high", "review", "explicit", "K8S_APISERVER"),
+    "virt.k8s_hostname": _r("virt", "change_required", "medium", "review", "explicit", "K8S_HOSTNAME"),
     # 代理會自己回報新位址；綁了固定位址（registerIP）的另有 wazuh_register_ip 要覆核
     "monitoring.wazuh_agent": _r("monitoring", "reference_only", "low", "informational", "explicit", "WAZUH_AGENT"),
     "monitoring.librenms_device": _r("monitoring", "change_required", "medium", "review", "explicit", "LIBRENMS_DEVICE"),

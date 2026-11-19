@@ -314,6 +314,7 @@ export interface AnomalyReport {
   stale_device_links: any[];
   mac_flapping?: Record<string, any>[];
   identity_changes?: Record<string, any>[];
+  k8s_conflicts?: Record<string, any>[];
   /** 同一台主機多張網卡回應同一個 IP（2026-10-09 從 IP 衝突分出來） */
   arp_flux?: Record<string, any>[];
   /** 兩個子網段混在同一個二層 */

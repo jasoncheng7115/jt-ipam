@@ -118,6 +118,12 @@ CATEGORY: dict[str, str] = {
     "zabbix_hosts": "synced",
     "checkmk_instances": "integrations",
     "checkmk_hosts": "synced",
+    "k8s_clusters": "integrations",
+    "k8s_nodes": "synced",
+    "k8s_service_ips": "synced",
+    "k8s_ip_pools": "synced",
+    "k8s_cidrs": "synced",
+    "k8s_hostnames": "synced",
     # 探測工作是執行紀錄（工具頁的兩分鐘就過期；IP 探測的歷次結果也屬歷史），與稽核／背景作業同歸短暫資料
     "agent_probe_jobs": "operational",
     # 掃描代理每一輪的耗時（負載面板的趨勢，只保留 7 天）
@@ -234,6 +240,8 @@ CATEGORY: dict[str, str] = {
     "ip_request_stage_approvals": "operational",
     "background_tasks": "operational",
     "notifications": "operational",
+    # 憑證更換成功、等著合併成一則通知的記錄（services/cert_deploy_digest）
+    "cert_deploy_notices": "operational",
     "ai_chat_conversations": "operational",
     "ai_chat_messages": "operational",
     # 巡檢發現是對「某一刻的資料」下的推測，搬到另一台機器未必還成立 —— 屬歷史紀錄，

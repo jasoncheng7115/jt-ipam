@@ -1051,6 +1051,10 @@ Commands:
                                                           downloading it from GitHub -- for offline hosts
   doctor       check a running install and print an exact fix for anything wrong
   harden-audit give the audit table to a NOLOGIN role (install and upgrade do this; run it after a restore)
+  sbom         print this install's software bill of materials (CycloneDX 1.5 JSON): the Python packages
+               actually installed and the npm packages bundled into the web UI. The same file can be downloaded
+               from Admin > Version Info. For vulnerability tools such as Dependency-Track.
+                 --output <file>                          write to a file instead of stdout
   upgrade      upgrade existing install (git pull -> backup -> pip -> alembic -> build -> restart)
                  --no-pull                                skip git pull
                  --force                                  discard local changes to tracked files (e.g. an edited
@@ -1307,6 +1311,29 @@ harden_audit_table() {
 
 unharden_audit_table() {
     audit_table_sql audit-unharden.sql || warn "Could not hand the audit table back for migrations; a migration that changes it may fail."
+}
+
+# Software bill of materials of what is installed here (backend/app/services/sbom.py). Read-only, no root needed.
+# JT_IPAM_PYTHON is a test hook (CI has no .venv).
+cmd_sbom() {
+    local out=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --output) out="${2:-}"; shift 2 || { echo "[error] --output needs a file" >&2; exit 2; } ;;
+            *) echo "[error] Unknown option for sbom: $1" >&2; exit 2 ;;
+        esac
+    done
+    local py="${JT_IPAM_PYTHON:-$REPO_ROOT/backend/.venv/bin/python}"
+    if ! command -v "$py" >/dev/null 2>&1 && [[ ! -x "$py" ]]; then
+        echo "[error] $py not found: is jt-ipam installed in $REPO_ROOT?" >&2
+        exit 1
+    fi
+    if [[ -n "$out" ]]; then
+        ( cd "$REPO_ROOT/backend" && "$py" -m app.services.sbom "$REPO_ROOT/frontend" ) > "$out"
+        echo "SBOM written to $out" >&2
+    else
+        ( cd "$REPO_ROOT/backend" && "$py" -m app.services.sbom "$REPO_ROOT/frontend" )
+    fi
 }
 
 cmd_harden_audit() {
@@ -2778,6 +2805,7 @@ main() {
         uninstall) shift; cmd_uninstall "$@" ;;
         doctor)    shift; cmd_doctor "$@" ;;
         harden-audit) shift; cmd_harden_audit "$@" ;;
+        sbom)      shift; cmd_sbom "$@" ;;
         *)
             echo "[error] Unknown command: $cmd" >&2
             echo >&2

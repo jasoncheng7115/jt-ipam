@@ -1,0 +1,74 @@
+# jt-ipam 的唯讀帳號：只能 get / list 下面這些資源，不能改任何東西（不讀 Secret、ConfigMap、Pod）。
+#   kubectl apply -f jt-ipam-readonly.yaml
+#   kubectl -n kube-system get secret jt-ipam-ro-token -o jsonpath='{.data.token}' | base64 -d     # token
+#   kubectl -n kube-system get secret jt-ipam-ro-token -o jsonpath='{.data.ca\.crt}' | base64 -d   # 叢集 CA
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jt-ipam-ro
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jt-ipam-ro-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: jt-ipam-ro
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jt-ipam-readonly
+rules:
+  - apiGroups: [""]
+    resources: [nodes, services, namespaces]
+    verbs: [get, list]
+  - apiGroups: [networking.k8s.io]
+    resources: [servicecidrs, ingresses]
+    verbs: [get, list]
+  - apiGroups: [metallb.io]
+    resources: [ipaddresspools]
+    verbs: [get, list]
+  - apiGroups: [cilium.io]
+    resources: [ciliumloadbalancerippools]
+    verbs: [get, list]
+  # 以下是選用的元件，叢集沒裝也可以照樣套用
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gateways, httproutes, grpcroutes]
+    verbs: [get, list]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get, list]
+  - apiGroups: [crd.projectcalico.org, projectcalico.org]
+    resources: [ippools]
+    verbs: [get, list]
+  - apiGroups: [whereabouts.cni.cncf.io]
+    resources: [ippools]
+    verbs: [get, list]
+  - apiGroups: [k8s.cni.cncf.io]
+    resources: [network-attachment-definitions]
+    verbs: [get, list]
+  - apiGroups: [k8s.ovn.org]
+    resources: [egressips]
+    verbs: [get, list]
+  - apiGroups: [cilium.io]
+    resources: [ciliumegressgatewaypolicies]
+    verbs: [get, list]
+  - apiGroups: [crd.antrea.io]
+    resources: [egresses, externalippools]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jt-ipam-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jt-ipam-readonly
+subjects:
+  - kind: ServiceAccount
+    name: jt-ipam-ro
+    namespace: kube-system

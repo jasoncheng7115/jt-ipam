@@ -47,6 +47,7 @@ const meta = computed(() => {
     { key: "Wazuh", at: a.last_seen_wazuh },
     { key: "Zabbix", at: a.last_seen_zabbix },
     { key: "Checkmk", at: a.last_seen_checkmk },
+    { key: "Kubernetes", at: a.last_seen_k8s },
     { key: "ARP", at: a.last_seen_arp },
     ...Object.entries(a.arp_seen || {}).map(([k, at]) => ({
       key: k === "device"

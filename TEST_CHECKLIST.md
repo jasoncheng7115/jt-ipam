@@ -2254,6 +2254,25 @@ What this section tests is the thing the chain itself cannot catch. Verifying th
 - [ ] **Liveness evidence**: only UP stamps `last_seen_checkmk`, with Checkmk's last check time; DOWN, not checked yet and active checks off never do (`tests/test_checkmk.py`)
 - [ ] **Screen** (`E2E_CHECKMK_URL=… e2e/checkmk.spec.ts`): create, test connection (version, site, host count), sync, host list (state, folder, several addresses), addresses not monitored, delete
 
+## 7f-3. Kubernetes integration: **whenever the Kubernetes sync, pools or clashes change**
+
+- [ ] **Two real clusters**: `bash scripts/k8s-test-target/run.sh` starts k3s (MetalLB, bundled Traefik) and kind (upstream Cilium, Gateway API, Calico, Whereabouts and OpenShift Route CRDs); run `tests/test_k8s_real.py` with the line it prints (the read-only account reads nodes, Services, pools and names; every write is 403; a wrong token gives `k8s_auth`, a wrong CA `k8s_tls_failed`; Traefik writes the MetalLB address into the Ingress)
+- [ ] **First-version read-only account**: with the phase-1 ClusterRole (`readonly-phase1.yaml` in the test target) the sync still runs, the newer resources are listed as missing permissions (`resource.group`) and the cluster page shows them, but resources the cluster does not have are not (RBAC answers 403 for them too, so discovery decides); applying the current manifest clears the notice
+- [ ] **Read-only account**: `deploy/k8s/jt-ipam-readonly.yaml` has get / list only, and the integration page hands out the same file
+- [ ] **kubeconfig**: token and client certificate work; exec / auth-provider, local file references and missing credentials give clear error codes
+- [ ] **Matching and liveness**: nodes only mark existing IPs and only Ready stamps `last_seen_k8s`; providerID links existing VMs (`tests/test_k8s.py`)
+- [ ] **Address pools**: pools inside a subnet become Reserved address ranges; the DHCP auto-range reconciliation leaves them alone; they go away when the pool does or the option is turned off
+- [ ] **Clashes**: unregistered, inside DHCP, pools containing addresses in use, overlapping non-routable cluster networks and names that point elsewhere in IPAM DNS all appear under the anomaly category "Kubernetes address clashes"
+- [ ] **Domain names**: Ingress (rules and tls hosts), Gateway listeners, HTTPRoute / GRPCRoute through their parent Gateway, OpenShift Route through `openshift-ingress/router-<name>`; wildcards are kept but not checked against DNS; the IPAM DNS column says match / points elsewhere / no record (CNAMEs followed); exact names appear in the FQDN view of exposed services
+- [ ] **Calico and Whereabouts**: Calico Workload pools become Pod networks (routable only without NAT and encapsulation), LoadBalancer pools become address pools; Whereabouts pools become address ranges and their allocations become Pod addresses (offset from the address written in `range`)
+- [ ] **Clashes between clusters**: the same address in two clusters, overlapping pools, overlapping routable Pod networks show up on both clusters' Clashes tab (detail names the other side) and once in anomaly detection; node addresses inside an IPAM subnet without a record are `node_unregistered`
+- [ ] **Broken optional resource**: an optional resource that answers 5xx (a CRD whose conversion webhook is gone) is skipped, written to the cluster's last error and listed in `optional_errors`; nodes and the rest still sync
+- [ ] **Egress IPs and Multus**: OVN-Kubernetes EgressIP (all spec addresses, node from status), Cilium egress gateway (egressGateway and egressGateways; interface-only policies have no address), Antrea Egress and ExternalIPPool (v1beta2 first, v1beta1 as fallback; use LoadBalancer / Egress); Multus host-local ranges become pools, static addresses become Pod addresses, Whereabouts and broken configs are skipped; an API address that is an IP becomes an `apiserver` row (a host name is not resolved) and gives `virt.k8s_apiserver` (high) in IP change assessment
+- [ ] **Routable Pod networks**: a routable Pod network (Calico, or the cluster switch) is not a clash and shows its overlapping subnets; an IP inside it shows the note on the IP detail card
+- [ ] **IP change assessment**: an address with Ingress / Gateway / Route names gives one `virt.k8s_hostname` finding per cluster listing the names (`tests/test_change_impact_k8s.py`)
+- [ ] **AI**: `list_k8s` by cluster, ip, host and subnet_cidr; `get_ip_detail` carries `kubernetes`; global read only, like the REST views
+- [ ] **Screen** (`E2E_K8S_DIR=… e2e/k8s.spec.ts`): add by token and by kubeconfig, per-item test connection (including the phase-2 rows), tabs after sync (Domain names, pool use, routable column), read-only account download, the routable switch, delete
+
 ## 7g. Evidence contract: **whenever a source is added or changed**
 
 What this section guards: **a new source must answer whether its evidence expires**.
@@ -2465,6 +2484,12 @@ happy path of "an upload succeeded" is not enough.
 - [ ] **AI**: get_device returns the group (members, role, shared IPs), get_ip_detail returns `device_group`
 
 ## 8. Recent feature spot-checks
+
+- [ ] **Kubernetes integration** (`tests/test_k8s.py`, `tests/test_k8s_real.py`, `e2e/k8s.spec.ts`): run every item of "7f-3. Kubernetes integration"; both the k3s and kind targets must pass
+
+- [ ] **One "certificate renewed" notice per batch** (`tests/test_cert_deploy_digest.py`): agent reports and push successes are not sent right away but recorded in cert_deploy_notices; after 10 quiet minutes for that certificate version (or an hour after the first one) the scheduler sends one notice listing every target; a target reported twice counts once; push failures are still sent immediately
+
+- [ ] **SBOM** (`tests/test_sbom.py`, `scripts/tests/test_jt_ipam_cli.sh`, `e2e/sbom-download.spec.ts`): the Admin > Version Info download and `jt-ipam.sh sbom` are CycloneDX 1.5 and pass the official strict schema validation; Python versions are the installed ones and jt-ipam itself is not a component; the frontend lists only bundled packages (no vitest or playwright); non-admins get 403; after pushing a version tag, the GitHub Release carries `jt-ipam-VERSION.sbom.cdx.json` and its `.sha256`
 
 - [ ] **Checkmk integration** (`tests/test_checkmk.py`, `tests/test_checkmk_real.py`, `e2e/checkmk.spec.ts`): run every item of "7f-2. Checkmk integration"; both the 2.4 and 2.5 targets must pass
 - [ ] **Uptime bar carries forward Wazuh / Zabbix / Checkmk** (`tests/test_ip_uptime.py`): a day only those sources proved online is carried forward into the following days without observations

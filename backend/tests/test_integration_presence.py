@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # 選單 key → 狀態鍵（前端 MainLayout.vue 的 INTEGRATION_PRESENCE_KEY 對照表要跟這裡一致）
 MENU_KEYS = {
     "dns", "adguard", "librenms", "opnsense", "pfsense", "fortigate", "paloalto", "checkpoint", "mikrotik", "snmp",
-    "windows_dhcp", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "rustdesk", "proxmox", "esxi", "hyperv", "openstack", "wazuh", "zabbix", "checkmk", "ocs", "graylog",
+    "windows_dhcp", "kea_dhcp", "isc_dhcp", "isoinsight", "technitium", "rustdesk", "proxmox", "esxi", "hyperv", "openstack", "wazuh", "zabbix", "checkmk", "k8s", "ocs", "graylog",
 }
 
 
@@ -33,5 +33,5 @@ def test_menu_maps_every_integration_to_a_presence_key() -> None:
     src = (ROOT / "frontend" / "src" / "components" / "layout" / "MainLayout.vue").read_text()
     block = re.search(r"const INTEGRATION_PRESENCE_KEY[^{]*\{(.*?)\};", src, re.S)
     assert block, "MainLayout.vue 要有 INTEGRATION_PRESENCE_KEY 對照表"
-    mapped = set(re.findall(r':\s*"([a-z_]+)"', block.group(1)))
+    mapped = set(re.findall(r':\s*"([a-z0-9_]+)"', block.group(1)))
     assert mapped == MENU_KEYS, mapped ^ MENU_KEYS

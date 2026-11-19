@@ -209,8 +209,9 @@ async def sync_auto_dhcp_ranges(session: AsyncSession) -> dict[str, int]:
         origin = f"{pool.source_type}:{pool.source_id}"[:64]
         desired.setdefault((top[0], str(a), str(b), origin), _label(pool))
 
+    # 只管 DHCP 的：別的整合自動建的範圍（例如 Kubernetes LB 集區，用途＝保留）由它們自己對帳，不可以在這裡被刪
     auto_rows = (await session.execute(
-        select(IPRange).where(IPRange.source_origin.is_not(None)))).scalars().all()
+        select(IPRange).where(IPRange.source_origin.is_not(None), IPRange.purpose == "dhcp"))).scalars().all()
     have: dict[tuple[uuid.UUID, str, str, str], IPRange] = {}
     for r in auto_rows:
         key = (r.subnet_id, str(r.start_ip).split("/")[0], str(r.end_ip).split("/")[0], str(r.source_origin))

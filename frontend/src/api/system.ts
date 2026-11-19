@@ -349,6 +349,13 @@ export interface LatestVersion {
   error: string | null;
 }
 
+/** 這個站台的 SBOM（CycloneDX 1.5 JSON），回傳檔名與內容 */
+export async function downloadSbom(): Promise<{ filename: string; blob: Blob }> {
+  const r = await apiClient.get("/api/v1/system/sbom", { responseType: "blob" });
+  const cd = String(r.headers["content-disposition"] ?? "");
+  return { filename: /filename="([^"]+)"/.exec(cd)?.[1] ?? "jt-ipam.sbom.cdx.json", blob: r.data as Blob };
+}
+
 export async function getVersionInfo(): Promise<VersionInfo> {
   const { data } = await apiClient.get<VersionInfo>("/api/v1/system/version");
   return data;

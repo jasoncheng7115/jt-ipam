@@ -11,7 +11,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-_KIND = re.compile(r'''(?:\bkind=|\bKIND = |record_refresh\(session, )"([a-z_]+\.[a-z_]+)"''')
+_KIND = re.compile(r'''(?:\bkind=|\bKIND = |record_refresh\(session, )"([a-z0-9_]+\.[a-z0-9_]+)"''')
 
 
 def _kinds() -> set[str]:

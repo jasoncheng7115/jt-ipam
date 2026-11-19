@@ -45,6 +45,7 @@ ADAPTERS: tuple[tuple[str, Callable[[Ctx], Awaitable[None]]], ...] = (
     ("nat", an.nat),
     ("monitoring", an.monitoring),
     ("virt", an.virt),
+    ("virt", an.kubernetes),
     ("cert", an.certs),
     ("physical", ai.device_relations),
     ("service", m2.service_refs),

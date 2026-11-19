@@ -7,6 +7,31 @@
 ## [Unreleased]
 
 ### 新增
+- **Kubernetes 整合**（管理 > 外部系統整合 > Kubernetes），唯讀，用 ClusterRole 只有 get / list 的 ServiceAccount（頁面提供設定檔；也可以貼內嵌資料的 kubeconfig，用 exec 外掛的雲端驗證會明確拒絕）。讀的是會佔用或撞到實體網段的位址；叢集內部的 Pod IP 不收。
+
+  #### 讀哪些資料
+  - **節點**：對應既有 IP 紀錄作為主機名稱來源，Ready 當上線證據（預設採信，升級的站台也是），providerID 連到既有的 OpenStack（或其他）VM。
+  - **佔用實體網段的位址**：LoadBalancer 與 externalIPs 的位址，以及是哪個 namespace / Service 在用；Pod 次要網卡的位址（Whereabouts 的配置、Multus 的 static 位址）；Egress IP（OVN-Kubernetes EgressIP 含目前所在的節點、Cilium egress gateway、Antrea Egress）；API 位址本身是 IP 時的 API 伺服器位址。
+  - **位址集區**：MetalLB、Cilium、Calico（allowedUses 是 LoadBalancer）的 LB 集區、Antrea 的 ExternalIPPool、Whereabouts 集區與 Multus 的 host-local 網段，落在子網路裡時建成用途為「保留」的位址範圍（每個叢集可關，刪叢集時一併移除）。
+  - **網域名稱**：Ingress、Gateway API（Gateway 的 listener、HTTPRoute、GRPCRoute）與 OpenShift Route，以及每個名稱指向的位址；也會出現在「對外開放服務」的 FQDN 檢視。
+  - **叢集網段**：節點的 podCIDR、Calico 的 Workload 集區與 ServiceCIDR。Calico 集區不 NAT 也不封裝的標成可直接路由；叢集也可以標成「Pod 網段可直接路由」（Cilium native routing、BGP）。可路由的 Pod 網段顯示對應到哪個子網路，不算衝突。
+
+  #### 出現在哪裡
+  - 異常偵測新類別「**Kubernetes 位址衝突**」：佔用沒登記的位址、位址在 DHCP 範圍裡、集區跟 DHCP 重疊或含使用中的位址、不可路由的叢集網段跟子網路重疊、名稱在 IPAM 同步的 DNS 裡指向別的位址、節點的位址 IPAM 沒登記，以及兩個叢集之間的衝突（同一個位址、位址集區重疊、可路由的 Pod 網段重疊）。
+  - IP 詳細資料的卡片：是哪個叢集的節點、哪個 Service 或 Pod 在用、哪些名稱指向它，或落在可路由的 Pod 網段裡。
+  - IP 變更評估列出節點與 API 伺服器位址（高：kubelet 憑證、etcd、每份 kubeconfig 與 API 伺服器憑證都綁著它）、Service、Pod、Egress IP、位址集區，以及 DNS 記錄要一起改的名稱。
+  - AI 對話 / MCP：新工具 `list_k8s`（可依叢集、位址、名稱或網段查），`get_ip_detail` 也帶 Kubernetes 的資料。
+
+  #### 唯讀帳號的升級
+  - 後來加的資源都是選用：還在用第一版 ClusterRole 的帳號照樣同步，叢集頁會列出缺哪些權限（叢集沒裝的不列），重新套用設定檔後就會讀到。
+  - 選用的資源 API 讀不出來（例如 CRD 的轉換 webhook 掛了）時只略過那一項，錯誤顯示在叢集上，其他資料照常同步。
+
+  #### 測試
+  - k3s（MetalLB＋內建的 Traefik，真的 Ingress 控制器）與 kind 裡的上游 Kubernetes（上游的 Cilium、Gateway API v1.3、Calico、Whereabouts、OpenShift Route、OVN-Kubernetes EgressIP、Antrea、Multus CRD）實測過；`scripts/k8s-test-target/run.sh` 起這兩個測試靶。
+- 依 DHCP 自動建立的位址範圍，對帳時不再刪掉別的整合建立的範圍（Kubernetes 集區需要）。
+- **軟體物料清單（SBOM）**，CycloneDX 1.5 格式，可匯入 Dependency-Track 等弱點管理工具：
+  - 每個站台：「管理 > 版本資訊」的「下載 SBOM」，或執行 `jt-ipam.sh sbom [--output 檔案]`。內容是這台主機實際安裝的 Python 套件（後端相依只寫最低版本，可能比發版時新），含授權與相依關係，以及打包進畫面的 npm 套件（取自 `pnpm-lock.yaml`，含 SHA-512）；開發工具不列。
+  - 每個版本：推送版本 tag 時 CI 產生 SBOM、對 CycloneDX 1.5 schema 驗證，連同 SHA-256 附在該 tag 的 GitHub Release（沒有 Release 就依 CHANGELOG 那一版的段落建立）。
 - **Checkmk 整合**（管理 > 外部系統整合 > Checkmk），跟 Zabbix 一樣是監控面的唯讀補充：
   - 主機與 IP 的對應作為主機名稱來源；主機狀態作為上線證據（只有 UP 算，時間用 Checkmk 的最後檢查時間；預設採信，升級的站台也是）；停機排程；Checkmk 沒監控的位址。
   - 只讀監控資料，所以自動化帳號用內建的 Guest user 角色就夠；讀「設定」要更高的權限，權限不夠時 Checkmk 會靜靜回空的，不會報錯。
@@ -27,6 +52,7 @@
   - 外部帳號「管理員」開關的說明寫出群組在哪裡設定、登入時會改寫開關，以及只要管理資料的話在「權限指派」給角色就夠了。
 
 ### 變更
+- **「憑證已更換成功」改成一批一則**（使用者回報：憑證換新的那個半夜，通知頻道每台代理各跳一則，連續七則）。憑證派送代理與無代理推送的成功先記下來；同一張憑證的新版 10 分鐘內沒有新的成功（或最早一筆已經等了一小時），就送一則，列出這次換好的每個目標，例如「web-01（pdm）、pve-01（pve）、proxy-01（nginx）」。推送失敗照舊立刻通知。
 - **「IP 位址」頁提示未納管的位址**（客戶新站台開了掃描，IP 清單卻是空的，畫面上沒有任何說明）。掃描代理看到沒有 IP 紀錄的位址時，上方說明有幾個、在哪些子網路，以及怎麼自動收錄（掃描代理的「自動收錄未登錄的 IP」，預設關閉是為了讓「未授權 IP」偵測有作用），並附上到掃描代理與各子網路的按鈕。可以關掉，在這台瀏覽器不再出現。新端點 `GET /api/v1/addresses/unmanaged-summary`。
 - 子網路 IP 指示計的「未納管」圖例寫出那個開關的名稱與位置；儀表板異動趨勢與 DNS 比對群組的「排除 DHCP 範圍」說明，補上沒有整合的 DHCP 伺服器要在哪裡手動新增範圍（子網路頁「位址範圍（集區）」›「新增範圍」，用途選「DHCP 集區」）。
 

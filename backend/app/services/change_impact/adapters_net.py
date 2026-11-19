@@ -1172,3 +1172,103 @@ async def certs(ctx: Ctx) -> None:
                                    observed_at=a.last_seen_at, freshness="current", visibility=("admin", None)))
             ctx.find(Finding("device.cert_agent", "cert_agent", a.name, [key], subject_id=a.id,
                              params={"certificates": len(a.scope_cert_ids or [])}, visibility=("admin", None)))
+
+
+async def kubernetes(ctx: Ctx) -> None:
+    """Kubernetes：舊位址是節點 IP（kubelet 憑證、etcd 都綁 IP，改址要重建節點）、Service／Pod 佔用的位址、
+    Ingress／Gateway／Route 名稱指向的位址（DNS 要跟著改），或落在位址集區裡（可能已經或之後會被發出去）。
+    全域讀取才看得到（同叢集頁）。"""
+    if not ctx.sources_of("virt") or not ctx.allowed("virt"):
+        return
+    ids = [r.ip_id for r in ctx.roots]
+    texts = [r.ip_text for r in ctx.roots]
+    by_text = {r.ip_text: r for r in ctx.roots}
+    by_id = {r.ip_id: r for r in ctx.roots}
+    params = {"ids": ids, "texts": texts}
+    for n in (await ctx.session.execute(text("""
+        SELECT n.id, n.name, n.roles, n.ready, host(n.ip) AS ip, n.jt_ipam_address_id, n.cluster_id, n.synced_at,
+               c.name AS cluster
+          FROM k8s_nodes n JOIN k8s_clusters c ON c.id = n.cluster_id
+         WHERE n.jt_ipam_address_id = ANY(:ids) OR host(n.ip) = ANY(:texts)
+    """), params)).all() if ids else []:
+        root = by_id.get(n.jt_ipam_address_id) or by_text.get(n.ip)
+        src = ctx.source("k8s", n.cluster_id)
+        if root is None or ctx.in_scope(src, root) is False:
+            continue
+        label = f"{n.cluster}/{n.name}"[:300]
+        key = ctx.add(Evidence(key=f"k8s_node:{n.id}", source_type="virt", object_type="k8s_node", object_id=n.id,
+                               integration_ref=f"k8s:{n.cluster_id}", label=label,
+                               payload={"roles": n.roles, "ready": n.ready, "ip": n.ip},
+                               observed_at=n.synced_at, freshness=src.freshness if src else "unknown"))
+        ctx.find(Finding("virt.k8s_node", "k8s_node", label, [key], subject_id=n.id, match_kind="exact",
+                         params={"address": root.ip_text, "cluster": n.cluster},
+                         strength=ctx.strength_for(src, root)))
+    for s in (await ctx.session.execute(text("""
+        SELECT s.id, s.namespace, s.name, s.kind, host(s.ip) AS ip, s.jt_ipam_address_id, s.cluster_id, s.synced_at,
+               c.name AS cluster
+          FROM k8s_service_ips s JOIN k8s_clusters c ON c.id = s.cluster_id
+         WHERE s.jt_ipam_address_id = ANY(:ids) OR host(s.ip) = ANY(:texts)
+    """), params)).all() if ids else []:
+        root = by_id.get(s.jt_ipam_address_id) or by_text.get(s.ip)
+        src = ctx.source("k8s", s.cluster_id)
+        if root is None or ctx.in_scope(src, root) is False:
+            continue
+        label = f"{s.cluster}/{s.namespace}/{s.name}"[:300]
+        key = ctx.add(Evidence(key=f"k8s_service_ip:{s.id}", source_type="virt", object_type="k8s_service_ip",
+                               object_id=s.id, integration_ref=f"k8s:{s.cluster_id}", label=label,
+                               payload={"kind": s.kind, "ip": s.ip}, observed_at=s.synced_at,
+                               freshness=src.freshness if src else "unknown"))
+        rule = "virt.k8s_apiserver" if s.kind == "apiserver" else "virt.k8s_service_ip"
+        ctx.find(Finding(rule, "k8s_service_ip", label, [key], subject_id=s.id, match_kind="exact",
+                         params={"address": root.ip_text, "cluster": s.cluster, "kind": s.kind},
+                         strength=ctx.strength_for(src, root)))
+    hosts: dict[tuple[Any, Any], list[Any]] = {}
+    for h in (await ctx.session.execute(text("""
+        SELECT h.id, h.kind, h.namespace, h.name, h.host, host(h.ip) AS ip, h.jt_ipam_address_id, h.cluster_id,
+               h.synced_at, c.name AS cluster
+          FROM k8s_hostnames h JOIN k8s_clusters c ON c.id = h.cluster_id
+         WHERE h.jt_ipam_address_id = ANY(:ids) OR host(h.ip) = ANY(:texts)
+         ORDER BY h.host
+    """), params)).all() if ids else []:
+        root = by_id.get(h.jt_ipam_address_id) or by_text.get(h.ip)
+        if root is not None:
+            hosts.setdefault((h.cluster_id, root.ip_id), []).append((h, root))
+    # 一個叢集、一個位址合成一筆（Ingress 控制器的 LB 位址可能掛上百個名稱）
+    for (cid, _rid), items in hosts.items():
+        h0, root = items[0]
+        src = ctx.source("k8s", cid)
+        if ctx.in_scope(src, root) is False:
+            continue
+        names = sorted({h.host for h, _r in items})
+        label = f"{h0.cluster}: {', '.join(names[:3])}{' …' if len(names) > 3 else ''}"[:300]
+        keys = [ctx.add(Evidence(key=f"k8s_hostname:{h.id}", source_type="virt", object_type="k8s_hostname",
+                                 object_id=h.id, integration_ref=f"k8s:{cid}", label=f"{h.host} ({h.kind})"[:300],
+                                 payload={"kind": h.kind, "host": h.host, "namespace": h.namespace, "name": h.name},
+                                 observed_at=h.synced_at, freshness=src.freshness if src else "unknown"))
+                for h, _r in items[:50]]
+        ctx.find(Finding("virt.k8s_hostname", "k8s_hostname", label, keys, subject_id=h0.id, match_kind="exact",
+                         params={"address": root.ip_text, "cluster": h0.cluster, "hosts": ", ".join(names[:10]),
+                                 "count": len(names)},
+                         strength=ctx.strength_for(src, root)))
+    import ipaddress as _ip
+    pools = (await ctx.session.execute(text("""
+        SELECT p.id, p.provider, p.name, p.blocks, p.disabled, p.cluster_id, p.synced_at, c.name AS cluster
+          FROM k8s_ip_pools p JOIN k8s_clusters c ON c.id = p.cluster_id
+    """))).all()
+    for r in ctx.roots:
+        try:
+            v = int(_ip.ip_address(r.ip_text))
+        except ValueError:
+            continue
+        for p in pools:
+            if p.disabled or not any(int(_ip.ip_address(b["start"])) <= v <= int(_ip.ip_address(b["end"]))
+                                     for b in (p.blocks or [])):
+                continue
+            src = ctx.source("k8s", p.cluster_id)
+            label = f"{p.cluster}/{p.provider}:{p.name}"[:300]
+            key = ctx.add(Evidence(key=f"k8s_pool:{p.id}", source_type="virt", object_type="k8s_pool",
+                                   object_id=p.id, integration_ref=f"k8s:{p.cluster_id}", label=label,
+                                   payload={"provider": p.provider, "blocks": p.blocks}, observed_at=p.synced_at,
+                                   freshness=src.freshness if src else "unknown"))
+            ctx.find(Finding("virt.k8s_pool", "k8s_pool", label, [key], subject_id=p.id, match_kind="range_contains",
+                             params={"address": r.ip_text, "cluster": p.cluster, "pool": p.name}))

@@ -38,7 +38,7 @@ export const VENDOR_LABEL: Record<string, string> = {
   mikrotik: "MikroTik", librenms: "LibreNMS", windows_dhcp: "Windows DHCP", kea_dhcp: "Kea DHCP",
   technitium: "Technitium DHCP",
   isc_dhcp: "ISC DHCP", isoinsight: "ISOinsight", proxmox: "Proxmox", vmware: "VMware", wazuh: "Wazuh", rustdesk: "RustDesk",
-  ocs: "OCS", zabbix: "Zabbix", checkmk: "Checkmk",
+  ocs: "OCS", zabbix: "Zabbix", checkmk: "Checkmk", k8s: "Kubernetes",
   // SNMP 收集（0217）：`arp:snmp`、`iface:snmp`；`arp:snmp_live`（設備標成 reachable 的項目）見 evidenceVendorLabel
   snmp: "SNMP",
 };
@@ -129,6 +129,10 @@ export function monitorLines(d: D | null | undefined, h: SectionHelpers,
       `Checkmk ${c.host}（${label(h, `checkmk.state_${c.state}`, c.state ?? "—")}）`,
       c.downtime ? h.t("checkmk.downtime") : null,
     ]));
+  }
+  for (const k of (m.k8s ?? []) as D[]) {
+    out.push(join([`Kubernetes ${k.cluster ?? ""} ${k.name}（${label(h, `k8s.ip_kind_${k.kind}`, k.kind)}）`,
+                   k.kind === "node" ? (k.ready ? "Ready" : "NotReady") : null]));
   }
   return out;
 }
@@ -321,6 +325,7 @@ const ANOMALY_LABEL: Record<string, string> = {
   ip_conflicts: "anomaly.ip_conflicts", mac_drifts: "anomaly.mac_drifts", mac_drift_reference: "anomaly.mac_drifts",
   ghost_ips: "anomaly.ghost_ips", arp_only_liveness: "anomaly.arp_only", stale_device_links: "anomaly.stale_link",
   mac_flapping: "anomaly.mac_flapping", identity_changes: "anomaly.identity_changes",
+  k8s_conflicts: "anomaly.k8s_conflicts",
   unauthorized_ips: "anomaly.unauthorized", rogue_dhcp: "anomaly.rogue_dhcp", external_exposure: "anomaly.exposure",
   dangling_dns: "anomaly.dangling_dns", duplicate_ip_records: "anomaly.dup_ip", suspicious_changes: "anomaly.changes",
   fw_rule_rot: "anomaly.fw_rot",
@@ -460,6 +465,10 @@ export function integrationTables(d: D | null | undefined, h: SectionHelpers,
   for (const c of (m.checkmk ?? []) as D[]) {
     mon.push(["Checkmk", c.host, label(h, `checkmk.state_${c.state}`, c.state ?? "—"),
               join([c.downtime ? h.t("checkmk.downtime") : null, c.folder]) || null]);
+  }
+  for (const k of (m.k8s ?? []) as D[]) {
+    mon.push(["Kubernetes", `${k.cluster ?? ""} / ${k.name}`, label(h, `k8s.ip_kind_${k.kind}`, k.kind),
+              k.kind === "node" ? (k.ready ? "Ready" : "NotReady") : null]);
   }
   out.push(table("mon", h.t("investigate.sec_mon"), [c("system"), c("name"), c("status"), c("note")], mon));
 

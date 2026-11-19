@@ -723,9 +723,9 @@ async def agent_report(
         agent.agent_version = x_agent_version[:32]
     await session.commit()
 
-    # 換新成功 → 通知（依通知矩陣）；每張憑證一次，best-effort 不影響回報結果
-    from app.services.notification import notify_admins_event
-    changed: list[tuple[str, str]] = []
+    # 換新成功 → 先記下來，排程把同一批合併成一則通知（services/cert_deploy_digest；以前一台一則，半夜洗版）
+    from app.services import cert_deploy_digest
+    changed: list[tuple[str, str, str]] = []
     seen: set[str] = set()
     for d in clean:
         if not isinstance(d, dict) or d.get("status") != "ok":
@@ -736,18 +736,10 @@ async def agent_report(
         old = prev_fp.get((cert, profile))
         if old and old != fp and cert not in seen:
             seen.add(cert)
-            changed.append((str(cert), str(profile or "")))
-    for cert, profile in changed:
-        await notify_admins_event(
-            session, event="cert.deployed",
-            title=f"憑證已更換成功:{cert}",
-            body=f"代理「{agent.name}」已在 {profile or '目標服務'} 套用「{cert}」的新版憑證。",
-            severity="info", link="/certificates",
-            title_key="notif.cert_deployed",
-            body_key="notif.cert_deployed_body" if profile else "notif.cert_deployed_body_nosvc",
-            params=({"agent": agent.name, "profile": profile, "cert": cert} if profile
-                    else {"agent": agent.name, "cert": cert}),
-        )
+            changed.append((str(cert), str(profile or ""), str(fp)))
+    for cert, profile, fp in changed:
+        await cert_deploy_digest.record(session, cert=cert, fingerprint=fp, target=agent.name,
+                                        service=profile or None, source="agent")
     if changed:
         await session.commit()
     return {"ok": True, "received": len(clean)}

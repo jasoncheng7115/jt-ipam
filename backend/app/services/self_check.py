@@ -631,6 +631,7 @@ async def _integration_errors(session: AsyncSession) -> Check:
     from app.models.checkpoint_gaia import CheckPointGaiaTarget
     from app.models.firewall import OPNsenseFirewall
     from app.models.fortigate import FortiGateFirewall
+    from app.models.k8s import K8sCluster
     from app.models.librenms import LibreNMSInstance
     from app.models.mikrotik import MikroTikRouter
     from app.models.paloalto import PaloAltoFirewall
@@ -646,7 +647,7 @@ async def _integration_errors(session: AsyncSession) -> Check:
         (FortiGateFirewall, "FortiGate"), (PaloAltoFirewall, "Palo Alto"),
         (CheckPointServer, "Check Point"), (CheckPointGaiaTarget, "Check Point Gaia"),
         (MikroTikRouter, "MikroTik"), (LibreNMSInstance, "LibreNMS"),
-        (ZabbixInstance, "Zabbix"), (CheckmkInstance, "Checkmk"), (WazuhInstance, "Wazuh"),
+        (ZabbixInstance, "Zabbix"), (CheckmkInstance, "Checkmk"), (K8sCluster, "Kubernetes"), (WazuhInstance, "Wazuh"),
         (AdGuardInstance, "AdGuard"), (ProxmoxInstance, "Proxmox"),
     ):
         for obj in (await session.execute(select(model))).scalars().all():

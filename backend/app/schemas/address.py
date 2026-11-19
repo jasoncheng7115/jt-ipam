@@ -211,6 +211,8 @@ class IPAddressRead(IPAddressBase):
     last_seen_zabbix: datetime | None = None
     #: Checkmk 最後一次檢查到主機 UP（監控核心輪詢維護）
     last_seen_checkmk: datetime | None = None
+    #: Kubernetes 節點最後一次回報 Ready
+    last_seen_k8s: datetime | None = None
     #: 防火牆給的逐來源觀測時間：`{"arp:opnsense": "…", "lease:pfsense": "…"}`。
     #: 這些原本全都被寫進 last_seen_scanner，畫面上就變成沒有掃描代理卻顯示
     #: 「上線 (scanner)」（見 services/arp_seen.py）。

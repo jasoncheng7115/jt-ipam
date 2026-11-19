@@ -174,6 +174,7 @@ const CATEGORY_KEYS = [
   "stale_device_links",
   "mac_flapping",
   "identity_changes",
+  "k8s_conflicts",
 ];
 const route = useRoute();
 const router = useRouter();
@@ -189,7 +190,8 @@ type CatKey = "ip_conflicts" | "arp_flux" | "l2_subnet_bleed" | "mac_drifts" | "
   | "arp_only_liveness"
   | "stale_device_links"
   | "mac_flapping"
-  | "identity_changes";
+  | "identity_changes"
+  | "k8s_conflicts";
 const CATEGORIES: { key: CatKey; label: () => string }[] = [
   { key: "ip_conflicts", label: () => t("anomaly.ip_conflicts") },
   // 2026-10-09：同一台主機多張網卡（從 IP 衝突分出來）、兩個子網段混在同一個二層
@@ -210,6 +212,8 @@ const CATEGORIES: { key: CatKey; label: () => string }[] = [
   { key: "stale_device_links", label: () => t("anomaly.stale_link") },
   { key: "mac_flapping", label: () => t("anomaly.mac_flapping") },
   { key: "identity_changes", label: () => t("anomaly.identity_changes") },
+  // 2026-11-18：Kubernetes 佔用的位址跟 IPAM 打架（沒有設定叢集就是空的）
+  { key: "k8s_conflicts", label: () => t("anomaly.k8s_conflicts") },
 ];
 
 const rogueTitle = computed(() =>
@@ -240,6 +244,7 @@ const anyFindings = computed(() => {
     + (r.stale_device_links?.length ?? 0)
     + (r.mac_flapping?.length ?? 0)
     + (r.identity_changes?.length ?? 0)
+    + (r.k8s_conflicts?.length ?? 0)
     + (r.arp_flux?.length ?? 0) + (r.l2_subnet_bleed?.length ?? 0)
     + (r.mac_drift_reference?.length ?? 0)) > 0;
 });
@@ -367,7 +372,8 @@ const CAT_KEYS: Record<CatKey, string[]> = {
                        "mac_changed_at", "ip_id"],
   // 類型或 OS 突變：哪個 IP、從什麼變成什麼，再看現在判讀出的型號與 OS
   identity_changes: ["ip", "live", "hostname", "device_kind", "shifts", "device_model", "os_guess", "last_at",
-                     "ip_id"],
+                     "ip_id"],  // 哪一類衝突、哪個位址（集區是起訖、網段是 CIDR）、哪個叢集的什麼物件、跟 IPAM 的哪裡打架
+  k8s_conflicts: ["kind", "ip", "live", "cluster", "what", "detail", "ip_address_id"],
 };
 // 設備類型（IP 記錄上掃描代理判讀出的類型）：各頁都可以在「欄位」勾選；只有「類型或 OS 突變」預設顯示
 const CAT_HIDDEN: Partial<Record<CatKey, string[]>> = {
@@ -378,6 +384,7 @@ const CAT_HIDDEN: Partial<Record<CatKey, string[]>> = {
   mac_drifts: ["locations"],
   mac_flapping: ["ip_id", "days", "device_kind"],
   identity_changes: ["ip_id"],
+  k8s_conflicts: ["ip_address_id"],
   ghost_ips: ["ip_address_id", "device_kind"],
   arp_only_liveness: ["device_kind"],
   stale_device_links: ["device_kind", "ip_id"],
@@ -404,7 +411,7 @@ function pretty(k: string, val: any): string {
   // kind 是分類代碼（exposed_unmonitored…），要翻成看得懂的字，不能把 enum 直接印給人看
   // kind 橫跨三類（對外曝險 exp_*、可疑變更 chg_*、防火牆規則劣化 rotk_*），找得到才翻，找不到就原樣顯示
   if (k === "kind") {
-    for (const p of ["anomaly.exp_", "anomaly.chg_", "anomaly.rotk_"]) {
+    for (const p of ["anomaly.exp_", "anomaly.chg_", "anomaly.rotk_", "anomaly.k8sk_"]) {
       const key = `${p}${val}`;
       if (te(key)) return t(key);
     }

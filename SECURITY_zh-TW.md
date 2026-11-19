@@ -69,3 +69,10 @@
 CI 也在每次推送時跑 ZAP baseline 掃描，對象是真的 nginx 設定與正式建置的前端；基準以外的任何警示都會讓 CI 失敗。
 
 若不確定某件事是否屬安全問題,請私下回報,我們會協助分級判斷。
+
+## 軟體物料清單（SBOM）
+
+每個站台都能下載自己實際執行內容的 CycloneDX 1.5 SBOM：「管理 > 版本資訊」的「下載 SBOM」，或執行
+`sudo /opt/jt-ipam/scripts/jt-ipam.sh sbom`。內容是這台主機上安裝的 Python 套件（後端相依只寫最低版本，
+pip 實際裝的可能比發版時新）與打包進畫面的 npm 套件。每個版本 tag 由 CI 產生一份發版建置的 SBOM，
+通過 CycloneDX 1.5 schema 驗證後附在 GitHub Release。

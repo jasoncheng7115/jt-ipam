@@ -21,7 +21,7 @@ const CATEGORY_ICONS: Record<string, Component> = {
   ip_conflicts: CloneIcon, duplicate_ip_records: CloneIcon, arp_flux: NatIcon, l2_subnet_bleed: SubnetsIcon,
   mac_drifts: MacIcon, mac_flapping: NatIcon, ghost_ips: OfflineIcon, unauthorized_ips: UnauthorizedIcon,
   rogue_dhcp: DhcpServerIcon, external_exposure: FirewallIcon, dangling_dns: DnsIcon,
-  suspicious_changes: IPChangesIcon, fw_rule_rot: FirewallIcon, identity_changes: IdentifyIcon,
+  suspicious_changes: IPChangesIcon, fw_rule_rot: FirewallIcon, identity_changes: IdentifyIcon, k8s_conflicts: SubnetsIcon,
 };
 
 export function categoryIcon(category: string): Component {

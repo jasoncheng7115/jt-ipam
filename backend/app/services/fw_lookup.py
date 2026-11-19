@@ -16,7 +16,7 @@ from __future__ import annotations
 import ipaddress
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -608,6 +608,16 @@ async def _attach_fqdns(session: AsyncSession, items: list[dict[str, Any]]) -> N
                 progressed = True
         if not progressed:
             break
+
+    # Kubernetes 的 Ingress／Gateway／Route：名稱指向這個 LB 位址（萬用字元不是一個可以查的名稱，不算）
+    from app.core.sqlin import in_values
+    from app.models.k8s import K8sHostname
+    for host, kip in (await session.execute(
+            select(K8sHostname.host, func.host(K8sHostname.ip))
+            .where(in_values(func.host(K8sHostname.ip), sorted(ips), type_=String())))).all():
+        names = by_ip.setdefault(str(kip), set())
+        if host and not host.startswith("*.") and host not in {n.lower() for n in names}:
+            names.add(host)
 
     for it in items:
         ip = it["identity"].get("ip")

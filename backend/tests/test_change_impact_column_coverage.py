@@ -53,6 +53,7 @@ COVERED: set[tuple[str, str]] = {
     ("librenms_devices", "hostname"), ("librenms_devices", "primary_ip"),
     ("zabbix_hosts", "host"), ("zabbix_hosts", "ip"),
     ("checkmk_hosts", "host_name"), ("checkmk_hosts", "ip"),
+    ("k8s_nodes", "ip"), ("k8s_service_ips", "ip"), ("k8s_hostnames", "ip"),
     ("wazuh_agents", "ip"), ("wazuh_agents", "register_ip"),
     ("rustdesk_peers", "hostname"),
     ("vm_interfaces", "primary_ip"),
@@ -71,7 +72,7 @@ COVERED: set[tuple[str, str]] = {
     ("checkpoint_servers", "api_url"), ("checkpoint_gateways", "ipv4_address"),
     # Check Point 第二階段：閘道 Gaia API 的網址、閘道 DHCP 發給用戶端的預設閘道（adapters_net.dhcp）
     ("checkpoint_gaia_targets", "gaia_url"), ("checkpoint_dhcp_subnets", "default_gateway"),
-    ("librenms_instances", "api_url"), ("zabbix_instances", "api_url"), ("checkmk_instances", "api_url"), ("wazuh_instances", "api_url"),
+    ("librenms_instances", "api_url"), ("zabbix_instances", "api_url"), ("checkmk_instances", "api_url"), ("k8s_clusters", "api_url"), ("wazuh_instances", "api_url"),
     ("ocs_servers", "base_url"), ("ocs_servers", "db_host"),
     ("rustdesk_servers", "client_address"), ("rustdesk_servers", "hbbs_host"), ("rustdesk_servers", "relay_host"),
     # SNMP 收集目標的管理位址覆寫（0217，代理連這個位址讀設備）
@@ -81,6 +82,8 @@ COVERED: set[tuple[str, str]] = {
 # 不用讀的欄位與理由
 EXEMPT: dict[tuple[str, str], str] = {
     ("api_tokens", "last_used_ip"): "歷史：API 呼叫者上次的來源位址",
+    ("k8s_cidrs", "cidr"): "叢集內部網段（Pod／Service），不是實體網路上的位址；跟子網路重疊由異常偵測的 Kubernetes 位址衝突處理",
+    ("k8s_hostnames", "host"): "網域名稱本身不是位址；評估從同一列的 ip 找到它，再把名稱列在 virt.k8s_hostname 裡（DNS 要一起改）",
     ("audit_logs", "actor_ip"): "歷史：稽核記錄不可改",
     ("integration_own_addresses", "address"): "鏡像：整合回報的設備自身介面位址，每輪同步重抓；整合本身的連線位址已在評估內",
     ("users", "last_login_ip"): "歷史：使用者上次登入的來源位址",

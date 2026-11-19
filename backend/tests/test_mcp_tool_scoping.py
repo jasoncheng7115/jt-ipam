@@ -92,7 +92,7 @@ async def test_scoped_tools_expose_subnet_param() -> None:
     """這批工具的 schema 一定要有 subnet_cidr，否則模型無從限縮（事故根因）。"""
     for name in ("wazuh_missing_agents", "list_wazuh_agents", "list_fdb",
                  "list_dhcp_ranges", "list_vms", "list_nat", "list_rustdesk_peers", "list_rustdesk_audit",
-                 "list_isoinsight_leases"):
+                 "list_isoinsight_leases", "list_k8s"):
         props = TOOLS[name]["parameters"]["properties"]
         assert "subnet_cidr" in props, f"{name} 沒有子網路參數 → 問某網段只能回全站"
 

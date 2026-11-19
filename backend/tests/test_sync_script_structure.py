@@ -28,6 +28,7 @@ BLOCK_MARKERS = [
     "WazuhInstance",
     "ZabbixInstance",
     "CheckmkInstance",
+    "K8sCluster",
     "LibreNMSInstance",
     "AdGuardInstance",
     "FortiGateFirewall",
