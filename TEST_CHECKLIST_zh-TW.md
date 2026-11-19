@@ -1837,6 +1837,7 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 - [ ] **email 空白的帳號能登入、預設 admin email 存得進去**（`tests/test_user_email_optional.py`）：建一個沒有 email 的帳號登入 → /me 200；編輯 admin（email 是 admin@localhost）只改密碼 → 存得進去
 
+- [ ] **編輯 NAT 規則儲存**（#59，`tests/test_nat_update_type.py`、`e2e/nat-edit-save.spec.ts`）：打開編輯什麼都不改按儲存成功；改類型再儲存，類型跟著變；不合法的類型、把名稱 / 類型 / 協定改成空值回 422
 - [ ] **NAT 的 IP / 裝置選單超過一頁**（#58，`e2e/nat-ip-picker.spec.ts`、`tests/test_nat_list_names.py`）：IP 超過 500 個時打字搜尋選得到不在第一頁的；編輯時已選的顯示位址；表格顯示位址與裝置名稱不是 ID
 
 - [ ] **Windows 派送代理在中文版 Windows**（`tests/test_powershell_agents.py`）：.ps1 只用 ASCII；在繁中 Windows（PowerShell 5.1）實際跑一次：自動釘選、跟上簽過章的換證、拒絕冒牌

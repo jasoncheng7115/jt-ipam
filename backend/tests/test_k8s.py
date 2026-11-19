@@ -556,7 +556,8 @@ async def test_ai_tool_list_k8s(db_session, admin_user, monkeypatch) -> None:
     # 單一 IP 的詳細資料也帶 Kubernetes（跟 IP 詳細頁的卡片同一層權限）
     detail = await TOOLS["get_ip_detail"]["fn"](db_session, user=admin_user, ip="198.51.100.200")
     assert [s["name"] for s in detail["kubernetes"]["services"]] == ["web"]
-    assert "shop.example.com" in [h["host"] for h in detail["kubernetes"]["hostnames"]]
+    assert {h["host"] for h in detail["kubernetes"]["hostnames"]} == {"shop.example.com", "api.example.com",
+                                                                     "*.dev.example.com"}
 
 
 # ─────────────────── 第三階段（2026-11-19）：Egress IP、API 伺服器位址、Multus 網段 ───────────────────
@@ -654,14 +655,14 @@ async def test_a_broken_optional_resource_does_not_stop_the_sync(db_session, mon
     fake_first = svc._list_first
 
     async def first(client, paths):  # type: ignore[no-untyped-def]
-        if "crd.antrea.io" in paths[0]:
+        if svc.resource_label(paths[0]).endswith(".crd.antrea.io"):
             raise svc.K8sError("Kubernetes: HTTP 500", code="k8s_http", path=paths[0], status=500, body="conversion webhook")
         return await fake_first(client, paths)
     monkeypatch.setattr(svc, "_list_first", first)
     out = await svc.sync_cluster(db_session, c)
     assert out["nodes"] == 1
     assert [e.split(":")[0] for e in out["optional_errors"]] == ["egresses.crd.antrea.io", "externalippools.crd.antrea.io"]
-    assert "egresses.crd.antrea.io" in (c.last_error or "")
+    assert (c.last_error or "").startswith("egresses.crd.antrea.io: ")
 
 
 # ─────────────────── 第四階段（2026-11-19）：跨叢集衝突、節點沒登記 ───────────────────

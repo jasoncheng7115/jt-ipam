@@ -151,10 +151,10 @@ async def test_phase1_readonly_account_keeps_working() -> None:
     """客戶還沒重新套用 manifest：新資源回 403，同步照跑，列出 ClusterRole 要補的那幾條。"""
     c = _cluster("k3s", token=(DIR / "k3s-phase1.token").read_text().strip())
     raw = await _raw2(c)
-    assert "ingresses.networking.k8s.io" in raw["_missing"]
-    # 沒權限時沒裝的資源也是 403；靠 discovery 分辨，k3s 沒裝的不可以列成缺權限
-    for absent in ("routes.route.openshift.io", "ippools.crd.projectcalico.org", "ippools.whereabouts.cni.cncf.io"):
-        assert absent not in raw["_missing"]
+    # 沒權限時沒裝的資源也是 403；靠 discovery 分辨，k3s 沒裝的不可以列成缺權限（k3s 有 Gateway API 的 CRD）
+    assert set(raw["_missing"]) <= {"ingresses.networking.k8s.io", "gateways.gateway.networking.k8s.io",
+                                    "httproutes.gateway.networking.k8s.io", "grpcroutes.gateway.networking.k8s.io"}
+    assert raw["_missing"].count("ingresses.networking.k8s.io") == 1
     assert raw["ingresses"] == []
     hc = {x["key"]: x for x in (await svc.healthcheck(c))["checks"]}
     assert hc["nodes"]["ok"] is True

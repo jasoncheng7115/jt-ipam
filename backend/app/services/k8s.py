@@ -323,8 +323,9 @@ def parse_node(n: dict[str, Any]) -> dict[str, Any]:
         next((ip for t, ip in ips if t == "ExternalIP" and ip), None)
     ready_cond = next((c for c in (status.get("conditions") or []) if c.get("type") == "Ready"), {})
     info = status.get("nodeInfo") or {}
-    roles = sorted(k.split("/", 1)[1] for k in (meta.get("labels") or {})
-                   if k.startswith("node-role.kubernetes.io/") and k.split("/", 1)[1])
+    # 標籤 node-role.kubernetes.io/<角色>（用 partition 比對前綴，不是網址比對）
+    roles = sorted(role for prefix, _, role in (k.partition("/") for k in (meta.get("labels") or {}))
+                   if prefix == "node-role.kubernetes.io" and role)
     hb = ready_cond.get("lastHeartbeatTime")
     return {
         "name": str(meta.get("name") or ""), "ip": primary, "addresses": addrs, "roles": roles or None,

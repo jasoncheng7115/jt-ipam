@@ -117,10 +117,10 @@ ISO27001 = [
        "データベース・設定ファイル（暗号鍵を含む）・TLS 証明書・アップロードファイルを毎日自動でバックアップし、14 日間保持します。バックアップのパスフレーズを設定すると、毎日のバックアップを 1 つのファイルに暗号化し（scrypt と AES-256-GCM のチャンク暗号化。切り詰め・入れ替え・改ざんがあると復号できません）、平文は削除します。復号ツールは Python と cryptography だけで動きます。システム診断に直近のバックアップ結果と暗号化の有無が表示されます。復元手順はインストール・運用ガイドにあります。"),
      "`test_backup_script.py`, `test_backup_encryption.py`, `test_self_check_backup.py`, `docs/INSTALL.md`"),
     (T("安全開發與弱點管理", "Secure development and vulnerability management", "セキュアな開発と脆弱性管理"),
-     T("每次推送由 CI 執行 bandit 安全規則、pip-audit、pnpm audit，以及對著實際 nginx 設定與正式建置前端的 OWASP ZAP 基準掃描（基準檔以外的任何警示都讓 CI 失敗）；GitHub 程式碼掃描（CodeQL）的警示逐項判讀；發版前另跑登入後的 ZAP 掃描、在乾淨系統實測全新安裝與升級；每次改動對應的檢查項目與守門測試寫在測試清單。",
-       "On every push CI runs bandit security rules, pip-audit, pnpm audit and an OWASP ZAP baseline scan of the production frontend build behind the shipped nginx configuration (any alert outside the baseline file fails CI); GitHub code scanning (CodeQL) alerts are triaged one by one; before a release an authenticated ZAP scan runs and fresh installs and upgrades are tested on clean systems; the checks and guard tests for each change are recorded in the test checklist.",
-       "プッシュのたびに CI が bandit のセキュリティルール・pip-audit・pnpm audit と、出荷する nginx 設定の後ろで本番ビルドのフロントエンドに対する OWASP ZAP のベースラインスキャンを実行します（ベースラインファイル以外のアラートは CI を失敗させます）。GitHub のコードスキャン（CodeQL）のアラートは 1 件ずつ判定します。リリース前にはログイン後の ZAP スキャンを実行し、クリーンな環境で新規インストールとアップグレードを検証します。変更ごとの確認項目とガードテストはテストチェックリストに記録しています。"),
-     "`.github/workflows/ci.yml`, `deploy/zap-baseline.conf`, `TEST_CHECKLIST.md`, `scripts/test-fresh-install.sh`, `scripts/test-upgrade.sh`"),
+     T("每次推送由 CI 執行 bandit 安全規則、pip-audit、pnpm audit，以及對著實際 nginx 設定與正式建置前端的 OWASP ZAP 基準掃描（基準檔以外的任何警示都讓 CI 失敗）；GitHub 程式碼掃描（CodeQL）的警示逐項判讀；軟體物料清單（SBOM，CycloneDX 1.5）：每個站台可在「管理 > 版本資訊」下載（或執行 jt-ipam.sh sbom），內容是實際安裝的 Python 套件與打包進畫面的 npm 套件，每個版本 tag 由 CI 產生一份、通過 schema 驗證後附在 GitHub Release；發版前另跑登入後的 ZAP 掃描、在乾淨系統實測全新安裝與升級；每次改動對應的檢查項目與守門測試寫在測試清單。",
+       "On every push CI runs bandit security rules, pip-audit, pnpm audit and an OWASP ZAP baseline scan of the production frontend build behind the shipped nginx configuration (any alert outside the baseline file fails CI); GitHub code scanning (CodeQL) alerts are triaged one by one; a software bill of materials (SBOM, CycloneDX 1.5) can be downloaded on each site under Admin > Version Info (or printed by jt-ipam.sh sbom), listing the Python packages actually installed and the npm packages bundled into the web UI, and for every version tag CI generates one, validates it against the schema and attaches it to the GitHub Release; before a release an authenticated ZAP scan runs and fresh installs and upgrades are tested on clean systems; the checks and guard tests for each change are recorded in the test checklist.",
+       "プッシュのたびに CI が bandit のセキュリティルール・pip-audit・pnpm audit と、出荷する nginx 設定の後ろで本番ビルドのフロントエンドに対する OWASP ZAP のベースラインスキャンを実行します（ベースラインファイル以外のアラートは CI を失敗させます）。GitHub のコードスキャン（CodeQL）のアラートは 1 件ずつ判定します。ソフトウェア部品表（SBOM、CycloneDX 1.5）は各サイトで「管理 > バージョン情報」からダウンロードでき（jt-ipam.sh sbom でも可）、実際にインストールされている Python パッケージと画面に組み込まれた npm パッケージを含みます。バージョンタグごとに CI が生成し、スキーマ検証のうえ GitHub Release に添付します。リリース前にはログイン後の ZAP スキャンを実行し、クリーンな環境で新規インストールとアップグレードを検証します。変更ごとの確認項目とガードテストはテストチェックリストに記録しています。"),
+     "`.github/workflows/ci.yml`, `.github/workflows/sbom.yml`, `test_sbom.py`, `deploy/zap-baseline.conf`, `TEST_CHECKLIST.md`, `scripts/test-fresh-install.sh`, `scripts/test-upgrade.sh`"),
 ]
 
 H_FEAT = T("AI 功能", "AI feature", "AI 機能")
@@ -319,9 +319,9 @@ CASES = [
 # 佐證連結固定在一個公開 commit（審查意見 2026-10-11：測試檔名連到固定 commit，附上執行結果與日期）。
 # 換版時改這裡：commit 要已經公開、CI 綠燈；main() 會確認每個佐證檔案都在這個 commit 裡（本機取得得到該 commit 時）。
 REPO_URL = "https://github.com/jasoncheng7115/jt-ipam"
-PINNED = {"commit": "5f2dc41c5b05f06c8ec5b8086ec5192ae3dd3f9f", "date": "2026-10-11",
-          "ci": "https://github.com/jasoncheng7115/jt-ipam/actions/runs/38124690745",
-          "backend": "3,974", "skipped": "3", "frontend": "934"}
+PINNED = {"commit": "e4f339800ffa63b8242e806b16c63a5b5bafc0fe", "date": "2026-11-19",
+          "ci": "https://github.com/jasoncheng7115/jt-ipam/actions/runs/44474788408",
+          "backend": "5,252", "skipped": "46", "frontend": "1,157"}
 VERIFY_NOTE = T(
     "驗證紀錄：上面的測試與設定檔連結固定在 commit {short}（{date} 公開）。這個 commit 在 GitHub Actions 的 CI（後端與前端測試、安全規則、相依套件弱點、OWASP ZAP 基準掃描）全部通過；同一份程式在發版前的完整測試：後端 {backend} 項通過、{skipped} 項略過，前端 {frontend} 項通過（{date}）。導入組織應以固定的版本，在自己的環境重新執行。",
     "Verification record: the test and file links above are pinned to commit {short} (published {date}). CI on GitHub Actions for this commit (backend and frontend tests, security rules, dependency vulnerabilities, OWASP ZAP baseline scan) passed; the full test run of the same code before release: backend {backend} passed and {skipped} skipped, frontend {frontend} passed ({date}). Adopting organisations should rerun them on a pinned version in their own environment.",

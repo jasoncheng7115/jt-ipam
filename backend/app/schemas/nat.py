@@ -67,7 +67,10 @@ class NATCreate(NATBase):
 
 
 class NATUpdate(_NATExtra):
+    """PATCH：只改有送的欄位。編輯表單跟新增共用、會帶 type（類型可以改，同一套驗證；issue #59）。
+    name／type／protocol 是不可為空的欄位：不送＝不改，明確送 null 回 422（以前會寫進資料庫變成 500）。"""
     name: Annotated[str | None, Field(min_length=1, max_length=128)] = None
+    type: str | None = None
     src_ip_id: uuid.UUID | None = None
     dst_ip_id: uuid.UUID | None = None
     src_port: Annotated[int | None, Field(ge=1, le=65535)] = None
@@ -77,11 +80,24 @@ class NATUpdate(_NATExtra):
     src_interface: Annotated[str | None, Field(max_length=64)] = None
     description: Annotated[str | None, Field(max_length=1024)] = None
 
+    @field_validator("name", "type", "protocol")
+    @classmethod
+    def _not_null(cls, v: str | None) -> str:
+        # 只有明確送 null 才會走到這裡（沒送的欄位不驗證）
+        if v is None:
+            raise ValueError("cannot be null")
+        return v
+
+    @field_validator("type")
+    @classmethod
+    def _type_valid(cls, v: str) -> str:
+        if v not in _TYPES:
+            raise ValueError(f"type must be one of {sorted(_TYPES)}")
+        return v
+
     @field_validator("protocol")
     @classmethod
-    def _proto_valid(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
+    def _proto_valid(cls, v: str) -> str:
         if v not in _PROTOS:
             raise ValueError(f"protocol must be one of {sorted(_PROTOS)}")
         return v

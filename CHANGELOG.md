@@ -40,6 +40,7 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
   - Tested against Checkmk 2.4 (Raw) and 2.5 (Community); `scripts/checkmk-test-target/run.sh` starts both.
 
 ### Fixed
+- **Saving an edited NAT rule always failed** with "Extra inputs are not permitted (type)" (GitHub issue #59): the edit form sends the type, as the add form does, but the update endpoint did not accept it. The type can now be changed when editing, with the same check as when adding. Sending an empty name, type or protocol now gets a clear 422 instead of a server error.
 - The uptime bar never carried forward a day that only Wazuh or Zabbix had proved online; those sources expire, so they now count like the scan agent (found while adding Checkmk).
 - **Roles now count for rooms, racks, devices, customers and sections** (customer report: LDAP accounts in the built-in System administrator role could not add a rack, the button said admin was required, and only turning on the account's Admin switch helped). These write endpoints only looked at the Admin switch, so the grants that roles give were never used. Now:
   - System administrator can add, edit and delete all of them; Network operator can add and edit devices (deleting needs admin on the device); a user granted one room can add racks and devices in that room.

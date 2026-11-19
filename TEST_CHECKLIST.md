@@ -2503,6 +2503,7 @@ happy path of "an upload succeeded" is not enough.
 
 - [ ] **Accounts without email sign in; the default admin email saves** (`tests/test_user_email_optional.py`): an account with no email signs in and /me is 200; editing admin (email admin@localhost) to change only the password saves
 
+- [ ] **Saving an edited NAT rule** (#59, `tests/test_nat_update_type.py`, `e2e/nat-edit-save.spec.ts`): opening the edit form and saving without changes works; changing the type and saving changes it; an invalid type, or an empty name / type / protocol, gets 422
 - [ ] **NAT IP / device pickers beyond one page** (#58, `e2e/nat-ip-picker.spec.ts`, `tests/test_nat_list_names.py`): with over 500 addresses, typing finds ones beyond the first page; editing shows the selected address; the table shows addresses and device names, not IDs
 
 - [ ] **Windows certificate agent on Chinese Windows** (`tests/test_powershell_agents.py`): .ps1 files are plain ASCII; one real run on Traditional Chinese Windows (PowerShell 5.1): pins by itself, follows a signed certificate change, refuses forged ones
