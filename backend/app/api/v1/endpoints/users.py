@@ -214,7 +214,7 @@ async def update_user(
     unlock = data.pop("unlock", False)
     new_username = data.pop("username", None)
     if new_username is not None and new_username != user.username:
-        # 帳號名只允許本機帳號改（外部帳號的 username 由領域決定，例如 jason@ldap）
+        # 帳號名只允許本機帳號改（外部帳號的 username 由領域決定，例如 alice@ldap）
         if user.auth_provider != "local":
             raise HTTPException(400, detail="cannot rename external account")
         user.username = new_username.strip()

@@ -13,7 +13,7 @@ import zhTW from "@/i18n/zh-TW.json";
 
 function render(data: Record<string, unknown>) {
   const i18n = createI18n({ legacy: false, locale: "zh-TW", messages: { "zh-TW": zhTW } });
-  return mount(IpPeek, { props: { ip: "192.168.1.129", data }, global: { plugins: [i18n] } });
+  return mount(IpPeek, { props: { ip: "192.168.123.129", data }, global: { plugins: [i18n] } });
 }
 
 describe("IpPeek 的狀態顯示", () => {

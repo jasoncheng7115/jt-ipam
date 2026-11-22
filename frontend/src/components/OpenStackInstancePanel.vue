@@ -101,6 +101,8 @@ import { useTablePagination } from "@/composables/useTablePagination";
 import { DevicesIcon, RefreshIcon, SubnetsIcon, SyncIcon, TestIcon } from "@/icons";
 import { fmtDateTime } from "@/utils/datetime";
 import { withExportValue } from "@/utils/tableExport";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 export interface SubnetChoice { label: string; value: string; cidr: string }
 
@@ -171,10 +173,17 @@ const STATE_TAG: Record<string, "warning" | "success" | "info" | "default"> = {
 
 const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
 
-const subnetCols = computed<DataTableColumns<OpenStackSubnet>>(() => [
+// 排序比的是畫面上看到的值；空值排最後
+const by = <T,>(f: (r: T) => unknown) => (a: T, b: T) => {
+  const x = f(a), y = f(b), ex = x == null || x === "", ey = y == null || y === "";
+  return ex || ey ? Number(ex) - Number(ey) : cmpNatural(x, y);
+};
+const STATE_ORDER = ["pending", "manual", "auto", "none"];
+const subnetCols = computed<DataTableColumns<OpenStackSubnet>>(() => autoSort<OpenStackSubnet>([
   withExportValue({
     title: t("openstack.col_neutron_subnet"), key: "name", minWidth: 150, ellipsis: { tooltip: true },
-    render: (r) => h(NTooltip, null, {
+    sorter: by((r: OpenStackSubnet) => r.name || r.subnet_id),
+    render: (r: OpenStackSubnet) => h(NTooltip, null, {
       trigger: () => h("span", null, r.name || r.subnet_id),
       default: () => r.subnet_id,
     }),
@@ -182,7 +191,8 @@ const subnetCols = computed<DataTableColumns<OpenStackSubnet>>(() => [
   // 對應狀態放前面：待對應一眼就看得到，不必捲到右邊
   withExportValue({
     title: t("openstack.col_mapping_state"), key: "state", width: 100,
-    render: (r) => {
+    sorter: (a: OpenStackSubnet, b: OpenStackSubnet) => STATE_ORDER.indexOf(mappingState(a)) - STATE_ORDER.indexOf(mappingState(b)),
+    render: (r: OpenStackSubnet) => {
       const s = mappingState(r);
       return h(NTag, { size: "small", bordered: false, type: STATE_TAG[s], "data-testid": `os-map-state-${s}` },
         { default: () => t(`openstack.map_${s}`) });
@@ -190,26 +200,27 @@ const subnetCols = computed<DataTableColumns<OpenStackSubnet>>(() => [
   }, (r) => t(`openstack.map_${mappingState(r)}`)),
   {
     title: t("openstack.col_network"), key: "network_name", minWidth: 140,
-    render: (r) => h("span", { class: "osp-nowrap" }, [
+    render: (r: OpenStackSubnet) => h("span", { class: "osp-nowrap" }, [
       dash(r.network_name),
       r.shared ? h(NTag, { size: "tiny", bordered: false, style: "margin-left:6px" },
                    { default: () => t("openstack.shared") }) : null,
     ]),
   },
   { title: t("openstack.project"), key: "project_name", minWidth: 110, ellipsis: { tooltip: true },
-    render: (r) => dash(r.project_name) },
+    render: (r: OpenStackSubnet) => dash(r.project_name) },
   { title: "CIDR", key: "cidr", width: 150 },
-  { title: t("openstack.col_gateway"), key: "gateway_ip", width: 130, render: (r) => dash(r.gateway_ip) },
+  { title: t("openstack.col_gateway"), key: "gateway_ip", width: 130, render: (r: OpenStackSubnet) => dash(r.gateway_ip) },
   withExportValue({
     title: "DHCP", key: "enable_dhcp", width: 76,
-    render: (r) => (r.enable_dhcp == null ? "—"
+    sorter: by((r: OpenStackSubnet) => (r.enable_dhcp == null ? null : r.enable_dhcp ? 0 : 1)),
+    render: (r: OpenStackSubnet) => (r.enable_dhcp == null ? "—"
       : h(NTag, { size: "small", bordered: false, type: r.enable_dhcp ? "success" : "default" },
           { default: () => (r.enable_dhcp ? t("common.yes") : t("common.no")) })),
   }, (r) => (r.enable_dhcp == null ? "" : r.enable_dhcp ? t("common.yes") : t("common.no"))),
   withExportValue({
     // 實際上的「操作」：選了就存（PATCH），之後同步不會覆寫
     title: t("openstack.col_mapping"), key: "mapping", width: 260, fixed: "right", className: "col-actions",
-    render: (r) => h(NSelect, {
+    render: (r: OpenStackSubnet) => h(NSelect, {
       value: r.mapped_subnet_id ?? null,
       options: props.subnetOptions as unknown as SelectOption[],
       size: "small", filterable: true, clearable: true, placeholder: t("openstack.map_ph"),
@@ -226,33 +237,33 @@ const subnetCols = computed<DataTableColumns<OpenStackSubnet>>(() => [
       "onUpdate:value": (v: string | null) => { if ((v ?? null) !== (r.mapped_subnet_id ?? null)) void setMapping(r, v ?? null); },
     }),
   }, (r) => r.mapped_subnet_cidr ?? ""),
-]);
+]));
 
 function ipLink(ip?: string | null) {
   if (!ip) return "—";
   return h(NButton, { text: true, type: "primary", onClick: () => router.push({ name: "addresses", query: { q: ip } }) },
     { default: () => ip });
 }
-const nodeCols = computed<DataTableColumns<CubeCOSNode>>(() => [
+const nodeCols = computed<DataTableColumns<CubeCOSNode>>(() => autoSort<CubeCOSNode>([
   { title: t("cols.hostname"), key: "hostname", minWidth: 150, ellipsis: { tooltip: true } },
-  { title: t("openstack.col_role"), key: "role", width: 140, render: (r) => dash(r.role) },
+  { title: t("openstack.col_role"), key: "role", width: 140, render: (r: CubeCOSNode) => dash(r.role) },
   {
     title: t("common.status"), key: "status", width: 110,
-    render: (r) => (r.status
+    render: (r: CubeCOSNode) => (r.status
       ? h(NTag, { size: "small", bordered: false,
                   type: /^(ok|up|online|ready|active|running|healthy)$/i.test(r.status) ? "success" : "warning" },
           { default: () => r.status })
       : "—"),
   },
-  { title: t("openstack.col_mgmt_ip"), key: "management_ip", width: 150, render: (r) => ipLink(r.management_ip) },
+  { title: t("openstack.col_mgmt_ip"), key: "management_ip", width: 150, render: (r: CubeCOSNode) => ipLink(r.management_ip) },
   // CubeCOS 的 provider IP 不可靠（上線節點的 ip 就是管理 IP），後端多半不給：有任何一台有值才顯示這一欄
   ...(nodes.value.some((n) => n.provider_ip)
     ? [{ title: t("openstack.col_provider_ip"), key: "provider_ip", width: 150,
          render: (r: CubeCOSNode) => ipLink(r.provider_ip) }]
     : []),
-  { title: t("openstack.col_storage_ip"), key: "storage_ip", width: 150, render: (r) => ipLink(r.storage_ip) },
-  { title: t("openstack.col_serial"), key: "serial", minWidth: 130, ellipsis: { tooltip: true }, render: (r) => dash(r.serial) },
-]);
+  { title: t("openstack.col_storage_ip"), key: "storage_ip", width: 150, render: (r: CubeCOSNode) => ipLink(r.storage_ip) },
+  { title: t("openstack.col_serial"), key: "serial", minWidth: 130, ellipsis: { tooltip: true }, render: (r: CubeCOSNode) => dash(r.serial) },
+]));
 
 onMounted(reload);
 // 同步跑完、或換了一個連線：重新讀

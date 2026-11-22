@@ -61,6 +61,7 @@ import { getScanAgentLoad, type ScanAgent, type ScanAgentLoad, type ScanLoadLeve
 import { updateSubnet } from "@/api/subnets";
 import { MoveIcon, PlusIcon, renderIcon } from "@/icons";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
 
 const props = defineProps<{ show: boolean; agent: ScanAgent | null; agents: ScanAgent[] }>();
 const emit = defineEmits<{ (e: "update:show", v: boolean): void; (e: "changed"): void; (e: "create"): void }>();
@@ -122,9 +123,9 @@ async function move(r: ScanLoadSubnet) {
   }
 }
 
-const cols = computed<DataTableColumns<ScanLoadSubnet>>(() => [
+const cols = computed<DataTableColumns<ScanLoadSubnet>>(() => autoSort<ScanLoadSubnet>([
   { title: t("scan_load.col_cidr"), key: "cidr", width: 150,
-    render: (r) => {
+    render: (r: ScanLoadSubnet) => {
       if (r.truncated) return h("span", null, [r.cidr, " ", h(NTag, { size: "tiny", type: "warning", bordered: false }, () => t("scan_load.truncated"))]);
       // 兩層掃描：已知位址每輪掃＋背景探索（代理 1.18.0 起）
       if (r.mode === "targets") return h("span", null, [r.cidr, " ", h(NTag, { size: "tiny", type: "success", bordered: false },
@@ -136,13 +137,13 @@ const cols = computed<DataTableColumns<ScanLoadSubnet>>(() => [
       return r.cidr;
     } },
   { title: t("scan_load.col_hosts"), key: "hosts", width: 110,
-    render: (r) => (r.total_hosts && r.total_hosts > r.hosts ? `${r.hosts} / ${r.total_hosts}` : String(r.hosts)) },
+    render: (r: ScanLoadSubnet) => (r.total_hosts && r.total_hosts > r.hosts ? `${r.hosts} / ${r.total_hosts}` : String(r.hosts)) },
   { title: t("scan_load.col_alive"), key: "alive", width: 70 },
-  { title: t("scan_load.col_duration"), key: "duration_s", width: 80, render: (r) => fmtSec(r.duration_s) },
+  { title: t("scan_load.col_duration"), key: "duration_s", width: 80, render: (r: ScanLoadSubnet) => fmtSec(r.duration_s) },
   { title: t("scan_load.col_per_host"), key: "per_host_ms", width: 100,
-    render: (r) => (r.per_host_ms == null ? "—" : `${r.per_host_ms} ms`) },
-  { title: t("scan_load.col_move"), key: "move", minWidth: 200,
-    render: (r) => (r.subnet_id && otherAgents.value.length
+    render: (r: ScanLoadSubnet) => (r.per_host_ms == null ? "—" : `${r.per_host_ms} ms`) },
+  { title: t("scan_load.col_move"), key: "move", minWidth: 200, sorter: false,
+    render: (r: ScanLoadSubnet) => (r.subnet_id && otherAgents.value.length
       ? h("div", { style: "display:flex;gap:6px;align-items:center" }, [
           h(NSelect, { size: "small", style: "min-width:120px", options: otherAgents.value,
                        placeholder: t("scan_load.move_to"), value: moveTarget.value[r.cidr] ?? null,
@@ -154,7 +155,7 @@ const cols = computed<DataTableColumns<ScanLoadSubnet>>(() => [
           }),
         ])
       : "—") },
-]);
+]));
 
 async function load() {
   if (!props.agent) return;

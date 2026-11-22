@@ -31,12 +31,12 @@ def test_picks_the_most_specific_subnet() -> None:
 
 
 def test_refuses_when_two_subnets_overlap_exactly() -> None:
-    """重疊網段（兩個單位各有 192.168.1.0/24）→ 不建。
+    """重疊網段（兩個單位各有 192.168.123.0/24）→ 不建。
 
     這是本專案存在的理由：猜錯單位會讓資料靜靜掛到別人名下，比不建糟得多。
     """
-    nets = _nets("192.168.1.0/24", "192.168.1.0/24")
-    assert pick_subnet_for_ip(nets, ipaddress.ip_address("192.168.1.50")) is None
+    nets = _nets("192.168.123.0/24", "192.168.123.0/24")
+    assert pick_subnet_for_ip(nets, ipaddress.ip_address("192.168.123.50")) is None
 
 
 def test_refuses_when_no_subnet_contains_it() -> None:

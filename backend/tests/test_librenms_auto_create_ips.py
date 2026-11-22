@@ -89,7 +89,7 @@ def test_pick_subnet_longest_prefix_and_ambiguity():
     # 巢狀 → 取最長首碼 /24
     assert _pick_subnet_for_ip([(n8, "A"), (n24, "B")], ipaddress.ip_address("10.1.1.5")) == "B"
     # 無任何容器 → None
-    assert _pick_subnet_for_ip([(n8, "A")], ipaddress.ip_address("192.168.1.1")) is None
+    assert _pick_subnet_for_ip([(n8, "A")], ipaddress.ip_address("192.168.123.1")) is None
     # 重疊網段、相同最長首碼 → 歧義 → None（不建錯單位）
-    dup = ipaddress.ip_network("192.168.1.0/24")
-    assert _pick_subnet_for_ip([(dup, "X"), (dup, "Y")], ipaddress.ip_address("192.168.1.9")) is None
+    dup = ipaddress.ip_network("192.168.123.0/24")
+    assert _pick_subnet_for_ip([(dup, "X"), (dup, "Y")], ipaddress.ip_address("192.168.123.9")) is None

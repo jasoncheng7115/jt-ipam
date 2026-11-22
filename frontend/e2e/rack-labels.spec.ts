@@ -56,6 +56,8 @@ test("機櫃圖：名稱依設定置中，且跨多 U 也看得見", async ({ pa
   // 只要那幾格用了 filter / opacity 來打亮，每一格就變成獨立的堆疊環境，
   // 上面那條 z-index 就跳不出去了 —— 實機症狀是「游標移過去名稱就不見」。
   const tall = spans.filter({ hasText: /host|switch|nas|ups/ }).first();
+  // 預設打開哪個機櫃跟著帳號偏好走（別的 spec 會換），那台可能在畫面外：先捲進來再移游標
+  await tall.scrollIntoViewIfNeeded();
   const box = (await tall.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height - 6);
   await page.waitForTimeout(500);

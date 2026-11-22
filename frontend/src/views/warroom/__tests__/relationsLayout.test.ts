@@ -70,7 +70,7 @@ describe("relations layout", () => {
 
 describe("address wrapping", () => {
   it("breaks only after separators and keeps every character", () => {
-    expect(addrParts("192.168.1.0/24")).toEqual(["192.", "168.", "1.", "0/", "24"]);
+    expect(addrParts("192.168.123.0/24")).toEqual(["192.", "168.", "123.", "0/", "24"]);
     expect(addrParts("2001:db8::1a2b").join("")).toBe("2001:db8::1a2b");
   });
 });

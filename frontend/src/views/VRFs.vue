@@ -67,7 +67,7 @@ async function submit() {
   try {
     const payload = {
       name: form.value.name,
-      rd: form.value.rd || undefined,
+      rd: form.value.rd?.trim() || null,
       description: form.value.description ?? "",
       allow_overlap: form.value.allow_overlap,
     };

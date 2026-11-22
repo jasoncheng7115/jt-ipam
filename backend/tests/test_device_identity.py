@@ -288,7 +288,7 @@ def test_a_slow_service_does_not_throw_away_the_whole_os_probe(monkeypatch) -> N
 
 async def test_periodic_probe_uses_our_oui_vendor_not_nmaps(client, db_session) -> None:
     """2026-10-04 正式環境：IP 記錄上的 MAC 是 SuperMicro，nmap 卻報 Hewlett Packard —— 不是 nmap 的資料庫錯（它的
-    3CECEF 也是 Super Micro），而是當下回應 ARP 的是這台的另一張 HP 擴充網卡（兩個網段在同一個廣播網域，Linux 預設
+    那個前綴也是 Super Micro），而是當下回應 ARP 的是這台的另一張 HP 擴充網卡（兩個網段在同一個廣播網域，Linux 預設
     任何一張網卡都會回答本機任何一個位址）。「探測」頁判讀時帶 jt-ipam 用 IP 記錄的 MAC 查到的廠商，定期 OS 偵測卻沒帶
     → 退回用 nmap 的 → 設備類型旁邊寫著 HP。定期偵測也要用 IP 記錄的 MAC 查 jt-ipam 的 OUI 表。"""
     from app.models.oui import OUIVendor

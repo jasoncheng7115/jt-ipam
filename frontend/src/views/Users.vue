@@ -257,7 +257,7 @@ function iconAction(icon: any, label: string, onClick: () => void, type?: any) {
     default: () => label,
   });
 }
-// 帳號的領域後綴（jason@ldap）在有「認證方式」欄位時是重複資訊；只去掉已知領域，
+// 帳號的領域後綴（alice@ldap）在有「認證方式」欄位時是重複資訊；只去掉已知領域，
 // 不動一般含 @ 的帳號（例如以 email 當帳號的本機使用者）
 const REALM_SUFFIXES = ["@ldap", "@radius", "@oidc", "@saml"];
 function stripRealm(username: string): string {

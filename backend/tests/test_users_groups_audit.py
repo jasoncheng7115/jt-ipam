@@ -81,7 +81,7 @@ async def test_user_crud(client, auth_headers):  # type: ignore[no-untyped-def]
 
     # weak password 拒絕
     bad = await client.post("/api/v1/users", headers=auth_headers, json={
-        "username": "bob", "email": "bob@x.com", "password": "short",
+        "username": "bob", "email": "bob@example.com", "password": "short",
     })
     assert bad.status_code == 400
 
@@ -149,7 +149,7 @@ async def test_group_crud(client, auth_headers):  # type: ignore[no-untyped-def]
 
     # add member
     user_resp = await client.post("/api/v1/users", headers=auth_headers, json={
-        "username": f"member-{uuid.uuid4().hex[:6]}", "email": "m@x.com",
+        "username": f"member-{uuid.uuid4().hex[:6]}", "email": "m@example.com",
         "password": "MemberTest2026!",
     })
     uid = user_resp.json()["id"]

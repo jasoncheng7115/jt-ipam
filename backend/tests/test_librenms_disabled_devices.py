@@ -50,7 +50,7 @@ def _api(monkeypatch, routes: dict, called: list | None = None) -> None:
 
 
 def _dev(i: int, ip: str, *, disabled: int = 0, ignore: int = 0, status: int = 1) -> dict:
-    return {"device_id": i, "hostname": f"dev{i}.example.com", "sysName": f"dev{i}", "ip": ip,
+    return {"device_id": i, "hostname": f"ap{i}.example.com", "sysName": f"ap{i}", "ip": ip,
             "status": status, "disabled": disabled, "ignore": ignore, "os": "unifi", "hardware": "UAP"}
 
 
@@ -94,8 +94,8 @@ async def test_disabled_device_creates_no_ip_and_no_device(db_session, monkeypat
     assert "198.51.100.11" in ips
     assert "198.51.100.12" not in ips, "停用裝置的主要 IP 不自動建立"
     names = set((await db_session.execute(select(Device.name))).scalars().all())
-    assert any("dev1" in n for n in names)
-    assert not any("dev2" in n for n in names), "停用裝置不自動建 jt-ipam 裝置"
+    assert any("ap1" in n for n in names)
+    assert not any("ap2" in n for n in names), "停用裝置不自動建 jt-ipam 裝置"
 
 
 async def test_ignored_device_is_still_used(db_session, monkeypatch) -> None:

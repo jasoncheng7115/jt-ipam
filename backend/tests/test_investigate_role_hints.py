@@ -15,7 +15,7 @@ from app.services.investigate import infer_role_hints
 
 
 def _dossier(**kw):
-    base = {"found": True, "ip": "192.0.2.10", "hostname": "revproxy1",
+    base = {"found": True, "ip": "192.0.2.10", "hostname": "proxy-01",
             "dns": [], "nat": [], "firewall": [], "arp": [], "hostname_sources": []}
     base.update(kw)
     return base

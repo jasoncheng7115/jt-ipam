@@ -33,11 +33,12 @@ const router = useRouter();
 
 const { visibleKeys, setVisible, reset, order, setOrder, orderColumns } = useColumnPrefs(
   "customers",
-  ["name", "subnet_count", "contact", "email", "phone", "description", "created_at", "actions"],
-  ["name", "subnet_count", "contact", "email", "phone", "description", "created_at", "actions"],
+  ["name", "title", "subnet_count", "contact", "email", "phone", "description", "created_at", "actions"],
+  ["name", "title", "subnet_count", "contact", "email", "phone", "description", "created_at", "actions"],
 );
 const columnPickerItems = computed(() => [
   { key: "name", label: t("cols.name") },
+  { key: "title", label: t("customer_detail.display_name") },
   { key: "subnet_count", label: t("cols.subnet") },
   { key: "contact", label: t("cols.contact") },
   { key: "email", label: "Email" },
@@ -141,6 +142,8 @@ function iconAction(icon: any, label: string, onClick: () => void, type?: any) {
 
 const allCols = computed<DataTableColumns<Customer>>(() => autoSort([
   { title: t("cols.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
+  { title: t("customer_detail.display_name"), key: "title", minWidth: 180, ellipsis: { tooltip: true },
+    render: (r) => r.title ?? "—" },
   { title: t("cols.subnet"), key: "subnet_count", width: 104,
     sorter: (a: any, b: any) => (a.subnet_count ?? 0) - (b.subnet_count ?? 0),
     render: (r: any) => {
@@ -225,6 +228,9 @@ onMounted(() => { void refresh(); });
       <n-form label-placement="left" label-width="100">
         <n-form-item :label="t('common.name')" required>
           <n-input v-model:value="form.name" :placeholder="t('customers.name_ph')" />
+        </n-form-item>
+        <n-form-item :label="t('customer_detail.display_name')">
+          <n-input v-model:value="form.title" :placeholder="t('customers.title_ph')" data-testid="customer-form-title" />
         </n-form-item>
         <n-form-item :label="t('common.description')">
           <n-input v-model:value="form.description" type="textarea" :rows="2" />

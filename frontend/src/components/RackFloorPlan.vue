@@ -8,11 +8,13 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { NButton, NIcon, NSpace, NEmpty, NPopconfirm, NSlider, NInputNumber, useMessage } from "naive-ui";
+import { onBeforeRouteLeave } from "vue-router";
+import { NButton, NIcon, NSpace, NEmpty, NPopconfirm, NSlider, NInputNumber, useDialog, useMessage } from "naive-ui";
+import { useFloorplanReplace } from "@/composables/useFloorplanReplace";
 import { RacksIcon, EditIcon, SaveIcon, DeleteIcon, PlusIcon, CancelIcon, FitIcon } from "@/icons";
 import {
   listRacksByLocation, getFloorplanObjectURL, uploadFloorplan,
-  deleteFloorplan, setRackPositions, type Rack,
+  deleteFloorplan, setRackPositions, getLayoutRevision, type Rack,
 } from "@/api/racks";
 
 const props = defineProps<{ locationId: string; canEdit: boolean }>();
@@ -20,6 +22,10 @@ const emit = defineEmits<{ (e: "select", rackId: string): void }>();
 
 const { t } = useI18n();
 const msg = useMessage();
+const dialog = useDialog();
+const replacer = useFloorplanReplace();
+// 載入時的版本：存檔時帶回去，別人剛存過會 409（兩個入口編輯同一份座標）
+const revision = ref<string | null>(null);
 
 const racks = ref<Rack[]>([]);
 const imgUrl = ref<string | null>(null);
@@ -85,7 +91,8 @@ async function load() {
   dirty.value = false;
   resetView();
   try {
-    racks.value = await listRacksByLocation(props.locationId);
+    [racks.value, revision.value] = await Promise.all([
+      listRacksByLocation(props.locationId), getLayoutRevision(props.locationId).catch(() => null)]);
     revoke();
     try {
       imgUrl.value = await getFloorplanObjectURL(props.locationId);
@@ -122,7 +129,12 @@ async function onFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (!f) return;
   try {
+    // 換底圖（原本就有圖、也擺了機櫃）：保留或清除座標要使用者明確選
+    let choice: "keep" | "clear" | null = "keep";
+    if (hasPlan.value && placed().length) choice = await replacer.ask();
+    if (choice === null) return;
     await uploadFloorplan(props.locationId, f);
+    if (choice === "clear") await replacer.clearPositions(props.locationId);
     msg.success(t("common.ok"));
     await load();
     editMode.value = true;
@@ -282,13 +294,42 @@ async function save() {
     pos_w: r.pos_w ?? null, pos_h: r.pos_h ?? null,
   }));
   try {
-    await setRackPositions(props.locationId, positions);
+    await setRackPositions(props.locationId, positions, revision.value);
     dirty.value = false;
     editMode.value = false;
     msg.success(t("common.ok"));
     await load();
-  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  } catch (e: any) {
+    if (e?.response?.data?.detail_code === "floorplan_conflict") {
+      // 別人剛存過：不蓋掉，讓使用者重新載入（自己這次的調整會放棄）
+      dialog.warning({
+        title: t("floorplan.conflict_title"), content: e.response.data.detail,
+        positiveText: t("floorplan.reload"), negativeText: t("common.cancel"),
+        onPositiveClick: () => { dirty.value = false; void load(); },
+      });
+      return;
+    }
+    msg.error(e?.response?.data?.detail ?? t("errors.server"));
+  }
 }
+
+// 還有沒存的調整：離開頁面先問（換頁、關分頁都算）
+function beforeUnload(ev: BeforeUnloadEvent) {
+  if (dirty.value) { ev.preventDefault(); ev.returnValue = ""; }
+}
+window.addEventListener("beforeunload", beforeUnload);
+onBeforeUnmount(() => window.removeEventListener("beforeunload", beforeUnload));
+onBeforeRouteLeave(() => {
+  if (!dirty.value) return true;
+  return new Promise<boolean>((resolve) => {
+    dialog.warning({
+      title: t("floorplan.unsaved_title"), content: t("floorplan.unsaved_body"),
+      positiveText: t("floorplan.leave"), negativeText: t("floorplan.stay"),
+      onPositiveClick: () => resolve(true), onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false), onMaskClick: () => resolve(false),
+    });
+  });
+});
 </script>
 
 <template>
@@ -303,11 +344,11 @@ async function save() {
           <template #icon><n-icon><PlusIcon /></n-icon></template>
           {{ hasPlan ? t("racks.fp_replace") : t("racks.fp_upload") }}
         </n-button>
-        <n-button v-if="hasPlan && !editMode" size="small" @click="editMode = true">
+        <n-button v-if="hasPlan && !editMode" size="small" data-testid="fp-edit" @click="editMode = true">
           <template #icon><n-icon><EditIcon /></n-icon></template>
           {{ t("racks.fp_edit") }}
         </n-button>
-        <n-button v-if="editMode" size="small" type="primary" :disabled="!dirty" @click="save">
+        <n-button v-if="editMode" size="small" type="primary" :disabled="!dirty" data-testid="fp-save" @click="save">
           <template #icon><n-icon><SaveIcon /></n-icon></template>
           {{ t("common.save") }}
         </n-button>
@@ -336,7 +377,7 @@ async function save() {
       <n-icon :size="15" class="tray-icon"><RacksIcon /></n-icon>
       <span class="tray-label">{{ t("racks.fp_unplaced_count", { n: unplaced().length }) }}</span>
       <n-button v-for="r in unplaced()" :key="r.id" size="tiny" type="warning"
-                @click="placeFromTray(r)">
+                :data-testid="`fp-tray-${r.name}`" @click="placeFromTray(r)">
         {{ r.name }}
       </n-button>
     </div>

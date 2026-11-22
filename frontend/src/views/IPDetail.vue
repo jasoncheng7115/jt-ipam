@@ -8,6 +8,7 @@ import IPAddressEditModal from "@/components/IPAddressEditModal.vue";
 import UptimeBar from "@/components/UptimeBar.vue";
 import OpenStackPortsCard from "@/components/OpenStackPortsCard.vue";
 import K8sAddressCard from "@/components/K8sAddressCard.vue";
+import IpCableTraceCard from "@/components/IpCableTraceCard.vue";
 import ExposurePathCard from "@/components/ExposurePathCard.vue";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import type { IPAddress } from "@/types";
@@ -162,6 +163,9 @@ watch(() => route.params.id, (id) => { if (id) load(String(id)); });
       <!-- OpenStack 網卡（Neutron port）：只有掛在 OpenStack 上的位址才會出現 -->
       <OpenStackPortsCard v-if="addr" :address-id="addr.id" />
       <K8sAddressCard v-if="addr" :address-id="addr.id" />
+
+      <!-- 實體線路：沿 IP 的裝置、MAC、FDB 交換器埠找可以追的連接埠（交接包 physical-v1.2） -->
+      <IpCableTraceCard v-if="addr" :address-id="addr.id" />
 
       <!-- 掃描項目（唯讀，由探測結果推導）；OS 已併入上方主要欄位表 -->
       <n-card v-if="addr && showScanSection" size="small" :bordered="true">

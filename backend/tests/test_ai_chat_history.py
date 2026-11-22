@@ -28,11 +28,11 @@ async def _mk_user(db_session, *, admin=False) -> User:
 async def test_save_turn_creates_conversation_with_title(db_session, admin_user):
     conv = await store.save_turn(
         db_session, user_id=admin_user.id, conversation_id=None,
-        user_text="192.168.1.1 是什麼裝置？", assistant_text="那是一台 OPNsense 防火牆。",
+        user_text="192.168.123.1 是什麼裝置？", assistant_text="那是一台 OPNsense 防火牆。",
         model="gpt-oss", elapsed_ms=1234,
     )
     assert conv.user_id == admin_user.id
-    assert conv.title and "192.168.1.1" in conv.title
+    assert conv.title and "192.168.123.1" in conv.title
     msgs = await store.get_messages(db_session, conversation_id=conv.id)
     assert [m.role for m in msgs] == ["user", "assistant"]
     assert msgs[1].model == "gpt-oss"

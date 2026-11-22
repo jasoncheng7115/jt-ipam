@@ -4,21 +4,21 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   NCard, NSpace, NIcon, NButton, NDescriptions, NDescriptionsItem,
-  NProgress, NDataTable, NSpin, NModal, NForm, NFormItem, NInput, NSelect,
-  NCheckbox, NInputNumber,
+  NProgress, NDataTable, NSpin, NModal, NForm,
   useMessage, type DataTableColumns,
 } from "naive-ui";
 import { SectionsIcon, SubnetsIcon, RefreshIcon, EditIcon, SaveIcon, CancelIcon } from "@/icons";
 import { ArrowLeft as ArrowLeftIcon } from "@iconoir/vue";
-import { apiClient } from "@/api/client";
+import { apiClient, apiErrMsg } from "@/api/client";
 import { listSubnets, getSubnetUsage } from "@/api/subnets";
-import { updateSection } from "@/api/sections";
+import { fetchAllSections, updateSection } from "@/api/sections";
 import type { Section, Subnet, SubnetUsage } from "@/types";
 import { autoSort } from "@/composables/useTableSort";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
 import { useCustomers } from "@/composables/useCustomers";
 import ColumnPicker from "@/components/ColumnPicker.vue";
+import SectionFormFields, { type SectionFormModel } from "@/components/SectionFormFields.vue";
 import { computed } from "vue";
 import { useTablePagination } from "@/composables/useTablePagination";
 const pg = useTablePagination();
@@ -49,34 +49,36 @@ const loading = ref(false);
 const { options: customerOptions, ensureLoaded: ensureCustomerOptsLoaded } = useCustomers();
 const showEdit = ref(false);
 const saving = ref(false);
-const form = ref({
-  name: "",
-  description: "" as string | null,
-  strict_mode: false,
-  display_order: 0 as number | null,
-  customer_id: null as string | null,
+const form = ref<SectionFormModel>({
+  name: "", description: "", parent_id: null, strict_mode: false, display_order: 0, customer_id: null,
 });
+// 上層區段選單要全部區段（跟列表頁同一份表單：SectionFormFields）
+const allSections = ref<Section[]>([]);
 
-function openEdit() {
+async function openEdit() {
   if (!section.value) return;
   void ensureCustomerOptsLoaded();
   form.value = {
     name: section.value.name,
     description: section.value.description ?? "",
+    parent_id: section.value.parent_id ?? null,
     strict_mode: section.value.strict_mode,
     display_order: section.value.display_order,
     customer_id: section.value.customer_id ?? null,
   };
   showEdit.value = true;
+  try { allSections.value = await fetchAllSections(); } catch { /* 讀不到就只少了上層選項 */ }
 }
 
 async function saveEdit() {
   if (!section.value) return;
   saving.value = true;
   try {
+    if (!form.value.name.trim()) { msg.error(t("common.name_required")); return; }
     await updateSection(section.value.id, {
-      name: form.value.name,
-      description: form.value.description || null,
+      name: form.value.name.trim(),
+      description: form.value.description.trim() || null,
+      parent_id: form.value.parent_id ?? null,
       strict_mode: form.value.strict_mode,
       display_order: form.value.display_order ?? 0,
       customer_id: form.value.customer_id ?? null,
@@ -84,8 +86,8 @@ async function saveEdit() {
     showEdit.value = false;
     msg.success(t("common.saved"));
     await load(section.value.id);
-  } catch {
-    msg.error(t("errors.network"));
+  } catch (e) {
+    msg.error(apiErrMsg(e) || t("errors.network"));
   } finally {
     saving.value = false;
   }
@@ -232,23 +234,8 @@ onMounted(() => {
 
     <n-modal v-model:show="showEdit" preset="card" style="width: 520px" :title="t('common.edit')">
       <n-form label-placement="top">
-        <n-form-item :label="t('common.name')">
-          <n-input v-model:value="form.name" />
-        </n-form-item>
-        <n-form-item :label="t('common.description')">
-          <n-input v-model:value="form.description" type="textarea" :autosize="{ minRows: 2 }" />
-        </n-form-item>
-        <n-form-item :label="t('nav.customers')">
-          <n-select v-model:value="form.customer_id" :options="customerOptions" clearable filterable />
-        </n-form-item>
-        <n-space :size="24">
-          <n-form-item :label="t('custom_fields.display_order')">
-            <n-input-number v-model:value="form.display_order" :min="0" style="width: 140px" />
-          </n-form-item>
-          <n-form-item :label="t('sections.strict_mode')">
-            <n-checkbox v-model:checked="form.strict_mode" />
-          </n-form-item>
-        </n-space>
+        <SectionFormFields v-model="form" :sections="allSections" :editing-id="section?.id ?? null"
+                           :customer-options="customerOptions" />
       </n-form>
       <template #footer>
         <n-space justify="end">

@@ -59,7 +59,7 @@ async def test_marked_dhcp_server_is_not_reported(db_session):
 async def test_marking_is_matched_per_subnet(db_session):
     """同一個 IP 字串在別的子網路被標記為合法，不該讓這個網段的也變合法。
 
-    重疊網段（多客戶共用 192.168.1.0/24）在這個專案是常態，只比對 IP 字串
+    重疊網段（多客戶共用 192.168.123.0/24）在這個專案是常態，只比對 IP 字串
     等於把別人的授權套到自己頭上。
     """
     a = await _subnet(db_session, "192.168.77.0/24")

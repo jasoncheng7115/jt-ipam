@@ -90,20 +90,20 @@ async def test_regrouped_ips_do_not_multiply(db_session):
     """
     run1, run2 = uuid.uuid4(), uuid.uuid4()
     await reconcile_findings(db_session, run1, [
-        _item("exposure", ["192.168.1.97", "192.168.1.46", "192.168.1.129"]),
-        _item("exposure", ["192.168.1.54"]),
+        _item("exposure", ["192.168.123.97", "192.168.123.46", "192.168.123.129"]),
+        _item("exposure", ["192.168.123.54"]),
     ])
     await db_session.flush()
     await reconcile_findings(db_session, run2, [
-        _item("exposure", ["192.168.1.54", "192.168.1.129", "192.168.1.46"]),
-        _item("exposure", ["192.168.1.97"]),
+        _item("exposure", ["192.168.123.54", "192.168.123.129", "192.168.123.46"]),
+        _item("exposure", ["192.168.123.97"]),
     ])
     await db_session.flush()
     rows = (await db_session.execute(
         select(AIFinding).where(AIFinding.status == "open"))).scalars().all()
     assert len(rows) == 2, f"換分組不該讓筆數翻倍，實得 {len(rows)}"
     covered = {ip for r in rows for ip in (r.evidence or {}).get("ips", [])}
-    assert covered == {"192.168.1.97", "192.168.1.46", "192.168.1.129", "192.168.1.54"}
+    assert covered == {"192.168.123.97", "192.168.123.46", "192.168.123.129", "192.168.123.54"}
 
 
 @pytest.mark.anyio

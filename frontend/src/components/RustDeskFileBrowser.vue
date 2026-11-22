@@ -28,7 +28,7 @@ import {
 import { apiErrMsg } from "@/api/client";
 import { srvText } from "@/utils/wsError";
 import { fmtDateTime } from "@/utils/datetime";
-import { sortEntries } from "@/utils/sftpSort";
+import { sortEntries, type SortKey, type SortOrder } from "@/utils/sftpSort";
 import { useFileListPagination } from "@/composables/useFileListPagination";
 import {
   checkUploadLimits, FileOpError, RdFileSession, type ConflictAnswer, type ConflictInfo, type FileJobView,
@@ -139,6 +139,14 @@ interface Row {
   mtime: number | null;
 }
 
+// 排序照 SFTP 檔案瀏覽器：自己排（受控），資料夾不論升冪降冪都在前面；表格的 sorter 只負責標題上的箭頭
+const sortKey = ref<SortKey>("name");
+const sortOrder = ref<SortOrder>("ascend");
+function onSorterChange(s: { columnKey?: string | number; order?: SortOrder } | null) {
+  if (!s || !s.order) { sortOrder.value = false; return; }
+  sortKey.value = String(s.columnKey ?? "name") as SortKey;
+  sortOrder.value = s.order;
+}
 const rows = computed<Row[]>(() => {
   const q = filterText.value.trim().toLowerCase();
   const list = entries.value
@@ -148,7 +156,7 @@ const rows = computed<Row[]>(() => {
       is_dir: isDirType(e.type), is_link: e.type === FileType.DirLink || e.type === FileType.FileLink,
       drive: e.type === FileType.DirDrive, size: isDirType(e.type) ? null : e.size, mtime: e.mtime || null,
     }));
-  return sortEntries(list, { key: "name", order: "ascend", dirsFirst: true });
+  return sortEntries(list, { key: sortKey.value, order: sortOrder.value, dirsFirst: true });
 });
 // 與 SFTP 同一套：每頁 1000 筆，超過時左下角有「還有 N 筆在下一頁」
 const { pagination, remaining: moreEntries, nextCount, next: nextPage, reset: resetPage } =
@@ -641,10 +649,13 @@ const cols = computed<DataTableColumns<Row>>(() => [
         r.is_dir ? [h(NIcon, { size: 16 }, { default: () => h(FilesIcon) })] : []),
       h("span", null, `${r.name}${r.is_link ? " ↗" : ""}`),
     ]),
+    sorter: true, sortOrder: sortKey.value === "name" ? sortOrder.value : false,
   },
-  { title: t("sftp.col_size"), key: "size", width: 110, render: (r) => (r.size == null ? "—" : fmtBytes(r.size)) },
+  { title: t("sftp.col_size"), key: "size", width: 110, render: (r) => (r.size == null ? "—" : fmtBytes(r.size)),
+    sorter: true, sortOrder: sortKey.value === "size" ? sortOrder.value : false },
   { title: t("sftp.col_mtime"), key: "mtime", width: 170,
-    render: (r) => (r.mtime ? fmtDateTime(new Date(r.mtime * 1000).toISOString()) : "—") },
+    render: (r) => (r.mtime ? fmtDateTime(new Date(r.mtime * 1000).toISOString()) : "—"),
+    sorter: true, sortOrder: sortKey.value === "mtime" ? sortOrder.value : false },
   {
     title: t("common.actions"), key: "actions", width: 250,
     render: (r) => (r.drive ? null : h(NSpace, { size: 4, wrap: false }, () => [
@@ -885,6 +896,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="rdf-table" :class="{ 'rdf-full': fullHeight }">
           <n-data-table :columns="cols" :data="rows" :loading="busy" size="small" :row-key="(r: Row) => r.key"
+                        @update:sorter="onSorterChange"
                         :pagination="pagination" :bordered="false" flex-height style="height:100%" virtual-scroll />
         </div>
         <div v-if="moreEntries > 0" class="file-more" data-testid="rdfile-more">

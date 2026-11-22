@@ -279,6 +279,8 @@ import {
 } from "naive-ui";
 import { DnsIcon, InfoIcon, LinkIcon, LockIcon, NetDiagIcon as LiveIcon, SearchIcon, TopologyIcon, CancelIcon } from "@/icons";
 import { MAX_PORTS, parsePorts } from "@/utils/ports";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import CardTitle from "@/components/CardTitle.vue";
 import { apiClient, apiErrMsg } from "@/api/client";
 import { traceStream } from "@/api/tools";
@@ -338,10 +340,16 @@ function dot(ok: boolean) {
 // ICMP 被沙箱擋住時的「怎麼修」說明
 const icmpHelpShow = ref(false);
 
-const pingCols = computed(() => [
+// 排序比的是畫面上看到的值；空值排最後
+const by = <T,>(f: (r: T) => unknown) => (a: T, b: T) => {
+  const x = f(a), y = f(b), ex = x == null || x === "", ey = y == null || y === "";
+  return ex || ey ? Number(ex) - Number(ey) : cmpNatural(x, y);
+};
+const upFirst = <T,>(f: (r: T) => boolean | null) => (a: T, b: T) => Number(!f(a)) - Number(!f(b));
+const pingCols = computed(() => autoSort<any>([
   { title: t("netdiag.target"), key: "target", width: 190 },
   {
-    title: t("netdiag.state"), key: "alive", width: 110,
+    title: t("netdiag.state"), key: "alive", width: 110, sorter: upFirst((r: PingRow) => r.alive),
     render: (r: PingRow) => h("span", null, [dot(r.alive), r.alive ? t("netdiag.up") : t("netdiag.down")]),
   },
   { title: t("netdiag.loss"), key: "loss_pct", width: 100,
@@ -349,7 +357,7 @@ const pingCols = computed(() => [
   { title: t("netdiag.rtt_avg"), key: "rtt_avg_ms", width: 120,
     render: (r: PingRow) => (r.rtt_avg_ms === null ? "—" : `${r.rtt_avg_ms} ms`) },
   {
-    title: t("netdiag.note"), key: "error",
+    title: t("netdiag.note"), key: "error", sorter: by((r: PingRow) => r.error),
     render: (r: PingRow) => {
       if (!r.error) return "";
       // 送不出封包時只講「壞了」沒有用 —— 旁邊放一個點得下去的「怎麼修」
@@ -364,11 +372,11 @@ const pingCols = computed(() => [
       ]);
     },
   },
-]);
+]));
 
-const hopCols = computed(() => [
+const hopCols = computed(() => autoSort<any>([
   { title: "#", key: "hop", width: 60 },
-  { title: t("netdiag.hop_host"), key: "host",
+  { title: t("netdiag.hop_host"), key: "host", sorter: by((h2: Hop) => h2.fqdn || h2.host),
     // 有反查到名稱就一起顯示（fqdn ＋ 淡色 IP）—— 跟終端機 traceroute 的閱讀體驗一致
     render: (h2: Hop) => h2.host
       ? (h2.fqdn
@@ -379,28 +387,28 @@ const hopCols = computed(() => [
     render: (h2: Hop) => (h2.rtt_ms === null ? "—" : `${h2.rtt_ms} ms`) },
   // note 可能是路由器回的旗標原文（`!H`…），也可能是我們自己造的句子；後者帶代碼，
   // 要翻譯後再顯示，否則英文與日文介面上會冒出一句中文
-  { title: t("netdiag.note"), key: "note",
+  { title: t("netdiag.note"), key: "note", sorter: by((h2: Hop) => (h2.note_code ? t(`errors.${h2.note_code}`) : h2.note)),
     render: (h2: Hop) => (h2.note_code ? t(`errors.${h2.note_code}`) : h2.note) || "" },
-]);
+]));
 
-const tcpCols = computed(() => [
+const tcpCols = computed(() => autoSort<any>([
   { title: t("netdiag.target"), key: "target", width: 190 },
   { title: t("netdiag.port"), key: "port", width: 90 },
   {
-    title: t("netdiag.state"), key: "open", width: 110,
+    title: t("netdiag.state"), key: "open", width: 110, sorter: upFirst((r: TcpRow) => r.open),
     render: (r: TcpRow) => h("span", null, [dot(r.open), r.open ? t("netdiag.open") : t("netdiag.closed")]),
   },
   { title: t("netdiag.latency"), key: "latency_ms", width: 120,
     render: (r: TcpRow) => (r.latency_ms === null ? "—" : `${r.latency_ms} ms`) },
   { title: t("netdiag.note"), key: "error", render: (r: TcpRow) => r.error || "" },
-]);
+]));
 
 const UDP_COLOR: Record<string, string> = { open: "#18a058", closed: "#d03050", no_reply: "#9aa0a6" };
-const udpCols = computed(() => [
+const udpCols = computed(() => autoSort<any>([
   { title: t("netdiag.target"), key: "target", width: 170 },
   { title: t("netdiag.port"), key: "port", width: 80 },
   {
-    title: t("netdiag.state"), key: "state", width: 150,
+    title: t("netdiag.state"), key: "state", width: 150, sorter: by((r: UdpRow) => t(`netdiag.udp_${r.state}`)),
     render: (r: UdpRow) => h("span", null, [
       h("span", { style: `display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${UDP_COLOR[r.state]}` }),
       t(`netdiag.udp_${r.state}`),
@@ -410,7 +418,7 @@ const udpCols = computed(() => [
   { title: t("netdiag.latency"), key: "latency_ms", width: 110,
     render: (r: UdpRow) => (r.latency_ms === null ? "—" : `${r.latency_ms} ms`) },
   { title: t("netdiag.note"), key: "detail", render: (r: UdpRow) => r.detail || "" },
-]);
+]));
 
 async function runUdp() {
   if (!udp.targets.trim()) { msg.error(t("netdiag.need_target")); return; }
@@ -442,10 +450,11 @@ function yesNo(v: boolean | null, goodIsTrue = true) {
     v ? t("common.yes") : t("common.no"));
 }
 
-const tlsCols = computed(() => [
+const tlsCols = computed(() => autoSort<any>([
   { title: t("netdiag.target"), key: "target", width: 160 },
   { title: t("netdiag.tls_subject"), key: "subject", width: 200,
-    render: (r: TlsRow) => r.subject || h("span", { style: "color:#d03050" }, r.error || "—") },
+    render: (r: TlsRow) => r.subject || h("span", { style: "color:#d03050" }, r.error || "—"),
+    sorter: by((r: TlsRow) => r.subject || r.error) },
   { title: t("netdiag.tls_issuer"), key: "issuer", width: 200 },
   { title: t("netdiag.tls_expiry"), key: "days_remaining", width: 130,
     render: (r: TlsRow) => daysTag(r.days_remaining) },
@@ -455,14 +464,14 @@ const tlsCols = computed(() => [
   { title: t("netdiag.tls_self_signed"), key: "self_signed", width: 90,
     render: (r: TlsRow) => yesNo(r.self_signed, false) },
   { title: "TLS", key: "tls_version", width: 100 },
-]);
+]));
 
-const rdnsCols = computed(() => [
+const rdnsCols = computed(() => autoSort<any>([
   { title: "IP", key: "ip", width: 200 },
-  { title: "PTR", key: "ptr",
+  { title: "PTR", key: "ptr", sorter: by((r: RdnsRow) => r.ptr),
     render: (r: RdnsRow) => r.ptr || h("span", { style: "opacity:.5" }, t("netdiag.no_ptr")) },
   { title: t("netdiag.note"), key: "error", render: (r: RdnsRow) => r.error || "" },
-]);
+]));
 
 async function runTls() {
   if (!tls.targets.trim()) { msg.error(t("netdiag.need_target")); return; }

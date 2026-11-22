@@ -17,14 +17,14 @@ EXPLICIT = """<opnsense><nat>
   <rule>
     <disabled>0</disabled><nordr>0</nordr><log>1</log>
     <interface>wan</interface><protocol>tcp</protocol>
-    <target>192.168.11.1</target><local-port>443</local-port>
+    <target>192.168.124.1</target><local-port>443</local-port>
     <descr>啟用中的轉發</descr>
     <associated-rule-id>r1</associated-rule-id>
   </rule>
   <rule>
     <disabled>1</disabled><nordr>0</nordr><log>0</log>
     <interface>wan</interface><protocol>tcp</protocol>
-    <target>192.168.11.2</target><local-port>22</local-port>
+    <target>192.168.124.2</target><local-port>22</local-port>
     <descr>已停用的轉發</descr>
     <associated-rule-id>r2</associated-rule-id>
   </rule>
@@ -33,14 +33,14 @@ EXPLICIT = """<opnsense><nat>
 PRESENCE = """<opnsense><nat>
   <rule>
     <interface>wan</interface><protocol>tcp</protocol>
-    <target>192.168.11.3</target><local-port>80</local-port>
+    <target>192.168.124.3</target><local-port>80</local-port>
     <descr>舊式：沒有 disabled 元素 = 啟用</descr>
     <associated-rule-id>r3</associated-rule-id>
   </rule>
   <rule>
     <disabled/>
     <interface>wan</interface><protocol>tcp</protocol>
-    <target>192.168.11.4</target><local-port>81</local-port>
+    <target>192.168.124.4</target><local-port>81</local-port>
     <descr>舊式：有 disabled 元素 = 停用</descr>
     <associated-rule-id>r4</associated-rule-id>
   </rule>
@@ -70,7 +70,7 @@ def test_presence_only_style_still_works():
 
 def test_other_fields_still_parsed():
     rules = {r["uuid"]: r for r in _parse_legacy_nat_xml(EXPLICIT)}
-    assert rules["r1"]["target"] == "192.168.11.1"
+    assert rules["r1"]["target"] == "192.168.124.1"
     assert rules["r1"]["target_port"] == "443"
     assert rules["r1"]["interface"] == "wan"
     assert rules["r1"]["description"] == "啟用中的轉發"
@@ -94,7 +94,7 @@ STATIC_MAPS = """<opnsense><dhcpd>
   <lan>
     <enable>1</enable>
     <staticmap>
-      <mac>00:11:22:33:44:55</mac><ipaddr>192.168.11.53</ipaddr>
+      <mac>00:11:22:33:44:55</mac><ipaddr>192.168.124.53</ipaddr>
       <hostname>voip-phone-01</hostname><descr>櫃檯話機</descr>
     </staticmap>
     <staticmap>
@@ -113,7 +113,7 @@ def test_static_maps_parsed_across_interfaces():
     from app.services.opnsense_firewall import _parse_legacy_static_maps
     rows = _parse_legacy_static_maps(STATIC_MAPS)
     ips = {r.ip for r in rows}
-    assert ips == {"192.168.11.53", "10.0.0.5"}
+    assert ips == {"192.168.124.53", "10.0.0.5"}
 
 
 def test_static_map_without_ip_is_skipped():
@@ -125,7 +125,7 @@ def test_static_map_without_ip_is_skipped():
 
 def test_static_map_fields():
     from app.services.opnsense_firewall import _parse_legacy_static_maps
-    r = next(x for x in _parse_legacy_static_maps(STATIC_MAPS) if x.ip == "192.168.11.53")
+    r = next(x for x in _parse_legacy_static_maps(STATIC_MAPS) if x.ip == "192.168.124.53")
     assert r.mac == "00:11:22:33:44:55"
     assert r.hostname == "voip-phone-01"
     assert r.description == "櫃檯話機"

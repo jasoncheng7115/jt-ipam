@@ -136,3 +136,5 @@ class RackPosition(StrictModel):
 
 class RackPositionsUpdate(StrictModel):
     positions: Annotated[list[RackPosition], Field(max_length=500)]
+    # 載入時拿到的 /layout revision：跟目前不一致（別人剛存過）→ 409 floorplan_conflict。不帶＝舊用戶端，照常存
+    revision: Annotated[str | None, Field(max_length=64)] = None

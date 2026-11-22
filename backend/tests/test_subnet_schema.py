@@ -13,7 +13,7 @@ from app.schemas.subnet import SubnetCreate
 def _payload(**overrides):
     base = {
         "section_id": uuid.uuid4(),
-        "cidr": "192.168.1.0/24",
+        "cidr": "192.168.123.0/24",
     }
     base.update(overrides)
     return base
@@ -31,8 +31,8 @@ def test_valid_cidr_v6():
 
 def test_cidr_normalised_to_network():
     """非網段位的 CIDR 應自動 truncate 為 network。"""
-    obj = SubnetCreate(**_payload(cidr="192.168.1.42/24"))
-    assert obj.cidr == "192.168.1.0/24"
+    obj = SubnetCreate(**_payload(cidr="192.168.123.42/24"))
+    assert obj.cidr == "192.168.123.0/24"
 
 
 def test_invalid_cidr():

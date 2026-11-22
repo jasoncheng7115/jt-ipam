@@ -12,6 +12,25 @@ function vueFiles(dir: string): string[] {
     e.isDirectory() ? vueFiles(join(dir, e.name)) : e.name.endsWith(".vue") ? [join(dir, e.name)] : []);
 }
 
+// 2026-11-21 掃描表單時又找到裝置的廠牌／型號／序號、地點地址、VRF 的 RD 同樣清不掉：
+// 擴大成所有「欄位: form.value.欄位 || undefined」。只在新增時用的表單（沒有舊值要清）列為例外。
+const CREATE_ONLY = ["views/IPRequests.vue"];
+
+describe("編輯表單的欄位可以清空", () => {
+  it("沒有 `x: form.value.x || undefined`（清空就送 null）", () => {
+    const root = resolve(__dirname, "..");
+    const bad: string[] = [];
+    for (const f of vueFiles(root)) {
+      const rel = f.slice(root.length + 1);
+      if (CREATE_ONLY.includes(rel)) continue;
+      for (const m of readFileSync(f, "utf8").matchAll(/^\s+(\w+):\s*form\.value\.(\w+)\s*\|\|\s*undefined/gm)) {
+        if (m[1] === m[2]) bad.push(`${rel}: ${m[1]}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
 describe("說明欄位可以清空", () => {
   it("沒有 `description: x.description || undefined`", () => {
     const root = resolve(__dirname, "..");

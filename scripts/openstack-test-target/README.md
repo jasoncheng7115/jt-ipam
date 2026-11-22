@@ -1,7 +1,7 @@
 # OpenStack 測試靶（OpenStack 整合用）
 
 可丟棄的測試環境，給 jt-ipam 的 OpenStack 整合（Keystone v3、Nova、Neutron，唯讀）做端到端驗證。
-在 dev1 上用 LXD 開兩個容器，裡面跑 DevStack（`stable/2026.1`）：
+在 開發機 上用 LXD 開兩個容器，裡面跑 DevStack（`stable/2026.1`）：
 
 | 容器 | 位址 | 內容 |
 | --- | --- | --- |
@@ -16,13 +16,13 @@ Cinder、Horizon、Swift、Tempest、metadata 代理、VNC 主控台都沒開。
 
 ## 安全
 
-- 只接在 LXD 自己的私網橋接 `jtosbr0`（`10.241.73.0/24`，NAT 出網）上；dev1 的區網介面沒有發布任何埠。
-  dev1 上的程式（例如本機的 jt-ipam 後端）直接連 `10.241.73.10`。
-- dev1 有 docker，docker 會把 FORWARD 預設改成 DROP，容器會上不了網。`create.sh`／`start.sh` 會在 `DOCKER-USER`
+- 只接在 LXD 自己的私網橋接 `jtosbr0`（`10.241.73.0/24`，NAT 出網）上；開發機 的區網介面沒有發布任何埠。
+  開發機 上的程式（例如本機的 jt-ipam 後端）直接連 `10.241.73.10`。
+- 開發機 有 docker，docker 會把 FORWARD 預設改成 DROP，容器會上不了網。`create.sh`／`start.sh` 會在 `DOCKER-USER`
   加兩條規則：放行「從 `jtosbr0` 出去」與「回到 `jtosbr0` 的已建立連線」。區網上的機器就算自己加了路由，也只能收到回程，
   連不進容器。`destroy.sh` 會把這兩條刪掉。
 - 兩個容器都是**特權容器**、不套 AppArmor（OVS 的核心 datapath 與 ovn-controller 在非特權容器裡跑不起來），
-  等於在 dev1 上有 root 權限，只能當測試用，不可以放任何真實資料。
+  等於在 開發機 上有 root 權限，只能當測試用，不可以放任何真實資料。
 - 密碼不寫在 repo 裡：第一次 `create.sh` 隨機產生，存在控制節點的 `/root/jt-target.secrets`，`seed.sh --info` 會印出來。
 - 種子資料全部是假的：位址只用 RFC 5737（`203.0.113.0/24`）、RFC 3849（`2001:db8::/32`）與私網，名稱一看就知道是測試用。
 
@@ -32,7 +32,7 @@ Cinder、Horizon、Swift、Tempest、metadata 代理、VNC 主控台都沒開。
 sudo scripts/openstack-test-target/create.sh      # 建儲存集區／網路／設定檔／兩個容器，各跑一次 stack.sh（實測控制節點約 55 分鐘、運算節點約 15 分鐘）
 sudo scripts/openstack-test-target/seed.sh        # 灌測試資料（約 5 分鐘，可重複執行）
 sudo scripts/openstack-test-target/seed.sh --info # 再印一次連線資訊與密碼
-sudo scripts/openstack-test-target/start.sh       # dev1 重開機後啟動（載入 OVS 模組、補轉送規則、起容器、等 API）
+sudo scripts/openstack-test-target/start.sh       # 開發機 重開機後啟動（載入 OVS 模組、補轉送規則、起容器、等 API）
 sudo scripts/openstack-test-target/start.sh stop  # 停止兩個容器（資料保留）
 sudo scripts/openstack-test-target/seed.sh --reset  # 重設：刪掉種子資料再重建（所有 UUID 會換新）
 sudo scripts/openstack-test-target/destroy.sh     # 全部刪除（容器、設定檔、網路、儲存集區、轉送規則）
@@ -159,12 +159,12 @@ lxc exec jtipam-os-ctl -- journalctl -u devstack@n-api -n 100
 - 沒有 TLS。要測 CA 憑證的流程得另外在前面放一個 TLS 反向代理，或改用 DevStack 的 `tls-proxy` 服務重建。
 - DevStack 會在容器裡用 apt 裝一些用不到的套件（例如 qemu），只佔容器的磁碟，不影響主機。
 - DevStack 預設的 KSM 調整會寫主機的 `/sys/kernel/mm/ksm/run`；容器裡這個路徑是唯讀的，`create.sh` 會關掉
-  `ENABLE_KSM`／`ENABLE_KSMTUNED` 並讓 DevStack 寫不進去就跳過，不會動到 dev1。
-- dev1 重開機後 OVS 核心模組與 `DOCKER-USER` 規則都會消失，要先跑 `start.sh`。
+  `ENABLE_KSM`／`ENABLE_KSMTUNED` 並讓 DevStack 寫不進去就跳過，不會動到 開發機。
+- 開發機 重開機後 OVS 核心模組與 `DOCKER-USER` 規則都會消失，要先跑 `start.sh`。
 
 ## 實測：預設政策下各帳號看得到什麼
 
-DevStack 2026.1 的預設政策（新版 RBAC），用 dev1 主機端直接打 API 的結果：
+DevStack 2026.1 的預設政策（新版 RBAC），用 開發機 主機端直接打 API 的結果：
 
 | 呼叫 | reader（專案範圍）／應用程式憑證／member | reader（system 範圍） | admin |
 | --- | --- | --- | --- |

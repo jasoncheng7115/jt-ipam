@@ -1,0 +1,5 @@
+#!/bin/sh
+# On the publish branch only (dev commits carry the session line on purpose): refuse private names, session links
+# and words that would close a GitHub issue in the commit message.
+[ "$(git rev-parse --abbrev-ref HEAD)" = publish ] || exit 0
+exec python3 "$(git rev-parse --git-common-dir)/../scripts/publish/preflight.py" msg "$1"

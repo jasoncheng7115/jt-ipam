@@ -2539,6 +2539,28 @@ cmd_upgrade() {
             warn "ipmitool install failed; BMC console unavailable until installed."
     fi
 
+    # -- 4b. upgrade data check, part 1: stop writes, take the baseline inventory --
+    # An in-place upgrade must not lose existing data (physical handover pack, UPGRADE.md):
+    # every record is compared by id and field after the migration, not just counted. Writes stop
+    # first (backend + the jt-ipam timers and their services) so the baseline and the migration
+    # see the same data. The inventory and the report contain site data: 0700 directory, 0600 files.
+    CHECK_DIR="/var/lib/jt-ipam/upgrade-checks/$(date +%Y%m%d-%H%M%S)"
+    install -d -m 0700 -o "$JTIPAM_USER" -g "$JTIPAM_USER" /var/lib/jt-ipam/upgrade-checks "$CHECK_DIR"
+    mapfile -t PAUSED_TIMERS < <(systemctl list-units --type=timer --state=active --no-legend --plain 'jt-ipam-*.timer' 2>/dev/null | awk '{print $1}')
+    log "Stopping writes for the migration: $SVC ${PAUSED_TIMERS[*]}"
+    for t in "${PAUSED_TIMERS[@]}"; do systemctl stop "$t" "${t%.timer}.service" 2>/dev/null || true; done
+    systemctl stop "$SVC" 2>/dev/null || true
+    uv_cli() { as_user bash -c "cd '$ROOT/backend'; set -a; source '$ENV_FILE'; set +a; .venv/bin/python -m app.cli.upgrade_verify $*"; }
+    resume_writes_hint() {
+      warn "Writes stay stopped ($SVC and the jt-ipam timers are NOT restarted) until the data is checked."
+      warn "  After restoring or confirming the data: systemctl start $SVC ${PAUSED_TIMERS[*]}"
+    }
+    log "Upgrade data check: taking the baseline inventory…"
+    if ! uv_cli snapshot --out "$CHECK_DIR/before.json"; then
+        resume_writes_hint
+        die "could not take the baseline inventory; nothing was migrated. Start the services again: systemctl start $SVC ${PAUSED_TIMERS[*]}"
+    fi
+
     # -- 5. database migration --
     # The audit table belongs to a NOLOGIN role; migrations run as the app role, so hand it
     # back for the migration and take it away again right after (also on failure below).
@@ -2547,9 +2569,23 @@ cmd_upgrade() {
     # env must be sourced inside the sudo subshell (sudo does not carry parent environment by default)
     if ! as_user bash -c "cd '$ROOT/backend'; set -a; source '$ENV_FILE'; set +a; .venv/bin/alembic upgrade head"; then
         harden_audit_table
+        on_err
+        resume_writes_hint
         die "alembic upgrade failed (see above)."
     fi
     harden_audit_table
+
+    # -- 5a. upgrade data check, part 2: compare every record with the baseline --
+    # Any missing record, changed value, changed floor-plan file or new data problem keeps writes
+    # stopped and leaves the report for an authorised person; existing problems are reported apart.
+    log "Upgrade data check: comparing every record with the baseline…"
+    if ! uv_cli compare --before "$CHECK_DIR/before.json" --after-out "$CHECK_DIR/after.json" --report "$CHECK_DIR/report.json"; then
+        warn "Upgrade data check FAILED: the migration changed or lost existing data (report: $CHECK_DIR/report.json)."
+        on_err
+        resume_writes_hint
+        die "upgrade data check failed; do not open the site for writes before the report is resolved."
+    fi
+    log "Upgrade data check passed (report: $CHECK_DIR/report.json)"
 
     # -- 5b. Recog fingerprint database (optional): install if missing, update if GitHub has a newer release --
     install_recog_db "$ROOT/backend" "$ENV_FILE" "$JTIPAM_USER" "$RECOG_ZIP"
@@ -2589,6 +2625,8 @@ cmd_upgrade() {
     log "Restarting $SVC…"
     systemctl restart "$SVC"
     systemctl is-active --quiet "$SVC" || die "$SVC did not come up after restart; check journalctl -u $SVC"
+    # background timers paused for the data check
+    for t in "${PAUSED_TIMERS[@]}"; do systemctl start "$t" 2>/dev/null || warn "could not restart $t"; done
     local _rdy_tls _rdy_port _rdy_url
     _rdy_tls="$(grep -oP 'BACKEND_TLS_MODE=\K\S+' "$ENV_FILE" 2>/dev/null || echo nginx)"
     if [[ "$_rdy_tls" == "nginx" ]]; then

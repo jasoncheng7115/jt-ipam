@@ -867,6 +867,59 @@ async def _fill_group_names(session: AsyncSession, items: list[Any], rows: list[
             it.device_group_name = names.get(r.device_group_id)
 
 
+@router.get("/{address_id}/trace-candidates")
+async def trace_candidates(
+    address_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """從 IP 詳情追線：沿 IP 既有的關聯找可以追的連接埠（交接包 physical-v1.2 CABLING.md）。
+    不從 IP 在不在線推定實體線路；看不到的裝置不列。"""
+    import re
+
+    from app.models.device import Device
+    from app.models.physical import DevicePort
+    from app.services.permission import visible_ids
+    obj = await session.get(IPAddress, address_id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Address not found")
+    await _require_subnet_perm(session, user, obj.subnet_id, "read")
+    vis = await visible_ids(session, user=user, object_type="device")
+
+    def ok(dev_id: uuid.UUID | None) -> bool:
+        return dev_id is not None and (vis is None or dev_id in vis)
+
+    def mac_key(m: object) -> str:
+        return re.sub(r"[^0-9a-f]", "", str(m or "").lower())
+
+    out: dict[str, Any] = {"device": None, "candidates": [], "device_ports": []}
+    dev = await session.get(Device, obj.device_id) if ok(obj.device_id) else None
+    ports: list[Any] = []
+    if dev is not None:
+        out["device"] = {"id": str(dev.id), "name": dev.name}
+        ports = list((await session.execute(select(DevicePort).where(DevicePort.device_id == dev.id)
+                                            .order_by(DevicePort.position, DevicePort.name))).scalars())
+        # 1) 這台裝置上 MAC 跟這個 IP 相同的網卡
+        if obj.mac:
+            for p in ports:
+                if p.mac_address and mac_key(p.mac_address) == mac_key(obj.mac):
+                    out["candidates"].append({"port_id": str(p.id), "device_id": str(dev.id), "device": dev.name,
+                                              "port": p.name, "reason": "mac_match"})
+    # 2) FDB 學到的交換器埠：「交換器 / 埠」對得到 jt-ipam 的裝置與埠才列
+    if obj.switch_port and " / " in obj.switch_port:
+        sw_name, port_name = (x.strip() for x in obj.switch_port.rsplit(" / ", 1))
+        hit = (await session.execute(
+            select(DevicePort, Device.name).join(Device, Device.id == DevicePort.device_id)
+            .where(Device.name == sw_name, DevicePort.name == port_name).limit(1))).first()
+        if hit is not None and ok(hit[0].device_id):
+            out["candidates"].append({"port_id": str(hit[0].id), "device_id": str(hit[0].device_id), "device": hit[1],
+                                      "port": hit[0].name, "reason": "switch_port"})
+    # 3) 只有裝置關聯、沒有候選：列那台裝置的埠讓人選
+    if dev is not None and not out["candidates"]:
+        out["device_ports"] = [{"port_id": str(p.id), "port": p.name, "type": p.type} for p in ports]
+    return out
+
+
 @router.get("/{address_id}", response_model=IPAddressRead)
 async def get_address(
     address_id: uuid.UUID,

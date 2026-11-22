@@ -9,6 +9,8 @@ import { test, expect, type APIRequestContext, type Page } from "@playwright/tes
 const ADMIN_USER = process.env.E2E_ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.E2E_ADMIN_PASS || "";
 test.skip(!ADMIN_PASS, "需要 E2E_ADMIN_PASS");
+// 一個測試走完 WAN 轉換、聯絡人、裝置租用：機器忙的時候會超過預設的 30 秒，逾時後清理也跟著失敗、留下資料
+test.setTimeout(150_000);
 
 async function token(request: APIRequestContext): Promise<string> {
   const r = await request.post("/api/v1/auth/login", { data: { username: ADMIN_USER, password: ADMIN_PASS, realm: "local" } });

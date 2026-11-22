@@ -15,6 +15,7 @@ import {
   createDevice, updateDevice, type Device, listLocations, listRacks, type Location, type Rack,
 } from "@/api/basic";
 import { getRackDiagram, type RackDiagram } from "@/api/racks";
+import CustomFieldInputs from "@/components/CustomFieldInputs.vue";
 import { resolveRackLocation } from "@/utils/rackLocation";
 import { useIpOptions } from "@/composables/useIpOptions";
 import { EditIcon, PlusIcon, SaveIcon, CancelIcon, RacksIcon } from "@/icons";
@@ -23,6 +24,12 @@ import { apiErrMsg } from "@/api/client";
 
 const props = defineProps<{ show: boolean; device: Device | null }>();
 const emit = defineEmits<{ (e: "update:show", v: boolean): void; (e: "saved"): void }>();
+// 自訂欄位：定義沒載到就不送（不清掉既有的值）
+const cfRef = ref<InstanceType<typeof CustomFieldInputs> | null>(null);
+function cfPart(): { custom_fields?: Record<string, unknown> } {
+  const cf = cfRef.value?.payload();
+  return cf === undefined ? {} : { custom_fields: cf };
+}
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -235,8 +242,8 @@ async function submit() {
   try {
     const payload = {
       name: form.value.name, fqdn: form.value.fqdn || null, type: form.value.type,
-      vendor: form.value.vendor || undefined, model: form.value.model || undefined,
-      serial: form.value.serial || undefined, description: form.value.description ?? "",
+      vendor: form.value.vendor?.trim() || null, model: form.value.model?.trim() || null,
+      serial: form.value.serial?.trim() || null, description: form.value.description ?? "",
       location_id: form.value.location_id, rack_id: form.value.rack_id,
       u_position: form.value.u_position, u_size: form.value.u_size,
       rack_face: form.value.rack_id ? form.value.rack_face : null,
@@ -248,6 +255,7 @@ async function submit() {
       rack_vslot_span: (form.value.rack_id && rackUsesLevels.value)
         ? spanFor(heightParts.value) : RACK_SLOTS,
       customer_id: form.value.customer_id, primary_ip_id: form.value.primary_ip_id,
+      ...cfPart(),
     };
     if (props.device) await updateDevice(props.device.id, payload);
     else await createDevice(payload);
@@ -348,6 +356,7 @@ async function submit() {
       <n-form-item :label="t('sections.description')" style="margin-top: 8px">
         <n-input v-model:value="form.description" type="textarea" :rows="2" />
       </n-form-item>
+      <CustomFieldInputs ref="cfRef" object-type="device" :initial="props.device?.custom_fields ?? null" />
     </n-form>
     <n-space justify="end">
       <n-button @click="emit('update:show', false)">

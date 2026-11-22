@@ -59,10 +59,10 @@ describe("雙接（不同網卡各接一台交換器）", () => {
 describe("節點名稱", () => {
   it("同名的補上 IP 才分得出來；不同名的不加", () => {
     const m = nodeLabels([{ id: "1", label: "ap-lobby", ip: "192.0.2.31" }, { id: "2", label: "ap-lobby", ip: "192.0.2.32" },
-                          { id: "3", label: "nas3", ip: "192.0.2.5" }]);
+                          { id: "3", label: "nas-03", ip: "192.0.2.5" }]);
     expect(m.get("1")).toBe("ap-lobby\n192.0.2.31");
     expect(m.get("2")).toBe("ap-lobby\n192.0.2.32");
-    expect(m.get("3")).toBe("nas3");
+    expect(m.get("3")).toBe("nas-03");
   });
 
   it("同名又沒有 IP：標同名 i/n", () => {

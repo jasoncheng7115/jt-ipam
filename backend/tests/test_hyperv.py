@@ -267,8 +267,8 @@ async def test_host_nics_become_ports_of_the_existing_device(db_session, monkeyp
     await db_session.flush()
     db_session.add(DevicePort(device_id=dev.id, name="iDRAC", type="network"))    # 使用者自己建的
     inst = await _inst(db_session)
-    adapters = [{"name": "NIC1", "desc": "Intel(R) Ethernet X710 #1", "mac": "3C-EC-EF-00-00-01", "up": True},
-                {"name": "NIC2", "desc": "Intel(R) Ethernet X710 #2", "mac": "3C-EC-EF-00-00-02", "up": True}]
+    adapters = [{"name": "NIC1", "desc": "Intel(R) Ethernet X710 #1", "mac": "00-25-90-00-00-01", "up": True},
+                {"name": "NIC2", "desc": "Intel(R) Ethernet X710 #2", "mac": "00-25-90-00-00-02", "up": True}]
     switches = [{"name": "External", "type": "External", "members": ["Intel(R) Ethernet X710 #1"]}]
     _fake(monkeypatch, {"hv1": _host("hv1", cluster=None, adapters=adapters, switches=switches)})
     out = await hyperv.sync_instance(db_session, inst)
@@ -276,7 +276,7 @@ async def test_host_nics_become_ports_of_the_existing_device(db_session, monkeyp
     assert out["ports"] == 3
     ports = {p.name: p for p in (await db_session.execute(select(DevicePort).where(
         DevicePort.device_id == dev.id))).scalars()}
-    assert ports["NIC1"].mac_address == "3c:ec:ef:00:00:01"
+    assert ports["NIC1"].mac_address == "00:25:90:00:00:01"
     assert ports["vSwitch External"].type == "bridge"
     assert ports["vSwitch External"].peer_port_id == ports["NIC1"].id
     # NIC2 拔掉了：它建的埠清掉，使用者的埠不動
@@ -375,7 +375,7 @@ async def test_delete_takes_back_what_it_wrote(client, auth_headers, db_session,
     db_session.add(dev)
     inst = await _inst(db_session)
     _fake(monkeypatch, {"hv1": _host("hv1", cluster=None, vms=[_vm(G1, "a")],
-                                     adapters=[{"name": "NIC1", "desc": "d", "mac": "3CECEF000001"}])})
+                                     adapters=[{"name": "NIC1", "desc": "d", "mac": "002590000001"}])})
     await hyperv.sync_instance(db_session, inst)
     await db_session.commit()
     cluster_id, inst_id = inst.cluster_id, inst.id

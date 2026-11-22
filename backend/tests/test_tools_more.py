@@ -5,12 +5,12 @@ from __future__ import annotations
 
 async def test_ip_in_cidr(client, auth_headers):
     r = await client.get("/api/v1/tools/ip-in-cidr",
-                         params={"ip": "192.168.1.50", "cidr": "192.168.1.0/24"},
+                         params={"ip": "192.168.123.50", "cidr": "192.168.123.0/24"},
                          headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["contains"] is True
     r2 = await client.get("/api/v1/tools/ip-in-cidr",
-                          params={"ip": "10.0.0.1", "cidr": "192.168.1.0/24"},
+                          params={"ip": "10.0.0.1", "cidr": "192.168.123.0/24"},
                           headers=auth_headers)
     assert r2.json()["contains"] is False
 
@@ -23,15 +23,15 @@ async def test_cidr_relation(client, auth_headers):
 
 async def test_range_to_cidr(client, auth_headers):
     r = await client.get("/api/v1/tools/range-to-cidr",
-                         params={"start": "192.168.1.0", "end": "192.168.1.255"},
+                         params={"start": "192.168.123.0", "end": "192.168.123.255"},
                          headers=auth_headers)
-    assert r.json()["cidrs"] == ["192.168.1.0/24"]
+    assert r.json()["cidrs"] == ["192.168.123.0/24"]
 
 
 async def test_aggregate(client, auth_headers):
     r = await client.get("/api/v1/tools/aggregate",
-                         params={"cidrs": "192.168.0.0/24, 192.168.1.0/24"}, headers=auth_headers)
-    assert r.json()["aggregated"] == ["192.168.0.0/23"]
+                         params={"cidrs": "192.168.122.0/24, 192.168.123.0/24"}, headers=auth_headers)
+    assert r.json()["aggregated"] == ["192.168.122.0/23"]
 
 
 async def test_netmask_convert(client, auth_headers):

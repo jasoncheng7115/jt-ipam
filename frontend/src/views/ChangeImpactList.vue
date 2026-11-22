@@ -36,7 +36,7 @@
                     :row-key="(r: ChangePlan) => r.id" :row-props="rowProps" :scroll-x="900"
                     :row-class-name="(r: ChangePlan) => r.lifecycle === 'cancelled' ? 'cip-row-cancelled' : ''"
                     :pagination="{ page, pageSize, itemCount: total, onChange: (p: number) => { page = p } }" remote
-                    data-testid="cip-list" />
+                    @update:sorter="onSorter" data-testid="cip-list" />
     </n-card>
 
     <ChangeImpactWizard v-model:show="wizard" />
@@ -84,7 +84,8 @@ async function fetchRows() {
   try {
     const r = await listPlans({ page: page.value, page_size: pageSize, scenario_type: scenario.value || undefined,
                                 lifecycle: lifecycle.value || undefined, q: q.value.trim() || undefined,
-                                awaiting_my_review: awaiting.value || undefined });
+                                awaiting_my_review: awaiting.value || undefined, sort: sortState.value?.key,
+                                order: sortState.value ? (sortState.value.order === "descend" ? "desc" : "asc") : undefined });
     rows.value = r.items;
     total.value = r.total;
   } finally {
@@ -100,14 +101,22 @@ watch([scenario, lifecycle, q, awaiting], () => {
 });
 watch(page, () => void fetchRows());
 
+// 後端分頁：點標題排序交給後端（分頁前排）；最近一次評估是組合欄位，不排序
+const sortState = ref<{ key: string; order: "ascend" | "descend" } | null>(null);
+const so = (k: string) => (sortState.value?.key === k ? sortState.value.order : false);
+function onSorter(st: { columnKey: string | number; order: "ascend" | "descend" | false } | null) {
+  sortState.value = st && st.order ? { key: String(st.columnKey), order: st.order } : null;
+  if (page.value !== 1) page.value = 1;   // 換頁的 watch 會重抓
+  else void fetchRows();
+}
 const columns = computed<DataTableColumns<ChangePlan>>(() => [
-  { title: t("change_impact.col_title"), key: "title", minWidth: 220,
+  { title: t("change_impact.col_title"), key: "title", minWidth: 220, sorter: true, sortOrder: so("title"),
     render: (r) => h("div", null, [h("div", { class: "cip-strong" }, r.title),
                                    h("div", { class: "cip-muted" }, r.target_label
                                      + (r.parameters.new_ip ? ` → ${r.parameters.new_ip}` : ""))]) },
-  { title: t("change_impact.f_scenario"), key: "scenario_type", width: 120,
+  { title: t("change_impact.f_scenario"), key: "scenario_type", width: 120, sorter: true, sortOrder: so("scenario_type"),
     render: (r) => t(`change_impact.scenario.${r.scenario_type}`) },
-  { title: t("change_impact.col_lifecycle"), key: "lifecycle", width: 110,
+  { title: t("change_impact.col_lifecycle"), key: "lifecycle", width: 110, sorter: true, sortOrder: so("lifecycle"),
     render: (r) => h(NTag, { size: "small", type: lifecycleType(r.lifecycle) },
                      { default: () => t(`change_impact.lifecycle.${r.lifecycle}`) }) },
   { title: t("change_impact.col_latest_run"), key: "latest_run", minWidth: 220,
@@ -124,9 +133,10 @@ const columns = computed<DataTableColumns<ChangePlan>>(() => [
           blockers: c.blockers ?? 0, review: c.review ?? 0, gaps: c.gaps ?? 0 })) : null,
       ]);
     } },
-  { title: t("change_impact.col_window"), key: "planned_start", width: 170,
+  { title: t("change_impact.col_window"), key: "planned_start", width: 170, sorter: true, sortOrder: so("planned_start"),
     render: (r) => (r.planned_start ? fmtDateTime(r.planned_start) : "—") },
-  { title: t("change_impact.col_created"), key: "created_at", width: 170, render: (r) => fmtDateTime(r.created_at) },
+  { title: t("change_impact.col_created"), key: "created_at", width: 170, render: (r) => fmtDateTime(r.created_at),
+    sorter: true, sortOrder: so("created_at") },
 ]);
 
 function rowProps(r: ChangePlan) {

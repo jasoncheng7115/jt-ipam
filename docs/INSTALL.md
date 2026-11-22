@@ -610,7 +610,7 @@ curl -X POST https://ipam.example.com/api/v1/audit/verify \
 
 ## 6. Upgrade
 
-One-shot upgrade via the unified script (git pull → backup → pip → alembic → build → restart):
+One-shot upgrade via the unified script (git pull → backup → pip → stop writes → baseline inventory → alembic → per-record check → build → restart):
 
 ```bash
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade
@@ -624,10 +624,14 @@ cd /opt/jt-ipam
 git pull
 sudo systemctl stop jt-ipam-backend
 sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/pip install -e backend
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; . /etc/jt-ipam/backend.env; set +a; .venv/bin/python -m app.cli.upgrade_verify snapshot --out /var/lib/jt-ipam/upgrade-checks/manual/before.json'
 sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/alembic -c backend/alembic.ini upgrade head
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; . /etc/jt-ipam/backend.env; set +a; .venv/bin/python -m app.cli.upgrade_verify compare --before /var/lib/jt-ipam/upgrade-checks/manual/before.json --report /var/lib/jt-ipam/upgrade-checks/manual/report.json'
 cd frontend && sudo -u jtipam pnpm install --frozen-lockfile && sudo -u jtipam pnpm run build
 sudo systemctl start jt-ipam-backend
 ```
+
+**Data check.** An in-place upgrade must not lose existing data. Before the migration the script stops writes (the backend and the jt-ipam timers) and records every location, rack, device placement, power and cabling record, the device–IP links and the permissions; after the migration it compares them **record by record and field by field** (not just counts; floor-plan files by checksum). Data problems that already existed are reported separately; only new ones fail. If anything is missing or changed the script stops, prints how to restore the backup it took, and **leaves the backend and timers stopped** so nothing writes on top of a damaged database. The inventory and the report (`/var/lib/jt-ipam/upgrade-checks/<time>/`) contain site data and are readable by the service account only (0600).
 
 ---
 

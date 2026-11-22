@@ -27,6 +27,8 @@ import {
 import { UsersIcon, DeleteIcon, PlusIcon, AdminIcon, EditIcon } from "@/icons";
 import { useTableQuickFilter } from "@/composables/useTableQuickFilter";
 import { useTablePagination } from "@/composables/useTablePagination";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 const pg = useTablePagination();
 const grantPg = useTablePagination();
 
@@ -166,14 +168,16 @@ function targetLabel(g: PermissionGrant): string {
   return labelMap.value[g.object_id] ?? g.object_id.slice(0, 8);
 }
 
-const userCols = computed<DataTableColumns<User>>(() => [
+// 權限摘要排序：先比角色數、再比直接授權筆數（沒有權限的排最前）
+const summaryRank = (u: User) => { const s = summary.value[u.id]; return s ? s.roles.length * 10000 + (s.grants || 0) : 0; };
+const userCols = computed<DataTableColumns<User>>(() => autoSort<User>([
   { title: t("cols.username"), key: "username", minWidth: 140, ellipsis: { tooltip: true },
     render: (u) => u.display_name ? `${u.username} (${u.display_name})` : u.username },
   { title: "Email", key: "email", minWidth: 160, ellipsis: { tooltip: true } },
   { title: t("cols.admin"), key: "is_admin", width: 90,
     render: (u) => u.is_admin ? h(NTag, { size: "small", type: "error" }, () => t("perm.superuser")) : "—" },
   // 權限：掛了哪些角色＋直接的物件授權幾筆（使用者 10-22：不用一個一個點開才知道）
-  { title: t("perm.col_summary"), key: "summary", minWidth: 220,
+  { title: t("perm.col_summary"), key: "summary", minWidth: 220, sorter: (a, b) => summaryRank(a) - summaryRank(b),
     render: (u) => {
       const s = summary.value[u.id];
       if (!s || (!s.roles.length && !s.grants)) return h("span", { style: "opacity:.45" }, t("perm.none"));
@@ -191,18 +195,21 @@ const userCols = computed<DataTableColumns<User>>(() => [
         { icon: () => h(NIcon, null, () => h(EditIcon)) }),
       default: () => t("common.edit"),
     }) },
-]);
+]));
 
-const grantCols = computed<DataTableColumns<PermissionGrant>>(() => [
-  { title: t("perm.col_type"), key: "object_type", width: 100, render: (r) => t(`perm.type_${r.object_type}`) },
-  { title: t("perm.col_target"), key: "object_id", minWidth: 140,
+const LEVEL_RANK: Record<string, number> = { read: 1, write: 2, admin: 3 };
+const targetText = (r: PermissionGrant) => (r.object_id === null ? t("perm.all") : targetLabel(r));
+const grantCols = computed<DataTableColumns<PermissionGrant>>(() => autoSort<PermissionGrant>([
+  { title: t("perm.col_type"), key: "object_type", width: 100, render: (r) => t(`perm.type_${r.object_type}`),
+    sorter: (a, b) => cmpNatural(t(`perm.type_${a.object_type}`), t(`perm.type_${b.object_type}`)) },
+  { title: t("perm.col_target"), key: "object_id", minWidth: 140, sorter: (a, b) => cmpNatural(targetText(a), targetText(b)),
     render: (r) => r.object_id === null ? h(NTag, { size: "small", type: "info" }, () => t("perm.all")) : targetLabel(r) },
-  { title: t("perm.col_level"), key: "level", width: 90,
+  { title: t("perm.col_level"), key: "level", width: 90, sorter: (a, b) => (LEVEL_RANK[a.level] ?? 0) - (LEVEL_RANK[b.level] ?? 0),
     render: (r) => h(NTag, { size: "small", type: r.level === "admin" ? "error" : r.level === "write" ? "warning" : "success" }, () => t(`perm.level_${r.level}`)) },
   { title: "", key: "actions", width: 50, align: "center", className: "col-actions",
     render: (r) => h(NButton, { size: "small", quaternary: true, type: "error", onClick: () => removeGrant(r.id) },
       { icon: () => h(NIcon, null, () => h(DeleteIcon)) }) },
-]);
+]));
 
 onMounted(async () => {
   await loadLists();

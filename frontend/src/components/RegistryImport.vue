@@ -108,6 +108,7 @@ import {
   type ImportPlan, type RdapNetworkInfo, type ImportResult, type RdapSource,
 } from "@/api/phase3";
 import { listSections } from "@/api/sections";
+import { autoSort } from "@/composables/useTableSort";
 
 const props = defineProps<{ source: RdapSource }>();
 const { t } = useI18n();
@@ -132,12 +133,12 @@ const hasInput = computed(() =>
 const whoisPlaceholder =
   "inetnum:  163.28.0.0 - 163.28.255.255\nnetname:  T-EDU.TW-NET\ncountry:  TW\ndescr:    …";
 
-const planCols = computed(() => [
+const planCols = computed(() => autoSort<ImportPlan>([
   { title: "CIDR", key: "cidr", width: 190 },
   { title: t("import.netname"), key: "netname" },
   { title: t("import.description"), key: "description" },
   { title: t("import.country"), key: "country", width: 90 },
-]);
+]));
 
 async function loadSections() {
   try {

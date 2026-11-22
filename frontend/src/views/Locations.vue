@@ -3,6 +3,10 @@ import { useAuthStore } from "@/stores/auth";
 const _authBtn = useAuthStore();
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
+import { useEntityLinks } from "@/composables/useEntityLinks";
+import { useFloorplanReplace } from "@/composables/useFloorplanReplace";
+const replacer = useFloorplanReplace();
 import { useTablePagination } from "@/composables/useTablePagination";
 import {
   NCard, NDataTable, NSpace, NIcon, NButton, NModal, NForm, NFormItem,
@@ -38,8 +42,16 @@ function pickFp() { fpInput.value?.click(); }
 async function onFpFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (!f || !editing.value) return;
+  // 換底圖（原本就有圖）：機櫃座標保留或清除要明確選（新圖比例可能不同）
+  let choice: "keep" | "clear" | null = "keep";
+  if (fpHas.value && (editing.value.rack_count ?? 0) > 0) choice = await replacer.ask();
+  if (choice === null) { if (fpInput.value) fpInput.value.value = ""; return; }
   fpBusy.value = true;
-  try { await uploadFloorplan(editing.value.id, f); await loadFp(editing.value.id); msg.success(t("common.ok")); }
+  try {
+    await uploadFloorplan(editing.value.id, f);
+    if (choice === "clear") await replacer.clearPositions(editing.value.id);
+    await loadFp(editing.value.id); msg.success(t("common.ok"));
+  }
   catch (err: any) { msg.error(err?.response?.data?.detail ?? t("errors.server")); }
   finally { fpBusy.value = false; if (fpInput.value) fpInput.value.value = ""; }
 }
@@ -64,9 +76,9 @@ const displayRows = computed(() => pin.sortPinnedFirst(filteredRows.value));
 const mapPoints = computed(() => rows.value
   .filter((r) => r.latitude != null && r.longitude != null)
   .map((r) => ({ id: r.id, name: r.name, lat: Number(r.latitude), lng: Number(r.longitude) })));
+// 名稱與地圖點選開機房詳情；編輯另有按鈕（交接包 physical-v1.2：機房是查看機櫃、裝置、IP 的入口）
 function onMapSelect(id: string) {
-  const r = rows.value.find((x) => x.id === id);
-  if (r) openEdit(r);
+  void router.push({ name: "location-detail", params: { id } });
 }
 const loading = ref(false);
 const show = ref(false);
@@ -131,7 +143,7 @@ async function submit() {
   try {
     const payload = {
       name: form.value.name,
-      address: form.value.address || undefined,
+      address: form.value.address?.trim() || null,
       description: form.value.description ?? "",
       latitude: form.value.latitude,
       longitude: form.value.longitude,
@@ -174,7 +186,8 @@ function iconAction(icon: any, label: string, onClick: () => void, type?: any) {
 }
 const allCols = computed<DataTableColumns<Location>>(() => [
   { type: "selection" },
-  { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
+  { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name),
+    render: (r) => links.location(r.id, r.name) },
   { title: t("cols.unit"), key: "customer_name", width: 140, ellipsis: { tooltip: true },
     render: (r) => (r as any).customer_name ?? "—" },
   { title: t("cols.coords"), key: "coords", width: 150,
@@ -206,8 +219,15 @@ const allCols = computed<DataTableColumns<Location>>(() => [
 const cols = computed<DataTableColumns<Location>>(() =>
   orderColumns(allCols.value.filter((c: any) => c.type === "selection" || c.key === "actions" || visibleKeys.value.includes(c.key))),
 );
-onMounted(() => {
-  void refresh();
+const router = useRouter();
+const route = useRoute();
+const links = useEntityLinks(router);
+onMounted(async () => {
+  await refresh();
+  // 從機房詳情按「編輯」過來（?edit=<id>）：直接開編輯視窗
+  const editId = String(route.query.edit ?? "");
+  const r = editId ? rows.value.find((x) => x.id === editId) : undefined;
+  if (r) { openEdit(r); void router.replace({ query: {} }); }
   void ensureCustomerOptsLoaded();
   getMapProvider().then((p) => { mapProvider.value = p; });
 });

@@ -76,6 +76,7 @@ CATEGORY: dict[str, str] = {
     "cable_terminations": "core",
     "device_ports": "core",
     "device_power_ports": "core",
+    "device_power_profiles": "core",
     "power_panels": "core",
     "power_feeds": "core",
     "power_outlets": "core",

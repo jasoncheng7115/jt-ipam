@@ -15,13 +15,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import CurrentUser, require_object_perm
+from app.api.v1.dependencies import CurrentUser, require_global_read, require_object_perm
 from app.api.v1.write_guards import require_create, require_move, require_visible
 from app.core.audit import append_audit
 from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.sqlin import in_values
-from app.core.ui_error import detail_of
+from app.core.ui_error import detail_of, ui_detail
 from app.models.location import Location, Rack
 from app.schemas.base import Paginated, StrictModel
 from app.schemas.location import (
@@ -106,16 +106,14 @@ async def list_locations(
     rack_counts: dict[Any, int] = {}
     dev_counts: dict[Any, int] = {}
     if loc_ids:
-        from app.models.device import Device
         from app.models.location import Rack
         rack_counts = dict((await session.execute(  # type: ignore[arg-type]
             select(Rack.location_id, func.count()).where(in_values(Rack.location_id, loc_ids))
             .group_by(Rack.location_id)
         )).all())
-        dev_counts = dict((await session.execute(  # type: ignore[arg-type]
-            select(Device.location_id, func.count()).where(in_values(Device.location_id, loc_ids))
-            .group_by(Device.location_id)
-        )).all())
+        # 裝置數用有效位置（機櫃的地點優先），跟機房詳情同一套（交接包 physical-v1.2 第 9 節）
+        from app.services.location_summary import effective_device_counts
+        dev_counts = await effective_device_counts(session, _user, loc_ids)
     # 所屬單位名稱
     cust_names: dict[Any, str] = {}
     cust_ids = [r.customer_id for r in rows if r.customer_id]
@@ -151,6 +149,64 @@ async def get_location(
     if obj is None:
         raise HTTPException(404, detail="Location not found")
     return LocationRead.model_validate(obj)
+
+
+# ── 機房詳情（交接包 physical-v1.2 設計圖 03、07）──
+
+@router.get("/locations/{location_id}/summary",
+            dependencies=[Depends(require_object_perm("location", "read", path_param="location_id"))])
+async def location_summary(
+    location_id: uuid.UUID, user: CurrentUser, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """機櫃、裝置（有效位置）、關聯 IP、規劃電力、待處理資料。只算這個帳號看得到的。"""
+    from app.services import location_summary as ls
+    if await session.get(Location, location_id) is None:
+        raise HTTPException(404, detail="Location not found")
+    return await ls.summary(session, user, await ls.scope(session, user, location_id))
+
+
+@router.get("/locations/{location_id}/devices",
+            dependencies=[Depends(require_object_perm("location", "read", path_param="location_id"))])
+async def location_devices(
+    location_id: uuid.UUID, user: CurrentUser, session: Annotated[AsyncSession, Depends(get_session)],
+    filter: Literal["all", "racked", "unracked", "conflict", "rack_location_unset"] = Query("all"),
+    q: str | None = Query(None, max_length=128),
+    page: int = Query(1, ge=1, le=10_000), page_size: int = Query(50, ge=1, le=500),
+    sort: Literal["name", "rack", "status", "ips"] | None = Query(None),
+    order: Literal["asc", "desc"] = Query("asc"),
+) -> dict[str, Any]:
+    from app.services import location_summary as ls
+    if await session.get(Location, location_id) is None:
+        raise HTTPException(404, detail="Location not found")
+    sc = await ls.scope(session, user, location_id)
+    return await ls.device_rows(session, user, sc, filt=filter, q=q, page=page, page_size=page_size,
+                                sort=sort, order=order)
+
+
+@router.get("/locations/{location_id}/power-summary",
+            dependencies=[Depends(require_global_read),
+                          Depends(require_object_perm("location", "read", path_param="location_id"))])
+async def location_power(
+    location_id: uuid.UUID, user: CurrentUser, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """機房內裝置的規劃負載與用到的迴路。迴路是全域資料（電力模組要全域讀取），全迴路的數字也只給有全域讀取的帳號。"""
+    from app.services import location_summary as ls
+    if await session.get(Location, location_id) is None:
+        raise HTTPException(404, detail="Location not found")
+    return await ls.power(session, await ls.scope(session, user, location_id))
+
+
+@router.get("/locations/{location_id}/cabling",
+            dependencies=[Depends(require_global_read),
+                          Depends(require_object_perm("location", "read", path_param="location_id"))])
+async def location_cabling(
+    location_id: uuid.UUID, user: CurrentUser, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """機房的已接線纜線：房內、跨房、對端位置未明（以纜線 id 去重）。"""
+    from app.services import location_summary as ls
+    if await session.get(Location, location_id) is None:
+        raise HTTPException(404, detail="Location not found")
+    return await ls.cabling(session, user, await ls.scope(session, user, location_id))
 
 
 @router.post("/locations", response_model=LocationRead, status_code=201)
@@ -322,6 +378,29 @@ async def delete_floorplan(
         await session.commit()
 
 
+async def _layout_revision(session: AsyncSession, location_id: uuid.UUID) -> str:
+    """平面配置目前的版本：底圖＋這個機房每個機櫃的座標算出來（不另存欄位）。兩個入口（機房詳情、機櫃頁）
+    編輯同一份資料，存檔時比對這個值，別人剛存過就不會被靜靜蓋掉（交接包 physical-v1.2 第 10 節）。"""
+    import hashlib
+    import json
+    loc = await session.get(Location, location_id)
+    rows = (await session.execute(
+        select(Rack.id, Rack.pos_x, Rack.pos_y, Rack.pos_rot, Rack.pos_w, Rack.pos_h)
+        .where(Rack.location_id == location_id).order_by(Rack.id))).all()
+    data = [loc.floor_plan_path if loc else None, [[str(r[0]), *[None if v is None else str(v) for v in r[1:]]] for r in rows]]
+    return hashlib.sha256(json.dumps(data).encode()).hexdigest()[:32]
+
+
+@router.get("/locations/{location_id}/layout",
+            dependencies=[Depends(require_object_perm("location", "read", path_param="location_id"))])
+async def get_layout_revision(
+    location_id: uuid.UUID, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    if await session.get(Location, location_id) is None:
+        raise HTTPException(404, detail="Location not found")
+    return {"revision": await _layout_revision(session, location_id)}
+
+
 @router.put("/locations/{location_id}/rack-positions",
             dependencies=[Depends(require_object_perm("location", "write", path_param="location_id"))])
 async def set_rack_positions(
@@ -330,10 +409,16 @@ async def set_rack_positions(
     user: CurrentUser,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """設定此機房內機櫃在平面圖上的座標（0..1）。positions 視為「完整擺放狀態」：
     清單內的設座標，清單外（此機房的其他機櫃）一律清空座標 → 對應前端的「移除擺放」。
-    只動屬於此 location 的機櫃。"""
+    只動屬於此 location 的機櫃。帶 revision 時先比對：別人剛存過 → 409，不蓋掉。"""
+    if payload.revision is not None:
+        # 鎖住機房那一列：兩筆存檔排隊，比對才準
+        await session.execute(select(Location.id).where(Location.id == location_id).with_for_update())
+        if payload.revision != await _layout_revision(session, location_id):
+            raise HTTPException(409, detail=ui_detail(
+                "floorplan_conflict", "平面配置剛被別人改過，請重新載入後再調整"))
     racks = {
         r.id: r for r in (await session.execute(
             select(Rack).where(Rack.location_id == location_id)
@@ -364,7 +449,7 @@ async def set_rack_positions(
             request_id=getattr(request.state, "request_id", None),
         )
         await session.commit()
-    return {"updated": updated}
+    return {"updated": updated, "revision": await _layout_revision(session, location_id)}
 
 
 # ─────────────────── Racks ───────────────────

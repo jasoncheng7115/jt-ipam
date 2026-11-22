@@ -991,17 +991,28 @@ async def list_racks(
 
 
 async def list_locations(
-    session: AsyncSession, *, user: User, limit: int = 200,
+    session: AsyncSession, *, user: User, limit: int = 200, location_id: str | None = None,
 ) -> dict[str, Any]:
     """列出地點（機房）：地址、座標、單位、有沒有平面圖、機櫃數、裝置數。
 
     可見性推進 SQL：以前先 LIMIT 再過濾，受限帳號看得到的地點只要排在後面就消失。
+    裝置數跟機房詳情同一套有效位置（機櫃的地點優先）。帶 location_id 時多回機房詳情的摘要
+    （未入櫃、位置衝突、規劃電力），跟畫面同一份計算（交接包 physical-v1.2）。
     """
+    from app.services import location_summary as ls
     limit = max(1, min(int(limit), 500))
     stmt = select(Location)
     vis = await visible_ids(session, user=user, object_type="location")
     if vis is not None:
         stmt = stmt.where(in_values(Location.id, vis) if vis else sa_false())
+    summary = None
+    if location_id:
+        lid = _as_uuid(location_id, "location_id")
+        loc = await session.get(Location, lid)
+        if loc is None or (vis is not None and lid not in vis):
+            raise IPAMToolError("location not found or not visible to this user")
+        summary = {"name": loc.name, **await ls.summary(session, user, await ls.scope(session, user, lid))}
+        stmt = stmt.where(Location.id == lid)
     total = await _count(session, stmt)
     rows = list((await session.execute(stmt.order_by(Location.name).limit(limit))).scalars().all())
     ids = [loc.id for loc in rows]
@@ -1011,9 +1022,7 @@ async def list_locations(
         rack_n = {lid: int(n) for lid, n in (await session.execute(
             select(Rack.location_id, func.count()).where(in_values(Rack.location_id, ids))
             .group_by(Rack.location_id))).all()}
-        dev_n = {lid: int(n) for lid, n in (await session.execute(
-            select(Device.location_id, func.count()).where(in_values(Device.location_id, ids))
-            .group_by(Device.location_id))).all()}
+        dev_n = await ls.effective_device_counts(session, user, ids)
     custs = await _name_map(session, Customer.name, [loc.customer_id for loc in rows])
     out = [{
         "id": str(loc.id), "name": loc.name, "address": loc.address,
@@ -1025,7 +1034,8 @@ async def list_locations(
         "has_floor_plan": bool(loc.floor_plan_path),
         "description": loc.description,
     } for loc in rows]
-    return {"locations": out, "count": len(out), **_page(total, len(out))}
+    return {"locations": out, "count": len(out), **_page(total, len(out)),
+            **({"summary": summary} if summary is not None else {})}
 
 
 async def list_devices(
@@ -3962,11 +3972,11 @@ async def _cable_ends(session: AsyncSession, cable_ids: list[Any]) -> dict[Any, 
 
 async def cable_trace(session: AsyncSession, *, user: User, cable_id: str) -> dict[str, Any]:
     """追蹤一條纜線：兩端接到哪台裝置的哪個埠，以及多跳路徑（沿纜線走、穿過跳接面板的前後埠，
-    直到兩邊的終點；與畫面「追蹤」同一套走法 —— 直接呼叫 /ports/{id}/trace 的實作）。"""
+    直到兩邊的終點；與畫面「追線」同一套走法 —— services/port_trace，第一段固定是這條線）。"""
     from fastapi import HTTPException
 
-    from app.api.v1.endpoints.physical import trace_port
     from app.models.physical import Cable, CableTermination
+    from app.services.port_trace import trace
     c = await session.get(Cable, _as_uuid(cable_id, "cable_id"))
     if c is None:
         raise IPAMToolError("cable not found")
@@ -3978,7 +3988,7 @@ async def cable_trace(session: AsyncSession, *, user: User, cable_id: str) -> di
         if t is None or t.object_type != "device_port":
             return None
         try:
-            return await trace_port(t.object_id, user, session)
+            return await trace(session, user, t.object_id, first_cable_id=c.id)
         except HTTPException:
             return None
 
@@ -4017,11 +4027,34 @@ async def cable_trace(session: AsyncSession, *, user: User, cable_id: str) -> di
                   "status": c.status, "description": c.description},
         "terminations": ends.get(c.id, []),
         "path": path[:60], "path_truncated": len(path) > 60,
+        # 為什麼停下來（end＝走到底；unpaired_panel_port、ambiguous、no_connected_cable…見 services/port_trace）
+        "stop_reasons": {side: tr.get("stop_reason") for side, tr in (("A", ta), ("B", tb)) if tr},
     }
 
 
+async def _resolve_feeds(session: AsyncSession, refs: Any) -> list[uuid.UUID]:
+    """失效模擬的迴路：id、迴路名稱或「配電盤 / 名稱」（不分大小寫）。同名多條要講清楚是哪一條，不任選。"""
+    from app.models.physical import PowerFeed, PowerPanel
+    items = [refs] if isinstance(refs, str) else list(refs or [])
+    if not items or len(items) > 20:
+        raise IPAMToolError("fail_feeds needs 1 to 20 feeds")
+    rows = (await session.execute(select(PowerFeed.id, PowerFeed.name, PowerPanel.name.label("panel"))
+                                  .join(PowerPanel, PowerPanel.id == PowerFeed.panel_id))).all()
+    out: list[uuid.UUID] = []
+    for ref in items:
+        key = str(ref).strip().lower()
+        hits = [r.id for r in rows if key in (str(r.id), r.name.lower(), f"{r.panel} / {r.name}".lower())]
+        if not hits:
+            raise IPAMToolError(f"feed not found: {ref}")
+        if len(hits) > 1:
+            names = sorted(f"{r.panel} / {r.name}" for r in rows if r.id in hits)
+            raise IPAMToolError(f"feed name is ambiguous: {ref}; use one of {names}")
+        out.append(hits[0])
+    return out
+
+
 async def list_power(
-    session: AsyncSession, *, user: User, limit: int = 200, rack_id: str | None = None,
+    session: AsyncSession, *, user: User, limit: int = 200, rack_id: str | None = None, fail_feeds: Any = None,
 ) -> dict[str, Any]:
     """電力清單：配電盤（所在地點）、饋線（屬於哪個配電盤、供哪個機櫃，電壓/電流/相位）、插座（掛在哪條饋線）、
     裝置電源埠（裝置的 PSU 接到哪個插座 —— 畫面「設備接電」用的是這個關聯，不是插座上的 device）。
@@ -4072,6 +4105,22 @@ async def list_power(
     dev_names = await _names_for_ids(session, Device, {pp.device_id for pp in pports}
                                    | {pp.device_id for lst in by_outlet.values() for pp in lst}
                                    | {o.device_id for o in outlets})
+    # 規劃電力（issue #54，交接包 physical-v1.2；畫面上的迴路表格、機櫃電力卡片是同一份計算）。
+    # 總數由後端完整計算，不受這裡的 limit 影響；AI 不要自己從截斷的清單加總
+    from app.services.power_scenario import preview_failure
+    from app.services.power_summary import feed_summaries
+    from app.services.power_summary import rack_summary as _rack_summary
+    loads = await feed_summaries(session, feeds)
+    rack_summary = None
+    if rack_id:
+        rs = await _rack_summary(session, _as_uuid(rack_id, "rack_id"))
+        rack_summary = {k: rs[k] for k in ("known_total_w", "assigned_w", "unassigned_w", "allocation_unknown_w",
+                                           "completeness", "unknown_devices", "partial")}
+        rack_summary["feeds"] = [{k: f[k] for k in ("name", "panel", "rack_allocated_w", "full_allocated_w",
+                                                    "planning_capacity_w", "utilization_pct", "status", "partial")}
+                                 for f in rs["feeds"]]
+        rack_summary["devices"] = [{k: d[k] for k in ("name", "included", "exclude_reason", "load_w", "issues",
+                                                      "allocations")} for d in rs["devices"]]
     return {
         "scope": scope, "truncated": any(t > n for t, n in zip(
             totals, (len(panels), len(feeds), len(outlets), len(pports)), strict=True)),
@@ -4083,7 +4132,18 @@ async def list_power(
             "id": str(f.id), "name": f.name, "panel": panel_names.get(f.panel_id), "rack": rack_names.get(f.rack_id),
             "voltage_v": f.voltage_v, "amperage_a": f.amperage_a, "phase": f.phase, "supply_type": f.supply_type,
             "description": f.description,
+            **{k: loads.get(f.id, {}).get(k) for k in ("planning_capacity_w", "warning_pct", "full_allocated_w",
+                                                       "utilization_pct", "status", "partial", "unknown_devices")},
         } for f in feeds],
+        # 帶 rack_id 時：已知小計、完整度、未接線、分配未知、各迴路本櫃份額與全迴路、每台裝置的分配
+        **({"rack_summary": rack_summary} if rack_summary is not None else {}),
+        # 帶 fail_feeds 時：失效模擬（畫面「失效模擬」同一份計算，唯讀）
+        **({"failure_preview": await preview_failure(session, await _resolve_feeds(session, fail_feeds))}
+           if fail_feeds else {}),
+        "semantics": ("All loads are planning values, not live measurement. load_w is the whole device's planning "
+                      "input, counted once; max_watts is a PSU rating, never a load. null means unknown, not 0. "
+                      "partial=true means some loads or shares are unknown, so totals are a lower bound. "
+                      "Different feeds do not prove independent upstream UPS or panels."),
         "outlets": [{
             "id": str(o.id), "label": o.label, "feed": feed_names.get(o.feed_id), "rack": rack_names.get(o.rack_id),
             "description": o.description,
@@ -5238,8 +5298,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     "list_racks": {
         "fn": list_racks,
         "description": (
-            "Racks and shelving units with location, device count, used/free rows and each device's position "
-            "(u_position/u_size, rack_slot/rack_vslot on a 60-cell grid). Shelf kinds (shelf, wire_shelf, "
+            "Racks and shelving units with location, device count, used/free rows and each device's position. Shelf kinds (shelf, wire_shelf, "
             "wood_shelf, angle_shelf, kallax) count LEVELS not U: use rows_label and rows_with_space before "
             "saying a row is full."),
         "parameters": {
@@ -5252,11 +5311,11 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "list_locations": {
         "fn": list_locations,
-        "description": ("List locations (地點／機房): address, latitude/longitude, customer, has_floor_plan, "
-                        "description, rack_count, device_count. Replies carry total and truncated."),
+        "description": ("List locations (地點／機房) with rack and device counts. location_id adds its "
+                        "summary: unracked devices, placement conflicts, planning power."),
         "parameters": {
             "type": "object",
-            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}},
+            "properties": {"location_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}},
         },
     },
     "list_devices": {
@@ -5359,8 +5418,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "VPN tunnels (WireGuard / IPsec / OpenVPN) from firewalls or entered by hand: both ends, algorithms, "
             "status. site_to_site pairing is reliable only when pairing_method=wireguard_pubkey; ipsec_endpoint is best "
-            "effort. contacts, and "
-            "carried_by_circuits (circuits whose WAN addresses contain an endpoint)."),
+            "effort."),
         "parameters": {"type": "object", "properties": {
             "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
@@ -6012,8 +6070,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "fn": list_power,
         "description": (
             "Power: panels, feeds, outlets with the device power supplies plugged in, and device power ports. "
-            "rack_id for one rack."),
-        "parameters": {"type": "object", "properties": {"rack_id": {"type": "string", "description": "Restrict to one rack"}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
+            "rack_id for one rack. fail_feeds (ids or names) simulates those feeds losing power."),
+        "parameters": {"type": "object", "properties": {"rack_id": {"type": "string", "description": "Restrict to one rack"}, "fail_feeds": {"type": "array", "items": {"type": "string"}}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
     "list_ocs_computers": {
         "fn": list_ocs_computers,

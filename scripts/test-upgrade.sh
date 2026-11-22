@@ -127,6 +127,18 @@ dex bash -c 'set -a; . /etc/jt-ipam/backend.env; set +a;
        VALUES (gen_random_uuid(), '\''upgrade-probe'\'', '\''written before the upgrade'\'', now(), now());"' \
   >/dev/null 2>&1 && pass "probe row written" || fail "could not write the probe row"
 
+# 交接包 physical-v1.2 UPGRADE.md 的固定案例：2 配電盤、3 迴路、9 插座、8 纜線、跨機房、雙電源、
+# 正背面同一 U、空線標、已除役線。升級要逐筆比對這些資料，所以先在「上一版」建好。
+# fixture 在新版的 repo 裡（掛進來的 /srv/jt-ipam-origin）；沒有掛載（從遠端 clone）就略過。
+FIXTURE=/srv/jt-ipam-origin/scripts/upgrade-fixture.sql
+if dex test -r "$FIXTURE"; then
+  say "Loading the physical fixture into the old version"
+  dex bash -c 'set -a; . /etc/jt-ipam/backend.env; set +a;
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h "${POSTGRES_HOST:-127.0.0.1}" -U "$POSTGRES_USER" \
+      -d "$POSTGRES_DB" -q -f '"$FIXTURE" >/tmp/$NAME.fixture.log 2>&1 \
+    && pass "physical fixture loaded" || { fail "could not load the fixture"; tail -20 /tmp/$NAME.fixture.log; }
+fi
+
 say "Running scripts/jt-ipam.sh upgrade (the part an existing site does)"
 if dex env DEBIAN_FRONTEND=noninteractive bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade \
         >/tmp/$NAME.upgrade.log 2>&1; then
@@ -136,6 +148,17 @@ else
 fi
 
 say "Checking the result the way the site's admin would"
+
+# 逐筆核對（UPGRADE.md P0）：升級腳本要跑過、要通過，報告只給授權的人看（0600）
+if grep -q "Upgrade data check passed" "/tmp/$NAME.upgrade.log"; then
+  pass "upgrade data check passed (every record compared by id and field)"
+  grep -E "^\s+\[(OK |ERR|pre)\]" "/tmp/$NAME.upgrade.log" | sed 's/^/        /'
+else
+  fail "upgrade data check did not pass -- see the upgrade log"
+  grep -E "upgrade data check|\[ERR\]|RESULT" "/tmp/$NAME.upgrade.log" | tail -20
+fi
+rep_mode="$(dex sh -c 'stat -c %a /var/lib/jt-ipam/upgrade-checks/*/report.json 2>/dev/null | tail -1')"
+[[ "$rep_mode" == "600" ]] && pass "check report is private (0600)" || fail "check report mode is '${rep_mode:-missing}', expected 600"
 
 after_ver="$(dex sh -c "grep -m1 '\"version\"' /opt/jt-ipam/frontend/package.json" | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
 if [[ "$after_ver" == "$TO_VER" ]]; then

@@ -7,7 +7,7 @@ import { buildReport, type ReportInput } from "../investigateReport";
 const input: ReportInput = {
   ip: "192.0.2.10",
   generatedAt: "2026-08-07 10:00:00",
-  summary: [["主機名稱", "revproxy1"], ["子網路", "192.0.2.0/24（服務網路區段）"]],
+  summary: [["主機名稱", "proxy-01"], ["子網路", "192.0.2.0/24（服務網路區段）"]],
   conflicts: ["各來源回報的主機名稱不一致（3 種）"],
   sections: [
     { title: "DNS（2）", lines: ["A a.example.com", "A b.example.com"] },
@@ -26,7 +26,7 @@ describe("調查報告", () => {
     const s = buildReport(input, "md");
     expect(s).toContain("# 192.0.2.10 調查報告");
     expect(s).toContain("## DNS（2）");
-    expect(s).toContain("revproxy1");
+    expect(s).toContain("proxy-01");
     expect(s).toContain("反向代理");
   });
 

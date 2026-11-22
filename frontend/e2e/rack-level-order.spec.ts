@@ -104,10 +104,12 @@ test("種類排在所有取決於它的欄位上面（#35）", async ({ page }) 
   // 只比對欄位標籤：說明文字裡也有「層數」這些字，hasText 會抓到別的欄位
   const item = (label: string) => page.locator(".n-form-item").filter({
     has: page.locator(".n-form-item-label", { hasText: new RegExp(`^\\s*${label}\\s*$`) }) }).first();
-  const kind = (await item("種類").boundingBox())!;
+  // 用 poll 量到穩定為止：對話框開啟動畫中是縮放的，量到的位置會互相重疊
   for (const label of ["層編號方向", "層數", "層板厚度"]) {
-    const b = (await item(label).boundingBox())!;
-    expect(kind.y + kind.height, `種類（底 ${kind.y + kind.height}）要在「${label}」（頂 ${b.y}）上面`)
-      .toBeLessThanOrEqual(b.y);
+    await expect.poll(async () => {
+      const kind = (await item("種類").boundingBox())!;
+      const b = (await item(label).boundingBox())!;
+      return b.y - (kind.y + kind.height);
+    }, { message: `種類要在「${label}」上面` }).toBeGreaterThanOrEqual(0);
   }
 });

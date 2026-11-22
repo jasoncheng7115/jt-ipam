@@ -96,7 +96,7 @@ sudo systemctl reload nginx
 sudo ./scripts/generate-self-signed-cert.sh \
     --out-dir /etc/jt-ipam/tls \
     --cn ipam.local \
-    --san "DNS:ipam.local,IP:192.168.1.10"
+    --san "DNS:ipam.local,IP:192.168.123.10"
 
 # 編輯 /etc/nginx/sites-available/jt-ipam，把 ssl_certificate 路徑改為：
 #   ssl_certificate     /etc/jt-ipam/tls/server.crt;
@@ -139,7 +139,7 @@ CORS_ORIGINS=https://ipam.local:8443
 sudo ./scripts/generate-self-signed-cert.sh \
     --out-dir /etc/jt-ipam/tls \
     --cn ipam.local \
-    --san "DNS:ipam.local,DNS:ipam,IP:192.168.1.10" \
+    --san "DNS:ipam.local,DNS:ipam,IP:192.168.123.10" \
     --days 1825 \
     --owner root:jtipam
 ```

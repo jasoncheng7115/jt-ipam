@@ -45,6 +45,7 @@ import { sourceLabel } from "@/utils/sourceLabel";
 import { daysSince, differsFrom, reporterLabel } from "@/utils/hostnameReports";
 import { useCustomers } from "@/composables/useCustomers";
 import ConsoleEgressSelect from "@/components/ConsoleEgressSelect.vue";
+import CustomFieldInputs from "@/components/CustomFieldInputs.vue";
 import { virtTagText } from "@/utils/virt";
 import { useChangeLogDim } from "@/composables/useChangeLogDim";
 import { useRouter, type RouteLocationRaw } from "vue-router";
@@ -319,6 +320,12 @@ const props = defineProps<{
   // inline：當成獨立頁面內容渲染（不包 n-modal）；給 IPDetail 頁用
   inline?: boolean;
 }>();
+// 自訂欄位：定義沒載到就不送（不清掉既有的值）
+const cfRef = ref<InstanceType<typeof CustomFieldInputs> | null>(null);
+function cfPart(): { custom_fields?: Record<string, unknown> } {
+  const cf = cfRef.value?.payload();
+  return cf === undefined ? {} : { custom_fields: cf };
+}
 
 const emit = defineEmits<{
   (e: "update:show", v: boolean): void;
@@ -987,6 +994,20 @@ async function save() {
         customer_id: form.value.customer_id ?? null,
         jump_host_id: form.value.jump_host_id ?? null,
         device_id: form.value.device_id ?? null,
+        // 新增視窗上看得到的其餘設定：以前只送上面那幾欄，這些選了也不會存（2026-11-21）
+        console_agent_id: form.value.console_agent_id ?? null,
+        excluded_probes: excludedProbes.value,
+        liveness_from_device: form.value.liveness_from_device,
+        ptr_ignore: form.value.ptr_ignore,
+        ssh_enabled: form.value.ssh_enabled,
+        sftp_enabled: form.value.sftp_enabled,
+        rdp_enabled: form.value.rdp_enabled,
+        vnc_enabled: form.value.vnc_enabled,
+        novnc_enabled: form.value.novnc_enabled,
+        bmc_enabled: form.value.bmc_enabled,
+        rustdesk_enabled: form.value.rustdesk_enabled,
+        is_dhcp_server: form.value.is_dhcp_server,
+        ...cfPart(),
       });
       msg.success(t("common.ok"));
       emit("created", created);
@@ -1019,6 +1040,7 @@ async function save() {
       rustdesk_enabled: form.value.rustdesk_enabled,
       is_dhcp_server: form.value.is_dhcp_server,
       liveness_from_device: form.value.liveness_from_device,
+      ...cfPart(),
     };
     // 裝置群組：只有管理員能改、而且只在真的改了才送（一般使用者送了會被 403 擋下整筆）。
     // 共用給群組的 IP，裝置欄由後端跟著代表裝置走，這裡不送。
@@ -1940,6 +1962,7 @@ async function remove() {
               <span style="font-size: 11px; opacity: .7">{{ t("addresses.is_dhcp_server_hint") }}</span>
             </n-space>
           </n-form-item>
+          <CustomFieldInputs ref="cfRef" object-type="ip" :initial="isCreate ? null : (props.address?.custom_fields ?? null)" />
         </n-form>
       </div>
 

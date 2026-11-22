@@ -84,7 +84,7 @@ async def test_one_notice_per_certificate_after_the_batch_goes_quiet(db_session,
 async def test_separate_certificates_and_a_trickle_that_never_stops(db_session, sent) -> None:
     now = datetime.now(UTC)
     a, b = (f"{x}{uuid.uuid4().hex[:6]}.example.com" for x in "ab")
-    await digest.record(db_session, cert=a, fingerprint="FA", target="ipam2", service="nginx", source="agent",
+    await digest.record(db_session, cert=a, fingerprint="FA", target="ipam-01", service="nginx", source="agent",
                         at=now - timedelta(minutes=30))
     await digest.record(db_session, cert=b, fingerprint="FB", target="fw1", service="opnsense", source="push",
                         at=now - timedelta(minutes=30))

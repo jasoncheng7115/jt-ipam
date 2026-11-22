@@ -31,6 +31,8 @@ export async function getAddress(id: string): Promise<IPAddress> {
 }
 
 export interface IPAddressUpdate {
+  /** 自訂欄位（整份取代；只帶目前有定義的欄位） */
+  custom_fields?: Record<string, unknown>;
   /** 主控台的連線出口（issue #24）：空＝沿用所屬子網路；跳板與掃描代理擇一 */
   jump_host_id?: string | null;
   console_agent_id?: string | null;
@@ -84,6 +86,13 @@ export interface IPAddressCreate {
   /** 主控台的連線出口（issue #24）：空＝沿用所屬子網路 */
   jump_host_id?: string | null;
   console_agent_id?: string | null;
+  // 新增視窗跟編輯一樣顯示的設定（以前新增時沒送，選了也不會存；2026-11-21）
+  excluded_probes?: string[];
+  liveness_from_device?: boolean;
+  ptr_ignore?: boolean;
+  ssh_enabled?: boolean; sftp_enabled?: boolean; rdp_enabled?: boolean; vnc_enabled?: boolean;
+  novnc_enabled?: boolean; bmc_enabled?: boolean; rustdesk_enabled?: boolean; is_dhcp_server?: boolean;
+  custom_fields?: Record<string, unknown>;
 }
 
 export async function createAddress(payload: IPAddressCreate): Promise<IPAddress> {

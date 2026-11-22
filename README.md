@@ -1,4 +1,4 @@
-# jt-ipam v1.0.22
+# jt-ipam v1.0.23
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -110,7 +110,7 @@ if which one is unclear, create nothing**.
 For example:
 - `10.1.1.5` falls inside both `10.0.0.0/8` and `10.1.1.0/24` → it goes into the **smaller**
   `10.1.1.0/24`.
-- Tenants A and B **each have their own `192.168.1.0/24`** → there is no way to tell whose
+- Tenants A and B **each have their own `192.168.123.0/24`** → there is no way to tell whose
   machine this is, so **nothing is created**. Filing a record under the wrong tenant is worse
   than having no record.
 - The address is inside no existing subnet → nothing is created (subnets are never invented).
@@ -187,7 +187,7 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts
 
 The script installs `postgresql-16` / `python3.12` / `nginx` / `redis` (plus `fonts-noto-cjk`, the Chinese / Japanese font embedded into PDF reports), creates the `jtipam` system account and PG role, generates keys into `/etc/jt-ipam/backend.env`, runs `alembic upgrade head`, builds the frontend, and enables `jt-ipam-backend.service`.
 
-Upgrade an existing install with `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade`: **the script runs `git pull` itself**, then backup → deps → alembic → build → restart. See [`docs/INSTALL.md`](docs/INSTALL.md).
+Upgrade an existing install with `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade`: **the script runs `git pull` itself**, then backup → deps → stop writes and record a baseline → alembic → compare every record with the baseline (stops and keeps writes off if anything was lost or changed) → build → restart. See [`docs/INSTALL.md`](docs/INSTALL.md).
 
 > **Coming from 0.5.170 or earlier, run `upgrade` twice.** The upgrade script is itself updated by the `git pull`, but that run is still driven by the old copy (from 0.5.171 it hands over to the new one after pulling). Afterwards, `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh doctor` will confirm the result and print a fix for anything it cannot verify.
 

@@ -146,6 +146,7 @@ import { apiErrMsg } from "@/api/client";
 import { DeleteIcon, EditIcon, PlusIcon, RefreshIcon, SyncIcon, TestIcon, VirtualizationIcon, CancelIcon, SaveIcon } from "@/icons";
 import { useTablePagination } from "@/composables/useTablePagination";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -262,11 +263,11 @@ const filtered = computed(() => {
     .some((v) => String(v ?? "").toLowerCase().includes(q)));
 });
 
-const cols: DataTableColumns<ESXiInstance> = [
+const cols: DataTableColumns<ESXiInstance> = autoSort<ESXiInstance>([
   { title: () => t("common.name"), key: "name" },
   {
     title: "URL", key: "api_url",
-    render: (r) => {
+    render: (r: ESXiInstance) => {
       const extra = (r.extra_api_urls || "").replace(/,/g, "\n").split("\n")
         .map((x) => x.trim()).filter(Boolean).length;
       return h("span", null, [
@@ -281,22 +282,23 @@ const cols: DataTableColumns<ESXiInstance> = [
   { title: () => t("common.username"), key: "username" },
   {
     title: () => t("common.enabled"), key: "enabled",
-    render: (r) => h(NTag, { size: "small", bordered: false, type: r.enabled ? "success" : "default" },
+    sorter: (a: ESXiInstance, b: ESXiInstance) => Number(a.enabled) - Number(b.enabled),
+    render: (r: ESXiInstance) => h(NTag, { size: "small", bordered: false, type: r.enabled ? "success" : "default" },
       { default: () => (r.enabled ? t("common.yes") : t("common.no")) }),
   },
   {
     title: () => t("cols.last_sync"), key: "last_sync_at",
-    render: (r) => (r.last_sync_at ? fmtDateTime(r.last_sync_at) : "—"),
+    render: (r: ESXiInstance) => (r.last_sync_at ? fmtDateTime(r.last_sync_at) : "—"),
   },
   {
     title: () => t("cols.last_error"), key: "last_error",
-    render: (r) => (r.last_error
+    render: (r: ESXiInstance) => (r.last_error
       ? h("span", { style: "color:#d03050", title: r.last_error }, r.last_error.slice(0, 60))
       : "—"),
   },
   {
     title: () => t("common.actions"), key: "actions",
-    render: (r) => h(NSpace, { size: 4 }, {
+    render: (r: ESXiInstance) => h(NSpace, { size: 4 }, {
       default: () => [
         h(NButton, { size: "tiny", onClick: () => runTest(r) },
           { icon: () => h(NIcon, null, { default: () => h(TestIcon) }) }),
@@ -312,7 +314,7 @@ const cols: DataTableColumns<ESXiInstance> = [
       ],
     }),
   },
-];
+]);
 
 
 const ALL_KEYS = ["name", "api_url", "username", "enabled", "last_sync_at", "last_error"];

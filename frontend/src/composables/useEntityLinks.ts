@@ -81,14 +81,14 @@ export function useEntityLinks(router: Router) {
     location(id: string | null | undefined, label: string | null | undefined) {
       if (!id) return label ?? "—";
       return _link(label ?? "—",
-        () => { void router.push({ name: "locations" }); });
+        () => { void router.push({ name: "location-detail", params: { id } }); });
     },
 
     /** Rack 暫無 detail；連到 /racks 列表 */
     rack(id: string | null | undefined, label: string | null | undefined) {
       if (!id) return label ?? "—";
       return _link(label ?? "—",
-        () => { void router.push({ name: "racks" }); });
+        () => { void router.push({ name: "racks", query: { rack: id } }); });
     },
 
     /** VLAN 暫無 detail；連到 /vlans 列表 */

@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import Field
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import CurrentUser, require_admin
@@ -222,7 +222,9 @@ def _summary(body: ServiceIn) -> dict[str, Any]:
 
 @router.get("/change-impact/services")
 async def list_services(user: CurrentUser, session: Session, q: str | None = Query(None, max_length=100),
-                        page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+                        page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
+                        sort: Literal["name", "criticality", "status", "group_count", "updated_at"] | None = None,
+                        order: Literal["asc", "desc"] = "asc") -> dict[str, Any]:
     await _enabled(session)
     await _require_reader(session, user)
     stmt = select(ImpactService)
@@ -231,7 +233,21 @@ async def list_services(user: CurrentUser, session: Session, q: str | None = Que
         stmt = stmt.where(or_(ImpactService.name.ilike(like, escape="\\"),
                               ImpactService.description.ilike(like, escape="\\")))
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
-    rows = (await session.execute(stmt.order_by(func.lower(ImpactService.name))
+    # 點標題排序（後端分頁：分頁前排）；嚴重度照等級（critical 在前），沒指定照名稱
+    name = func.lower(ImpactService.name)
+    if sort == "criticality":
+        col: Any = case({c: i for i, c in enumerate(SERVICE_CRITICALITY)}, value=ImpactService.criticality, else_=99)
+    elif sort == "status":
+        col = ImpactService.status
+    elif sort == "group_count":
+        col = (select(func.count(ImpactDependencyGroup.id)).where(ImpactDependencyGroup.service_id == ImpactService.id)
+               .scalar_subquery())
+    elif sort == "updated_at":
+        col = ImpactService.updated_at
+    else:
+        col = name
+    ordering = [(col.desc() if order == "desc" else col.asc()).nulls_last(), name, ImpactService.id]
+    rows = (await session.execute(stmt.order_by(*ordering)
                                   .offset((page - 1) * page_size).limit(page_size))).scalars().all()
     return {"items": [await _out(session, s, detail=False) for s in rows], "total": total,
             "page": page, "page_size": page_size, "can_edit": bool(user.is_admin)}

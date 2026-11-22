@@ -1,4 +1,4 @@
-"""位址搜尋：exact=true 時 IP 須完全相等（避免 192.168.1.1 撈到 192.168.1.1xx）。"""
+"""位址搜尋：exact=true 時 IP 須完全相等（避免 192.168.123.1 撈到 192.168.123.1xx）。"""
 
 from __future__ import annotations
 

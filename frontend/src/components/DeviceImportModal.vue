@@ -15,6 +15,8 @@ import {
   type DeviceImportMessage, type DeviceImportPreview, type DeviceImportRow,
 } from "@/api/deviceImport";
 import { DownloadIcon, UploadIcon, CancelIcon } from "@/icons";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ (e: "update:show", v: boolean): void; (e: "queued", taskId: string): void }>();
@@ -82,19 +84,26 @@ function msgText(m: DeviceImportMessage): string {
 }
 const ACTION_TYPE = { create: "success", update: "info", skip: "default", error: "error" } as const;
 
-const cols = computed<DataTableColumns<DeviceImportRow>>(() => [
+const ACTION_ORDER = ["error", "create", "update", "skip"];
+const msgsText = (r: DeviceImportRow) => r.messages.map(msgText).join(" ");
+const cols = computed<DataTableColumns<DeviceImportRow>>(() => autoSort<DeviceImportRow>([
   { title: t("device_import.col_line"), key: "line", width: 70 },
   { title: t("device_import.col_name"), key: "name", width: 200, ellipsis: { tooltip: true },
-    render: (r) => r.name ?? "—" },
+    render: (r: DeviceImportRow) => r.name ?? "—" },
   { title: t("device_import.col_action"), key: "action", width: 100,
-    render: (r) => h(NTag, { size: "small", bordered: false, type: ACTION_TYPE[r.action] },
-      () => t(`device_import.action_${r.action}`)) },
+    render: (r: DeviceImportRow) => h(NTag, { size: "small", bordered: false, type: ACTION_TYPE[r.action] },
+      () => t(`device_import.action_${r.action}`)),
+    sorter: (a: DeviceImportRow, b: DeviceImportRow) => ACTION_ORDER.indexOf(a.action) - ACTION_ORDER.indexOf(b.action) },
   { title: t("device_import.col_messages"), key: "messages", minWidth: 260,
-    render: (r) => (r.messages.length
+    render: (r: DeviceImportRow) => (r.messages.length
       ? h("div", { class: "di-msgs" }, r.messages.map((m) =>
           h("div", { class: m.code.startsWith("warn_") ? "di-warn" : r.action === "error" ? "di-err" : "" }, msgText(m))))
-      : "—") },
-]);
+      : "—"),
+    sorter: (a: DeviceImportRow, b: DeviceImportRow) => {
+      const x = msgsText(a), y = msgsText(b);
+      return !x || !y ? Number(!x) - Number(!y) : cmpNatural(x, y);
+    } },
+]));
 
 const fatalText = computed(() => {
   const f = preview.value?.fatal;

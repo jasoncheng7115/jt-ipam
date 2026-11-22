@@ -427,8 +427,14 @@ export interface Circuit { id: string; cid: string; provider_id: string; type_id
 export interface ContactGroup { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
 export interface ContactRole { id: string; name: string; description: string | null; builtin_key: string | null; }
 export interface Contact { id: string; name: string; email: string | null; phone: string | null; group_id: string | null; description: string | null; created_at: string; updated_at: string; }
-export interface WirelessSSID { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
-export interface WirelessLink { id: string; ssid_id: string; description: string | null; created_at: string; updated_at: string; }
+export interface WirelessSSID {
+  id: string; ssid: string; description: string | null; auth_type: string | null; vlan_id: string | null;
+  tenant_id: string | null; vlan_label?: string | null; tenant_name?: string | null;
+}
+export interface WirelessLink {
+  id: string; name: string; a_device_id: string | null; b_device_id: string | null; ssid: string | null;
+  distance_m: number | null; description: string | null; a_device_name?: string | null; b_device_name?: string | null;
+}
 
 async function getList<T>(url: string): Promise<T[]> {
   // 逐頁抓完整清單（後端 page_size 上限 500）→ 超過 500 筆（如 592 台 VM）也不會被截斷
@@ -545,7 +551,10 @@ export interface DevicePowerPort {
   name: string;
   outlet_id: string | null;
   outlet_label: string | null;
+  /** PSU 額定容量（不是耗電量，也不是整機負載） */
   max_watts: number | null;
+  rating_confirmed_at?: string | null;
+  normal_share_pct?: number | null;
   description: string | null;
 }
 export async function listDevicePowerPorts(deviceId: string): Promise<DevicePowerPort[]> {
@@ -562,12 +571,44 @@ export async function createDevicePowerPort(p: {
 }
 export async function updateDevicePowerPort(id: string, p: {
   name?: string; outlet_id?: string | null; max_watts?: number | null; description?: string | null;
+  rating_confirmed?: boolean;
 }): Promise<DevicePowerPort> {
   const { data } = await apiClient.patch<DevicePowerPort>(`/api/v1/device-power-ports/${id}`, p);
   return data;
 }
 export async function deleteDevicePowerPort(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/device-power-ports/${id}`);
+}
+
+// ─────────────────── 裝置的規劃電力（交接包 physical-v1.2） ───────────────────
+export type PowerBasis = "manual_estimate" | "vendor_reference" | "measurement_reference";
+export type SupplyMode = "unknown" | "single" | "shared" | "active_standby" | "custom";
+export type FailoverCapability = "unknown" | "confirmed_full_load" | "insufficient";
+export interface PowerProfilePort {
+  id: string; name: string; max_watts: number | null; legacy_rating: boolean; normal_share_pct: number | null;
+  allocated_w: number | null; outlet_id: string | null; outlet_label: string | null; outlet_path: string | null;
+  feed_id: string | null; feed: string | null;
+}
+export interface PowerProfile {
+  device_id: string; revision: number; planning_input_w: number | null; value_basis: PowerBasis | null;
+  confirmed_at: string | null; notes: string | null; supply_mode: SupplyMode; failover_capability: FailoverCapability;
+  primary_port_id: string | null; include_in_planning: boolean; exclude_reason: string | null;
+  ports: PowerProfilePort[]; share_total: number | null;
+  preview: { by_feed: { feed_id: string; feed: string; watts: number }[]; unassigned_w: number; allocation_unknown_w: number };
+  issues: string[];
+  wiring: { distinct_feeds: number; same_feed: boolean; unconnected: string[]; upstream_independence: string };
+}
+export interface PowerProfileWrite {
+  revision: number; planning_input_w: number | null; value_basis: PowerBasis | null; notes: string | null;
+  supply_mode: SupplyMode; failover_capability: FailoverCapability; primary_port_id: string | null;
+  include_in_planning: boolean; exclude_reason: string | null;
+  ports: { id: string; normal_share_pct: number | null }[];
+}
+export async function getPowerProfile(deviceId: string): Promise<PowerProfile> {
+  return (await apiClient.get<PowerProfile>(`/api/v1/devices/${deviceId}/power-profile`)).data;
+}
+export async function putPowerProfile(deviceId: string, body: PowerProfileWrite): Promise<PowerProfile> {
+  return (await apiClient.put<PowerProfile>(`/api/v1/devices/${deviceId}/power-profile`, body)).data;
 }
 
 // ─────────────────── Virt ───────────────────
@@ -633,14 +674,83 @@ export const Virt = {
 
 export interface Cable { id: string; type: string; status: string; description: string | null; }
 export interface PowerPanel { id: string; name: string; location_id: string | null; }
-export interface PowerFeed { id: string; name: string; panel_id: string; }
+export interface PowerFeed {
+  id: string; name: string; panel_id: string; voltage_v?: number; amperage_a?: number; phase?: "single" | "three";
+  supply_type?: "ac" | "dc"; rack_id?: string | null; description?: string | null;
+  /** 規劃容量（人工確認，null＝未設定）與警戒 %；不用電壓 × 電流推算 */
+  planning_capacity_w?: number | null; warning_pct?: number; capacity_basis?: string | null;
+  /** 負載（清單才有）：整條迴路已知的規劃分配；partial＝有裝置的負載或分攤未知 */
+  allocated_w?: number | null; partial?: boolean | null; unknown_devices?: number | null;
+  utilization_pct?: number | null; status?: PowerStatus | null; devices?: number | null; racks?: number | null;
+}
+/** no_capacity：沒設規劃容量；incomplete：低於警戒但資料不完整（不給「安全」） */
+export type PowerStatus = "no_capacity" | "over" | "warn" | "incomplete" | "ok";
+export interface RackPowerFeed {
+  id: string; name: string; panel: string; voltage_v: number; amperage_a: number; phase: "single" | "three";
+  supply_type: "ac" | "dc"; planning_capacity_w: number | null; warning_pct: number; capacity_basis: string | null;
+  rack_allocated_w: number; full_allocated_w: number; partial: boolean; unknown_devices: number;
+  devices: number; racks: number; utilization_pct: number | null; status: PowerStatus;
+  phase_balance_checked: boolean | null;
+}
+export interface RackPowerDevice {
+  id: string; name: string; included: boolean; exclude_reason: string | null; load_w: number | null; basis: string | null;
+  allocations: { port: string; feed_id: string | null; feed: string | null; watts: number | null; cross_rack: boolean }[];
+  unassigned_w: number; allocation_unknown_w: number; issues: string[];
+}
+export interface RackPower {
+  rack_id: string; computed_at: string;
+  known_total_w: number; assigned_w: number; unassigned_w: number; allocation_unknown_w: number;
+  completeness: { known: number; included: number } | null; unknown_devices: number; partial: boolean;
+  feeds: RackPowerFeed[]; devices: RackPowerDevice[];
+}
 export interface PowerOutlet { id: string; name: string; feed_id: string; }
-export interface VPNTunnel { id: string; name: string; type: string; status: string; }
+/** 迴路失效模擬：每台受影響裝置只有四種結果；存活迴路的負載從頭重算 */
+export type FailureOutcome = "transferable" | "loses_power" | "insufficient_capacity" | "undetermined";
+export interface PowerFailurePreview {
+  computed_at: string;
+  failed_feeds: { id: string; name: string; panel: string }[];
+  counts: Record<FailureOutcome, number>;
+  lost_load_w: number; lost_unknown_devices: number;
+  devices: {
+    id: string; name: string; rack_id: string | null; included: boolean; load_w: number | null;
+    outcome: FailureOutcome; reason: string | null; supplies: number; failed_supplies: string[];
+    to_feeds: { id: string; name: string }[]; surviving_feeds: string[];
+  }[];
+  feeds: {
+    id: string; name: string; panel: string; planning_capacity_w: number | null; warning_pct: number;
+    before_w: number; before_partial: boolean; after_w: number; added_w: number; partial: boolean;
+    unknown_devices: number; incoming_devices: number; utilization_pct: number | null; status: PowerStatus;
+  }[];
+  assumptions: string[];
+}
+export interface VPNTunnel {
+  id: string; name: string; type: string; status: string;
+  a_device_id: string | null; b_device_id: string | null;
+  a_endpoint: string | null; b_endpoint: string | null;
+  encryption_algo: string | null; auth_algo: string | null; description: string | null;
+  pairing_method?: string | null; a_device_name?: string | null; b_device_name?: string | null;
+  peered?: boolean;
+  /** 防火牆同步來的（`fortigate:<id>` 之類）唯讀；手動建立的是 null */
+  source_origin?: string | null;
+}
+export type VPNTunnelWrite = Pick<VPNTunnel, "name" | "type" | "status" | "a_device_id" | "b_device_id"
+  | "a_endpoint" | "b_endpoint" | "encryption_algo" | "auth_algo" | "description">;
 
+export interface PhysicalCheckSection<T> { total: number; items: T[] }
+export interface PhysicalCheck {
+  total: number; limit: number;
+  ports_multi_cable: PhysicalCheckSection<{ device_id: string; device: string; port_id: string; port: string; cables: string[] }>;
+  outlets_multi_psu: PhysicalCheckSection<{ outlet_id: string; outlet: string; ports: string[] }>;
+  asymmetric_peers: PhysicalCheckSection<{ device_id: string; device: string; port_id: string; port: string; peer: string; peer_points_to: string | null }>;
+  incomplete_cables: PhysicalCheckSection<{ cable_id: string; cable: string; reason: "one_end" | "missing_port" }>;
+  legacy_outlet_links: PhysicalCheckSection<{ outlet_id: string; outlet: string; device_id: string; device: string; reason: "no_psu" | "psu_of_other_device" }>;
+}
 export interface DevicePort {
   id: string; device_id: string; name: string; type: string;
   peer_port_id: string | null; position: number | null; description: string | null;
   link?: string | null; mac_address?: string | null;
+  /** 接在這個埠的線（有多條時優先已接線的） */
+  cable_id?: string | null; cable_label?: string | null; cable_status?: string | null;
   /** OUI 廠商（後端依 MAC 前綴查） */
   mac_vendor?: string | null;
 }
@@ -652,8 +762,19 @@ export interface TraceNode {
 export interface TraceHop {
   cable_id: string | null; cable_label: string | null; cable_type: string | null;
   cable_color: string | null; to: TraceNode | null; internal?: boolean;
+  /** cable：實體線；panel_passthrough：面板正背面；logical_bridge：bridge ↔ NIC（不是線） */
+  kind?: "cable" | "panel_passthrough" | "logical_bridge";
 }
-export interface PortTrace { start: TraceNode; nodes: TraceNode[]; hops: TraceHop[]; }
+/** 為什麼停下來（交接包 physical-v1.2 CABLING.md） */
+export type TraceStop = "end" | "unpaired_panel_port" | "no_connected_cable" | "ambiguous" | "loop" | "limit"
+  | "external_end" | "missing_port" | "no_permission" | "cable_missing_end";
+export interface PortTrace {
+  start: TraceNode; nodes: TraceNode[]; hops: TraceHop[];
+  segments?: { kind: string; from_port_id: string; to_port_id: string | null; cable_id: string | null;
+               cable_label: string | null; status: string | null }[];
+  stop_reason?: TraceStop; stop_port?: TraceNode | null; candidates?: string[] | null;
+  cable_count?: number; truncated?: boolean;
+}
 
 export const Physical = {
   cables: () => getList<Cable>("/api/v1/cables"),
@@ -661,6 +782,15 @@ export const Physical = {
   feeds: () => getList<PowerFeed>("/api/v1/power-feeds"),
   outlets: () => getList<PowerOutlet>("/api/v1/power-outlets"),
   vpns: () => getList<VPNTunnel>("/api/v1/vpn-tunnels"),
+  async createVpn(p: VPNTunnelWrite): Promise<VPNTunnel> {
+    const { data } = await apiClient.post<VPNTunnel>("/api/v1/vpn-tunnels", p);
+    return data;
+  },
+  async updateVpn(id: string, p: VPNTunnelWrite): Promise<VPNTunnel> {
+    const { data } = await apiClient.patch<VPNTunnel>(`/api/v1/vpn-tunnels/${id}`, p);
+    return data;
+  },
+  async deleteVpn(id: string): Promise<void> { await apiClient.delete(`/api/v1/vpn-tunnels/${id}`); },
   async ports(deviceId: string): Promise<DevicePort[]> {
     const { data } = await apiClient.get<DevicePort[]>("/api/v1/device-ports", { params: { device_id: deviceId } });
     return data;
@@ -669,7 +799,7 @@ export const Physical = {
     const { data } = await apiClient.post<DevicePort>("/api/v1/device-ports", p);
     return data;
   },
-  async updatePort(id: string, p: Partial<DevicePort>): Promise<DevicePort> {
+  async updatePort(id: string, p: Partial<DevicePort> & { replace_peer?: boolean }): Promise<DevicePort> {
     const { data } = await apiClient.patch<DevicePort>(`/api/v1/device-ports/${id}`, p);
     return data;
   },
@@ -679,15 +809,24 @@ export const Physical = {
     const { data } = await apiClient.post("/api/v1/device-ports/import", null, { params: { device_id: deviceId } });
     return data;
   },
-  async tracePort(id: string): Promise<PortTrace> {
-    const { data } = await apiClient.get<PortTrace>(`/api/v1/ports/${id}/trace`);
+  async tracePort(id: string, firstCableId?: string): Promise<PortTrace> {
+    const { data } = await apiClient.get<PortTrace>(`/api/v1/ports/${id}/trace`,
+      { params: firstCableId ? { first_cable_id: firstCableId } : undefined });
     return data;
   },
   async createPanel(p: { name: string; location_id?: string | null; description?: string | null }): Promise<PowerPanel> {
     const { data } = await apiClient.post<PowerPanel>("/api/v1/power-panels", p);
     return data;
   },
-  async createFeed(p: { panel_id: string; name: string; description?: string | null }): Promise<PowerFeed> {
+  async previewFailure(feedIds: string[]): Promise<PowerFailurePreview> {
+    return (await apiClient.get<PowerFailurePreview>("/api/v1/power-scenarios/preview", {
+      params: { feed_id: feedIds }, paramsSerializer: { indexes: null } })).data;
+  },
+  async rackPower(rackId: string): Promise<RackPower> {
+    return (await apiClient.get<RackPower>(`/api/v1/racks/${rackId}/power`)).data;
+  },
+  async createFeed(p: { panel_id: string; name: string; description?: string | null; voltage_v?: number;
+                        amperage_a?: number; phase?: string; supply_type?: string; rack_id?: string | null }): Promise<PowerFeed> {
     const { data } = await apiClient.post<PowerFeed>("/api/v1/power-feeds", p);
     return data;
   },
@@ -701,14 +840,19 @@ export const Physical = {
   async deleteFeed(id: string): Promise<void> { await apiClient.delete(`/api/v1/power-feeds/${id}`); },
   async updateOutlet(id: string, p: Record<string, any>): Promise<void> { await apiClient.patch(`/api/v1/power-outlets/${id}`, p); },
   async deleteOutlet(id: string): Promise<void> { await apiClient.delete(`/api/v1/power-outlets/${id}`); },
-  // 連線：建一條 cable + 兩端 termination（都接到 device_port）
-  async connectPorts(aPortId: string, bPortId: string, opts: { type?: string; color?: string; label?: string; length_m?: number } = {}): Promise<void> {
-    const { data: cable } = await apiClient.post<Cable>("/api/v1/cables", {
+  // 連線：一條 cable + 兩端一次建好（同一個交易；以前三支 API，一端失敗就留下半條線）
+  async connectPorts(aPortId: string, bPortId: string, opts: { type?: string; color?: string; label?: string; length_m?: number;
+                                                                status?: string; description?: string } = {}): Promise<void> {
+    await apiClient.post<Cable>("/api/v1/cables/connect", {
+      a_port_id: aPortId, b_port_id: bPortId,
       type: opts.type ?? null, color: opts.color ?? null, label: opts.label ?? null,
-      length_m: opts.length_m ?? null, status: "connected",
+      length_m: opts.length_m ?? null, status: opts.status ?? "connected", description: opts.description ?? null,
     });
-    await apiClient.post("/api/v1/cable-terminations", { cable_id: cable.id, side: "A", object_type: "device_port", object_id: aPortId });
-    await apiClient.post("/api/v1/cable-terminations", { cable_id: cable.id, side: "B", object_type: "device_port", object_id: bPortId });
+  },
+  /** 佈線與供電的既有問題（只讀，管理員） */
+  async physicalCheck(): Promise<PhysicalCheck> {
+    const { data } = await apiClient.get<PhysicalCheck>("/api/v1/physical-check");
+    return data;
   },
   async updateCable(id: string, patch: { type?: string | null; label?: string | null; color?: string | null; length_m?: number | null; description?: string | null; status?: string }): Promise<void> {
     await apiClient.patch(`/api/v1/cables/${id}`, patch);

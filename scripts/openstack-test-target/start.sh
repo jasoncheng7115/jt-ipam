@@ -1,5 +1,5 @@
 #!/bin/bash
-# 啟動已建立的 OpenStack 測試靶（例如 dev1 重開機之後）。
+# 啟動已建立的 OpenStack 測試靶（例如 開發機 重開機之後）。
 # 主機重開機後要重新載入 OVS 核心模組、補回 DOCKER-USER 的兩條轉送規則；DevStack 的服務是 systemd 單元，會自己起來。
 #
 #   scripts/openstack-test-target/start.sh          啟動兩個容器並等 API 回應

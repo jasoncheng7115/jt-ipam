@@ -52,8 +52,8 @@ async def test_empty_email_never_matches_a_login(client, auth_headers) -> None:
 
 def test_placeholder_ldap_addresses_are_not_mailed() -> None:
     from app.services.notification import deliverable_email
-    assert deliverable_email("jason@example.com")
-    assert not deliverable_email("jason@ldap.local")
+    assert deliverable_email("alice@example.com")
+    assert not deliverable_email("alice@ldap.local")
     assert not deliverable_email("")
     assert not deliverable_email(None)
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { forgetCustomFieldDefs } from "@/components/CustomFieldInputs.vue";
 import { computed, h, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -154,11 +155,11 @@ async function submit() {
       } as any);
     }
     show.value = false;
-    await refresh();
+    forgetCustomFieldDefs(); await refresh();
   } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 async function del(r: CustomField) {
-  try { await deleteCustomField(r.id); await refresh(); }
+  try { await deleteCustomField(r.id); forgetCustomFieldDefs(); await refresh(); }
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 

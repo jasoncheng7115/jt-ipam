@@ -1447,7 +1447,7 @@ def _build_chat_context(
                 "call it (e.g. list_vpn_tunnels for site-to-site VPN, get_topology for "
                 "how things connect, list_firewall_rules for firewall policy). "
                 "When the user asks how many IPs are used / free / available / usable in a "
-                "subnet or CIDR (e.g. '192.168.1.0/24 有多少可用 IP'), you MUST call "
+                "subnet or CIDR (e.g. '192.168.123.0/24 有多少可用 IP'), you MUST call "
                 "get_subnet_detail (subnet_cidr=...) or get_subnet_usage to report jt-ipam's "
                 "ACTUAL allocated/used/free counts and usage %. Do NOT answer with generic "
                 "CIDR arithmetic (total addresses, usable-hosts = 2^n − 2, network/broadcast) "

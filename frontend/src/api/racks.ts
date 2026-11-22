@@ -117,11 +117,17 @@ export async function deleteFloorplan(locationId: string): Promise<void> {
 export async function setRackPositions(
   locationId: string,
   positions: { id: string; pos_x: number; pos_y: number; pos_rot: number; pos_w?: number | null; pos_h?: number | null }[],
-): Promise<{ updated: number }> {
-  const { data } = await apiClient.put<{ updated: number }>(
-    `/api/v1/locations/${locationId}/rack-positions`, { positions },
+  revision?: string | null,
+): Promise<{ updated: number; revision?: string }> {
+  // revision：載入時拿到的版本；別人剛存過會回 409 floorplan_conflict，不會靜靜蓋掉
+  const { data } = await apiClient.put<{ updated: number; revision?: string }>(
+    `/api/v1/locations/${locationId}/rack-positions`, { positions, ...(revision ? { revision } : {}) },
   );
   return data;
+}
+/** 平面配置目前的版本（座標＋底圖） */
+export async function getLayoutRevision(locationId: string): Promise<string> {
+  return (await apiClient.get<{ revision: string }>(`/api/v1/locations/${locationId}/layout`)).data.revision;
 }
 
 

@@ -580,7 +580,7 @@ curl -X POST https://ipam.example.com/api/v1/audit/verify \
 
 ## 6. 升級
 
-統一腳本一鍵升級（內含 git pull → 備份 → pip → alembic → build → restart）：
+統一腳本一鍵升級（內含 git pull → 備份 → pip → 停止寫入 → 基準清冊 → alembic → 逐筆核對 → build → restart）：
 
 ```bash
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade
@@ -594,10 +594,14 @@ cd /opt/jt-ipam
 git pull
 sudo systemctl stop jt-ipam-backend
 sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/pip install -e backend
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; . /etc/jt-ipam/backend.env; set +a; .venv/bin/python -m app.cli.upgrade_verify snapshot --out /var/lib/jt-ipam/upgrade-checks/manual/before.json'
 sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/alembic -c backend/alembic.ini upgrade head
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; . /etc/jt-ipam/backend.env; set +a; .venv/bin/python -m app.cli.upgrade_verify compare --before /var/lib/jt-ipam/upgrade-checks/manual/before.json --report /var/lib/jt-ipam/upgrade-checks/manual/report.json'
 cd frontend && sudo -u jtipam pnpm install --frozen-lockfile && sudo -u jtipam pnpm run build
 sudo systemctl start jt-ipam-backend
 ```
+
+**資料核對。**原地升級不能遺失既有資料。遷移前腳本會先停止寫入（後端與 jt-ipam 的排程），把每一筆機房、機櫃、裝置位置、電力、佈線、裝置與 IP 的關聯、權限都記下來；遷移後**逐筆、逐欄**比對（不是只比筆數；平面圖檔比內容摘要）。升級前就存在的資料問題分開列出，只有新出現的才算失敗。只要有缺或有變，腳本就停下來，印出怎麼還原剛才的備份，並**讓後端與排程維持停止**，避免在受損的資料上繼續寫入。清冊與報告（`/var/lib/jt-ipam/upgrade-checks/<時間>/`）含站台資料，只有服務帳號讀得到（0600）。
 
 ---
 

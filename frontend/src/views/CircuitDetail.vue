@@ -28,6 +28,8 @@ import ContactAssignments from "@/components/ContactAssignments.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useEntityLinks } from "@/composables/useEntityLinks";
 import { fmtDate, fmtRelative } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import { sourceText } from "@/utils/changeImpact";
 
 const route = useRoute();
@@ -90,23 +92,29 @@ function seenText(r: CircuitWanIp): string {
   const src = r.last_seen_source ? sourceText(t, te, r.last_seen_source) : "";
   return src ? `${fmtRelative(r.last_seen)}（${src}）` : fmtRelative(r.last_seen);
 }
-const ipCols = computed<DataTableColumns<CircuitWanIp>>(() => [
-  { title: "IP", key: "ip", width: 150, render: (r) => links.ipById(r.id, r.ip) },
+const hostText = (r: CircuitWanIp) => r.hostname || r.description || "";
+// ping：回應的依延遲排在前面，沒回應的其次，還沒測的最後
+const pingRank = (r: CircuitWanIp) => { const p = ping.rows[r.ip]; return !p ? 1e9 : p.alive ? (p.rtt ?? 1e6) : 1e8; };
+const ipCols = computed<DataTableColumns<CircuitWanIp>>(() => autoSort<CircuitWanIp>([
+  { title: "IP", key: "ip", width: 150, render: (r: CircuitWanIp) => links.ipById(r.id, r.ip) },
   { title: t("cols.hostname"), key: "hostname", minWidth: 140, ellipsis: { tooltip: true },
-    render: (r) => r.hostname || r.description || "—" },
+    render: (r: CircuitWanIp) => hostText(r) || "—",
+    sorter: (a: CircuitWanIp, b: CircuitWanIp) => cmpNatural(hostText(a), hostText(b)) },
   { title: t("circuits.wan_device"), key: "device", width: 160,
-    render: (r) => (r.device ? links.device(r.device.id, r.device.name) : "—") },
+    render: (r: CircuitWanIp) => (r.device ? links.device(r.device.id, r.device.name) : "—"),
+    sorter: (a: CircuitWanIp, b: CircuitWanIp) => cmpNatural(a.device?.name ?? "", b.device?.name ?? "") },
   { title: "NAT", key: "nat_count", width: 70,
-    render: (r) => (r.nat_count ? links.ipById(r.id, String(r.nat_count)) : "0") },
-  { title: t("circuits.wan_last_seen"), key: "last_seen", width: 220, render: (r) => seenText(r) },
+    render: (r: CircuitWanIp) => (r.nat_count ? links.ipById(r.id, String(r.nat_count)) : "0") },
+  { title: t("circuits.wan_last_seen"), key: "last_seen", width: 220, render: (r: CircuitWanIp) => seenText(r) },
   { title: t("circuits.wan_signals"), key: "signals", width: 110,
-    render: (r) => h(NTooltip, null, {
+    render: (r: CircuitWanIp) => h(NTooltip, null, {
       trigger: () => h(NTag, { size: "small", bordered: false, type: r.signals ? "success" : "default" },
                        () => t("circuits.wan_signals_n", { n: r.signals })),
       default: () => t("circuits.wan_signals_hint"),
     }) },
   ...(ping.done ? [{
     title: "ping", key: "_ping", width: 110,
+    sorter: (a: CircuitWanIp, b: CircuitWanIp) => pingRank(a) - pingRank(b),
     render: (r: CircuitWanIp) => {
       const p = ping.rows[r.ip];
       if (!p) return "—";
@@ -114,7 +122,7 @@ const ipCols = computed<DataTableColumns<CircuitWanIp>>(() => [
                () => (p.alive ? `${p.rtt ?? "?"} ms` : t("circuits.wan_ping_none")));
     },
   }] : []),
-]);
+]));
 
 async function checkSignals() {
   const ips = [...new Set(allIps.value.map((x) => x.ip))].slice(0, 64);

@@ -13,6 +13,8 @@ import { apiErrMsg } from "@/api/client";
 import { Maintenance, type Window } from "@/api/maintenance";
 import MaintenanceEditModal from "@/components/MaintenanceEditModal.vue";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import { scheduleText, statusLine } from "@/utils/maintenance";
 
 const route = useRoute();
@@ -42,12 +44,14 @@ function eventText(ev: string): string {
   const k = `notify_ch.ev.${ev.replace(/\./g, "_")}`;
   return te(k) ? t(k) : ev;
 }
-const supCols = computed<DataTableColumns<(typeof sup.value)[number]>>(() => [
-  { title: t("maint.sup_event"), key: "event", width: 220, render: (r) => eventText(r.event) },
+type SupRow = (typeof sup.value)[number];
+const supCols = computed<DataTableColumns<SupRow>>(() => autoSort<SupRow>([
+  { title: t("maint.sup_event"), key: "event", width: 220, render: (r) => eventText(r.event),
+    sorter: (a, b) => cmpNatural(eventText(a.event), eventText(b.event)) },
   { title: t("maint.sup_target"), key: "label", minWidth: 200, render: (r) => r.label || "—" },
   { title: t("maint.sup_first"), key: "first_at", width: 170, render: (r) => fmtDateTime(r.first_at) },
   { title: t("maint.sup_count"), key: "count", width: 80 },
-]);
+]));
 const ico = (c: typeof EditIcon) => () => h(NIcon, null, () => h(c));
 const adjustOpts = computed(() => [
   ...[1, 2, 4].map((n) => ({ key: String(n * 60), label: t("maint.extend_n", { n }), icon: ico(ExtendIcon) })),

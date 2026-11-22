@@ -226,10 +226,12 @@ export interface ImpactService {
   maintenance_notes: string | null; version: number; updated_at: string | null; group_count: number;
   endpoints?: ServiceEndpoint[]; groups?: ServiceGroup[];
 }
-export async function listServices(params: { q?: string; page?: number; pageSize?: number } = {}):
+export async function listServices(params: { q?: string; page?: number; pageSize?: number; sort?: string;
+                                            order?: "asc" | "desc" } = {}):
     Promise<{ items: ImpactService[]; total: number; can_edit: boolean }> {
   return (await apiClient.get("/api/v1/change-impact/services", { params: {
-    q: params.q || undefined, page: params.page ?? 1, page_size: params.pageSize ?? 50 } })).data;
+    q: params.q || undefined, page: params.page ?? 1, page_size: params.pageSize ?? 50,
+    sort: params.sort || undefined, order: params.sort ? params.order : undefined } })).data;
 }
 export async function getService(id: string): Promise<ImpactService> {
   return (await apiClient.get(`/api/v1/change-impact/services/${id}`)).data;

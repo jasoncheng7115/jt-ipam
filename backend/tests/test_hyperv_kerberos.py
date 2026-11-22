@@ -3,7 +3,7 @@
 做法見 services/winrm_kerberos：kinit 拿帳密換 TGT 放進這次專用的快取，連線期間把環境變數指過去，結束還原並刪掉。
 單元測試用假的 kinit 與假的 WinRM；最後一支連真的 KDC（`scripts/kerberos-test-kdc/run.sh` 起的 Samba AD DC 容器），沒設環境變數時跳過：
 
-    JTIPAM_TEST_KDC=172.17.0.10 JTIPAM_TEST_KRB_USER=svc-ipam@CORP.TEST JTIPAM_TEST_KRB_PASS=… \\
+    JTIPAM_TEST_KDC=kdc.corp.test JTIPAM_TEST_KRB_USER=svc-ipam@CORP.TEST JTIPAM_TEST_KRB_PASS=… \\
     JTIPAM_TEST_KRB_SPN_HOST=hv1.corp.test pytest tests/test_hyperv_kerberos.py
 """
 from __future__ import annotations

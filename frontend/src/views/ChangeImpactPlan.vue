@@ -478,6 +478,8 @@ import { renderReportPdf } from "@/api/reports";
 import { saveBlob } from "@/utils/saveFile";
 import { useExportBusy } from "@/composables/useExportBusy";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import {
   decisionType, dispositionType, gapAffected, gapText, lifecycleType, reasonText, severityType, taskTitle,
 } from "@/utils/changeImpact";
@@ -658,9 +660,12 @@ function aiText(it: AIItem): string {
 }
 
 const evById = computed(() => Object.fromEntries(evidence.value.map((e) => [e.id, e])));
-const findingCols = computed<DataTableColumns<ImpactFinding>>(() => [
+// 嚴重度依等級排（不是依字母）；其他翻譯過的欄位依畫面上的文字排
+const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+const byText = <T,>(f: (r: T) => string) => (a: T, b: T) => cmpNatural(f(a), f(b));
+const findingCols = computed<DataTableColumns<ImpactFinding>>(() => autoSort<ImpactFinding>([
   // 展開的細節：左側色條＋底色、左右兩欄（項目／內容），一眼看得出是上面那一列的（使用者 2026-10-08）
-  { type: "expand", renderExpand: (r) => h("div", { class: "cip-expand", "data-testid": "cip-expand" }, [
+  { type: "expand", renderExpand: (r: ImpactFinding) => h("div", { class: "cip-expand", "data-testid": "cip-expand" }, [
       ...r.evidence_ids.flatMap((id, i) => {
         const e = evById.value[id];
         return e ? [
@@ -681,15 +686,18 @@ const findingCols = computed<DataTableColumns<ImpactFinding>>(() => [
       h("span", { class: "cip-expand__v cip-muted" }, `${r.rule_id} v${r.rule_version}`),
     ]) },
   { title: t("change_impact.col_disposition"), key: "disposition", width: 96,
-    render: (r) => h(NTag, { size: "small", type: dispositionType(r.disposition) },
+    sorter: byText((r: ImpactFinding) => t(`change_impact.disposition.${r.disposition}`)),
+    render: (r: ImpactFinding) => h(NTag, { size: "small", type: dispositionType(r.disposition) },
                      { default: () => t(`change_impact.disposition.${r.disposition}`) }) },
   { title: t("change_impact.col_severity"), key: "severity", width: 80,
-    render: (r) => h(NTag, { size: "small", bordered: false, type: severityType(r.severity) },
+    sorter: (a: ImpactFinding, b: ImpactFinding) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9),
+    render: (r: ImpactFinding) => h(NTag, { size: "small", bordered: false, type: severityType(r.severity) },
                      { default: () => t(`change_impact.severity.${r.severity}`) }) },
-  { title: t("change_impact.col_category"), key: "category", width: 96, render: (r) => catLabel(r.category) },
+  { title: t("change_impact.col_category"), key: "category", width: 96, render: (r: ImpactFinding) => catLabel(r.category),
+    sorter: byText((r: ImpactFinding) => catLabel(r.category)) },
   // 物件與原因：第一行是「是什麼」（類型圖示＋類型＋名稱），第二行是「為什麼列出來」（使用者 2026-10-08：要一眼看懂）
   { title: t("change_impact.col_subject"), key: "subject_label", minWidth: 340,
-    render: (r) => h("div", { id: `cip-f-${r.id}`, class: "cip-subj" }, [
+    render: (r: ImpactFinding) => h("div", { id: `cip-f-${r.id}`, class: "cip-subj" }, [
       h("div", { class: "cip-subj__head" }, [
         h("span", { class: "cip-subj__type" }, [h(NIcon, { size: 13 }, () => h(iconFor(r.subject_type))),
                                                 h("span", null, subjectTypeLabel(r.subject_type, r.category))]),
@@ -700,10 +708,12 @@ const findingCols = computed<DataTableColumns<ImpactFinding>>(() => [
         h("span", { class: "cip-wrap" }, reasonText(t, te, r.reason_code, r.params)),
       ]),
     ]) },
-  { title: t("change_impact.col_impact"), key: "impact", width: 110, render: (r) => t(`change_impact.impact.${r.impact}`) },
+  { title: t("change_impact.col_impact"), key: "impact", width: 110, render: (r: ImpactFinding) => t(`change_impact.impact.${r.impact}`),
+    sorter: byText((r: ImpactFinding) => t(`change_impact.impact.${r.impact}`)) },
   { title: t("change_impact.col_strength"), key: "evidence_strength", width: 100,
-    render: (r) => t(`change_impact.strength.${r.evidence_strength}`) },
-]);
+    render: (r: ImpactFinding) => t(`change_impact.strength.${r.evidence_strength}`),
+    sorter: byText((r: ImpactFinding) => t(`change_impact.strength.${r.evidence_strength}`)) },
+]));
 // 欄寬：時間與時效固定且不換行，物件欄吃剩下的寬度（使用者 10-21：物件欄太空、右邊的時間被擠成兩行）
 const nowrap = (v: string) => h("span", { style: "white-space: nowrap" }, v);
 // 證據來自哪一台整合：同一筆紀錄在兩台 DNS 上會是兩列，只寫「DNS」看起來像重複（2026-10-25 實測）
@@ -713,17 +723,19 @@ function evidenceSource(e: ImpactEvidence): string {
   const name = e.integration_ref ? sourceNames.value.get(e.integration_ref) : undefined;
   return name ? `${catLabel(e.source_type)} · ${name}` : catLabel(e.source_type);
 }
-const evidenceCols = computed<DataTableColumns<ImpactEvidence>>(() => [
-  { title: t("change_impact.col_source"), key: "source_type", width: 170, render: (r) => nowrap(evidenceSource(r)) },
+const freshText = (r: ImpactEvidence) => (te(`change_impact.fresh.${r.freshness}`) ? t(`change_impact.fresh.${r.freshness}`) : r.freshness);
+const evidenceCols = computed<DataTableColumns<ImpactEvidence>>(() => autoSort<ImpactEvidence>([
+  { title: t("change_impact.col_source"), key: "source_type", width: 170, render: (r: ImpactEvidence) => nowrap(evidenceSource(r)),
+    sorter: byText(evidenceSource) },
   { title: t("change_impact.col_object"), key: "label", minWidth: 220,
-    render: (r) => h("span", { class: "cip-mono cip-wrap" }, r.label) },
+    render: (r: ImpactEvidence) => h("span", { class: "cip-mono cip-wrap" }, r.label) },
   { title: t("change_impact.observed"), key: "observed_at", width: 180,
-    render: (r) => nowrap(r.observed_at ? fmtDateTime(r.observed_at) : "—") },
+    render: (r: ImpactEvidence) => nowrap(r.observed_at ? fmtDateTime(r.observed_at) : "—") },
   { title: t("change_impact.collected"), key: "collected_at", width: 180,
-    render: (r) => nowrap(r.collected_at ? fmtDateTime(r.collected_at) : "—") },
+    render: (r: ImpactEvidence) => nowrap(r.collected_at ? fmtDateTime(r.collected_at) : "—") },
   { title: t("change_impact.col_freshness"), key: "freshness", width: 120,
-    render: (r) => (te(`change_impact.fresh.${r.freshness}`) ? t(`change_impact.fresh.${r.freshness}`) : r.freshness) },
-]);
+    render: freshText, sorter: byText(freshText) },
+]));
 
 /** 來源依種類、名稱排；新鮮度分三級給顏色（最新／即時＝正常，過期與失敗＝要注意，其餘＝不確定） */
 const sortedSources = computed(() => [...(run.value?.scope_manifest?.sources ?? [])]

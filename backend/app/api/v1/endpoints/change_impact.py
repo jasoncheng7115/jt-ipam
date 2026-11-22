@@ -326,7 +326,9 @@ async def list_plans(user: CurrentUser, session: Session, scenario_type: str | N
                      lifecycle: str | None = None, q: str | None = None, include_archived: bool = False,
                      target_type: str | None = None, target_id: uuid.UUID | None = None,
                      awaiting_my_review: bool = False,
-                     page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+                     page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
+                     sort: Literal["title", "scenario_type", "lifecycle", "planned_start", "created_at"] | None = None,
+                     order: Literal["asc", "desc"] = "asc") -> dict[str, Any]:
     cfg = await _enabled(session)
     stmt = select(ChangePlan)
     if awaiting_my_review:
@@ -354,7 +356,15 @@ async def list_plans(user: CurrentUser, session: Session, scenario_type: str | N
         like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         stmt = stmt.where(or_(ChangePlan.title.ilike(like, escape="\\"), ChangePlan.target_label.ilike(like, escape="\\")))
     total = (await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
-    rows = (await session.execute(stmt.order_by(ChangePlan.created_at.desc())
+    # 點標題排序（後端分頁：分頁前排）；沒指定照舊，最新建立的在前。文字不分大小寫、空值排最後
+    if sort:
+        col = {"title": func.lower(ChangePlan.title), "scenario_type": ChangePlan.scenario_type,
+               "lifecycle": ChangePlan.lifecycle, "planned_start": ChangePlan.planned_start,
+               "created_at": ChangePlan.created_at}[sort]
+        ordering = [(col.desc() if order == "desc" else col.asc()).nulls_last(), ChangePlan.created_at.desc(), ChangePlan.id]
+    else:
+        ordering = [ChangePlan.created_at.desc(), ChangePlan.id]
+    rows = (await session.execute(stmt.order_by(*ordering)
                                   .offset((page - 1) * page_size).limit(page_size))).scalars().all()
     runs = {}
     ids = [r.latest_run_id for r in rows if r.latest_run_id]

@@ -249,7 +249,7 @@ async def link_librenms_device(
     # 1. 用 primary_ip 對到已存在的 IPAddress → 其 device_id
     ipa = None
     if ldev.primary_ip:
-        # 重疊網段（例如甲乙兩單位都用 192.168.1.0/24）下，同一個 IP 是兩台不同機器。
+        # 重疊網段（例如甲乙兩單位都用 192.168.123.0/24）下，同一個 IP 是兩台不同機器。
         # 取兩筆來判斷：剛好一筆才採用；多筆＝分不出是誰的，寧可不對應也不要掛錯 ——
         # 掛錯會把甲單位的裝置資料寫進乙單位的紀錄，而且沒有人會發現。
         # 要讓這些位址對應得上，就在該實例設定「限定子網路範圍」。
@@ -332,7 +332,7 @@ def _pick_subnet_for_ip(nets: list[tuple[Any, Any]], aip: Any) -> Any | None:
 
     避免建錯子網路：
     - 多層巢狀（如 10.0.0.0/8 與 10.1.1.0/24 都包含）→ 取最長首碼（最精確）那個。
-    - **重疊網段歧義**（多個「相同最長首碼」都包含，如兩個客戶各有 192.168.1.0/24）
+    - **重疊網段歧義**（多個「相同最長首碼」都包含，如兩個客戶各有 192.168.123.0/24）
       → 回 None：寧可不建，也不要建到錯的單位。要消除歧義就在該 LibreNMS 實例設
       scope_subnet_ids，把候選縮到自己的子網路（整合設定頁的 ScopeOverlapWarning 會提醒）。
     - 沒有任何既有子網路包含 → 回 None（不憑空建子網路）。
@@ -432,7 +432,7 @@ async def sync_devices(
                 if is_up:
                     ipa.last_seen_librenms = datetime.now(UTC)
                 # feature A：把 LibreNMS 裝置名稱寫成此 IP 的 librenms 觀測。
-                # OPNsense 等常把 hostname 設成 IP（如 192.168.11.1），真正的名稱
+                # OPNsense 等常把 hostname 設成 IP（如 192.168.124.1），真正的名稱
                 # 在 sysName（如 fw-01.example.net）→ hostname 是 IP 時改採 sysName。
                 dev_hostname = (d.get("hostname") or "").strip()
                 sysname = (d.get("sysName") or d.get("sysname") or "").strip()

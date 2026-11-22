@@ -133,6 +133,8 @@ AI 巡檢的發現每跑一次就回來一次、得一再忽略，因為識別�
 
 ## 5b. 部署腳本流程（拋棄式環境，**勿在 dev/prod 跑 install**）
 
+- [ ] **升級資料核對**（`tests/test_upgrade_verify.py`、`scripts/test-upgrade.sh` 搭配 `scripts/upgrade-fixture.sql`）：在載入固定案例（2 配電盤、3 迴路、9 插座、8 纜線、跨機房、雙電源、正背面同一 U、空線標、已除役的線、未知瓦數）的上一版升級，日誌出現「Upgrade data check passed」且每張表都相符；`/var/lib/jt-ipam/upgrade-checks/` 的報告權限 0600；負向案例都會失敗：纜線兩端互換、未知瓦數變 0、刪掉一筆、改了權限、平面圖檔被換、欄位被刪；升級前就有的問題列為 pre 不算失敗，新出現的才算；失敗時後端與排程維持停止並印出還原步驟
+
 客戶回報過的每一個安裝問題，在一台早就能跑的機器上都看不到，因為那些東西在那裡本來就在：另一個大版本的
 PostgreSQL 叢集早就存在（於是 `pgvector` 裝到錯的那一個）、`pnpm install` 安靜地失敗而沒有前端、安裝腳本印出
 「Done」但什麼都沒在跑、備份單元的 `ReadWritePaths` 目錄還不存在，systemd 對此回報 `226/NAMESPACE`，
@@ -1865,6 +1867,31 @@ ARP 被當成有時間概念的證據，讓一台關機數週的 VM 顯示 52 �
 
 - [ ] **判讀／巡檢先選供應商再填位址**（`tests/test_llm_role_servers.py`、`e2e/llm-role-server.spec.ts`）：打開「這個用途使用不同的 LLM Server」、先選 OpenAI 相容端點，存完不跳回 Ollama、重新整理還在；還沒填位址前照樣用對話那台；關掉開關清掉供應商與金鑰
 
+- [ ] **自訂欄位的值**（`tests/test_custom_field_values.py`、`e2e/custom-field-inputs.spec.ts`）：定義的欄位依型別出現在子網路、IP（新增與編輯）、裝置的表單並標示必填；值會存、再編輯時帶回；必填缺值、未定義的鍵、不在選項裡都回 400；更新是整份取代；日期型欄位用全站的日期選擇器（清除 / 現在 / 確定有圖示，`tests/test_date_picker_icons.py`），選的日期會存進去
+- [ ] **修改聯絡人指派**（`e2e/contact-assignment-edit.spec.ts`、`e2e/circuit-detail.spec.ts`）：已指派的聯絡人可以從那一列改角色與優先序；新增視窗可以設優先序；清單依優先序排
+- [ ] **進階模組的欄位**（`tests/test_group_parent_cycle.py`、`e2e/advanced-form-fields.spec.ts`）：供應商的 ASN / 入口網址 / NOC 會存、表格顯示；聯絡人的職稱 / 地址 / 租戶會存；群組的上層選單排除自己與子群組；形成循環回 422 `parent_cycle`
+- [ ] **新增纜線**（`e2e/cable-create-fields.spec.ts`）：新增視窗跟編輯同樣欄位（類型、標籤、顏色、長度、狀態、說明）且都會存；兩端裝置選單可搜尋到第一頁之後的裝置
+- [ ] **清得掉的欄位與補上的欄位**（`src/__tests__/clearableDescription.test.ts`、`e2e/form-field-gaps.spec.ts`）：清空裝置製造商存成 null；編輯表單沒有 `x: form.value.x || undefined`；機櫃預設呈現面設成背面，示意圖打開就是背面；連接埠排序會存
+- [ ] **新增 IP 會存表單上的設定**（`tests/test_ip_create_keeps_form_fields.py`、`e2e/ip-create-keeps-fields.spec.ts`）：新增視窗選的開關（SSH、略過 PTR…）、略過的掃描項目、主控台出口都會存；略過 ICMP 同時設成不 ping；同時選跳板與中繼代理回 422
+- [ ] **進階的對話框標題**（`src/__tests__/advancedCreateTitles.test.ts`）：進階頁每一種資源在三語都有 `advanced.create_<kind>`（鍵是執行時組出來的，i18n 檢查看不到）
+- [ ] **無線連線與 SSID**（`tests/test_wireless_ui_api.py`、`e2e/wireless-links.spec.ts`）：「無線連線」頁籤可以新增、編輯（兩端裝置帶回名稱）、刪除，裝置選單可搜尋，距離以公尺顯示；兩端不可以是同一台（422）；SSID 表單可填認證方式、VLAN、租戶，表格會顯示
+- [ ] **站對站 VPN 通道新增 / 編輯 / 刪除**（`tests/test_vpn_tunnel_crud.py`、`e2e/vpn-tunnel-crud.spec.ts`）：VPN 頁與「進階 > 電路 > 站對站 VPN」都有新增按鈕，編輯時兩端裝置帶回名稱、清空 B 端會真的清掉、狀態改「離線」表格跟著變；刪除寫稽核；防火牆同步來的通道編輯、刪除反灰（API 回 409 `vpn_tunnel_synced`）；類型填錯 422、名稱重複 409；VPN 頁、電力頁都只有一顆「重新整理」
+- [ ] **面板配對、埠與插座占用、資料檢查**（`tests/test_port_peer_and_occupancy.py`、`tests/test_physical_check.py`、`e2e/port-pair-occupancy.spec.ts`）：F1 從 R1 改配 R2 後 R1 不再指向 F1；改配已被 F3 用掉的 R3 會跳確認，確定後 F3 清空；配對到別台裝置的埠 422；已接線的埠再接一條 409 且不留下半條線，規劃中的線不占用、改成已接線時重新檢查；同一個插座第二顆電源 409；同時兩筆只成功一筆；佈線頁「資料檢查」列出舊式插座直連等既有問題，且呼叫前後資料不變
+- [ ] **機房詳情與有效位置**（`tests/test_location_summary.py`、`e2e/location-detail.spec.ts`）：機房清單點名稱、點地圖標記進詳情，「編輯」回清單並直接開編輯視窗；機櫃在東京、裝置地點記大阪的那台算在東京一次，兩邊都列位置衝突；未入櫃的裝置算進自己的地點；機櫃沒有地點的不算進任何機房；清單的裝置數與詳情一致；關聯 IP 以紀錄 id 計（不同子網路的同一位址算兩筆）；機房電力含未入櫃的裝置，迴路顯示本機房分配與全迴路；佈線分房內、跨機房、對端未明，規劃中的線不算；只有地點授權的帳號看不到別的機房，電力與佈線要全域讀取
+- [ ] **平面配置的版本檢查**（`tests/test_floorplan_revision.py`、`e2e/floorplan-revision.spec.ts`）：開著平面圖、別人先存了 → 這邊存檔跳出「平面配置剛被別人改過」，別人的座標沒被蓋掉、這邊的也沒寫進去；不帶版本的舊用戶端照常存；換底圖會改變版本；調整了沒存就切到別頁會先問，選「留在這頁」不離開；已有底圖且擺了機櫃時換圖會問保留或清除位置，選清除後機櫃全回托盤
+- [ ] **端到端追線與纜線篩選**（`tests/test_port_trace.py`、`e2e/cable-trace.spec.ts`）：交換器 → A01-01 → 面板 F1 ↔ R1 → A01-02 → 主機，雙向都是 2 條纜線、1 組面板內部對應，不經 F2/R2，段落標籤對準；從 B 端追第一段仍是選的那條；拿掉 F1↔R1 配對停在 F1 並說明；第二段改規劃中走不到主機；同一埠兩條已接線停下並列出候選；環路、64 段上限、外部端點、bridge（不算纜線）；看不到的對端不回名稱；指定不在這個埠上的線回 422；清單每端有埠、機櫃、有效位置；網址帶 `?q=`、`?nolabel=1&rack=` 打開就套用；connected 顯示「已接線」；AI 工具 cable_trace 用同一套追線（第一段固定是那條線），並回各端的停止原因
+- [ ] **IP 詳情的實體線路**（`tests/test_ip_trace_candidates.py`、`e2e/ip-trace.spec.ts`）：IP 的 MAC 跟裝置網卡相同 → 列出那張網卡（MAC 相同的網卡）；FDB 交換器埠對得到 jt-ipam 的裝置與埠 → 列出（交換器學到的埠）；只掛在裝置上 → 從裝置的埠挑一個，追線走到交換器；沒有關聯 → 「尚未對應裝置或連接埠」；看不到的裝置不列
+- [ ] **配線面板埠位圖**（`tests/test_port_trace.py`、`e2e/cable-trace.spec.ts`）：連接埠清單每個埠顯示線標（同一埠同時有規劃中與已接線的線時顯示已接線那條）；有正面 / 背面埠的裝置才出現「清單 / 面板埠位」切換；點 F1 標出 R1、顯示兩邊線標與「已登錄」；沒配對顯示「未登錄」、只有單邊指向顯示不一致；「追蹤完整路徑」從正面那條線的遠端穿過面板到背面那條線的遠端；沒有正背面埠的裝置不出現切換
+- [ ] **迴路失效模擬**（`tests/test_power_failure_preview.py`、`e2e/power-failure.spec.ts`）：單電源接失效迴路 → 失去供電；兩顆接同一路 → 失去供電（不算備援）；雙路且確認單顆撐得住 → 可轉移，整機負載移到另一路；接手迴路超過規劃容量 → 剩餘容量不足；沒確認、負載未知、三顆以上、自訂模式、另一顆沒接線、只有舊插座直連 → 無法判斷；失效那顆分攤 0% → 照常運作；存活迴路失效前 / 後與使用率，有無法判斷的裝置時標「至少」、不給「低於警戒」；沒設規劃容量顯示未設定；一次選兩路都失效 → 雙路也斷、沒有存活迴路；不存在的迴路 404、沒選迴路 422；不會改任何資料
+- [ ] **AI 對話的機房摘要與失效模擬**（`tests/test_ai_power_location_tools.py`）：機櫃在東京、裝置寫大阪 → AI 機房清單算東京；問某機房 → 摘要的未入櫃、位置衝突與機房詳情一致；問某迴路失效 → 結果與畫面「失效模擬」相同，迴路可用 id、名稱或「配電盤 / 名稱」；同名多條 → 回報不明確並列出全名，不任選；找不到 → 說找不到；看不到的機房不給摘要；工具清單仍在 5 萬字內
+- [ ] **發佈前檢查**（`tests/test_publish_preflight.py`、`scripts/publish/`）：沒列在 `PUBLISH.txt` 的檔案不發佈（`docs/SPEC*`、新的根目錄檔案）；沒有私有封鎖清單就拒絕；封鎖清單的名稱、網域（含子網域）、位址前綴、MAC 前綴都擋，公開的例外不擋；金鑰要有內容才算；信箱只允許範例與公開的；session 連結與會自動關 issue 的字擋下；截圖有中繼資料就擋；看不了內容的二進位檔擋下；`sync.sh` 只複製 git 追蹤且在允許清單上的檔案、不改寫內容；pre-push 檢查每個要推的 commit 與 tag 的身分、訊息與變更檔案
+- [ ] **機房與電力表格的排序與匯出**（`tests/test_location_summary.py`、`tests/test_table_sorting.py`、`e2e/location-detail.spec.ts`）：機房詳情各頁籤、機櫃電力卡、失效模擬的表格點標題能排序、有匯出；機房裝置清單依名稱 / 機櫃 / 狀態 / IP 排序跨頁正確（未入櫃、沒有 IP 排最後），匯出含全部頁；機房佈線兩端顯示「裝置@埠」、@ 是綠色、裝置名稱可點；追線、IP 詳情實體線路卡片、資料檢查的埠也是「裝置@埠」；選單「機櫃」「機房 / 地點」「佈線」「電力」相鄰，「佈線」圖示跟「機櫃」不同；新增有表格的畫面沒有排序時守門測試會擋
+- [ ] **所有表格點標題排序**（`tests/test_table_sorting.py`、`tests/test_change_impact_api.py`、`tests/test_change_impact_services_api.py`）：API 金鑰、權限指派、IP 變更評估、服務清單、各整合管理頁、網路工具、維護排程、移轉、系統匯出 / 匯入、登入工作階段等表格點標題能排序，排的是畫面上看到的內容；IP 變更評估清單（標題、情境、狀態、時段、建立時間）與服務清單（名稱、嚴重度依等級、狀態、群組數、更新時間）在後端排序、換頁順序正確，不指定時維持原本預設；輸入欄位（例如分攤比例）不排序
+- [ ] **通知事件名稱與跨來源下載檔名**（`tests/test_notify_event_labels.py`、`tests/test_cors_custom_headers.py`、`e2e/notify-matrix-health.spec.ts`、`e2e/sbom-download.spec.ts`）：通知設定每個事件（含 Kubernetes 位址衝突）三種語言都有名稱；網頁與 API 不同源時，SBOM 與憑證下載的檔名帶版本 / 憑證名稱，不是預設值
+- [ ] **前後端不同源時的 CORS 預檢**（`tests/test_cors_custom_headers.py`）：網頁送出的自訂標頭（`Idempotency-Key`、`X-Warroom-Token`）都在允許清單；e2e 環境建立 IP 變更評估成功
+- [ ] **單位顯示名稱**（`e2e/customer-title.spec.ts`）：單位表單有「顯示名稱」；列表有這一欄，單位頁也顯示
+- [ ] **區段編輯表單**（`tests/test_section_parent_cycle.py`、`e2e/section-edit-form.spec.ts`）：區段列表與區段頁的欄位一樣（名稱、說明、上層區段、單位、排序、嚴格模式）；上層選單排除自己與子區段、載入全部區段；上層設成自己或子區段回 422 `section_parent_cycle`
+- [ ] **規劃電力**（#54，`tests/test_power_planning.py`、`e2e/rack-power.spec.ts`）：兩顆 800 W 電源、整機 500 W 算 500 W，分攤 50 / 50 時各迴路 250 W，兩顆接同一路時該路 500 W；負載空白是未知、0 是零；沒設分攤顯示「分攤比例未設定」而不是均分，一顆電源就是 100%；沒接線的負載有列出，已知總量 = 已分配 + 未接線 + 分攤未知；跨機櫃的裝置負載算在自己的機櫃、迴路顯示兩個機櫃；資料不完整不會顯示「低於警戒」，沒設容量顯示「未設定規劃容量」；跳接面板（被動元件）與不納入的裝置帶原因排除；電源設定 revision 過期、分攤超過 100%、別台的電源埠、不納入沒寫原因都會被擋；舊瓦數標「舊值，請確認」，確認後值不變；刪除還在用的插座、有插座的迴路、有迴路的配電盤回 409；插座清單有位置路徑與接著哪顆電源
 - [ ] **按鈕都有圖示**（`tests/test_button_icons.py`）：電力、佈線、SFTP、RustDesk、機櫃等對話框的取消 / 儲存 / 確認都有圖示；守門測試列出例外（符號按鈕、切換鈕組、像連結的文字按鈕）
 
 - [ ] **代理指派子網路不默默搬走別台的**（`tests/test_scan_agent_subnet_list.py`、`e2e/scan-agent-subnet-list.spec.ts`）：子網路選單標「目前由「X」掃描」；儲存時跳確認列出子網路與原本的代理，取消什麼都不動、確定才搬；API 不帶 `move_from_other_agents` 回 409 `scan_agent_subnets_taken`；稽核 diff 有 `moved`

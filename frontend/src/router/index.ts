@@ -110,6 +110,7 @@ const routes: RouteRecordRaw[] = [
       { path: "devices", name: "devices", component: () => import("@/views/Devices.vue") },
       { path: "devices/:id", name: "device-detail", component: () => import("@/views/DeviceDetail.vue") },
       { path: "locations", name: "locations", component: () => import("@/views/Locations.vue") },
+      { path: "locations/:id", name: "location-detail", component: () => import("@/views/LocationDetail.vue") },
       { path: "dns", name: "dns", component: () => import("@/views/DNSAdmin.vue"), meta: { admin: true } },
       { path: "adguard", name: "adguard", component: () => import("@/views/AdGuardAdmin.vue"), meta: { admin: true } },
       { path: "librenms", name: "librenms", component: () => import("@/views/LibreNMSAdmin.vue"), meta: { admin: true } },

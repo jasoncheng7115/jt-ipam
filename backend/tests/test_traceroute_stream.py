@@ -27,15 +27,15 @@ def test_hops_are_parsed_one_line_at_a_time():
     """逐行解析必須和整批解析得到一樣的結果。"""
     lines = [
         " 1?: [LOCALHOST]                      pmtu 1500",
-        " 1:  192.168.1.1                                          0.312ms",
-        " 1:  192.168.1.1                                          0.221ms",
+        " 1:  192.168.123.1                                          0.312ms",
+        " 1:  192.168.123.1                                          0.221ms",
         " 2:  no reply",
         " 3:  168.95.210.154                                       3.902ms",
     ]
     p = netdiag.TracepathIncremental("8.8.8.8")
     hops = [h for ln in lines for h in [p.feed(ln)] if h]
     assert [h["hop"] for h in hops] == [1, 2, 3]
-    assert hops[0]["host"] == "192.168.1.1"
+    assert hops[0]["host"] == "192.168.123.1"
     assert hops[1]["host"] is None and hops[1]["note"]      # 無回應也要出現
     assert p.path_mtu == 1500
 

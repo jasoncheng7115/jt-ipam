@@ -463,7 +463,7 @@ html[data-theme="light"] .n-card > .n-card-header {
   .n-card > .n-card-header { padding: 12px 12px 10px !important; }
 
   /* 卡片標題列：標題與「操作按鈕區(header-extra)」改上下堆疊，
-     避免長標題(如 192.168.1.0/24)被按鈕擠到一字一行 */
+     避免長標題(如 192.168.123.0/24)被按鈕擠到一字一行 */
   .n-card > .n-card-header { flex-wrap: wrap; row-gap: 8px; }
   .n-card > .n-card-header > .n-card-header__main { flex: 1 1 100%; min-width: 0; }
   .n-card > .n-card-header > .n-card-header__extra {

@@ -741,3 +741,25 @@ async def test_ai_cites_short_reference_codes_not_uuids(client, auth_headers, db
     assert art["output"]["suggested_tasks"][0]["finding_ids"] == [fid]
     gaps = (await client.get(f"/api/v1/impact-runs/{run_id}/gaps", headers=auth_headers)).json()["items"]
     assert art["output"]["uncertainties"][0]["gap_ids"][0] in {g["id"] for g in gaps}
+
+
+async def test_plan_list_sorts_on_the_server(client, auth_headers, db_session) -> None:
+    """評估清單是後端分頁：點標題排序在後端、分頁前做（2026-11-22 全站表格補排序）。預設仍是最新建立的在前。"""
+    await _enable(db_session)
+    _sec, _sub, ip = await _setup(db_session)
+    for title in ("b-plan", "C-plan", "a-plan"):
+        r = await _plan(client, auth_headers, ip.id, title=title)
+        assert r.status_code in (200, 201), r.text
+
+    async def titles(**q):  # type: ignore[no-untyped-def]
+        out = []
+        for page in (1, 2, 3):
+            qs = "&".join(f"{k}={v}" for k, v in {**q, "page": page, "page_size": 1}.items())
+            out += [x["title"] for x in (await client.get(f"/api/v1/change-plans?{qs}", headers=auth_headers)).json()["items"]]
+        return out
+
+    assert await titles() == ["a-plan", "C-plan", "b-plan"], "預設：最新建立的在前"
+    assert await titles(sort="title") == ["a-plan", "b-plan", "C-plan"], "名稱不分大小寫"
+    assert await titles(sort="created_at", order="asc") == ["b-plan", "C-plan", "a-plan"]
+    r = await client.get("/api/v1/change-plans?sort=parameters", headers=auth_headers)
+    assert r.status_code == 422

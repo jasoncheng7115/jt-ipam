@@ -215,8 +215,11 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "If-Match"],
-        expose_headers=["X-Request-ID"],
+        # 前端送的自訂標頭都要列（tests/test_cors_custom_headers.py 守著）：前後端不同源時少一個，
+        # 預檢就 400、瀏覽器根本不送請求，畫面只看到「連線失敗」
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "If-Match", "Idempotency-Key", "X-Warroom-Token"],
+        # 下載檔名（SBOM、憑證）在 Content-Disposition；不同源時沒公開，前端讀不到就只能用預設檔名
+        expose_headers=["X-Request-ID", "Content-Disposition"],
         max_age=600,
     )
 

@@ -648,7 +648,7 @@ curl -X POST https://ipam.example.com/api/v1/audit/verify \
 
 ## 6. アップグレード
 
-統合スクリプトによる一括アップグレード（git pull → バックアップ → pip → alembic → ビルド → 再起動）：
+統合スクリプトによる一括アップグレード（git pull → バックアップ → pip → 書き込み停止 → 基準の一覧 → alembic → 1 件ずつの照合 → ビルド → 再起動）：
 
 ```bash
 sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade
@@ -662,10 +662,14 @@ cd /opt/jt-ipam
 git pull
 sudo systemctl stop jt-ipam-backend
 sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/pip install -e backend
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; . /etc/jt-ipam/backend.env; set +a; .venv/bin/python -m app.cli.upgrade_verify snapshot --out /var/lib/jt-ipam/upgrade-checks/manual/before.json'
 sudo -u jtipam /opt/jt-ipam/backend/.venv/bin/alembic -c backend/alembic.ini upgrade head
+sudo -u jtipam bash -c 'cd /opt/jt-ipam/backend; set -a; . /etc/jt-ipam/backend.env; set +a; .venv/bin/python -m app.cli.upgrade_verify compare --before /var/lib/jt-ipam/upgrade-checks/manual/before.json --report /var/lib/jt-ipam/upgrade-checks/manual/report.json'
 cd frontend && sudo -u jtipam pnpm install --frozen-lockfile && sudo -u jtipam pnpm run build
 sudo systemctl start jt-ipam-backend
 ```
+
+**データの照合。**インプレースのアップグレードで既存データを失ってはいけません。マイグレーションの前にスクリプトは書き込みを止め（バックエンドと jt-ipam のタイマー）、ロケーション、ラック、機器の配置、電源、配線、機器と IP の関連付け、権限をすべて記録し、マイグレーション後に**1 件ずつ・項目ごとに**照合します（件数だけではなく、フロアプランのファイルはハッシュで比較）。以前からあったデータの問題は別に表示し、新しく生じたものだけを失敗とします。欠けたり変わったりしていればスクリプトは停止し、取得したバックアップの復元方法を表示して、**バックエンドとタイマーを停止したまま**にします。一覧とレポート（`/var/lib/jt-ipam/upgrade-checks/<時刻>/`）にはサイトのデータが含まれ、サービスアカウントだけが読めます（0600）。
 
 0.4.x からの移行には、専用の手順書 [UPGRADE_FROM_0.4_ja.md](UPGRADE_FROM_0.4_ja.md) があります。
 

@@ -318,6 +318,7 @@ import { CheckIcon, DownloadIcon, IdentifyIcon, CancelIcon } from "@/icons";
 import { useAuthStore } from "@/stores/auth";
 import type { IPAddress } from "@/types";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
 import { decodeNmapEscapes, serviceKind } from "@/utils/nmapText";
 import { saveBlob } from "@/utils/saveFile";
 import { investigate } from "@/api/investigate";
@@ -346,7 +347,7 @@ const invHelpers: SectionHelpers = { t: (k, p) => (p ? t(k, p) : t(k)), te: (k) 
 const integrations = computed(() => integrationTables(
   dossier.value, invHelpers, (s) => wazuhStatusLabel(t, s), (s) => lnmsStatusLabel(t, s)));
 function integCols(tb: IntegTable): DataTableColumns<Record<string, string>> {
-  return tb.cols.map((title, i) => ({ title, key: `c${i}`, minWidth: 90 }));
+  return autoSort<Record<string, string>>(tb.cols.map((title, i) => ({ title, key: `c${i}`, minWidth: 90 })));
 }
 function integRows(tb: IntegTable): Record<string, string>[] {
   return tb.rows.map((r, n) => Object.fromEntries([["__k", String(n)], ...r.map((v, i) => [`c${i}`, v || "—"])]));
@@ -476,7 +477,7 @@ function daysLeft(iso: string | null): number | null {
   const ms = new Date(iso.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
   return Number.isFinite(ms) ? Math.floor((ms - Date.now()) / 86400000) : null;
 }
-const certCols = computed<DataTableColumns<IdentifyCert>>(() => [
+const certCols = computed<DataTableColumns<IdentifyCert>>(() => autoSort<IdentifyCert>([
   { title: t("identify.col_port"), key: "port", width: 90, render: (r) => h("span", { class: "idf-mono" }, r.port) },
   // 主體一行、簽發者（或「自簽」）與其他名稱在第二行：六欄並排在一般視窗寬度放不下
   { title: t("identify.col_subject"), key: "subject", minWidth: 240,
@@ -509,15 +510,15 @@ const certCols = computed<DataTableColumns<IdentifyCert>>(() => [
       if (!hex) return "—";
       const short = (hex.match(/../g) ?? []).slice(0, 6).join(":").toUpperCase();
       return h("span", { class: "idf-fp", title: `${algo} ${hex}` }, `${algo} ${short}…`);
-    } },
-]);
-const keyCols = computed<DataTableColumns<IdentifySshKey>>(() => [
+    }, sorter: false },
+]));
+const keyCols = computed<DataTableColumns<IdentifySshKey>>(() => autoSort<IdentifySshKey>([
   { title: t("identify.col_port"), key: "port", width: 90, render: (r) => h("span", { class: "idf-mono" }, r.port) },
   { title: t("identify.col_key_type"), key: "type", width: 190,
     render: (r) => h("span", { class: "idf-mono" }, `${r.type ?? "—"}${r.bits ? ` (${r.bits})` : ""}`) },
   { title: t("identify.col_fingerprint"), key: "fingerprint", minWidth: 320,
-    render: (r) => h("span", { class: "idf-fp" }, r.fingerprint ?? "—") },
-]);
+    render: (r) => h("span", { class: "idf-fp" }, r.fingerprint ?? "—"), sorter: false },
+]));
 
 /** 顯示的 MAC：跟後端算網卡廠牌用的同一個（IP 記錄上的優先，沒有才用這次 nmap 看到的，同網段才拿得到），
  *  不然會出現「這個 MAC 配上另一個 MAC 的廠牌」 */
@@ -609,7 +610,7 @@ const extraWidth = computed(() => fitWidth(t("identify.col_extra"),
   ports.value.map((p) => p.extrainfo || ""), 100, 300));
 const portTableWidth = computed(() => 100 + 150 + productWidth.value + extraWidth.value + 360);
 
-const portCols = computed<DataTableColumns<IdentifyPort>>(() => [
+const portCols = computed<DataTableColumns<IdentifyPort>>(() => autoSort<IdentifyPort>([
   { title: t("identify.col_port"), key: "port", width: 100,
     render: (r) => h("span", { class: "idf-port" }, [h("b", null, String(r.port)), h("span", null, `/${r.proto}`)]) },
   { title: t("identify.col_service"), key: "service", width: 150,
@@ -645,8 +646,8 @@ const portCols = computed<DataTableColumns<IdentifyPort>>(() => [
                                                                          t("identify.truncated")) : null]),
           h("pre", { class: "idf-script__v" }, decodeNmapEscapes(v)),
         ])));
-    } },
-]);
+    }, sorter: false },
+]));
 
 /** 腳本輸出被截斷了沒：新代理直接講；舊代理看長度剛好是上限（600 字） */
 function isCut(r: IdentifyPort, key: string, text: string): boolean {

@@ -180,6 +180,8 @@ import {
   VirtualizationIcon,
 } from "@/icons";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import { saveBlob } from "@/utils/saveFile";
 
 const { t, te } = useI18n();
@@ -328,14 +330,15 @@ function iconAction(icon: any, label: string, onClick: () => void,
   });
 }
 
-const cols = computed<DataTableColumns<K8sCluster>>(() => [
+const authText = (r: K8sCluster) => (r.auth_method === "client_cert" ? t("k8s.auth_client_cert") : t("k8s.auth_token"));
+const cols = computed<DataTableColumns<K8sCluster>>(() => autoSort<K8sCluster>([
   { title: t("common.name"), key: "name", minWidth: 150, ellipsis: { tooltip: true },
     render: (r) => h(NButton, { text: true, type: "primary", onClick: () => { tab.value = `c:${r.id}`; } },
       { default: () => r.name }) },
   { title: t("k8s.api_url"), key: "api_url", minWidth: 220, ellipsis: { tooltip: true } },
   { title: t("k8s.version"), key: "server_version", width: 120, render: (r) => r.server_version ?? "—" },
   { title: t("k8s.auth"), key: "auth_method", width: 140,
-    render: (r) => (r.auth_method === "client_cert" ? t("k8s.auth_client_cert") : t("k8s.auth_token")) },
+    render: authText, sorter: (a, b) => cmpNatural(authText(a), authText(b)) },
   { title: t("common.enabled"), key: "enabled", width: 80,
     render: (r) => h(NTag, { size: "small", bordered: false, type: r.enabled ? "success" : "default" },
       { default: () => (r.enabled ? t("common.yes") : t("common.no")) }) },
@@ -351,7 +354,7 @@ const cols = computed<DataTableColumns<K8sCluster>>(() => [
         { trigger: () => iconAction(DeleteIcon, t("common.delete"), () => {}, { type: "error", testid: "k8s-delete" }),
           default: () => t("common.confirm_delete") }),
     ]) },
-]);
+]));
 
 onMounted(() => { void load(); void loadSubnetOptions(); });
 </script>

@@ -112,7 +112,7 @@ async def sync_clients(session: AsyncSession, inst: AdGuardInstance) -> dict[str
 
     AdGuard `clients` 回應結構：
         { "clients": [
-            { "name": "...", "ids": ["192.168.1.5", "aa:bb:cc:dd:ee:ff", "host.lan"], ... },
+            { "name": "...", "ids": ["192.168.123.5", "aa:bb:cc:dd:ee:ff", "host.lan"], ... },
             ...
         ] }
     `ids` 是 list，可能混 IP / MAC / hostname。

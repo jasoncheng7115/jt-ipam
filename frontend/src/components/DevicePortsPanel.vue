@@ -2,11 +2,12 @@
 import { computed, h, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NCard, NSpace, NButton, NIcon, NDataTable, NModal, NForm, NFormItem, NInput,
-  NSelect, NPopconfirm, NTag, NTooltip, NDropdown, useMessage, type DataTableColumns,
+  NCard, NSpace, NButton, NIcon, NDataTable, NModal, NForm, NFormItem, NInput, NInputNumber,
+  NSelect, NPopconfirm, NTag, NTooltip, NDropdown, NRadioButton, NRadioGroup, useDialog, useMessage, type DataTableColumns,
 } from "naive-ui";
 import { Physical, type DevicePort, type PortTrace } from "@/api/phase3";
-import { listDevices } from "@/api/basic";
+import { useDeviceOptions } from "@/composables/useDeviceOptions";
+import PatchPanelGrid from "@/components/PatchPanelGrid.vue";
 import { PlusIcon, EditIcon, DeleteIcon, LinkIcon, RefreshIcon, PhysicalIcon, ExportIcon, CancelIcon, SaveIcon } from "@/icons";
 
 import { useExportBusy } from "@/composables/useExportBusy";
@@ -18,7 +19,9 @@ import { saveBlob } from "@/utils/saveFile";
 const props = defineProps<{ deviceId: string; deviceName: string; admin: boolean }>();
 const { t } = useI18n();
 const msg = useMessage();
+const dialog = useDialog();
 const pg = useTablePagination();
+const errCode = (e: unknown): string | undefined => (e as any)?.response?.data?.detail_code;
 
 const ports = ref<DevicePort[]>([]);
 const loading = ref(false);
@@ -76,17 +79,35 @@ function openEdit(p: DevicePort) {
   form.value = { name: p.name, type: p.type, peer_port_id: p.peer_port_id, position: p.position, description: p.description ?? "" };
   showEdit.value = true;
 }
-async function submit() {
+// 目標埠已經跟別的埠配對：先問，確定才帶 replace_peer 重配（後端會清掉原本那一對的指標）
+function confirmReplacePeer(text: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: t("ports.peer_replace_title"), content: text,
+      positiveText: t("ports.peer_replace_ok"), negativeText: t("common.cancel"),
+      onPositiveClick: () => resolve(true), onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false), onMaskClick: () => resolve(false),
+    });
+  });
+}
+async function submit(replacePeer = false) {
   if (!form.value.name.trim()) { msg.error(t("ports.name_required")); return; }
   try {
-    if (editId.value) await Physical.updatePort(editId.value, { ...form.value, description: form.value.description || null });
-    else await Physical.createPort({ device_id: props.deviceId, ...form.value, description: form.value.description || null });
+    const body = { ...form.value, description: form.value.description || null };
+    if (editId.value) await Physical.updatePort(editId.value, { ...body, ...(replacePeer ? { replace_peer: true } : {}) });
+    else await Physical.createPort({ device_id: props.deviceId, ...body });
     showEdit.value = false; msg.success(t("common.ok")); await refresh();
-  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  } catch (e) {
+    if (editId.value && !replacePeer && errCode(e) === "port_peer_taken") {
+      if (await confirmReplacePeer(apiErrMsg(e))) await submit(true);
+      return;
+    }
+    msg.error(apiErrMsg(e));
+  }
 }
 async function del(id: string) {
   try { await Physical.deletePort(id); msg.success(t("common.ok")); await refresh(); }
-  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  catch (e) { msg.error(apiErrMsg(e)); }
 }
 
 const importing = ref(false);
@@ -103,7 +124,7 @@ async function importPorts() {
       msg.success(parts.join("；"));
       await refresh();
     } else msg.info(t("ports.import_none"));
-  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  } catch (e) { msg.error(apiErrMsg(e)); }
   finally { importing.value = false; }
 }
 
@@ -115,7 +136,8 @@ const targetPortId = ref<string | null>(null);
 const targetPorts = ref<DevicePort[]>([]);
 const cableType = ref<string>("cat6");
 const cableColor = ref<string>("");
-const deviceOpts = ref<{ label: string; value: string }[]>([]);
+// 裝置選單走後端搜尋（以前只載前 500 台，後面的選不到）
+const devOpts = useDeviceOptions();
 const CABLE_TYPES = ["cat6", "cat6a", "fiber-mm", "fiber-sm", "dac", "power"];
 const cableTypeOpts = computed(() => CABLE_TYPES.map((v) => ({ label: v, value: v })));
 const targetPortOpts = computed(() => [...targetPorts.value]
@@ -125,11 +147,7 @@ function openConnect(p: DevicePort) {
   connectFrom.value = p; targetDeviceId.value = null; targetPortId.value = null;
   targetPorts.value = []; cableType.value = "cat6"; cableColor.value = "";
   showConnect.value = true;
-  if (!deviceOpts.value.length) {
-    void listDevices({ pageSize: 500 }).then((r) => {
-      deviceOpts.value = r.items.map((d) => ({ label: d.name, value: d.id }));
-    });
-  }
+  void devOpts.search();
 }
 watch(targetDeviceId, async (id) => {
   targetPortId.value = null; targetPorts.value = [];
@@ -140,7 +158,7 @@ async function doConnect() {
   try {
     await Physical.connectPorts(connectFrom.value.id, targetPortId.value, { type: cableType.value, color: cableColor.value || undefined });
     showConnect.value = false; msg.success(t("ports.connected")); await refresh();
-  } catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  } catch (e) { msg.error(apiErrMsg(e)); }
 }
 
 // ── trace ──
@@ -148,12 +166,46 @@ const showTrace = ref(false);
 const trace = ref<PortTrace | null>(null);
 const traceTitle = ref("");
 async function openTrace(p: DevicePort) {
-  traceTitle.value = `${props.deviceName} · ${p.name}`;
+  traceTitle.value = `${props.deviceName}@${p.name}`;
   showTrace.value = true; trace.value = null;
   try { trace.value = await Physical.tracePort(p.id); }
-  catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
+  catch (e) { msg.error(apiErrMsg(e)); }
+}
+// 面板「追蹤完整路徑」：前埠、後埠各追一次再接起來（外側 ← 前埠 ↔ 後埠 → 外側），
+// 單從一個埠出發只會沿它那條線走到另一端，看不到穿過面板的整條路
+async function openPanelTrace(p: DevicePort) {
+  const peer = p.peer_port_id ? ports.value.find((x) => x.id === p.peer_port_id) : undefined;
+  if (!peer || peer.peer_port_id !== p.id) { await openTrace(p); return; }
+  const [front, rear] = p.type === "rear" ? [peer, p] : [p, peer];
+  traceTitle.value = `${props.deviceName}@${front.name} ↔ ${rear.name}`;
+  showTrace.value = true; trace.value = null;
+  try {
+    const [f, r] = await Promise.all([Physical.tracePort(front.id), Physical.tracePort(rear.id)]);
+    // f.nodes 第一個是前埠：反過來接（外側 … 前埠），中間插面板對應，再接後埠往外
+    const fn = f.nodes.slice().reverse();
+    const fh = f.hops.slice(0, f.nodes.length - 1).reverse();
+    const pass = { cable_id: null, cable_label: null, cable_type: "internal", cable_color: null, internal: true,
+                   kind: "panel_passthrough" as const, to: r.nodes[0] };
+    trace.value = {
+      start: fn[0], nodes: [...fn, ...r.nodes], hops: [...fh, pass, ...r.hops],
+      cable_count: (f.cable_count ?? 0) + (r.cable_count ?? 0),
+      stop_reason: r.stop_reason !== "end" ? r.stop_reason : f.stop_reason,
+      stop_port: r.stop_reason !== "end" ? r.stop_port : f.stop_port, candidates: r.candidates ?? f.candidates,
+    };
+  } catch (e) { msg.error(apiErrMsg(e)); }
 }
 const traceConnected = computed(() => (trace.value?.hops.length ?? 0) > 0);
+// 跳接面板：前埠 / 後埠的格狀檢視（交接包 physical-v1.2 設計圖 06）
+const hasPanelPorts = computed(() => ports.value.some((p) => p.type === "front" || p.type === "rear"));
+const view = ref<"list" | "grid">("list");   // 編輯、連線、刪除都在清單裡，預設清單
+const traceStop = computed(() => {
+  const d = trace.value;
+  if (!d?.stop_reason || d.stop_reason === "end") return "";
+  const sp = d.stop_port;
+  return t(`cable_trace.stop_${d.stop_reason}`, {
+    port: sp ? `${sp.device_name ?? ""}@${sp.port_name ?? ""}` : "",
+    list: (d.candidates ?? []).map((x) => x || t("physical_check.no_label")).join("、") });
+});
 
 function escapeXml(s: string): string {
   return s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c] as string));
@@ -286,9 +338,9 @@ const cols = computed<DataTableColumns<DevicePort>>(() => [
       ];
       if (props.admin) {
         acts.push(
-          h(NButton, { size: "tiny", quaternary: true, type: "primary", title: t("ports.connect"), onClick: () => openConnect(r) },
+          h(NButton, { size: "tiny", quaternary: true, type: "primary", title: t("ports.connect"), "data-testid": `port-connect-${r.name}`, onClick: () => openConnect(r) },
             { icon: () => h(NIcon, null, () => h(PhysicalIcon)) }),
-          h(NButton, { size: "tiny", quaternary: true, onClick: () => openEdit(r) }, { icon: () => h(NIcon, null, () => h(EditIcon)) }),
+          h(NButton, { size: "tiny", quaternary: true, "data-testid": `port-edit-${r.name}`, onClick: () => openEdit(r) }, { icon: () => h(NIcon, null, () => h(EditIcon)) }),
           h(NPopconfirm, { onPositiveClick: () => del(r.id) }, {
             trigger: () => h(NButton, { size: "tiny", quaternary: true, type: "error" }, { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
             default: () => t("common.confirm_delete"),
@@ -320,8 +372,14 @@ onMounted(() => { void refresh(); });
       <n-button size="small" @click="refresh" :loading="loading">
         <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
       </n-button>
+      <!-- 有前埠 / 後埠（跳接面板）才有格狀檢視 -->
+      <n-radio-group v-if="hasPanelPorts" v-model:value="view" size="small" data-testid="ports-view">
+        <n-radio-button value="list">{{ t("panel_grid.view_list") }}</n-radio-button>
+        <n-radio-button value="grid">{{ t("panel_grid.view_grid") }}</n-radio-button>
+      </n-radio-group>
     </n-space>
-    <n-data-table :columns="cols" :data="ports" :loading="loading" size="small" :bordered="false" :pagination="pg">
+    <PatchPanelGrid v-if="hasPanelPorts && view === 'grid'" :ports="ports" @trace="openPanelTrace" />
+    <n-data-table v-else :columns="cols" :data="ports" :loading="loading" size="small" :bordered="false" :pagination="pg">
       <template #empty><div style="text-align:center;opacity:.5;padding:12px">{{ t("ports.empty") }}</div></template>
     </n-data-table>
 
@@ -331,25 +389,33 @@ onMounted(() => { void refresh(); });
         <n-form-item :label="t('ports.col_name')"><n-input v-model:value="form.name" placeholder="eth0 / ge-0/0/1 / Port 1" /></n-form-item>
         <n-form-item :label="t('ports.col_type')"><n-select v-model:value="form.type" :options="typeOpts" /></n-form-item>
         <n-form-item :label="t('ports.peer_hint')">
-          <n-select v-model:value="form.peer_port_id" :options="peerOpts" clearable :placeholder="t('ports.peer_none')" />
+          <n-select v-model:value="form.peer_port_id" :options="peerOpts" clearable :placeholder="t('ports.peer_none')" data-testid="port-peer" />
+        </n-form-item>
+        <n-form-item :label="t('ports.position')">
+          <n-space vertical :size="2" style="width:100%">
+            <n-input-number v-model:value="form.position" :min="0" :max="100000" clearable style="width:160px" data-testid="port-position" />
+            <span style="font-size:12px;opacity:.7">{{ t("ports.position_hint") }}</span>
+          </n-space>
         </n-form-item>
         <n-form-item :label="t('common.description')"><n-input v-model:value="form.description" type="textarea" :rows="2" /></n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end"><n-button @click="showEdit = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" @click="submit"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button></n-space>
+          <n-button type="primary" data-testid="port-save" @click="submit()"><template #icon><n-icon><SaveIcon /></n-icon></template>{{ t("common.save") }}</n-button></n-space>
       </template>
     </n-modal>
 
     <!-- connect -->
     <n-modal v-model:show="showConnect" preset="card" style="width:480px" :title="t('ports.connect_title')">
       <n-form>
-        <n-form-item :label="t('ports.from')"><n-input :value="`${deviceName} · ${connectFrom?.name ?? ''}`" disabled /></n-form-item>
+        <n-form-item :label="t('ports.from')"><n-input :value="`${deviceName}@${connectFrom?.name ?? ''}`" disabled /></n-form-item>
         <n-form-item :label="t('ports.target_device')">
-          <n-select v-model:value="targetDeviceId" :options="deviceOpts" filterable :placeholder="t('common.select')" />
+          <n-select v-model:value="targetDeviceId" :options="devOpts.options.value" filterable remote clearable
+                    :loading="devOpts.loading.value" @search="devOpts.onSearch" :placeholder="t('common.select')"
+                    data-testid="connect-device" />
         </n-form-item>
         <n-form-item :label="t('ports.target_port')">
-          <n-select v-model:value="targetPortId" :options="targetPortOpts" :disabled="!targetDeviceId" :placeholder="t('ports.target_port_ph')" />
+          <n-select v-model:value="targetPortId" :options="targetPortOpts" :disabled="!targetDeviceId" :placeholder="t('ports.target_port_ph')" data-testid="connect-port" />
         </n-form-item>
         <n-space :size="10">
           <n-form-item :label="t('ports.cable_type')"><n-select v-model:value="cableType" :options="cableTypeOpts" style="width:150px" /></n-form-item>
@@ -358,7 +424,7 @@ onMounted(() => { void refresh(); });
       </n-form>
       <template #footer>
         <n-space justify="end"><n-button @click="showConnect = false"><template #icon><n-icon><CancelIcon /></n-icon></template>{{ t("common.cancel") }}</n-button>
-          <n-button type="primary" @click="doConnect"><template #icon><n-icon><LinkIcon /></n-icon></template>{{ t("ports.connect") }}</n-button></n-space>
+          <n-button type="primary" data-testid="connect-do" @click="doConnect"><template #icon><n-icon><LinkIcon /></n-icon></template>{{ t("ports.connect") }}</n-button></n-space>
       </template>
     </n-modal>
 
@@ -374,7 +440,7 @@ onMounted(() => { void refresh(); });
         </n-dropdown>
       </n-space>
       <div v-if="!trace" style="text-align:center;padding:20px;opacity:.6">…</div>
-      <div v-else-if="!traceConnected" style="text-align:center;padding:20px;opacity:.6">{{ t("ports.not_connected") }}</div>
+      <div v-else-if="!traceConnected && !traceStop" style="text-align:center;padding:20px;opacity:.6">{{ t("ports.not_connected") }}</div>
       <div v-else class="trace-chain">
         <template v-for="(n, i) in trace.nodes" :key="i">
           <div v-if="i > 0" class="trace-cable">
@@ -388,12 +454,15 @@ onMounted(() => { void refresh(); });
           </div>
         </template>
       </div>
+      <!-- 為什麼停在這裡（交接包 physical-v1.2：未配對的面板、同一埠多條線、只有規劃中的線…） -->
+      <div v-if="trace && traceStop" class="trace-stop" data-testid="port-trace-stop">{{ traceStop }}</div>
     </n-modal>
   </n-card>
 </template>
 
 <style scoped>
 .trace-chain { display: flex; flex-direction: column; align-items: center; padding: 6px 0; }
+.trace-stop { margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: rgba(240, 160, 32, .14); font-size: 13px; }
 .trace-node {
   width: 320px; max-width: 100%; border: 2px solid #6366f1; background: rgba(99,102,241,0.08);
   border-radius: 8px; padding: 8px 12px; text-align: center;

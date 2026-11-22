@@ -17,13 +17,13 @@ from app.models.subnet import Subnet
 from app.services import adguard as adguard_svc
 
 
-async def _make_overlapping_ip(db_session, ip_value: str = "192.168.1.5") -> None:
+async def _make_overlapping_ip(db_session, ip_value: str = "192.168.123.5") -> None:
     sec = Section(name=f"sec-{uuid.uuid4().hex[:6]}")
     db_session.add(sec)
     await db_session.flush()
     # 兩個重疊子網路（同 CIDR），各掛一筆相同 IP → IPAddress.ip == x 會回多筆
     for _ in range(2):
-        sn = Subnet(section_id=sec.id, cidr="192.168.1.0/24")
+        sn = Subnet(section_id=sec.id, cidr="192.168.123.0/24")
         db_session.add(sn)
         await db_session.flush()
         db_session.add(IPAddress(subnet_id=sn.id, ip=ip_value, state="active"))
@@ -42,7 +42,7 @@ async def test_sync_clients_overlap_no_crash(db_session, monkeypatch):
     await _make_overlapping_ip(db_session)
 
     async def fake_api_get(inst, path, *, timeout=15.0):
-        return {"clients": [{"name": "pc1", "ids": ["192.168.1.5", "host.lan"]}]}
+        return {"clients": [{"name": "pc1", "ids": ["192.168.123.5", "host.lan"]}]}
 
     monkeypatch.setattr(adguard_svc, "_api_get", fake_api_get)
     inst = _instance()
@@ -55,7 +55,7 @@ async def test_sync_rewrites_overlap_no_crash(db_session, monkeypatch):
     await _make_overlapping_ip(db_session)
 
     async def fake_api_get(inst, path, *, timeout=15.0):
-        return [{"domain": "host.lan", "answer": "192.168.1.5"}]
+        return [{"domain": "host.lan", "answer": "192.168.123.5"}]
 
     monkeypatch.setattr(adguard_svc, "_api_get", fake_api_get)
     inst = _instance()

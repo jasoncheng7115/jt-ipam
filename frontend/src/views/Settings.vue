@@ -37,6 +37,8 @@ import TotpEnroll from "@/components/auth/TotpEnroll.vue";
 import RecoveryCodes from "@/components/auth/RecoveryCodes.vue";
 import { describeAgent, listMySessions, revokeMyOtherSessions, revokeMySession, type LoginSession } from "@/api/sessions";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import { storeToRefs } from "pinia";
 import { useAuthStore } from "@/stores/auth";
 import { useUiStore } from "@/stores/ui";
@@ -185,8 +187,9 @@ async function revokeOthers() {
     await loadSessions();
   } catch (e) { msg.error(apiErrMsg(e)); }
 }
-const sessionColumns = computed<DataTableColumns<LoginSession>>(() => [
+const sessionColumns = computed<DataTableColumns<LoginSession>>(() => autoSort<LoginSession>([
   { title: t("settings.sessions.device"), key: "user_agent", minWidth: 160,
+    sorter: (a, b) => cmpNatural(describeAgent(a.user_agent), describeAgent(b.user_agent)),
     render: (r) => h("span", [describeAgent(r.user_agent),
       r.current ? h(NTag, { size: "small", type: "success", bordered: false, style: "margin-left:6px" },
                     () => t("settings.sessions.current")) : null]) },
@@ -201,7 +204,7 @@ const sessionColumns = computed<DataTableColumns<LoginSession>>(() => [
                        { default: () => t("settings.sessions.revoke"), icon: () => h(NIcon, { component: LogoutIcon }) }),
       default: () => t("settings.sessions.revoke_confirm"),
     }) },
-]);
+]));
 
 const localeOptions = [
   { label: "繁體中文", value: "zh-TW" },

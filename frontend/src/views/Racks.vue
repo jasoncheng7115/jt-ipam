@@ -34,6 +34,7 @@ import { useExportBusy } from "@/composables/useExportBusy";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient, apiErrMsg } from "@/api/client";
 import RackDiagram from "@/components/RackDiagram.vue";
+import RackPowerCard from "@/components/RackPowerCard.vue";
 import RackRoomToolbar from "@/components/RackRoomToolbar.vue";
 import { RACK_DEVICE_TYPES, rackTypeFill } from "@/utils/rackColors";
 import RackFloorPlan from "@/components/RackFloorPlan.vue";
@@ -886,6 +887,7 @@ function doMergedExport(key: string) {
           </n-button>
         </n-space>
         <rack-diagram :diagram="roomFocus" :editable="isAdmin" @pick-empty="onPickEmpty" />
+        <RackPowerCard v-if="(roomFocus as any).rack_id" :rack-id="(roomFocus as any).rack_id" />
       </n-card>
 
       <!-- 點選聚焦時隱藏整排總覽，避免同一機櫃顯示兩次 -->
@@ -942,6 +944,8 @@ function doMergedExport(key: string) {
       <n-card v-else-if="!selected" :title="t('racks.diagram_title')">
         <p style="opacity: 0.7">{{ t("racks.diagram_empty") }}</p>
       </n-card>
+      <!-- 電力加總（issue #54） -->
+      <RackPowerCard v-if="diagram && selected" :rack-id="selected" />
     </n-spin>
 
     <n-card :title="t('racks.all_title')">
@@ -1022,6 +1026,15 @@ function doMergedExport(key: string) {
           <div style="width: 100%">
             <n-select v-model:value="form.numbering" :options="numberingOpts" />
             <span class="field-hint">{{ t("racks.numbering_hint") }}</span>
+          </div>
+        </n-form-item>
+        <n-form-item :label="t('racks.default_face')">
+          <div style="width: 100%">
+            <n-radio-group v-model:value="form.face" data-testid="rack-default-face">
+              <n-radio-button value="front">{{ t("racks.face_front") }}</n-radio-button>
+              <n-radio-button value="rear">{{ t("racks.face_rear") }}</n-radio-button>
+            </n-radio-group>
+            <span class="field-hint">{{ t("racks.default_face_hint") }}</span>
           </div>
         </n-form-item>
         <n-form-item :label="kindUsesLevels ? t('racks.levels') : t('racks.u_height')">

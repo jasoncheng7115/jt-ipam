@@ -253,7 +253,7 @@ async def test_apply_matches_existing_ip_by_mac_and_fills_identity(db_session) -
 
     now = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
     res = await svc._apply_computer(
-        db_session, _server(), _computer("host-107", "aa:bb:cc:00:00:41"), idx, now)
+        db_session, _server(), _computer("pc-07", "aa:bb:cc:00:00:41"), idx, now)
     await db_session.flush()
 
     assert res["matched"] == 1
@@ -319,14 +319,14 @@ async def test_serial_fills_only_empty_device_fields(db_session) -> None:
     """新鮮盤點會補**空的**裝置欄位，但不覆寫已填的。"""
     from app.models.device import Device
     from app.services.arp_precedence import normalize_mac
-    dev = Device(name="host-107", vendor="Acme")     # vendor 已填、serial/model 空
+    dev = Device(name="pc-07", vendor="Acme")     # vendor 已填、serial/model 空
     db_session.add(dev)
     await db_session.flush()
     ip = await _mk_ip(db_session, "198.51.100.41", "aa:bb:cc:00:00:41", device_id=dev.id)
     idx = {normalize_mac("aa:bb:cc:00:00:41"): [ip.id]}
 
     await svc._apply_computer(
-        db_session, _server(), _computer("host-107", "aa:bb:cc:00:00:41", serial="SN-PC001"),
+        db_session, _server(), _computer("pc-07", "aa:bb:cc:00:00:41", serial="SN-PC001"),
         idx, datetime(2026, 9, 18, 12, 0, tzinfo=UTC))
     await db_session.flush()
     await db_session.refresh(dev)
@@ -339,13 +339,13 @@ async def test_serial_replaces_stored_dmi_placeholder(db_session) -> None:
     但使用者手填的真值不動。"""
     from app.models.device import Device
     from app.services.arp_precedence import normalize_mac
-    dev = Device(name="host-107", model="To Be Filled By O.E.M. X570D4I-2T",
+    dev = Device(name="pc-07", model="To Be Filled By O.E.M. X570D4I-2T",
                  serial="REAL-SN", vendor="Acme")
     db_session.add(dev)
     await db_session.flush()
     ip = await _mk_ip(db_session, "198.51.100.41", "aa:bb:cc:00:00:41", device_id=dev.id)
     idx = {normalize_mac("aa:bb:cc:00:00:41"): [ip.id]}
-    comp = _computer("host-107", "aa:bb:cc:00:00:41", serial="SN-PC001")
+    comp = _computer("pc-07", "aa:bb:cc:00:00:41", serial="SN-PC001")
     comp["bios"] = [{"SMANUFACTURER": "ASRock", "SMODEL": "X570D4I-2T", "SSN": "SN-PC001"}]
     await svc._apply_computer(db_session, _server(), comp, idx,
                              datetime(2026, 9, 18, 12, 0, tzinfo=UTC))
@@ -361,12 +361,12 @@ async def test_placeholder_cleared_when_ocs_has_no_real_value(db_session) -> Non
     """存的是佔位垃圾、OCS 也給不出真值時（bios 序號也是佔位）→ 清成空，別繼續顯示垃圾。"""
     from app.models.device import Device
     from app.services.arp_precedence import normalize_mac
-    dev = Device(name="host-114", serial="To Be Filled By O.E.M.")
+    dev = Device(name="pc-14", serial="To Be Filled By O.E.M.")
     db_session.add(dev)
     await db_session.flush()
     ip = await _mk_ip(db_session, "198.51.100.41", "aa:bb:cc:00:00:41", device_id=dev.id)
     idx = {normalize_mac("aa:bb:cc:00:00:41"): [ip.id]}
-    comp = _computer("host-114", "aa:bb:cc:00:00:41")
+    comp = _computer("pc-14", "aa:bb:cc:00:00:41")
     comp["bios"] = [{"SSN": "To Be Filled By O.E.M."}]   # OCS 的序號也是佔位
     await svc._apply_computer(db_session, _server(), comp, idx,
                              datetime(2026, 9, 18, 12, 0, tzinfo=UTC))

@@ -10,6 +10,7 @@ import {
 import { migrationStatus, getMigrationConfig, saveMigrationConfig, type MappingStat } from "@/api/phase3";
 import { apiClient, apiErrMsg } from "@/api/client";
 import { getTask } from "@/api/tasks";
+import { autoSort } from "@/composables/useTableSort";
 import {
   MigrationIcon, RefreshIcon, EyeIcon, SaveIcon, WarnIcon,
   CancelIcon, OkIcon,
@@ -142,10 +143,22 @@ const tofuFingerprint = ref("");
 const tofuKnownHost = ref("");
 const tofuFetching = ref(false);
 
-const cols: DataTableColumns<MappingStat> = [
+const cols: DataTableColumns<MappingStat> = autoSort<MappingStat>([
   { title: t("cols.object_type"), key: "object_type" },
   { title: t("cols.count"),       key: "count" },
-];
+]);
+// 匯入結果：各表的新增 / 更新 / 略過 / 錯誤（數字欄，autoSort 依數值排）
+const resultCols = computed<DataTableColumns<TableRow>>(() => autoSort<TableRow>([
+  { title: t("migration.table"), key: "name" },
+  { title: t("migration.inserted"), key: "inserted",
+    render: (r) => h(NTag, { size: "small", type: r.inserted > 0 ? "success" : "default", bordered: false }, () => String(r.inserted)) },
+  { title: t("migration.updated"), key: "updated",
+    render: (r) => h(NTag, { size: "small", type: r.updated > 0 ? "info" : "default", bordered: false }, () => String(r.updated)) },
+  { title: t("migration.skipped"), key: "skipped",
+    render: (r) => h(NTag, { size: "small", bordered: false }, () => String(r.skipped)) },
+  { title: t("migration.errored"), key: "errored",
+    render: (r) => h(NTag, { size: "small", type: r.errored > 0 ? "error" : "default", bordered: false }, () => String(r.errored)) },
+]));
 
 async function refresh() {
   loading.value = true;
@@ -568,19 +581,7 @@ onUnmounted(() => window.removeEventListener("resize", onResizeSteps));
         </span>
       </n-alert>
 
-      <n-data-table size="small" :bordered="false"
-        :columns="[
-          { title: t('migration.table'), key: 'name' },
-          { title: t('migration.inserted'), key: 'inserted',
-            render: (r) => h(NTag, { size: 'small', type: r.inserted > 0 ? 'success' : 'default', bordered: false }, () => String(r.inserted)) },
-          { title: t('migration.updated'), key: 'updated',
-            render: (r) => h(NTag, { size: 'small', type: r.updated > 0 ? 'info' : 'default', bordered: false }, () => String(r.updated)) },
-          { title: t('migration.skipped'), key: 'skipped',
-            render: (r) => h(NTag, { size: 'small', bordered: false }, () => String(r.skipped)) },
-          { title: t('migration.errored'), key: 'errored',
-            render: (r) => h(NTag, { size: 'small', type: r.errored > 0 ? 'error' : 'default', bordered: false }, () => String(r.errored)) },
-        ]"
-        :data="tableRows" />
+      <n-data-table size="small" :bordered="false" :columns="resultCols" :data="tableRows" />
 
       <n-collapse v-if="allErrorMessages.length" :default-expanded-names="['errors']"
                   style="margin-top: 12px">

@@ -66,7 +66,7 @@ useVersionCheck();
 const auth = useAuthStore();
 const { theme, locale } = storeToRefs(ui);
 const { me } = storeToRefs(auth);
-// 右上以「帳號@領域」呈現：本機帳號補 @local；外部帳號的 username 已是 jason@ldap 形式
+// 右上以「帳號@領域」呈現：本機帳號補 @local；外部帳號的 username 已是 alice@ldap 形式
 const accountLabel = computed(() => {
   const u = me.value?.username || "";
   return u.includes("@") ? u : `${u}@local`;
@@ -277,6 +277,9 @@ const menuOptions = computed<MenuOption[]>(() => {
     { label: () => t("nav.devices"),     key: "devices",    icon: renderIcon(DevicesIcon) },
     { label: () => t("nav.racks"),       key: "racks",      icon: renderIcon(RacksIcon) },
     { label: () => t("nav.locations"),   key: "locations",  icon: renderIcon(LocationsIcon) },
+    // 機房、機櫃、佈線、電力排在一起（使用者 2026-11-22：機房機櫃相關的要排在一起；以前佈線 / 電力在「進階」裡）
+    { label: () => t("nav.cabling"),     key: "cabling",    icon: renderIcon(PhysicalIcon) },
+    { label: () => t("nav.power"),       key: "power",      icon: renderIcon(PowerIcon) },
     ...(me.value?.is_admin
       ? [{ label: () => t("nav.customers"), key: "customers", icon: renderIcon(CustomersIcon) }]
       : []),
@@ -321,8 +324,6 @@ const menuOptions = computed<MenuOption[]>(() => {
         ...(intgPresence.value.mikrotik
           ? [{ label: () => t("nav.mikrotik_fw"), key: "mikrotik_fw", icon: renderIcon(FirewallIcon) }] : []),
         { label: () => t("nav.nat"),            key: "nat",         icon: renderIcon(NatIcon) },
-        { label: () => t("nav.cabling"),        key: "cabling",     icon: renderIcon(PhysicalIcon) },
-        { label: () => t("nav.power"),          key: "power",       icon: renderIcon(PowerIcon) },
         { label: () => t("nav.vpn_tunnels"),    key: "vpn-tunnels", icon: renderIcon(VpnIcon) },
         // 匯入會寫入子網路、後端六支端點都是 admin → 非 admin 不顯示，
         // 否則點進去只會拿到 403

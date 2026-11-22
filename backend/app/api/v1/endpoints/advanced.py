@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, model_validator
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
 from app.core.db import get_session
+from app.core.sqlin import in_values
+from app.core.ui_error import ui_detail
 from app.models.advanced import (
     ASN,
     Circuit,
@@ -47,6 +49,20 @@ def _slugify(name: str) -> str:
     return (s[:64] or "tenant")
 
 
+async def _check_parent_loop(session: AsyncSession, model: type, obj_id: uuid.UUID, data: dict[str, Any]) -> None:
+    """有上層的資源（租戶群組、聯絡人群組）：上層不可以是自己或自己底下的，不然會形成循環。
+    往上走新上層的祖先鏈，遇到自己就擋；資料若已經有循環也會停。"""
+    if data.get("parent_id") is None or not hasattr(model, "parent_id"):
+        return
+    seen: set[uuid.UUID] = set()
+    cur: uuid.UUID | None = data["parent_id"]
+    while cur is not None and cur not in seen:
+        if cur == obj_id:
+            raise HTTPException(422, detail=ui_detail("parent_cycle", "上層不可以是自己或自己底下的項目"))
+        seen.add(cur)
+        cur = await session.scalar(select(model.parent_id).where(model.id == cur))  # type: ignore[attr-defined]
+
+
 async def _patch_resource(
     session: AsyncSession,
     *,
@@ -62,6 +78,7 @@ async def _patch_resource(
     if obj is None:
         raise HTTPException(404, detail="Not found")
     data = payload.model_dump(exclude_unset=True)
+    await _check_parent_loop(session, model, obj.id, data)
     for key, value in data.items():
         setattr(obj, key, value)
     try:
@@ -734,6 +751,7 @@ async def update_contact_group(
     obj = await session.get(ContactGroup, g_id)
     if obj is None:
         raise HTTPException(404, detail="Not found")
+    await _check_parent_loop(session, ContactGroup, obj.id, payload.model_dump(exclude_unset=True))
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(obj, k, v)
     try:
@@ -854,6 +872,9 @@ class WirelessSSIDRead(StrictModel):
     auth_type: str | None
     vlan_id: uuid.UUID | None
     tenant_id: uuid.UUID | None
+    # 清單才填：表格不靠前端只載第一頁的選單找名稱
+    vlan_label: str | None = None
+    tenant_name: str | None = None
 
 
 class WirelessSSIDWrite(StrictModel):
@@ -872,6 +893,8 @@ class WirelessLinkRead(StrictModel):
     ssid: str | None
     distance_m: int | None
     description: str | None
+    a_device_name: str | None = None
+    b_device_name: str | None = None
 
 
 class WirelessLinkWrite(StrictModel):
@@ -881,6 +904,12 @@ class WirelessLinkWrite(StrictModel):
     ssid: Annotated[str | None, Field(max_length=64)] = None
     distance_m: Annotated[int | None, Field(ge=0, le=100_000)] = None
     description: Annotated[str | None, Field(max_length=1024)] = None
+
+    @model_validator(mode="after")
+    def _two_ends(self) -> WirelessLinkWrite:
+        if self.a_device_id is not None and self.a_device_id == self.b_device_id:
+            raise ValueError("a_device_id and b_device_id must be different devices")
+        return self
 
 
 @router.get("/wireless/ssids", response_model=Paginated[WirelessSSIDRead])
@@ -894,8 +923,15 @@ async def list_ssids(
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
     total = int(await session.scalar(select(func.count()).select_from(WirelessSSID)) or 0)
+    from app.models.vlan import VLAN
+    vlans = {i: f"{n} {nm}".strip() for i, n, nm in (await session.execute(
+        select(VLAN.id, VLAN.number, VLAN.name).where(in_values(VLAN.id, {r.vlan_id for r in rows if r.vlan_id}))
+    )).all()}
+    tenants = dict((await session.execute(select(Tenant.id, Tenant.name).where(
+        in_values(Tenant.id, {r.tenant_id for r in rows if r.tenant_id})))).all())
     return Paginated[WirelessSSIDRead](
-        items=[WirelessSSIDRead.model_validate(r) for r in rows],
+        items=[WirelessSSIDRead.model_validate(r).model_copy(update={
+            "vlan_label": vlans.get(r.vlan_id), "tenant_name": tenants.get(r.tenant_id)}) for r in rows],
         total=total, page=page, page_size=page_size,
     )
 
@@ -928,8 +964,13 @@ async def list_wlinks(
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
     total = int(await session.scalar(select(func.count()).select_from(WirelessLink)) or 0)
+    from app.models.device import Device
+    ids = {d for r in rows for d in (r.a_device_id, r.b_device_id) if d}
+    names = dict((await session.execute(select(Device.id, Device.name).where(
+        in_values(Device.id, ids)))).all())
     return Paginated[WirelessLinkRead](
-        items=[WirelessLinkRead.model_validate(r) for r in rows],
+        items=[WirelessLinkRead.model_validate(r).model_copy(update={
+            "a_device_name": names.get(r.a_device_id), "b_device_name": names.get(r.b_device_id)}) for r in rows],
         total=total, page=page, page_size=page_size,
     )
 

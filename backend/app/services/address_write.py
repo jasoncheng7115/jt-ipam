@@ -79,6 +79,26 @@ async def create_address_checked(
     obj.custom_fields = cf or None
     if "customer_id" in requested:
         obj.customer_id = payload.customer_id
+    # 新增視窗上的其餘設定（以前新增時沒存，選了等於沒選；2026-11-21）
+    for flag in ("ssh_enabled", "sftp_enabled", "rdp_enabled", "vnc_enabled", "novnc_enabled", "bmc_enabled",
+                 "rustdesk_enabled", "is_dhcp_server"):
+        setattr(obj, flag, bool(getattr(payload, flag)))
+    if payload.excluded_probes or payload.exclude_from_ping:
+        from app.core.scan_probes import normalize_probes as _norm_probes
+        probes = set(payload.excluded_probes or [])
+        if payload.exclude_from_ping:
+            probes.add("icmp")
+        obj.excluded_probes = _norm_probes(list(probes))
+        obj.exclude_from_ping = "icmp" in obj.excluded_probes
+    if payload.jump_host_id or payload.console_agent_id:
+        from app.services.console_route import EgressError, normalize_egress
+        egress = {"jump_host_id": payload.jump_host_id, "console_agent_id": payload.console_agent_id}
+        try:
+            await normalize_egress(session, egress, scan_agent_id=subnet.scan_agent_id)
+        except EgressError as exc:
+            raise HTTPException(status_code=422, detail=ui_detail(exc.code, str(exc), **exc.params)) from exc
+        obj.jump_host_id = egress.get("jump_host_id")
+        obj.console_agent_id = egress.get("console_agent_id")
 
     await log_change(session, ip=obj, event_type="created",
                      source="manual", actor_user_id=str(user.id), note=change_note)

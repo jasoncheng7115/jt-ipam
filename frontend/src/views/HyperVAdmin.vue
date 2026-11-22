@@ -188,6 +188,8 @@ import {
   CancelIcon, DeleteIcon, EditIcon, PlusIcon, RefreshIcon, SaveIcon, SyncIcon, TestIcon, VirtualizationIcon,
 } from "@/icons";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 const { t, te } = useI18n();
 const router = useRouter();
@@ -329,16 +331,20 @@ function hostCount(r: HyperVInstance): number {
   return (r.extra_hosts || "").split(/[\s,]+/).filter(Boolean).length;
 }
 
-const cols = computed<DataTableColumns<HyperVInstance>>(() => [
+const modeText = (r: HyperVInstance) => (r.mode === "scvmm" ? "SCVMM" : t("hyperv.mode_hosts_short"));
+const winrmText = (r: HyperVInstance) =>
+  `${r.use_ssl ? "HTTPS" : "HTTP"} ${r.port} · ${r.auth_method === "kerberos" ? "Kerberos" : "NTLM"}`;
+const cols = computed<DataTableColumns<HyperVInstance>>(() => autoSort<HyperVInstance>([
   { title: t("common.name"), key: "name", minWidth: 150, ellipsis: { tooltip: true } },
   {
     title: t("hyperv.mode"), key: "mode", width: 120,
-    render: (r) => h(NTag, { size: "small", bordered: false, type: r.mode === "scvmm" ? "info" : "default" },
-      { default: () => (r.mode === "scvmm" ? "SCVMM" : t("hyperv.mode_hosts_short")) }),
+    sorter: (a: HyperVInstance, b: HyperVInstance) => cmpNatural(modeText(a), modeText(b)),
+    render: (r: HyperVInstance) => h(NTag, { size: "small", bordered: false, type: r.mode === "scvmm" ? "info" : "default" },
+      { default: () => modeText(r) }),
   },
   {
     title: t("hyperv.col_hosts"), key: "host", minWidth: 200,
-    render: (r) => h("span", null, [
+    render: (r: HyperVInstance) => h("span", null, [
       r.host,
       hostCount(r)
         ? h(NTag, { size: "tiny", type: "info", bordered: false, style: "margin-left:6px",
@@ -348,25 +354,27 @@ const cols = computed<DataTableColumns<HyperVInstance>>(() => [
   },
   {
     title: "WinRM", key: "port", width: 170,
-    render: (r) => `${r.use_ssl ? "HTTPS" : "HTTP"} ${r.port} · ${r.auth_method === "kerberos" ? "Kerberos" : "NTLM"}`,
+    render: winrmText,
+    sorter: (a: HyperVInstance, b: HyperVInstance) => cmpNatural(winrmText(a), winrmText(b)),
   },
   { title: t("common.username"), key: "username", width: 160, ellipsis: { tooltip: true } },
   {
     title: t("common.enabled"), key: "enabled", width: 80,
-    render: (r) => h(NTag, { size: "small", bordered: false, type: r.enabled ? "success" : "default" },
+    sorter: (a: HyperVInstance, b: HyperVInstance) => Number(a.enabled) - Number(b.enabled),
+    render: (r: HyperVInstance) => h(NTag, { size: "small", bordered: false, type: r.enabled ? "success" : "default" },
       { default: () => (r.enabled ? t("common.yes") : t("common.no")) }),
   },
   {
     title: t("cols.last_sync"), key: "last_sync_at", width: 170,
-    render: (r) => (r.last_sync_at ? fmtDateTime(r.last_sync_at) : "—"),
+    render: (r: HyperVInstance) => (r.last_sync_at ? fmtDateTime(r.last_sync_at) : "—"),
   },
   {
     title: t("cols.last_error"), key: "last_error", minWidth: 160, ellipsis: { tooltip: true },
-    render: (r) => (r.last_error ? h("span", { style: "color:#d03050" }, r.last_error) : "—"),
+    render: (r: HyperVInstance) => (r.last_error ? h("span", { style: "color:#d03050" }, r.last_error) : "—"),
   },
   {
     title: t("common.actions"), key: "actions", className: "col-actions", width: 176,
-    render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
+    render: (r: HyperVInstance) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       iconAction(EditIcon, t("common.edit"), () => openEdit(r), "success", "hyperv-edit"),
       iconAction(TestIcon, t("common.test"), () => runTest(r), undefined, "hyperv-test"),
       iconAction(SyncIcon, t("common.pull"), () => runSync(r), "primary", "hyperv-sync"),
@@ -375,7 +383,7 @@ const cols = computed<DataTableColumns<HyperVInstance>>(() => [
           default: () => t("common.confirm_delete") }),
     ]),
   },
-]);
+]));
 
 const ALL_KEYS = ["name", "mode", "host", "port", "username", "enabled", "last_sync_at", "last_error"];
 const colPrefs = useColumnPrefs("hyperv_admin", ALL_KEYS, ALL_KEYS);

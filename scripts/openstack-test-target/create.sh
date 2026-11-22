@@ -8,7 +8,7 @@
 #
 # 可以重複執行：已存在的儲存集區／網路／設定檔／容器會沿用，已經跑完 stack.sh 的節點會跳過。
 #
-# ⚠️ 只接在 LXD 自己的私網橋接（jtosbr0，10.241.73.0/24）上，dev1 的區網介面沒有發布任何埠；
+# ⚠️ 只接在 LXD 自己的私網橋接（jtosbr0，10.241.73.0/24）上，開發機 的區網介面沒有發布任何埠；
 #    區網上的機器就算加了路由，轉送規則也只放行「已建立的連線」回程，連不進來。
 #    容器是特權容器（OVS 要用核心 datapath），只能當測試用，不可以放任何真實資料。
 set -euo pipefail
@@ -71,7 +71,7 @@ devices:
     network: $BRIDGE
 EOF
 
-    # dev1 有 docker：它把 FORWARD 預設改成 DROP，容器會上不了網（clone／pip／apt 都會失敗）。
+    # 開發機 有 docker：它把 FORWARD 預設改成 DROP，容器會上不了網（clone／pip／apt 都會失敗）。
     # 只在 DOCKER-USER 放行「從橋接出去」與「回到橋接的已建立連線」，所以區網連不進容器。
     if iptables -n -L DOCKER-USER >/dev/null 2>&1; then
         iptables -C DOCKER-USER -i "$BRIDGE" -j ACCEPT 2>/dev/null \

@@ -162,7 +162,7 @@ async def healthcheck(inst: WazuhInstance) -> dict[str, Any]:
 def _index_by_ip(ip_rows: Any) -> tuple[dict[str, Any], set[str]]:
     """IP 字串 → IPAddress.id；**對應到多筆的一律不收**。
 
-    重疊網段（例如甲乙兩單位都用 192.168.1.0/24）下，同一個 IP 字串是兩台不同機器。
+    重疊網段（例如甲乙兩單位都用 192.168.123.0/24）下，同一個 IP 字串是兩台不同機器。
     以前這裡用 dict 覆寫，等於依資料庫回傳順序任意挑一筆 —— 掛錯比沒有更糟：
     沒有資料使用者會去查，掛錯了不會知道，而且在多單位環境下是跨單位的資料外洩。
 
@@ -241,7 +241,7 @@ def agent_represents_ip(agent: Any, ip: Any, *, grace_hours: int = 24) -> bool:
     """這個 Wazuh agent 現在還代表這個 IP 嗎？
 
     只比對 IP 位址是不夠的：**DHCP 位址會被回收**。實機上 agent 015
-    （`laptop-a1.local`，macOS）失聯後，它登記的 192.168.1.187 被 Proxmox 上的
+    （`laptop-a1.local`，macOS）失聯後，它登記的 192.168.123.187 被 Proxmox 上的
     Linux VM 拿去用，我們卻把 macOS 貼到了那台 VM 上。
 
     判準：agent 還連著就算數；已失聯的話，只要這個 IP 在它失聯**之後**還被偵測到活著，

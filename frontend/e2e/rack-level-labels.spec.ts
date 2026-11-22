@@ -68,12 +68,13 @@ test("挑選器要講得出「該層第幾個位置」，不能只給名字", as
   const labels = await page.locator(".upick-row .upick-u").allInnerTexts();
   labels.forEach((l, i) => byLabel.set(l.trim(), texts[i].trim()));
 
+  // 只檢查標示的寫法，不寫死設備名稱（這支跑在實際的層架上，名稱不放進原始碼）
   // 佔左半又只佔下半的那一台，兩個方向都要講
-  expect(byLabel.get("頂")).toBe("srv-top-01（左半·下半）");
+  expect(byLabel.get("頂")).toMatch(/^\S+（左半·下半）$/);
   // 只切上下的就只講上下
-  expect(byLabel.get("9")).toBe("switch-003（下半）");
+  expect(byLabel.get("9")).toMatch(/^\S+（下半）$/);
   // 同一層兩台並排：由左而右，各自標位置
-  expect(byLabel.get("2")).toBe("das5（左半）、nas2（右半）");
+  expect(byLabel.get("2")).toMatch(/^\S+（左半）、\S+（右半）$/);
   // 佔滿整層的不要畫蛇添足
-  expect(byLabel.get("1")).toBe("pc-001");
+  expect(byLabel.get("1")).toMatch(/^[^（、]+$/);
 });

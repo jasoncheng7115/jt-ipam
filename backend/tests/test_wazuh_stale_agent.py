@@ -1,10 +1,10 @@
 """Wazuh agent 與 IP 的對映要看「還算不算數」，不能只比對 IP 位址。
 
-實機案例（v0.5.141）：`192.168.1.187` 顯示 OS 是 macOS、來源 Wazuh，但那台其實是
+實機案例（v0.5.141）：`192.168.123.187` 顯示 OS 是 macOS、來源 Wazuh，但那台其實是
 Proxmox 上的 Linux VM（MAC 開頭 bc:24:11），PVE 裡根本沒有 macOS 的 VM。
 
 追下去：Wazuh 的 agent 015 是 `laptop-a1.local`（一台 MacBook），Wazuh 上記錄的 IP
-還是 192.168.1.187，狀態 disconnected。那是 DHCP 位址，早就被回收給別台機器用了。
+還是 192.168.123.187，狀態 disconnected。那是 DHCP 位址，早就被回收給別台機器用了。
 我們只用 IP 比對，就把 Mac 的 OS 貼到了 Linux VM 上。
 
 判準：**agent 已經失聯，而這個 IP 在那之後還被偵測到活著 → 現在佔用這個 IP 的不是它。**

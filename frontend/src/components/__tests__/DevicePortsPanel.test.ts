@@ -26,7 +26,8 @@ vi.mock("@/api/phase3", () => ({
 vi.mock("@/api/basic", () => ({ listDevices: vi.fn(async () => ({ items: [] })) }));
 vi.mock("naive-ui", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("naive-ui");
-  return { ...actual, useMessage: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }) };
+  return { ...actual, useMessage: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+           useDialog: () => ({ warning: vi.fn(), info: vi.fn() }) };
 });
 
 import { createPinia, setActivePinia } from "pinia";

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Annotated, Any
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +18,7 @@ from app.api.v1.dependencies import CurrentUser, require_admin, require_global_r
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.sqlin import in_values
+from app.core.ui_error import ui_detail
 from app.models.device import Device
 from app.models.librenms import FDBEntry, LibreNMSDevice
 from app.models.physical import (
@@ -23,6 +26,7 @@ from app.models.physical import (
     CableTermination,
     DevicePort,
     DevicePowerPort,
+    DevicePowerProfile,
     PowerFeed,
     PowerOutlet,
     PowerPanel,
@@ -31,6 +35,15 @@ from app.models.physical import (
 from app.schemas.base import Paginated, StrictModel
 from app.services.device_port_filter import is_pseudo_iface, prune_pseudo_ports
 from app.services.device_port_filter import load_patterns as load_pseudo_patterns
+from app.services.physical_links import (
+    ensure_cable_ports_free,
+    ensure_outlet_free,
+    ensure_port_free,
+    lock_ports,
+    set_peer,
+)
+from app.services.power_scenario import preview_failure
+from app.services.power_summary import feed_detail, feed_summaries, rack_summary
 
 router = APIRouter(tags=["physical"], dependencies=[Depends(require_global_read)])
 
@@ -70,6 +83,11 @@ class CableRead(StrictModel):
     b_customer_id: uuid.UUID | None = None
     a_location_id: uuid.UUID | None = None
     b_location_id: uuid.UUID | None = None
+    # 追線從這一端出發用；機櫃給清單篩選（機房是有效位置：機櫃的地點優先）
+    a_port_id: uuid.UUID | None = None
+    b_port_id: uuid.UUID | None = None
+    a_rack_id: uuid.UUID | None = None
+    b_rack_id: uuid.UUID | None = None
 
 
 class CableWrite(StrictModel):
@@ -78,7 +96,19 @@ class CableWrite(StrictModel):
     color: Annotated[str | None, Field(max_length=16)] = None
     length_m: Annotated[float | None, Field(ge=0, le=10_000)] = None
     description: Annotated[str | None, Field(max_length=1024)] = None
-    status: str = "connected"
+    status: Literal["planned", "connected", "decommissioned"] = "connected"
+
+
+class CableConnect(CableWrite):
+    """一次建好一條線與兩端（同一個交易）：以前前端要打三支 API，一端失敗就留下半條線。"""
+    a_port_id: uuid.UUID
+    b_port_id: uuid.UUID
+
+    @model_validator(mode="after")
+    def _two_ports(self) -> CableConnect:
+        if self.a_port_id == self.b_port_id:
+            raise ValueError("a_port_id and b_port_id must be different ports")
+        return self
 
 
 class CableTerminationRead(StrictModel):
@@ -125,13 +155,17 @@ async def list_cables(
             ports = {p.id: p for p in (await session.execute(
                 select(DevicePort).where(DevicePort.id.in_(port_ids))  # bounded: ends of one page of cables
             )).scalars().all()}
-        # dev_meta: id → (name, customer_id, location_id)
-        dev_meta: dict[uuid.UUID, tuple[str, uuid.UUID | None, uuid.UUID | None]] = {}
+        # dev_meta: id → (name, customer_id, 有效位置, rack_id)。機房用有效位置：在機櫃裡就算機櫃的地點
+        # （交接包 physical-v1.2 第 9 節；機房與機櫃條件才會落在同一端）
+        from app.models.location import Rack
+        dev_meta: dict[uuid.UUID, tuple[str, uuid.UUID | None, uuid.UUID | None, uuid.UUID | None]] = {}
         need_dev = set(dev_ids) | {p.device_id for p in ports.values()}
         if need_dev:
-            dev_meta = {d.id: (d.name, d.customer_id, d.location_id) for d in (await session.execute(
-                select(Device).where(Device.id.in_(need_dev))  # bounded: ends of one page of cables
-            )).scalars().all()}
+            dev_meta = {d.id: (d.name, d.customer_id, rack_loc if d.rack_id else d.location_id, d.rack_id)
+                        for d, rack_loc in (await session.execute(
+                select(Device, Rack.location_id).outerjoin(Rack, Rack.id == Device.rack_id)
+                .where(Device.id.in_(need_dev))  # bounded: ends of one page of cables
+            )).all()}
         for t in terms:
             label = None
             device_id = None
@@ -149,6 +183,8 @@ async def list_cables(
                 "label": label, "device_id": device_id,
                 "customer_id": meta[1] if meta else None,
                 "location_id": meta[2] if meta else None,
+                "rack_id": meta[3] if meta else None,
+                "port_id": t.object_id if t.object_type == "device_port" and t.object_id in ports else None,
             }
 
     items = []
@@ -160,6 +196,8 @@ async def list_cables(
             "a_device_id": a.get("device_id"), "b_device_id": b.get("device_id"),
             "a_customer_id": a.get("customer_id"), "b_customer_id": b.get("customer_id"),
             "a_location_id": a.get("location_id"), "b_location_id": b.get("location_id"),
+            "a_port_id": a.get("port_id"), "b_port_id": b.get("port_id"),
+            "a_rack_id": a.get("rack_id"), "b_rack_id": b.get("rack_id"),
         }))
     return Paginated[CableRead](items=items, total=total, page=page, page_size=page_size)
 
@@ -181,6 +219,34 @@ async def create_cable(
     return CableRead.model_validate(obj)
 
 
+@router.post("/cables/connect", response_model=CableRead, status_code=201,
+             dependencies=[Depends(require_admin)])
+async def connect_ports(
+    payload: CableConnect, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CableRead:
+    """建一條線並接好兩端；任一端被已接線的纜線占用就整筆不建（409 port_occupied）。"""
+    ports = await lock_ports(session, [payload.a_port_id, payload.b_port_id])
+    for pid in (payload.a_port_id, payload.b_port_id):
+        if pid not in ports:
+            raise HTTPException(422, detail=ui_detail("port_not_found", "找不到這個連接埠"))
+        if payload.status == "connected":
+            await ensure_port_free(session, ports[pid])
+    attrs = payload.model_dump(exclude={"a_port_id", "b_port_id"})
+    obj = Cable(**attrs)
+    session.add(obj)
+    await session.flush()
+    for side, pid in (("A", payload.a_port_id), ("B", payload.b_port_id)):
+        session.add(CableTermination(cable_id=obj.id, side=side, object_type="device_port", object_id=pid))
+    await session.flush()
+    await _audit(session, user=user, request=request, object_type="cable",
+                 object_id=str(obj.id), action="create",
+                 diff=payload.model_dump(mode="json"))
+    await session.commit()
+    await session.refresh(obj)
+    return CableRead.model_validate(obj)
+
+
 @router.patch("/cables/{cable_id}", response_model=CableRead,
               dependencies=[Depends(require_admin)])
 async def update_cable(
@@ -190,7 +256,11 @@ async def update_cable(
     obj = await session.get(Cable, cable_id)
     if obj is None:
         raise HTTPException(404, detail="Cable not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("status") == "connected" and obj.status != "connected":
+        # 規劃中 / 已除役改成已接線：兩端可能已經被別條線接走了
+        await ensure_cable_ports_free(session, cable_id)
+    for k, v in changes.items():
         setattr(obj, k, v)
     await session.flush()
     await _audit(session, user=user, request=request, object_type="cable",
@@ -227,6 +297,13 @@ async def add_termination(
     payload: CableTerminationWrite, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CableTerminationRead:
+    if payload.object_type == "device_port":
+        cable = await session.get(Cable, payload.cable_id)
+        port = (await lock_ports(session, [payload.object_id])).get(payload.object_id)
+        if port is None:
+            raise HTTPException(422, detail=ui_detail("port_not_found", "找不到這個連接埠"))
+        if cable is not None and cable.status == "connected":
+            await ensure_port_free(session, port, exclude_cable_id=cable.id)
     obj = CableTermination(**payload.model_dump())
     session.add(obj)
     try:
@@ -239,6 +316,16 @@ async def add_termination(
     await session.commit()
     await session.refresh(obj)
     return CableTerminationRead.model_validate(obj)
+
+
+@router.get("/physical-check", dependencies=[Depends(require_admin)])
+async def get_physical_check(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """佈線與供電的既有問題（只讀）：重複占用、不對稱配對、半條線、舊式插座直連。"""
+    from app.services.physical_check import physical_check
+    return await physical_check(session)
 
 
 @router.get("/cables/{cable_id}/trace")
@@ -281,6 +368,10 @@ class DevicePortRead(StrictModel):
     position: int | None
     description: str | None
     link: str | None = None   # 對端標籤（已接纜線時）：例「switch-003 · eth1/0/24」
+    # 接在這個埠的線（面板格狀檢視顯示正面、背面各自的線標）；有多條時優先已接線的
+    cable_id: uuid.UUID | None = None
+    cable_label: str | None = None
+    cable_status: str | None = None
     mac_address: str | None = None   # 此埠自身的實體 MAC（ifPhysAddress）
     mac_vendor: str | None = None    # MAC 的 OUI 廠商（清單的 MAC 欄第二行，與 IP 清單一致）
 
@@ -300,6 +391,8 @@ class DevicePortUpdate(StrictModel):
     peer_port_id: uuid.UUID | None = None
     position: int | None = None
     description: Annotated[str | None, Field(max_length=1024)] = None
+    # 目標埠已經跟第三個埠配對時，要明確帶 true 才重配（不然 409 port_peer_taken）
+    replace_peer: bool = False
 
 
 @router.get("/device-ports", response_model=list[DevicePortRead])
@@ -323,32 +416,43 @@ async def list_device_ports(
     by_id = {r.id: r for r in out}
     port_ids = list(by_id)
 
-    # ── 纜線對端（link）──
-    terms = list((await session.execute(
-        select(CableTermination).where(
-            CableTermination.object_type == "device_port",
-            in_values(CableTermination.object_id, port_ids),      # 一台裝置可以有上萬個埠（issue #47）
-        )
-    )).scalars().all())
-    for t in terms:
-        other = (await session.execute(
-            select(CableTermination).where(
-                CableTermination.cable_id == t.cable_id,
-                CableTermination.id != t.id,
-            ).limit(1)
-        )).scalar_one_or_none()
+    # ── 纜線與對端（link）── 批次查：一台裝置可以有上萬個埠（issue #47），以前每個端點各查一次
+    rows = (await session.execute(
+        select(CableTermination.object_id, CableTermination.id, Cable.id, Cable.label, Cable.status)
+        .join(Cable, Cable.id == CableTermination.cable_id)
+        .where(CableTermination.object_type == "device_port", in_values(CableTermination.object_id, port_ids))
+    )).all()
+    # 同一個埠有多條線（舊資料）：已接線 > 規劃中 > 已除役
+    rank = {"connected": 0, "planned": 1, "decommissioned": 2}
+    best: dict[uuid.UUID, Any] = {}
+    for r in rows:
+        cur = best.get(r[0])
+        if cur is None or rank.get(r[4], 3) < rank.get(cur[4], 3):
+            best[r[0]] = r
+    others: dict[uuid.UUID, Any] = {}
+    if best:
+        for o in (await session.execute(select(CableTermination).where(
+                in_values(CableTermination.cable_id, [r[2] for r in best.values()])))).scalars():
+            others.setdefault(o.cable_id, []).append(o)
+    far_ids = [o.object_id for lst in others.values() for o in lst if o.object_type == "device_port"]
+    far: dict[uuid.UUID, Any] = {}
+    if far_ids:
+        far = {pid: (pname, dname) for pid, pname, dname in (await session.execute(
+            select(DevicePort.id, DevicePort.name, Device.name).join(Device, Device.id == DevicePort.device_id)
+            .where(in_values(DevicePort.id, far_ids)))).all()}
+    for pid, r in best.items():
+        item = by_id.get(pid)
+        if item is None:
+            continue
+        item.cable_id, item.cable_label, item.cable_status = r[2], r[3], r[4]
+        other = next((o for o in others.get(r[2], []) if o.id != r[1]), None)
         if other is None:
             continue
-        label: str | None = None
         if other.object_type == "device_port":
-            fp = await session.get(DevicePort, other.object_id)
-            if fp is not None:
-                fd = await session.get(Device, fp.device_id)
-                label = f"{fd.name if fd else '?'} · {fp.name}"
+            pn = far.get(other.object_id)
+            item.link = f"{pn[1]} · {pn[0]}" if pn else None
         else:
-            label = f"{other.object_type} {other.port_label or ''}".strip()
-        if label and t.object_id in by_id:
-            by_id[t.object_id].link = label
+            item.link = f"{other.object_type} {other.port_label or ''}".strip()
 
     # 埠自身 MAC（mac_address）已由 model_validate 直接帶出，不再用 FDB/ARP
     return out
@@ -362,12 +466,15 @@ async def create_device_port(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DevicePortRead:
-    obj = DevicePort(**payload.model_dump())
+    obj = DevicePort(**payload.model_dump(exclude={"peer_port_id"}))
     session.add(obj)
     try:
         await session.flush()
     except IntegrityError as exc:
         raise HTTPException(409, detail="Port name already exists on this device") from exc
+    if payload.peer_port_id is not None:
+        await set_peer(session, obj, payload.peer_port_id, replace=False)
+        await session.flush()
     await _audit(session, user=user, request=request, object_type="device_port",
                  object_id=str(obj.id), action="create", diff={"name": obj.name})
     await session.commit()
@@ -488,19 +595,21 @@ async def update_device_port(
     obj = await session.get(DevicePort, port_id)
     if obj is None:
         raise HTTPException(404, detail="Port not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True, exclude={"replace_peer"})
+    peer_given = "peer_port_id" in changes
+    new_peer = changes.pop("peer_port_id", None)
+    for k, v in changes.items():
         setattr(obj, k, v)
     try:
         await session.flush()
     except IntegrityError as exc:
         raise HTTPException(409, detail="Port name already exists on this device") from exc
-    # front↔rear pass-through 雙向綁定：設定 peer 時，對方也指回自己
-    if payload.peer_port_id is not None:
-        peer = await session.get(DevicePort, payload.peer_port_id)
-        if peer is not None and peer.peer_port_id != obj.id:
-            peer.peer_port_id = obj.id
+    # front↔rear 穿透配對兩邊一起改：舊對端的反向指標要清掉（以前只補寫新對端，舊的還指著自己）
+    if peer_given and new_peer != obj.peer_port_id:
+        await set_peer(session, obj, new_peer, replace=payload.replace_peer)
+        await session.flush()
     await _audit(session, user=user, request=request, object_type="device_port",
-                 object_id=str(obj.id), action="update", diff=payload.model_dump(exclude_unset=True))
+                 object_id=str(obj.id), action="update", diff=payload.model_dump(mode="json", exclude_unset=True))
     await session.commit()
     await session.refresh(obj)
     return DevicePortRead.model_validate(obj)
@@ -526,104 +635,14 @@ async def delete_device_port(
 @router.get("/ports/{port_id}/trace")
 async def trace_port(
     port_id: uuid.UUID,
-    _user: CurrentUser,
+    user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> dict:  # type: ignore[type-arg]
-    """從某連接埠做多跳 cable trace：沿纜線 → 對端埠 →（若為 front/rear pass-through）穿透 → 續走。"""
-    start = await session.get(DevicePort, port_id)
-    if start is None:
-        raise HTTPException(404, detail="Port not found")
-
-    dev_names: dict[uuid.UUID, str] = {}
-
-    async def _port_node(p: DevicePort) -> dict[str, Any]:
-        if p.device_id not in dev_names:
-            d = await session.get(Device, p.device_id)
-            dev_names[p.device_id] = d.name if d else str(p.device_id)[:8]
-        return {"port_id": str(p.id), "port_name": p.name, "port_type": p.type,
-                "device_id": str(p.device_id), "device_name": dev_names[p.device_id]}
-
-    async def _term_for_port(pid: uuid.UUID) -> CableTermination | None:
-        return (await session.execute(
-            select(CableTermination).where(
-                CableTermination.object_type == "device_port",
-                CableTermination.object_id == pid,
-            ).limit(1)
-        )).scalar_one_or_none()
-
-    def _internal_hop(to_node: dict[str, Any]) -> dict[str, Any]:
-        return {"cable_id": None, "cable_label": None, "cable_type": "internal",
-                "cable_color": None, "internal": True, "to": to_node}
-
-    hops: list[dict[str, Any]] = []
-    visited: set[uuid.UUID] = set()
-    current: DevicePort | None = start
-    nodes = [await _port_node(current)]
-
-    # 每一輪最多前進一段（纜線或內部 peer），且每多一個 node 就配一個 hop（保持對齊）。
-    # visited 同時防迴圈：雙向 peer（bridge↔NIC）不會來回繞。
-    while current is not None and current.id not in visited:
-        visited.add(current.id)
-
-        # bridge：實體上行其實是對應 NIC(peer)。插入「bridge →(橋接) NIC」內部跳，
-        # NIC 標記已訪、但 current 仍是 bridge（纜線掛在 bridge 上，由下方續走）。
-        if (current.type == "bridge" and current.peer_port_id
-                and current.peer_port_id not in visited):
-            nic = await session.get(DevicePort, current.peer_port_id)
-            if nic is not None and nic.device_id == current.device_id:
-                visited.add(nic.id)
-                nic_node = await _port_node(nic)
-                hops.append(_internal_hop(nic_node))
-                nodes.append(nic_node)
-
-        # 1) 沿纜線到對端（對端未訪過才前進，避免回繞）
-        term = await _term_for_port(current.id)
-        if term is not None:
-            cable = await session.get(Cable, term.cable_id)
-            other = (await session.execute(
-                select(CableTermination).where(
-                    CableTermination.cable_id == term.cable_id,
-                    CableTermination.id != term.id,
-                ).limit(1)
-            )).scalar_one_or_none()
-            if other is not None:
-                cable_hop: dict[str, Any] = {
-                    "cable_id": str(cable.id) if cable else None,
-                    "cable_label": cable.label if cable else None,
-                    "cable_type": cable.type if cable else None,
-                    "cable_color": cable.color if cable else None,
-                    "to": None,
-                }
-                if other.object_type == "device_port":
-                    far = await session.get(DevicePort, other.object_id)
-                    if far is not None and far.id not in visited:
-                        cable_hop["to"] = await _port_node(far)
-                        hops.append(cable_hop)
-                        nodes.append(cable_hop["to"])
-                        current = far
-                        continue
-                    # 對端已訪過 → 此纜線不再前進
-                else:
-                    # 非 device_port 對端（外部標籤）→ 視為終點
-                    cable_hop["to"] = {"object_type": other.object_type,
-                                       "object_id": str(other.object_id),
-                                       "port_name": other.port_label}
-                    hops.append(cable_hop)
-                    nodes.append(cable_hop["to"])
-                    break
-
-        # 2) 沒有可走的纜線 → 內部 peer 穿透（跳接面板 front/rear，或從 NIC 端）
-        if current.peer_port_id and current.peer_port_id not in visited:
-            pp = await session.get(DevicePort, current.peer_port_id)
-            if pp is not None:
-                pp_node = await _port_node(pp)
-                hops.append(_internal_hop(pp_node))
-                nodes.append(pp_node)
-                current = pp
-                continue
-        break
-
-    return {"start": nodes[0], "nodes": nodes, "hops": hops}
+    first_cable_id: uuid.UUID | None = Query(None, description="從纜線清單出發：第一段走這條線"),
+    max_segments: int = Query(64, ge=1, le=64),
+) -> dict[str, Any]:
+    """端到端追線：沿已接線的纜線、面板正背面配對一路往下，並說明停在哪、為什麼（services/port_trace）。"""
+    from app.services.port_trace import trace
+    return await trace(session, user, port_id, first_cable_id=first_cable_id, max_segments=max_segments)
 
 
 # ─────────────────── Power ───────────────────
@@ -652,6 +671,19 @@ class PowerFeedRead(StrictModel):
     supply_type: str
     rack_id: uuid.UUID | None
     description: str | None
+    # 規劃容量（人工確認，null＝未設定）與警戒 %。不再用電壓 × 電流當可用瓦數（交接包 physical-v1.2）
+    planning_capacity_w: float | None = None
+    warning_pct: int = 80
+    capacity_basis: str | None = None
+    # 負載（清單才填，services/power_summary）：整條迴路已知的規劃分配；partial＝有裝置的負載或分攤未知，
+    # 使用率只能說「至少」，狀態不會是 ok
+    allocated_w: float | None = None
+    partial: bool | None = None
+    unknown_devices: int | None = None
+    utilization_pct: float | None = None
+    status: str | None = None
+    devices: int | None = None
+    racks: int | None = None
 
 
 class PowerFeedWrite(StrictModel):
@@ -659,10 +691,14 @@ class PowerFeedWrite(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=64)]
     voltage_v: Annotated[int, Field(ge=12, le=600)] = 220
     amperage_a: Annotated[int, Field(ge=1, le=400)] = 20
-    phase: str = "single"
-    supply_type: str = "ac"
+    # 資料庫有 CHECK：以前送別的值會變成 500，現在在格式檢查就擋（422）
+    phase: Literal["single", "three"] = "single"
+    supply_type: Literal["ac", "dc"] = "ac"
     rack_id: uuid.UUID | None = None
     description: Annotated[str | None, Field(max_length=1024)] = None
+    planning_capacity_w: Annotated[Decimal | None, Field(ge=0, le=10_000_000, max_digits=10, decimal_places=2)] = None
+    warning_pct: Annotated[int, Field(ge=1, le=100)] = 80
+    capacity_basis: Annotated[str | None, Field(max_length=128)] = None
 
 
 class PowerOutletRead(StrictModel):
@@ -672,6 +708,9 @@ class PowerOutletRead(StrictModel):
     label: str
     device_id: uuid.UUID | None
     description: str | None
+    # 清單才填：「機房 / 機櫃 / 配電盤 / 迴路 / 插座」（同名插座才分得出來）與接在上面的電源
+    path: str | None = None
+    occupied_by: list[str] | None = None
 
 
 class PowerOutletWrite(StrictModel):
@@ -735,10 +774,53 @@ async def list_power_feeds(
         stmt.order_by(PowerFeed.name).offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
     total = int(await session.scalar(cstmt) or 0)
-    return Paginated[PowerFeedRead](
-        items=[PowerFeedRead.model_validate(r) for r in rows],
-        total=total, page=page, page_size=page_size,
-    )
+    sums = await feed_summaries(session, rows)
+    items = []
+    for r in rows:
+        v = sums.get(r.id, {})
+        items.append(PowerFeedRead.model_validate(r).model_copy(update={
+            "allocated_w": v.get("full_allocated_w"), "partial": v.get("partial"),
+            "unknown_devices": v.get("unknown_devices"), "utilization_pct": v.get("utilization_pct"),
+            "status": v.get("status"), "devices": v.get("devices"), "racks": v.get("racks")}))
+    return Paginated[PowerFeedRead](items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/power-feeds/{fid}/load-summary")
+async def power_feed_load(
+    fid: uuid.UUID, _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """整條迴路：接在上面的每台裝置（各機櫃、未入櫃都算）與已知分配。"""
+    feed = await session.get(PowerFeed, fid)
+    if feed is None:
+        raise HTTPException(404, detail="Not found")
+    return await feed_detail(session, feed)
+
+
+@router.get("/power-scenarios/preview")
+async def power_failure_preview(
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    feed_id: Annotated[list[uuid.UUID], Query(min_length=1, max_length=20)],
+) -> dict[str, Any]:
+    """失效模擬（唯讀）：這幾條迴路整條斷電時，每台受影響裝置的結果與存活迴路的新負載。"""
+    res = await preview_failure(session, feed_id)
+    if res is None:
+        raise HTTPException(404, detail="Power feed not found")
+    return res
+
+
+@router.get("/racks/{rack_id}/power")
+async def rack_power(
+    rack_id: uuid.UUID,
+    _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """機櫃的規劃電力（issue #54）：已知小計、完整度、未接線、分配未知、各迴路本櫃份額與全迴路、每台裝置的分配。"""
+    from app.models.location import Rack
+    if await session.get(Rack, rack_id) is None:
+        raise HTTPException(404, detail="Rack not found")
+    return await rack_summary(session, rack_id)
 
 
 @router.post("/power-feeds", response_model=PowerFeedRead, status_code=201,
@@ -772,10 +854,30 @@ async def list_power_outlets(
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
     total = int(await session.scalar(select(func.count()).select_from(PowerOutlet)) or 0)
-    return Paginated[PowerOutletRead](
-        items=[PowerOutletRead.model_validate(r) for r in rows],
-        total=total, page=page, page_size=page_size,
-    )
+    from app.models.location import Location, Rack
+    ids = [r.id for r in rows]
+    where: dict[uuid.UUID, tuple[Any, ...]] = {}
+    used: dict[uuid.UUID, list[str]] = {}
+    if ids:
+        for oid, feed, panel, rack, loc in (await session.execute(
+                select(PowerOutlet.id, PowerFeed.name, PowerPanel.name, Rack.name, Location.name)
+                .outerjoin(PowerFeed, PowerFeed.id == PowerOutlet.feed_id)
+                .outerjoin(PowerPanel, PowerPanel.id == PowerFeed.panel_id)
+                .outerjoin(Rack, Rack.id == PowerOutlet.rack_id)
+                .outerjoin(Location, Location.id == Rack.location_id)
+                .where(in_values(PowerOutlet.id, ids)))).all():
+            where[oid] = (loc, rack, panel, feed)
+        for oid, dev, port in (await session.execute(
+                select(DevicePowerPort.outlet_id, Device.name, DevicePowerPort.name)
+                .join(Device, Device.id == DevicePowerPort.device_id)
+                .where(in_values(DevicePowerPort.outlet_id, ids)).order_by(Device.name))).all():
+            used.setdefault(oid, []).append(f"{dev} {port}")
+    items = []
+    for r in rows:
+        parts = [*where.get(r.id, ()), r.label]
+        items.append(PowerOutletRead.model_validate(r).model_copy(update={
+            "path": " / ".join(x for x in parts if x), "occupied_by": used.get(r.id, [])}))
+    return Paginated[PowerOutletRead](items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("/power-outlets", response_model=PowerOutletRead, status_code=201,
@@ -830,6 +932,10 @@ async def update_power_panel(pid: uuid.UUID, payload: PowerPanelWrite, user: Cur
 @router.delete("/power-panels/{pid}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_power_panel(pid: uuid.UUID, user: CurrentUser, request: Request,
                              session: Annotated[AsyncSession, Depends(get_session)]) -> None:
+    # 還有迴路就不刪：CASCADE 會連迴路、插座的關聯一起靜靜消失，備援資訊就沒了
+    n = int(await session.scalar(select(func.count()).select_from(PowerFeed).where(PowerFeed.panel_id == pid)) or 0)
+    if n:
+        raise HTTPException(409, detail=ui_detail("panel_in_use", f"這個配電盤還有 {n} 個迴路，先刪除或移走", n=n))
     await _power_delete(session, PowerPanel, pid, "power_panel", user, request)
 
 
@@ -842,6 +948,9 @@ async def update_power_feed(fid: uuid.UUID, payload: PowerFeedWrite, user: Curre
 @router.delete("/power-feeds/{fid}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_power_feed(fid: uuid.UUID, user: CurrentUser, request: Request,
                             session: Annotated[AsyncSession, Depends(get_session)]) -> None:
+    n = int(await session.scalar(select(func.count()).select_from(PowerOutlet).where(PowerOutlet.feed_id == fid)) or 0)
+    if n:
+        raise HTTPException(409, detail=ui_detail("feed_in_use", f"這個迴路還有 {n} 個插座，先刪除或改到別的迴路", n=n))
     await _power_delete(session, PowerFeed, fid, "power_feed", user, request)
 
 
@@ -854,6 +963,13 @@ async def update_power_outlet(oid: uuid.UUID, payload: PowerOutletWrite, user: C
 @router.delete("/power-outlets/{oid}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_power_outlet(oid: uuid.UUID, user: CurrentUser, request: Request,
                               session: Annotated[AsyncSession, Depends(get_session)]) -> None:
+    # 有電源接著就不刪（SET NULL 會讓那顆電源靜靜變成未接線）
+    users = (await session.execute(
+        select(Device.name, DevicePowerPort.name).join(Device, Device.id == DevicePowerPort.device_id)
+        .where(DevicePowerPort.outlet_id == oid).limit(5))).all()
+    if users:
+        names = "、".join(f"{d} {p}" for d, p in users)
+        raise HTTPException(409, detail=ui_detail("outlet_in_use", f"這個插座接著 {names}，先改接或拔掉", ports=names))
     await _power_delete(session, PowerOutlet, oid, "power_outlet", user, request)
 
 
@@ -864,7 +980,9 @@ class DevicePowerPortRead(StrictModel):
     name: str
     outlet_id: uuid.UUID | None
     outlet_label: str | None = None
-    max_watts: int | None
+    max_watts: int | None                # PSU 額定容量（不是負載）
+    rating_confirmed_at: datetime | None = None
+    normal_share_pct: float | None = None
     description: str | None
 
 
@@ -881,6 +999,8 @@ class DevicePowerPortPatch(StrictModel):
     outlet_id: uuid.UUID | None = None
     max_watts: Annotated[int | None, Field(ge=0, le=100_000)] = None
     description: Annotated[str | None, Field(max_length=1024)] = None
+    # 「舊值，請確認」：確認 0247 以前填的瓦數確實是 PSU 額定容量（不改值）
+    rating_confirmed: bool | None = None
 
 
 async def _power_port_out(session: AsyncSession, obj: DevicePowerPort) -> DevicePowerPortRead:
@@ -911,7 +1031,11 @@ async def create_device_power_port(
     payload: DevicePowerPortWrite, user: CurrentUser, request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DevicePowerPortRead:
+    if payload.outlet_id is not None:
+        await ensure_outlet_free(session, payload.outlet_id, psu_id=None)
     obj = DevicePowerPort(**payload.model_dump())
+    if obj.max_watts is not None:
+        obj.rating_confirmed_at = datetime.now(UTC)   # 新畫面填的就是額定容量
     session.add(obj)
     try:
         await session.flush()
@@ -933,7 +1057,14 @@ async def update_device_power_port(
     obj = await session.get(DevicePowerPort, pid)
     if obj is None:
         raise HTTPException(404, detail="Not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True, exclude={"rating_confirmed"})
+    # 用新畫面（標「PSU 額定容量」）改的值、或按了確認：都算確認過
+    if payload.rating_confirmed or "max_watts" in changes:
+        obj.rating_confirmed_at = datetime.now(UTC)
+    # 只在換插座時檢查：升級前就有的重複占用照樣可以改說明（不動舊資料，由資料檢查頁列出）
+    if changes.get("outlet_id") is not None and changes["outlet_id"] != obj.outlet_id:
+        await ensure_outlet_free(session, changes["outlet_id"], psu_id=obj.id)
+    for k, v in changes.items():
         setattr(obj, k, v)
     try:
         await session.flush()
@@ -961,6 +1092,147 @@ async def delete_device_power_port(
     await session.commit()
 
 
+# ── 裝置的規劃電力（交接包 physical-v1.2 設計圖 02）──
+
+PowerBasis = Literal["manual_estimate", "vendor_reference", "measurement_reference"]
+SupplyMode = Literal["unknown", "single", "shared", "active_standby", "custom"]
+Failover = Literal["unknown", "confirmed_full_load", "insufficient"]
+
+
+class PowerShareIn(StrictModel):
+    id: uuid.UUID
+    normal_share_pct: Annotated[Decimal | None, Field(ge=0, le=100, max_digits=5, decimal_places=2)] = None
+
+
+class PowerProfileWrite(StrictModel):
+    """整台的規劃電力與各顆電源的分攤，一次存（同一個交易）。revision 不對＝別人剛改過 → 409，不蓋掉。"""
+    revision: Annotated[int, Field(ge=0)]
+    planning_input_w: Annotated[Decimal | None, Field(ge=0, le=10_000_000, max_digits=10, decimal_places=2)] = None
+    value_basis: PowerBasis | None = None
+    notes: Annotated[str | None, Field(max_length=2048)] = None
+    supply_mode: SupplyMode = "unknown"
+    failover_capability: Failover = "unknown"
+    primary_port_id: uuid.UUID | None = None
+    include_in_planning: bool = True
+    exclude_reason: Annotated[str | None, Field(max_length=1024)] = None
+    ports: Annotated[list[PowerShareIn], Field(max_length=64)] = []
+
+
+async def _power_profile_out(session: AsyncSession, device_id: uuid.UUID) -> dict[str, Any]:
+    from app.models.location import Location, Rack
+    from app.services.power_summary import allocate, num
+    prof = (await session.execute(select(DevicePowerProfile).where(
+        DevicePowerProfile.device_id == device_id))).scalar_one_or_none()
+    rows = (await session.execute(
+        select(DevicePowerPort, PowerOutlet, PowerFeed, PowerPanel.name, Rack.name, Location.name)
+        .outerjoin(PowerOutlet, PowerOutlet.id == DevicePowerPort.outlet_id)
+        .outerjoin(PowerFeed, PowerFeed.id == PowerOutlet.feed_id)
+        .outerjoin(PowerPanel, PowerPanel.id == PowerFeed.panel_id)
+        .outerjoin(Rack, Rack.id == PowerOutlet.rack_id)
+        .outerjoin(Location, Location.id == Rack.location_id)
+        .where(DevicePowerPort.device_id == device_id).order_by(DevicePowerPort.name))).all()
+    alloc = (await allocate(session, [device_id])).get(device_id)
+    watts = {p.port_id: p.watts for p in alloc.ports} if alloc else {}
+    ports, by_feed = [], {}
+    for pp, outlet, feed, panel, rack, loc in rows:
+        w = watts.get(pp.id)
+        if feed is not None and w is not None:
+            cur = by_feed.setdefault(feed.id, {"feed_id": str(feed.id), "feed": feed.name, "watts": Decimal(0)})
+            cur["watts"] += w
+        ports.append({
+            "id": str(pp.id), "name": pp.name, "max_watts": pp.max_watts,
+            "legacy_rating": pp.max_watts is not None and pp.rating_confirmed_at is None,
+            "normal_share_pct": num(pp.normal_share_pct), "allocated_w": num(w),
+            "outlet_id": str(outlet.id) if outlet else None, "outlet_label": outlet.label if outlet else None,
+            # 機房 / 機櫃 / 配電盤 / 迴路 / 插座：同名插座才分得出來
+            "outlet_path": " / ".join(x for x in (loc, rack, panel, feed.name if feed else None,
+                                                  outlet.label if outlet else None) if x) or None,
+            "feed_id": str(feed.id) if feed else None, "feed": feed.name if feed else None,
+        })
+    shares = [p.normal_share_pct for p, *_ in rows if p.normal_share_pct is not None]
+    feeds = {p["feed_id"] for p in ports if p["feed_id"]}
+    return {
+        "device_id": str(device_id), "revision": prof.revision if prof else 0,
+        "planning_input_w": num(prof.planning_input_w) if prof else None,
+        "value_basis": prof.value_basis if prof else None,
+        "confirmed_at": prof.confirmed_at.isoformat() if prof and prof.confirmed_at else None,
+        "notes": prof.notes if prof else None,
+        "supply_mode": prof.supply_mode if prof else "unknown",
+        "failover_capability": prof.failover_capability if prof else "unknown",
+        "primary_port_id": str(prof.primary_port_id) if prof and prof.primary_port_id else None,
+        "include_in_planning": alloc.included if alloc else True,
+        "exclude_reason": prof.exclude_reason if prof else None,
+        "ports": ports,
+        "share_total": num(sum(shares, Decimal(0))) if shares else None,
+        "preview": {"by_feed": [{**v, "watts": num(v["watts"])} for v in by_feed.values()],
+                    "unassigned_w": num(alloc.unassigned) if alloc else 0,
+                    "allocation_unknown_w": num(alloc.allocation_unknown) if alloc else 0},
+        "issues": alloc.issues if alloc else [],
+        # 不同迴路只證明迴路不同，不證明上游 UPS / 配電盤各自獨立
+        "wiring": {"distinct_feeds": len(feeds), "same_feed": len(ports) >= 2 and len(feeds) == 1,
+                   "unconnected": [p["name"] for p in ports if not p["feed_id"]],
+                   "upstream_independence": "unconfirmed"},
+    }
+
+
+@router.get("/devices/{device_id}/power-profile")
+async def get_power_profile(
+    device_id: uuid.UUID, _user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    if await session.get(Device, device_id) is None:
+        raise HTTPException(404, detail="Device not found")
+    return await _power_profile_out(session, device_id)
+
+
+@router.put("/devices/{device_id}/power-profile", dependencies=[Depends(require_admin)])
+async def put_power_profile(
+    device_id: uuid.UUID, payload: PowerProfileWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    # 鎖住裝置那一列：同一台的兩次存檔排隊，revision 檢查才準
+    dev = (await session.execute(select(Device).where(Device.id == device_id).with_for_update())).scalar_one_or_none()
+    if dev is None:
+        raise HTTPException(404, detail="Device not found")
+    prof = (await session.execute(select(DevicePowerProfile).where(
+        DevicePowerProfile.device_id == device_id))).scalar_one_or_none()
+    current = prof.revision if prof else 0
+    if payload.revision != current:
+        raise HTTPException(409, detail=ui_detail(
+            "power_profile_conflict", "這台裝置的電源設定剛被別人改過，請重新整理後再存", current=current))
+    if not payload.include_in_planning and not (payload.exclude_reason or "").strip():
+        raise HTTPException(422, detail=ui_detail("power_exclude_reason_required", "不納入規劃要寫原因"))
+    ports = {p.id: p for p in (await session.execute(select(DevicePowerPort).where(
+        DevicePowerPort.device_id == device_id).with_for_update())).scalars()}
+    if payload.primary_port_id is not None and payload.primary_port_id not in ports:
+        raise HTTPException(422, detail=ui_detail("power_port_other_device", "電源埠不屬於這台裝置"))
+    for sh in payload.ports:
+        if sh.id not in ports:
+            raise HTTPException(422, detail=ui_detail("power_port_other_device", "電源埠不屬於這台裝置"))
+        ports[sh.id].normal_share_pct = sh.normal_share_pct
+    total = sum((p.normal_share_pct for p in ports.values() if p.normal_share_pct is not None), Decimal(0))
+    if total > 100:
+        raise HTTPException(422, detail=ui_detail("power_share_over", f"分攤比例加總 {total}% 超過 100%", total=str(total)))
+    if prof is None:
+        prof = DevicePowerProfile(device_id=device_id, revision=0)
+        session.add(prof)
+    if payload.planning_input_w is None:
+        prof.confirmed_at = None
+    elif prof.planning_input_w != payload.planning_input_w or prof.value_basis != payload.value_basis \
+            or prof.confirmed_at is None:
+        prof.confirmed_at = datetime.now(UTC)
+    for k in ("planning_input_w", "value_basis", "notes", "supply_mode", "failover_capability", "primary_port_id",
+              "include_in_planning"):
+        setattr(prof, k, getattr(payload, k))
+    prof.exclude_reason = None if payload.include_in_planning else (payload.exclude_reason or "").strip()
+    prof.revision = current + 1
+    await session.flush()
+    await _audit(session, user=user, request=request, object_type="device_power_profile",
+                 object_id=str(device_id), action="update", diff=payload.model_dump(mode="json"))
+    await session.commit()
+    return await _power_profile_out(session, device_id)
+
+
 # ─────────────────── VPN ───────────────────
 
 
@@ -980,12 +1252,19 @@ class VPNTunnelRead(StrictModel):
     a_device_name: str | None = None
     b_device_name: str | None = None
     peered: bool = False   # 兩端對接成立（公鑰或端點比對）
+    # 防火牆同步來的（`fortigate:<id>` 之類）唯讀；手動建立的是 None
+    source_origin: str | None = None
+
+
+VPNType = Literal["ipsec_ikev1", "ipsec_ikev2", "wireguard", "openvpn", "l2tp", "vxlan", "vpls", "evpn", "other"]
+VPNStatus = Literal["planned", "active", "offline", "decommissioned"]
 
 
 class VPNTunnelWrite(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=128)]
-    type: str
-    status: str = "active"
+    # 跟資料表的檢查約束同一份：以前是 str，填錯撞上約束被當成「名稱重複」回 409
+    type: VPNType
+    status: VPNStatus = "active"
     a_device_id: uuid.UUID | None = None
     b_device_id: uuid.UUID | None = None
     a_endpoint: Annotated[str | None, Field(max_length=255)] = None
@@ -993,6 +1272,12 @@ class VPNTunnelWrite(StrictModel):
     encryption_algo: Annotated[str | None, Field(max_length=32)] = None
     auth_algo: Annotated[str | None, Field(max_length=32)] = None
     description: Annotated[str | None, Field(max_length=1024)] = None
+
+    @model_validator(mode="after")
+    def _two_ends(self) -> VPNTunnelWrite:
+        if self.a_device_id is not None and self.a_device_id == self.b_device_id:
+            raise ValueError("a_device_id and b_device_id must be different devices")
+        return self
 
 
 @router.get("/vpn-tunnels", response_model=Paginated[VPNTunnelRead])
@@ -1029,6 +1314,21 @@ async def list_vpn(
     )
 
 
+def _vpn_name_taken(name: str) -> HTTPException:
+    return HTTPException(409, detail=ui_detail("vpn_tunnel_name_taken", f"已經有同名的 VPN 通道「{name}」", name=name))
+
+
+async def _manual_vpn(session: AsyncSession, tunnel_id: uuid.UUID) -> VPNTunnel:
+    obj = await session.get(VPNTunnel, tunnel_id)
+    if obj is None:
+        raise HTTPException(404, detail="Not found")
+    if obj.source_origin:
+        # 防火牆同步來的：下次同步會照設備的設定蓋回去／重建，改了、刪了都沒用
+        raise HTTPException(409, detail=ui_detail(
+            "vpn_tunnel_synced", "這條通道是從防火牆同步來的，請在防火牆上修改", origin=obj.source_origin))
+    return obj
+
+
 @router.post("/vpn-tunnels", response_model=VPNTunnelRead, status_code=201,
              dependencies=[Depends(require_admin)])
 async def create_vpn(
@@ -1040,10 +1340,43 @@ async def create_vpn(
     try:
         await session.flush()
     except IntegrityError as exc:
-        raise HTTPException(409, detail="VPN tunnel name conflict") from exc
+        raise _vpn_name_taken(payload.name) from exc
     await _audit(session, user=user, request=request, object_type="vpn_tunnel",
                  object_id=str(obj.id), action="create",
                  diff=payload.model_dump(mode="json"))
     await session.commit()
     await session.refresh(obj)
     return VPNTunnelRead.model_validate(obj)
+
+
+@router.patch("/vpn-tunnels/{tunnel_id}", response_model=VPNTunnelRead, dependencies=[Depends(require_admin)])
+async def update_vpn(
+    tunnel_id: uuid.UUID, payload: VPNTunnelWrite, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> VPNTunnelRead:
+    obj = await _manual_vpn(session, tunnel_id)
+    changes = payload.model_dump(exclude_unset=True)
+    for k, v in changes.items():
+        setattr(obj, k, v)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise _vpn_name_taken(payload.name) from exc
+    await _audit(session, user=user, request=request, object_type="vpn_tunnel",
+                 object_id=str(tunnel_id), action="update",
+                 diff=payload.model_dump(mode="json", exclude_unset=True))
+    await session.commit()
+    await session.refresh(obj)
+    return VPNTunnelRead.model_validate(obj)
+
+
+@router.delete("/vpn-tunnels/{tunnel_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_vpn(
+    tunnel_id: uuid.UUID, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    obj = await _manual_vpn(session, tunnel_id)
+    await session.delete(obj)
+    await _audit(session, user=user, request=request, object_type="vpn_tunnel",
+                 object_id=str(tunnel_id), action="delete", diff={"name": obj.name})
+    await session.commit()

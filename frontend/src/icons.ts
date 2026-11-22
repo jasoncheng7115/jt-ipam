@@ -57,6 +57,7 @@ import {
   DatabaseScript,
   Text,
   ServerConnection,
+  Usb,
   Settings,
   GraphUp,
   ScaleFrameEnlarge,
@@ -99,6 +100,7 @@ import {
   AntennaSignal,
   BrainResearch,
   Flash,
+  FlashOff,
   DeliveryTruck,
   Wrench,
   Hourglass,
@@ -280,8 +282,11 @@ export const PluginsIcon = Puzzle;
 export const Phase3Icon = Server;
 export const AdvancedIcon = Group;
 export const VirtualizationIcon = Server;
-export const PhysicalIcon = ServerConnection;
+/** 佈線（纜線＋線標）：選單上跟「機櫃」並排，不可同一個圖示（2026-11-22） */
+export const PhysicalIcon = Usb;
 export const PowerIcon = Flash;
+/** 迴路失效模擬（唯讀計算） */
+export const PowerFailureIcon = FlashOff;
 /** 租用設備（向供應商租用、要寄回歸還） */
 export const LeaseIcon = DeliveryTruck;
 /** 維護排程（維護期間不告警） */

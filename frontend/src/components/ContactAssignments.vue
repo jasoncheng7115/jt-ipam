@@ -6,12 +6,14 @@
 import { computed, h, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  NButton, NDataTable, NForm, NFormItem, NIcon, NInput, NModal, NPopconfirm, NRadioButton, NRadioGroup, NSelect,
+  NButton, NDataTable, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NPopconfirm, NRadioButton, NRadioGroup, NSelect,
   NSpace, NTag, useMessage, type DataTableColumns,
 } from "naive-ui";
-import { CancelIcon, DeleteIcon, PlusIcon, SaveIcon } from "@/icons";
+import { CancelIcon, DeleteIcon, EditIcon, PlusIcon, SaveIcon } from "@/icons";
 import { apiClient, apiErrMsg } from "@/api/client";
 import { Advanced, type AssignedContact, type Contact, type ContactObjectType, type ContactRole } from "@/api/phase3";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 const props = defineProps<{
   objectType: ContactObjectType; objectId: string; contacts: AssignedContact[]; title: string;
@@ -30,31 +32,48 @@ function roleName(r: AssignedContact["role"] | ContactRole | null): string {
   return k && te(k) ? t(k) : r.name;
 }
 
-const cols = computed<DataTableColumns<AssignedContact>>(() => [
-  { title: t("cols.name"), key: "name", minWidth: 120, render: (r) => r.contact.name },
+// 排序比的是畫面上看到的值；空值排最後
+const by = (f: (r: AssignedContact) => unknown) => (a: AssignedContact, b: AssignedContact) => {
+  const x = f(a), y = f(b), ex = x == null || x === "", ey = y == null || y === "";
+  return ex || ey ? Number(ex) - Number(ey) : cmpNatural(x, y);
+};
+const cols = computed<DataTableColumns<AssignedContact>>(() => autoSort<AssignedContact>([
+  { title: t("cols.name"), key: "name", minWidth: 120, render: (r: AssignedContact) => r.contact.name,
+    sorter: by((r) => r.contact.name) },
   { title: t("circuits.contact_role"), key: "role", width: 120,
-    render: (r) => h(NTag, { size: "small", bordered: false }, () => roleName(r.role)) },
-  { title: t("circuits.contact_title"), key: "title", width: 120, render: (r) => r.contact.title || "—" },
+    render: (r: AssignedContact) => h(NTag, { size: "small", bordered: false }, () => roleName(r.role)),
+    sorter: by((r) => (r.role ? roleName(r.role) : null)) },
+  { title: t("circuits.contact_title"), key: "title", width: 120, render: (r: AssignedContact) => r.contact.title || "—",
+    sorter: by((r) => r.contact.title) },
   { title: t("circuits.contact_phone"), key: "phone", width: 150,
-    render: (r) => (r.contact.phone ? h("a", { href: `tel:${r.contact.phone}` }, r.contact.phone) : "—") },
+    render: (r: AssignedContact) => (r.contact.phone ? h("a", { href: `tel:${r.contact.phone}` }, r.contact.phone) : "—"),
+    sorter: by((r) => r.contact.phone) },
   { title: t("circuits.contact_email"), key: "email", minWidth: 180,
-    render: (r) => (r.contact.email ? h("a", { href: `mailto:${r.contact.email}` }, r.contact.email) : "—") },
+    render: (r: AssignedContact) => (r.contact.email ? h("a", { href: `mailto:${r.contact.email}` }, r.contact.email) : "—"),
+    sorter: by((r) => r.contact.email) },
+  { title: t("circuits.contact_priority"), key: "priority", width: 80, render: (r: AssignedContact) => r.priority ?? 0,
+    sorter: (a: AssignedContact, b: AssignedContact) => (a.priority ?? 0) - (b.priority ?? 0) },
   ...(props.admin ? [{
-    title: t("common.actions"), key: "_", width: 70, className: "col-actions",
-    render: (r: AssignedContact) => h(NPopconfirm, { onPositiveClick: () => remove(r) }, {
-      trigger: () => h(NButton, { size: "tiny", type: "error", ghost: true, title: t("common.delete") },
-                       { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
-      default: () => t("circuits.contact_remove_confirm", { name: r.contact.name }),
-    }),
+    title: t("common.actions"), key: "_", width: 100, className: "col-actions",
+    render: (r: AssignedContact) => h(NSpace, { size: 4, wrap: false }, () => [
+      h(NButton, { size: "tiny", type: "success", ghost: true, title: t("common.edit"),
+                   "data-testid": "contact-assign-edit", onClick: () => openEdit(r) },
+        { icon: () => h(NIcon, null, () => h(EditIcon)) }),
+      h(NPopconfirm, { onPositiveClick: () => remove(r) }, {
+        trigger: () => h(NButton, { size: "tiny", type: "error", ghost: true, title: t("common.delete") },
+                         { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
+        default: () => t("circuits.contact_remove_confirm", { name: r.contact.name }),
+      }),
+    ]),
   }] : []),
-]);
+]));
 
 const form = reactive({
   show: false, busy: false, mode: "pick" as "pick" | "new", contact_id: null as string | null,
-  role_id: null as string | null, name: "", phone: "", email: "", title: "",
+  role_id: null as string | null, priority: 0 as number | null, name: "", phone: "", email: "", title: "",
 });
 async function open() {
-  Object.assign(form, { show: true, busy: false, mode: "pick", contact_id: null, role_id: null,
+  Object.assign(form, { show: true, busy: false, mode: "pick", contact_id: null, role_id: null, priority: 0,
                         name: "", phone: "", email: "", title: "" });
   try {
     [roles.value, all.value] = await Promise.all([Advanced.contactRoles(), Advanced.contacts()]);
@@ -78,11 +97,29 @@ async function save() {
       cid = c.id;
     }
     await Advanced.assignContact({ contact_id: cid!, role_id: form.role_id, object_type: props.objectType,
-                                   object_id: props.objectId });
+                                   object_id: props.objectId, priority: form.priority ?? 0 });
     form.show = false;
     msg.success(t("common.saved"));
     emit("changed");
   } catch (e) { msg.error(apiErrMsg(e)); } finally { form.busy = false; }
+}
+// 已指派的聯絡人：改角色與優先序（以前建好就改不了，要刪掉重加）
+const editing = reactive({ show: false, busy: false, id: "", name: "", role_id: null as string | null, priority: 0 as number | null });
+async function openEdit(r: AssignedContact) {
+  Object.assign(editing, { show: true, busy: false, id: r.id, name: r.contact.name, role_id: r.role?.id ?? null,
+                           priority: r.priority ?? 0 });
+  if (!roles.value.length) {
+    try { roles.value = await Advanced.contactRoles(); } catch (e) { msg.error(apiErrMsg(e)); }
+  }
+}
+async function saveEdit() {
+  editing.busy = true;
+  try {
+    await Advanced.patchAssignment(editing.id, { role_id: editing.role_id, priority: editing.priority ?? 0 });
+    editing.show = false;
+    msg.success(t("common.saved"));
+    emit("changed");
+  } catch (e) { msg.error(apiErrMsg(e)); } finally { editing.busy = false; }
 }
 async function remove(r: AssignedContact) {
   try {
@@ -131,6 +168,12 @@ async function remove(r: AssignedContact) {
         <n-form-item :label="t('circuits.contact_role')">
           <n-select v-model:value="form.role_id" clearable :options="roleOpts" data-testid="contact-role" />
         </n-form-item>
+        <n-form-item :label="t('circuits.contact_priority')">
+          <n-space vertical :size="2">
+            <n-input-number v-model:value="form.priority" :min="0" :max="100" style="width:140px" />
+            <span class="hint">{{ t("circuits.contact_priority_hint") }}</span>
+          </n-space>
+        </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
@@ -146,10 +189,41 @@ async function remove(r: AssignedContact) {
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 改已指派聯絡人的角色與優先序 -->
+    <n-modal v-model:show="editing.show" preset="card" style="width: 420px; max-width: 95vw"
+             :title="t('circuits.contact_edit', { name: editing.name })">
+      <n-form label-placement="top">
+        <n-form-item :label="t('circuits.contact_role')">
+          <n-select v-model:value="editing.role_id" clearable :options="roleOpts" data-testid="contact-edit-role" />
+        </n-form-item>
+        <n-form-item :label="t('circuits.contact_priority')">
+          <n-space vertical :size="2">
+            <n-input-number v-model:value="editing.priority" :min="0" :max="100" style="width:140px"
+                            data-testid="contact-edit-priority" />
+            <span class="hint">{{ t("circuits.contact_priority_hint") }}</span>
+          </n-space>
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="editing.show = false">
+            <template #icon><n-icon><CancelIcon /></n-icon></template>
+            {{ t("common.cancel") }}
+          </n-button>
+          <n-button type="primary" :loading="editing.busy" :disabled="editing.busy" data-testid="contact-edit-save"
+                    @click="saveEdit">
+            <template #icon><n-icon><SaveIcon /></n-icon></template>
+            {{ t("common.save") }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <style scoped>
 .sec + .sec { margin-top: 18px; }
 .sec-title { font-weight: 600; }
+.hint { font-size: 12px; opacity: .7; }
 </style>

@@ -13,6 +13,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // 預設 5 秒：開發機負載 20 以上時，RustDesk / rdweb 那幾支（壓縮、128 KiB 分塊上傳、重連倒數）
+    // 會超時假紅，單獨跑都過（2026-11-21 全套 7 個失敗全是 "Test timed out in 5000ms"）
+    testTimeout: 20_000,
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     coverage: {
       provider: "v8",

@@ -93,7 +93,7 @@ class LibreNMSInstance(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     vlan_create_missing: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False, server_default=text("true"))
 
-    # 限定 sync 解析 IP 的子網路範圍（解決重疊網段：A/B 客戶都用 192.168.1.x）。
+    # 限定 sync 解析 IP 的子網路範圍（解決重疊網段：A/B 客戶都用 192.168.123.x）。
     # 空 = 全域比對（向下相容）。存 subnet UUID 字串陣列。
     scope_subnet_ids: Mapped[list[Any] | None] = mapped_column(JSONB)
 

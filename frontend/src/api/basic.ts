@@ -98,13 +98,13 @@ export async function listVRFs(): Promise<Paginated<VRF>> {
   return data;
 }
 export async function createVRF(payload: {
-  name: string; rd?: string; description?: string; allow_overlap?: boolean;
+  name: string; rd?: string | null; description?: string; allow_overlap?: boolean;
 }): Promise<VRF> {
   const { data } = await apiClient.post<VRF>("/api/v1/vrfs", payload);
   return data;
 }
 export async function updateVRF(
-  id: string, payload: { name?: string; rd?: string; description?: string; allow_overlap?: boolean },
+  id: string, payload: { name?: string; rd?: string | null; description?: string; allow_overlap?: boolean },
 ): Promise<VRF> {
   const { data } = await apiClient.patch<VRF>(`/api/v1/vrfs/${id}`, payload);
   return data;
@@ -132,6 +132,7 @@ export interface Device {
   /** 裝置群組（堆疊／HA／叢集）摘要；不在群組裡是 null */
   group?: DeviceGroupSummary | null;
   created_at: string; updated_at: string;
+  custom_fields?: Record<string, unknown> | null;
 }
 export interface DeviceGroupSummary {
   id: string; name: string; kind: string;
@@ -191,22 +192,22 @@ export async function getDeviceLibrenms(deviceId: string): Promise<DeviceLibreNM
   return data;
 }
 export async function createDevice(payload: {
-  name: string; type?: string; vendor?: string; model?: string;
-  serial?: string; description?: string; fqdn?: string | null;
+  name: string; type?: string; vendor?: string | null; model?: string | null;
+  serial?: string | null; description?: string; fqdn?: string | null;
   location_id?: string | null; rack_id?: string | null;
   u_position?: number | null; u_size?: number | null;
-  customer_id?: string | null;
+  customer_id?: string | null; custom_fields?: Record<string, unknown>;
 }): Promise<Device> {
   const { data } = await apiClient.post<Device>("/api/v1/devices", payload);
   return data;
 }
 export async function updateDevice(
   id: string,
-  payload: Partial<{ name: string; type: string; vendor: string; model: string;
-                     serial: string; description: string; fqdn: string | null;
+  payload: Partial<{ name: string; type: string; vendor: string | null; model: string | null;
+                     serial: string | null; description: string; fqdn: string | null;
                      location_id: string | null; rack_id: string | null;
                      u_position: number | null; u_size: number | null;
-                     customer_id: string | null }>,
+                     customer_id: string | null; custom_fields: Record<string, unknown> }>,
 ): Promise<Device> {
   const { data } = await apiClient.patch<Device>(`/api/v1/devices/${id}`, payload);
   return data;
@@ -340,7 +341,7 @@ export async function listLocations(): Promise<Paginated<Location>> {
   return data;
 }
 export async function createLocation(payload: {
-  name: string; address?: string; description?: string;
+  name: string; address?: string | null; description?: string;
   latitude?: number | null; longitude?: number | null;
 }): Promise<Location> {
   const { data } = await apiClient.post<Location>("/api/v1/locations", payload);
@@ -348,7 +349,7 @@ export async function createLocation(payload: {
 }
 export async function updateLocation(
   id: string,
-  payload: Partial<{ name: string; address: string; description: string;
+  payload: Partial<{ name: string; address: string | null; description: string;
     latitude: number | null; longitude: number | null }>,
 ): Promise<Location> {
   const { data } = await apiClient.patch<Location>(`/api/v1/locations/${id}`, payload);
@@ -386,3 +387,45 @@ export const bulkDeleteVLANDomains = (ids: string[]) => _bulk("/api/v1/vlan-doma
 export const bulkDeleteVRFs = (ids: string[]) => _bulk("/api/v1/vrfs/bulk-delete", ids);
 export const bulkDeleteLocations = (ids: string[]) => _bulk("/api/v1/locations/bulk-delete", ids);
 export const bulkDeleteRacks = (ids: string[]) => _bulk("/api/v1/racks/bulk-delete", ids);
+
+// ─────────────────── 機房詳情（交接包 physical-v1.2） ───────────────────
+// 有效位置：裝置在機櫃裡就算機櫃的機房，沒入櫃才算裝置自己的；記錄不一致的列成位置衝突
+export async function getLocation(id: string): Promise<Location> {
+  return (await apiClient.get<Location>(`/api/v1/locations/${id}`)).data;
+}
+export interface LocationSummary {
+  location_id: string; racks: number; ips: number; has_floor_plan: boolean;
+  devices: { total: number; racked: number; unracked: number };
+  power: { known_total_w: number; completeness: { known: number; included: number } | null; unknown_devices: number; partial: boolean };
+  pending: { unracked: number; load_unknown: number; location_conflicts: number; rack_location_unset: number };
+  rack_list: { id: string; name: string; devices: number; known_total_w: number; completeness: { known: number; included: number } | null }[];
+}
+export type LocationDeviceFilter = "all" | "racked" | "unracked" | "conflict" | "rack_location_unset";
+export interface LocationDevice {
+  id: string; name: string; type: string; status: "racked" | "unracked" | "conflict" | "rack_location_unset";
+  rack_id: string | null; rack: string | null; recorded_location: string | null; counted_location: string | null;
+  ips: { id: string; ip: string }[];
+}
+export interface LocationCabling {
+  total: number; in_room: number; cross_room: number; unknown: number; truncated?: boolean;
+  /** a / b：「裝置@埠」文字（匯出用）；a_device_id / a_device / a_port：畫面做成連結（看不到的裝置是 null） */
+  items: { id: string; label: string | null; kind: "in_room" | "cross_room" | "unknown"; a: string | null; b: string | null;
+           a_device_id: string | null; a_device: string | null; a_port: string | null;
+           b_device_id: string | null; b_device: string | null; b_port: string | null; other_location: string | null }[];
+  by_rack: { id: string; rack: string; cables: number }[];
+}
+export async function getLocationSummary(id: string): Promise<LocationSummary> {
+  return (await apiClient.get<LocationSummary>(`/api/v1/locations/${id}/summary`)).data;
+}
+export type LocationDeviceSort = "name" | "rack" | "status" | "ips";
+export async function getLocationDevices(id: string, params: { filter?: LocationDeviceFilter; q?: string; page?: number; page_size?: number;
+                                                               sort?: LocationDeviceSort; order?: "asc" | "desc" }):
+  Promise<{ total: number; items: LocationDevice[] }> {
+  return (await apiClient.get(`/api/v1/locations/${id}/devices`, { params })).data;
+}
+export async function getLocationPower(id: string): Promise<any> {
+  return (await apiClient.get(`/api/v1/locations/${id}/power-summary`)).data;
+}
+export async function getLocationCabling(id: string): Promise<LocationCabling> {
+  return (await apiClient.get<LocationCabling>(`/api/v1/locations/${id}/cabling`)).data;
+}

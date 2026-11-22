@@ -24,6 +24,7 @@ import {
   SnmpIcon, GroupIcon,
 } from "@/icons";
 import DeviceGroupsPanel from "@/components/DeviceGroupsPanel.vue";
+import CustomFieldInputs from "@/components/CustomFieldInputs.vue";
 import { cmpNatural } from "@/utils/sort";
 import { useIpOptions } from "@/composables/useIpOptions";
 import { listSubnets } from "@/api/subnets";
@@ -92,6 +93,13 @@ function onImportQueued(taskId: string) {
   trackTask(taskId, { onDone: () => void refresh() });
 }
 const editing = ref<Device | null>(null);
+// 自訂欄位：定義沒載到就不送（不清掉既有的值）
+const cfRef = ref<InstanceType<typeof CustomFieldInputs> | null>(null);
+function cfPart(): { custom_fields?: Record<string, unknown> } {
+  const cf = cfRef.value?.payload();
+  return cf === undefined ? {} : { custom_fields: cf };
+}
+
 
 const form = ref<{
   name: string; fqdn: string; type: string;
@@ -366,9 +374,9 @@ async function submit() {
       name: form.value.name,
       fqdn: form.value.fqdn || null,
       type: form.value.type,
-      vendor: form.value.vendor || undefined,
-      model: form.value.model || undefined,
-      serial: form.value.serial || undefined,
+      vendor: form.value.vendor?.trim() || null,
+      model: form.value.model?.trim() || null,
+      serial: form.value.serial?.trim() || null,
       description: form.value.description ?? "",
       location_id: form.value.location_id,
       rack_id: form.value.rack_id,
@@ -384,6 +392,7 @@ async function submit() {
         ? spanFor(heightParts.value) : RACK_SLOTS,
       customer_id: form.value.customer_id,
       primary_ip_id: form.value.primary_ip_id,
+      ...cfPart(),
     };
     if (editing.value) await updateDevice(editing.value.id, payload);
     else await createDevice(payload);
@@ -800,6 +809,7 @@ onMounted(async () => {
         <n-form-item :label="t('sections.description')" style="margin-top: 8px">
           <n-input v-model:value="form.description" type="textarea" :rows="2" />
         </n-form-item>
+        <CustomFieldInputs ref="cfRef" object-type="device" :initial="editing?.custom_fields ?? null" />
       </n-form>
       <n-space justify="end">
         <n-button @click="show = false">

@@ -28,7 +28,7 @@ def test_noise_addresses_are_never_unauthorized_devices(ip):
     assert _is_noise_address(ip) is True
 
 
-@pytest.mark.parametrize("ip", ["192.168.1.50", "10.0.0.7", "172.16.5.1"])
+@pytest.mark.parametrize("ip", ["192.168.123.50", "10.0.0.7", "172.16.5.1"])
 def test_normal_addresses_are_not_noise(ip):
     assert _is_noise_address(ip) is False
 

@@ -91,6 +91,16 @@ class IPAddressBase(StrictModel):
 
 
 class IPAddressCreate(IPAddressBase):
+    # 主控台開關：新增視窗跟編輯一樣顯示，以前新增格式沒有它們，選了也存不進去（2026-11-21）
+    ssh_enabled: bool = False
+    sftp_enabled: bool = False
+    rdp_enabled: bool = False
+    vnc_enabled: bool = False
+    novnc_enabled: bool = False
+    bmc_enabled: bool = False
+    rustdesk_enabled: bool = False
+    is_dhcp_server: bool = False
+
     @field_validator("hostname")
     @classmethod
     def _hostname_strict(cls, v: str | None) -> str | None:

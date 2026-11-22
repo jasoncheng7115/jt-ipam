@@ -94,8 +94,8 @@ async def test_pfsense_sync_dhcp_ranges(db_session, admin_user, monkeypatch) -> 
         if path == pf.EP_DHCP_SERVERS:
             return [
                 {"interface": "lan", "enable": True,
-                 "range_from": "192.168.1.100", "range_to": "192.168.1.199",
-                 "pool": [{"range_from": "192.168.1.210", "range_to": "192.168.1.220"}]},
+                 "range_from": "192.168.123.100", "range_to": "192.168.123.199",
+                 "pool": [{"range_from": "192.168.123.210", "range_to": "192.168.123.220"}]},
                 {"interface": "opt1", "enable": False,      # 停用 → 不算
                  "range_from": "10.9.9.10", "range_to": "10.9.9.20"},
                 {"interface": "wan"},                        # 沒有範圍 → 跳過
@@ -107,8 +107,8 @@ async def test_pfsense_sync_dhcp_ranges(db_session, admin_user, monkeypatch) -> 
     assert n == 2
 
     pools = await _ranges_of(db_session, "pfsense", f.id)
-    assert ("lan", "192.168.1.100", "192.168.1.199") in pools
-    assert ("lan", "192.168.1.210", "192.168.1.220") in pools
+    assert ("lan", "192.168.123.100", "192.168.123.199") in pools
+    assert ("lan", "192.168.123.210", "192.168.123.220") in pools
 
 
 @pytest.mark.anyio

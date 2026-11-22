@@ -33,6 +33,7 @@ import { EditIcon, PlusIcon, SaveIcon, CancelIcon, InfoIcon } from "@/icons";
 import { probeInstall } from "@/utils/probeInstall";
 import { useCustomers } from "@/composables/useCustomers";
 import ConsoleEgressSelect from "@/components/ConsoleEgressSelect.vue";
+import CustomFieldInputs from "@/components/CustomFieldInputs.vue";
 import { useSubnetTree } from "@/composables/useSubnetTree";
 import { useScanProbes, probeLabel } from "@/api/scanProbes";
 import { useAuthStore } from "@/stores/auth";
@@ -47,6 +48,12 @@ const emit = defineEmits<{
   (e: "update:show", v: boolean): void;
   (e: "saved"): void;
 }>();
+// 自訂欄位：定義沒載到就不送（不清掉既有的值）
+const cfRef = ref<InstanceType<typeof CustomFieldInputs> | null>(null);
+function cfPart(): { custom_fields?: Record<string, unknown> } {
+  const cf = cfRef.value?.payload();
+  return cf === undefined ? {} : { custom_fields: cf };
+}
 
 const { t, locale } = useI18n();
 const auth = useAuthStore();
@@ -305,6 +312,7 @@ async function submit() {
         gateway: form.value.gateway.trim() || null,
         dns_servers: form.value.dns_servers.trim() || null,
         location_id: form.value.location_id ?? null,
+        ...cfPart(),
       };
       await updateSubnet(props.editing.id, patch);
     } else {
@@ -329,6 +337,7 @@ async function submit() {
         dns_servers: form.value.dns_servers.trim() || null,
         location_id: form.value.location_id ?? null,
         allow_overlap: form.value.allow_overlap,
+        ...cfPart(),
       });
     }
     msg.success(t("common.ok"));
@@ -496,6 +505,7 @@ async function submit() {
         <n-input-number v-model:value="form.threshold_pct" :min="0" :max="100" clearable
                         :placeholder="t('subnets.threshold_ph')" />
       </n-form-item>
+      <CustomFieldInputs ref="cfRef" object-type="subnet" :initial="props.editing?.custom_fields ?? null" />
     </n-form>
     <n-space justify="end">
       <n-button @click="showModel = false">

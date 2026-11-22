@@ -18,6 +18,8 @@ import {
   createIPRange, deleteIPRange, updateIPRange, RANGE_COLORS,
   type IPRange, type IPRangePurpose,
 } from "@/api/ipRanges";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 const props = defineProps<{ subnetId: string; cidr: string; ranges: IPRange[]; canEdit: boolean }>();
 const emit = defineEmits<{
@@ -31,12 +33,13 @@ const purposeOpts = computed(() => (["dhcp", "reserved", "other"] as IPRangePurp
   label: t(`ranges.purpose_${v}`), value: v,
 })));
 
-const columns = computed<DataTableColumns<IPRange>>(() => [
+const usedRatio = (r: IPRange) => (r.size ? r.used / r.size : 0);
+const columns = computed<DataTableColumns<IPRange>>(() => autoSort<IPRange>([
   {
     // 要給寬度：沒有寬度時等寬、不換行的文字會蓋到隔壁「用途」的標籤上。
     // 兩端各自不換行、長的（IPv6）在「–」處換行
     title: t("ranges.col_range"), key: "start_ip", width: 260,
-    render: (r) => h("span", { style: "font-family: monospace; display:inline-flex; flex-wrap:wrap; column-gap:6px" }, [
+    render: (r: IPRange) => h("span", { style: "font-family: monospace; display:inline-flex; flex-wrap:wrap; column-gap:6px" }, [
       // 空格留在文字裡（複製出來、讀屏都是「起 – 迄」）；換行時行尾的空白不會畫出來
       h("span", { style: "white-space: nowrap" }, `${r.start_ip} `),
       h("span", { style: "white-space: nowrap" }, `– ${r.end_ip}`),
@@ -44,14 +47,15 @@ const columns = computed<DataTableColumns<IPRange>>(() => [
   },
   {
     title: t("ranges.col_purpose"), key: "purpose", width: 120,
-    render: (r) => h(NTag, { size: "small", bordered: false,
+    sorter: (a: IPRange, b: IPRange) => cmpNatural(t(`ranges.purpose_${a.purpose}`), t(`ranges.purpose_${b.purpose}`)),
+    render: (r: IPRange) => h(NTag, { size: "small", bordered: false,
       color: { color: RANGE_COLORS[r.purpose] + "26", textColor: RANGE_COLORS[r.purpose] } },
     () => t(`ranges.purpose_${r.purpose}`)),
   },
   {
     title: t("common.name"), key: "name", width: 200,
     // 自動建立的：名稱就是來源（firewall-a · KEA），前面標「自動」，滑過去講它跟著誰同步
-    render: (r) => r.auto
+    render: (r: IPRange) => r.auto
       ? h("span", { style: "display:inline-flex; align-items:center; gap:6px; white-space:nowrap",
                     title: t("ranges.auto_hint", { source: r.source_label || r.name || "" }) }, [
           h(NTag, { size: "small", bordered: false, type: "info" }, () => t("ranges.auto")),
@@ -61,7 +65,9 @@ const columns = computed<DataTableColumns<IPRange>>(() => [
   },
   {
     title: t("ranges.col_used"), key: "used", width: 190,
-    render: (r) => h("div", { style: "display:flex; align-items:center; gap:8px" }, [
+    // 畫面是使用率長條＋「已用 / 總數」：依使用率排
+    sorter: (a: IPRange, b: IPRange) => usedRatio(a) - usedRatio(b),
+    render: (r: IPRange) => h("div", { style: "display:flex; align-items:center; gap:8px" }, [
       h(NProgress, { type: "line", percentage: r.size ? Math.round((r.used / r.size) * 100) : 0,
         showIndicator: false, height: 6, style: "flex:1; min-width:60px",
         status: r.size && r.used / r.size >= 0.9 ? "error" : r.size && r.used / r.size >= 0.75 ? "warning" : "success" }),
@@ -76,7 +82,7 @@ const columns = computed<DataTableColumns<IPRange>>(() => [
   },
   {
     title: t("ranges.col_first_free"), key: "first_free", width: 150,
-    render: (r) => r.first_free
+    render: (r: IPRange) => r.first_free
       ? h(NButton, { text: true, type: "primary", size: "small", disabled: !props.canEdit,
           title: t("ranges.assign_hint"), onClick: () => emit("create-ip", r.first_free as string) },
         () => r.first_free)
@@ -87,7 +93,7 @@ const columns = computed<DataTableColumns<IPRange>>(() => [
         : h("span", { style: "opacity:.6" }, t("ranges.full")),
   },
   { title: t("common.description"), key: "description", ellipsis: { tooltip: true },
-    render: (r) => r.description || (r.auto ? t("ranges.auto_desc") : "—") },
+    render: (r: IPRange) => r.description || (r.auto ? t("ranges.auto_desc") : "—") },
   ...(props.canEdit ? [{
     title: "", key: "actions", width: 80,
     // 自動建立的由同步管理：不給改、不給刪（後端也會擋），滑過去講要改上游
@@ -103,7 +109,7 @@ const columns = computed<DataTableColumns<IPRange>>(() => [
       }),
     ]),
   }] : []),
-]);
+]));
 
 const show = ref(false);
 const editing = ref<IPRange | null>(null);

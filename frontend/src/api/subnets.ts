@@ -78,6 +78,7 @@ export interface SubnetCreate {
   dns_servers?: string | null;
   location_id?: string | null;
   allow_overlap?: boolean;
+  custom_fields?: Record<string, unknown>;
 }
 
 export interface SubnetUpdate {
@@ -102,6 +103,7 @@ export interface SubnetUpdate {
   gateway?: string | null;
   dns_servers?: string | null;
   location_id?: string | null;
+  custom_fields?: Record<string, unknown>;
 }
 
 export async function createSubnet(payload: SubnetCreate): Promise<Subnet> {

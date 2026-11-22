@@ -1,0 +1,4 @@
+#!/bin/sh
+# On the publish branch only: the whole publish tree passes the checks before it is committed.
+[ "$(git rev-parse --abbrev-ref HEAD)" = publish ] || exit 0
+exec python3 "$(git rev-parse --git-common-dir)/../scripts/publish/preflight.py" tree "$(git rev-parse --show-toplevel)"

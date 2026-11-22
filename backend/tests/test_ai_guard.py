@@ -14,7 +14,7 @@ from app.services.ai_guard import AIInputRejected, screen_user_messages
 
 def test_normal_ipam_question_passes():
     screen_user_messages([
-        {"role": "user", "content": "192.168.1.10 這台是什麼裝置？屬於哪個網段？"},
+        {"role": "user", "content": "192.168.123.10 這台是什麼裝置？屬於哪個網段？"},
         {"role": "assistant", "content": "..."},
         {"role": "user", "content": "那它有沒有 site-to-site VPN？"},
     ])  # 不應 raise

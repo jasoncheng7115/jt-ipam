@@ -357,8 +357,8 @@ watch(ids, load, { deep: true });
 }
 .row-label:hover .row-ip { color: #18a058; }
 .row-ip {
-  /* 固定寬度讓主機名稱在每一列都從同一個位置開始 —— 位址長度不一（192.168.1.3 vs
-     192.168.1.111），只靠 gap 的話主機名稱那一欄會參差不齊。放不下的（IPv6）才撐開。 */
+  /* 固定寬度讓主機名稱在每一列都從同一個位置開始 —— 位址長度不一（192.168.123.3 vs
+     192.168.123.111），只靠 gap 的話主機名稱那一欄會參差不齊。放不下的（IPv6）才撐開。 */
   flex: 0 0 auto; min-width: 112px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12.5px; font-weight: 600; color: var(--n-text-color);

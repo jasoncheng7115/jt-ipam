@@ -1,0 +1,5 @@
+#!/bin/sh
+# The last check before anything leaves this machine: every commit and annotated tag being pushed
+# (identity, message, every changed file against PUBLISH.txt and the privacy scan). Never bypass with --no-verify;
+# fix the source instead. Installed by scripts/publish/install-hooks.sh.
+exec python3 "$(git rev-parse --git-common-dir)/../scripts/publish/preflight.py" push "$@"

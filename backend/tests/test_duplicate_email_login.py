@@ -1,6 +1,6 @@
 """同一個 email 可以同時屬於本機帳號與 LDAP 帳號。
 
-真實事故：使用者的本機帳號 jasonlocal 與 LDAP 帳號 jason 共用同一個公司 email。
+真實事故：使用者的本機帳號 alice-local 與 LDAP 帳號 alice 共用同一個公司 email。
 `users.email` 是唯一鍵 → LDAP 自動建帳號在 commit 時撞 unique，登入回 500（LDAP
 帳密其實已經驗過了），而且該帳號永遠建不起來。
 

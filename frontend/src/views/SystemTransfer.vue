@@ -14,6 +14,7 @@ import {
   type AnalyzeResult, type ImportReport, type TransferSchema,
 } from "@/api/systemTransfer";
 import { saveBlob } from "@/utils/saveFile";
+import { autoSort } from "@/composables/useTableSort";
 
 const { t } = useI18n();
 const msg = useMessage();
@@ -166,13 +167,13 @@ const countRows = computed(() => {
   return src.filter((r) => r.inserted || r.updated || r.skipped || r.errored);
 });
 
-const reportColumns = computed(() => [
+const reportColumns = computed(() => autoSort([
   { title: t("system_transfer.col_table"), key: "table" },
   { title: "+", key: "inserted", width: 70 },
   { title: "~", key: "updated", width: 70 },
   { title: "skip", key: "skipped", width: 70 },
   { title: t("system_transfer.col_errored"), key: "errored", width: 80 },
-]);
+]));
 
 async function doApply(dryRun: boolean) {
   if (!analyzed.value || !impPass.value) return;

@@ -6,7 +6,7 @@
  * 大網段 (/16+) 採聚合：每 cell = 256 個 host，顯示已用比率。
  *
  * Props:
- *   cidr        — 子網路 CIDR(例 "192.168.1.0/24")
+ *   cidr        — 子網路 CIDR(例 "192.168.123.0/24")
  *   addresses   — 此網段的 IP 物件清單 (subnet_id 已篩過)
  */
 import { computed, ref, watch } from "vue";

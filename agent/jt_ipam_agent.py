@@ -614,7 +614,7 @@ def _netbios(ip: str) -> str | None:
             r = subprocess.run([nbt, "-q", ip], capture_output=True, text=True, timeout=5)
             for line in r.stdout.splitlines():
                 parts = line.split()
-                # 例： "192.168.1.10   WORKGROUP\\DESKTOP-ABC   SHARING ..."
+                # 例： "192.168.123.10   WORKGROUP\\DESKTOP-ABC   SHARING ..."
                 if parts and parts[0] == ip and len(parts) >= 2:
                     nm = parts[1]
                     if "\\" in nm:
@@ -766,7 +766,7 @@ def _mdns(ip: str) -> str | None:
             r = subprocess.run([av, "-a", ip], capture_output=True, text=True, timeout=5)
             out = (r.stdout or "").strip()
             if out:
-                # 例： "192.168.1.10\tdesktop.local"
+                # 例： "192.168.123.10\tdesktop.local"
                 parts = out.split()
                 if len(parts) >= 2:
                     name = parts[-1].strip().rstrip(".")

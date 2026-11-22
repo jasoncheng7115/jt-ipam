@@ -6,7 +6,7 @@
 
 * 主機名稱來源顯示「各來源回報的主機名稱不一致（3 種）」，其實不是資料有問題，
   是我們硬從一堆服務名裡挑了一個當「這台機器的名字」。
-* 其他來源（manual／proxmox／wazuh／librenms）都說它叫 revproxy1。
+* 其他來源（manual／proxmox／wazuh／librenms）都說它叫 proxy-01。
 
 規則改成：
 1. 有名字與其他來源說法相符 → 用那一個（有佐證的優先）
@@ -20,16 +20,16 @@ from app.services.dns_sync import pick_dns_hostname
 
 def test_a_corroborated_name_wins():
     """DNS 裡就有其他來源在用的那個名字時，那顯然才是這台機器的名字。"""
-    names = {"chai.example.com", "revproxy1.example.com", "wb.example.com"}
-    assert pick_dns_hostname(names, others={"revproxy1"}) == "revproxy1.example.com"
+    names = {"chai.example.com", "proxy-01.example.com", "wb.example.com"}
+    assert pick_dns_hostname(names, others={"proxy-01"}) == "proxy-01.example.com"
 
 
 def test_corroboration_matches_on_the_first_label():
-    """其他來源常常只給短名（revproxy1），DNS 給的是 FQDN。"""
-    assert pick_dns_hostname({"revproxy1.example.com"}, others={"revproxy1"}) \
-        == "revproxy1.example.com"
-    assert pick_dns_hostname({"revproxy1.example.com"},
-                             others={"revproxy1.example.com"}) == "revproxy1.example.com"
+    """其他來源常常只給短名（proxy-01），DNS 給的是 FQDN。"""
+    assert pick_dns_hostname({"proxy-01.example.com"}, others={"proxy-01"}) \
+        == "proxy-01.example.com"
+    assert pick_dns_hostname({"proxy-01.example.com"},
+                             others={"proxy-01.example.com"}) == "proxy-01.example.com"
 
 
 def test_many_unrelated_names_report_nothing():
@@ -38,7 +38,7 @@ def test_many_unrelated_names_report_nothing():
     硬挑一個等於製造一個假的矛盾 —— 寧可不報。
     """
     names = {f"svc{i}.example.com" for i in range(26)}
-    assert pick_dns_hostname(names, others={"revproxy1"}) is None
+    assert pick_dns_hostname(names, others={"proxy-01"}) is None
 
 
 def test_a_couple_of_names_still_picks_the_stable_one():

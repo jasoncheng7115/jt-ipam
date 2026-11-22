@@ -343,6 +343,10 @@ interface Props {
 }
 const props = withDefaults(defineProps<Props>(), { showLegend: true, editable: false, floorAlignTo: 0, highlightId: null, compact: false, bare: false, face: null, controls: true, sharedZoom: null, fitTo: null });
 const faceView = ref<"front" | "rear">("front");   // 機櫃正面 / 背面切換
+// 打開時先顯示機櫃設定的「預設呈現面」（以前這個設定存了卻沒有作用，每次都從正面開始）
+watch(() => (props.diagram as any)?.rack_id, () => {
+  faceView.value = (props.diagram as any)?.face === "rear" ? "rear" : "front";
+}, { immediate: true });
 // 實際採用的檢視面：外部有指定就用外部（合併卡共用），否則用自身切換
 const effFace = computed(() => props.face ?? faceView.value);
 const hasRear = computed(() => (props.diagram?.devices || []).some((d: any) => d.rack_face === "rear"));

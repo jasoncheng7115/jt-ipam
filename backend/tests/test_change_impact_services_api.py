@@ -111,3 +111,27 @@ async def test_switch_maintenance_plan_through_the_api(client, auth_headers, db_
         "title": "x", "scenario_type": "node_downtime", "target_type": "device",
         "target_id": str(sw.id), "parameters": {"mode": "explode"}})
     assert r.status_code == 422
+
+
+async def test_service_list_sorts_on_the_server(client, auth_headers, db_session) -> None:
+    """服務清單是後端分頁：點標題排序要在後端、分頁前做（2026-11-22 全站表格補排序）。"""
+    await _enable(db_session)
+    a, b = await _devices(db_session, "db-01", "db-02")
+    m1 = [{"object_type": "device", "object_id": str(a.id), "relation_type": "hosted_on"}]
+    m2 = m1 + [{"object_type": "device", "object_id": str(b.id), "relation_type": "hosted_on"}]
+    for name, crit, members in (("Bravo", "low", m1), ("alpha", "critical", m2), ("Charlie", "normal", m1)):
+        r = await client.post(URL, headers=auth_headers, json=_body(name, members, criticality=crit))
+        assert r.status_code == 201, r.text
+
+    async def names(**q):  # type: ignore[no-untyped-def]
+        out = []
+        for page in (1, 2, 3):
+            qs = "&".join(f"{k}={v}" for k, v in {**q, "page": page, "page_size": 1}.items())
+            out += [x["name"] for x in (await client.get(f"{URL}?{qs}", headers=auth_headers)).json()["items"]]
+        return out
+
+    assert await names() == ["alpha", "Bravo", "Charlie"], "預設照名稱（不分大小寫）"
+    assert await names(sort="name", order="desc") == ["Charlie", "Bravo", "alpha"]
+    assert await names(sort="criticality") == ["alpha", "Charlie", "Bravo"], "嚴重度照等級：critical → low"
+    r = await client.get(f"{URL}?sort=owner_user_id", headers=auth_headers)
+    assert r.status_code == 422

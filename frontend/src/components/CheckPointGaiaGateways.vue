@@ -14,6 +14,8 @@ import {
   NSelect, NSpace, NSwitch, NTag, NTooltip, useMessage, type DataTableColumns,
 } from "naive-ui";
 import { fmtDateTime } from "@/utils/datetime";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 import { apiErrMsg } from "@/api/client";
 import type { CheckPointGateway } from "@/api/checkpoint";
 import {
@@ -111,18 +113,29 @@ function summaryText(tg: GaiaTarget | null): string {
   return parts.join(" · ") || "—";
 }
 
-const cols = computed<DataTableColumns<Row>>(() => [
-  { title: t("checkpoint.domain"), key: "domain", width: 110, render: (r) => r.gw?.domain || r.target?.domain || "—" },
+// 排序比的是畫面上看到的值；空值排最後
+const by = <T,>(f: (r: T) => unknown) => (a: T, b: T) => {
+  const x = f(a), y = f(b), ex = x == null || x === "", ey = y == null || y === "";
+  return ex || ey ? Number(ex) - Number(ey) : cmpNatural(x, y);
+};
+const gaiaRank = (tg: GaiaTarget | null) => (!tg ? 0 : !tg.enabled ? 1 : tg.allow_scripts ? 3 : 2);
+const cols = computed<DataTableColumns<Row>>(() => autoSort<Row>([
+  { title: t("checkpoint.domain"), key: "domain", width: 110, render: (r: Row) => r.gw?.domain || r.target?.domain || "—",
+    sorter: by((r: Row) => r.gw?.domain || r.target?.domain) },
   { title: t("cols.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true },
-    render: (r) => r.gw?.name ?? r.target?.name ?? "—" },
+    render: (r: Row) => r.gw?.name ?? r.target?.name ?? "—", sorter: by((r: Row) => r.gw?.name ?? r.target?.name) },
   { title: t("cols.type"), key: "type", width: 170, ellipsis: { tooltip: true },
-    render: (r) => r.gw ? (r.gw.type || "—") : t("checkpoint.gaia_manual") },
-  { title: t("checkpoint.address"), key: "ipv4_address", width: 140, render: (r) => r.gw?.ipv4_address || "—" },
-  { title: t("checkpoint.version"), key: "version", width: 100, render: (r) => r.gw?.version || "—" },
-  { title: "Gaia", key: "gaia", width: 150, render: (r) => gaiaTag(r.target) },
+    render: (r: Row) => r.gw ? (r.gw.type || "—") : t("checkpoint.gaia_manual"),
+    sorter: by((r: Row) => r.gw ? r.gw.type : t("checkpoint.gaia_manual")) },
+  { title: t("checkpoint.address"), key: "ipv4_address", width: 140, render: (r: Row) => r.gw?.ipv4_address || "—",
+    sorter: by((r: Row) => r.gw?.ipv4_address) },
+  { title: t("checkpoint.version"), key: "version", width: 100, render: (r: Row) => r.gw?.version || "—", sorter: by((r: Row) => r.gw?.version) },
+  { title: "Gaia", key: "gaia", width: 150, render: (r: Row) => gaiaTag(r.target),
+    sorter: (a: Row, b: Row) => gaiaRank(a.target) - gaiaRank(b.target) },
   { title: t("checkpoint.last_seen"), key: "summary", minWidth: 240, ellipsis: { tooltip: true },
-    render: (r) => summaryText(r.target) },
-  { title: t("cols.last_sync"), key: "last_sync_at", width: 170, render: (r) => fmtDateTime(r.target?.last_sync_at) },
+    render: (r: Row) => summaryText(r.target), sorter: by((r: Row) => (r.target?.last_summary ? summaryText(r.target) : null)) },
+  { title: t("cols.last_sync"), key: "last_sync_at", width: 170, render: (r: Row) => fmtDateTime(r.target?.last_sync_at),
+    sorter: by((r: Row) => r.target?.last_sync_at) },
   {
     title: t("common.actions"), key: "actions", className: "col-actions", width: 210, fixed: "right",
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => r.target ? [
@@ -136,7 +149,7 @@ const cols = computed<DataTableColumns<Row>>(() => [
       }),
     ] : [iconAction(PlusIcon, t("checkpoint.gaia_setup"), () => openEdit(r), "success", "cpg-setup")]),
   },
-]);
+]));
 
 // ── 設定對話框 ──
 const show = ref(false);
@@ -232,19 +245,24 @@ function poolText(p: GaiaDhcpSubnet["pools"][number]) {
   if (p.include === "exclude") return `${t("checkpoint.gaia_pool_exclude")} ${base}`;
   return p.enabled ? base : `${base} (${t("common.disabled")})`;
 }
-const dhcpCols = computed<DataTableColumns<GaiaDhcpSubnet>>(() => [
+const dhcpCols = computed<DataTableColumns<GaiaDhcpSubnet>>(() => autoSort<GaiaDhcpSubnet>([
   { title: t("checkpoint.gaia_subnet"), key: "subnet_cidr", width: 160 },
   { title: t("cols.status"), key: "enabled", width: 90,
-    render: (r) => h(NTag, { size: "small", type: r.enabled ? "success" : "default", bordered: false },
-      () => r.enabled ? t("common.enabled") : t("common.disabled")) },
+    render: (r: GaiaDhcpSubnet) => h(NTag, { size: "small", type: r.enabled ? "success" : "default", bordered: false },
+      () => r.enabled ? t("common.enabled") : t("common.disabled")),
+    sorter: (a: GaiaDhcpSubnet, b: GaiaDhcpSubnet) => Number(b.enabled) - Number(a.enabled) },
   { title: t("checkpoint.gaia_pools"), key: "pools", minWidth: 240,
-    render: (r) => r.pools.length ? h("div", null, r.pools.map((p) => h("div", null, poolText(p)))) : "—" },
-  { title: t("checkpoint.gaia_router"), key: "default_gateway", width: 140, render: (r) => r.default_gateway || "—" },
-  { title: "DNS", key: "dns_servers", minWidth: 160, render: (r) => r.dns_servers.join(", ") || "—" },
+    render: (r: GaiaDhcpSubnet) => r.pools.length ? h("div", null, r.pools.map((p) => h("div", null, poolText(p)))) : "—",
+    sorter: by((r: GaiaDhcpSubnet) => r.pools.map(poolText).join(" ")) },
+  { title: t("checkpoint.gaia_router"), key: "default_gateway", width: 140, render: (r: GaiaDhcpSubnet) => r.default_gateway || "—",
+    sorter: by((r: GaiaDhcpSubnet) => r.default_gateway) },
+  { title: "DNS", key: "dns_servers", minWidth: 160, render: (r: GaiaDhcpSubnet) => r.dns_servers.join(", ") || "—",
+    sorter: by((r: GaiaDhcpSubnet) => r.dns_servers.join(", ")) },
   { title: t("checkpoint.gaia_domain_name"), key: "domain_name", width: 160, ellipsis: { tooltip: true },
-    render: (r) => r.domain_name || "—" },
-  { title: t("cols.last_sync"), key: "synced_at", width: 170, render: (r) => fmtDateTime(r.synced_at) },
-]);
+    render: (r: GaiaDhcpSubnet) => r.domain_name || "—", sorter: by((r: GaiaDhcpSubnet) => r.domain_name) },
+  { title: t("cols.last_sync"), key: "synced_at", width: 170, render: (r: GaiaDhcpSubnet) => fmtDateTime(r.synced_at),
+    sorter: by((r: GaiaDhcpSubnet) => r.synced_at) },
+]));
 </script>
 
 <template>

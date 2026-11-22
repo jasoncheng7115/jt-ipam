@@ -112,6 +112,8 @@ import {
 } from "@/api/apiTokens";
 import { fmtDateTime, fmtRelative } from "@/utils/datetime";
 import { useTablePagination } from "@/composables/useTablePagination";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 const { t } = useI18n();
 const message = useMessage();
@@ -203,32 +205,37 @@ function statusTag(r: ApiToken) {
   return h(NTag, { size: "small", type: "success" }, () => t("api_tokens.st_active"));
 }
 
-const columns = computed<DataTableColumns<ApiToken>>(() => [
+// 狀態欄排序：有效 → 已過期 → 已撤銷
+const stRank = (r: ApiToken) => (r.revoked_at ? 2 : new Date(r.expires_at).getTime() <= Date.now() ? 1 : 0);
+const scopeText = (r: ApiToken) => (r.scopes?.includes("read") ? t("api_tokens.tag_read") : t("api_tokens.tag_full"));
+const columns = computed<DataTableColumns<ApiToken>>(() => autoSort<ApiToken>([
   { title: t("api_tokens.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
   {
     title: t("api_tokens.prefix"), key: "token_prefix", width: 120,
-    render: (r) => h("code", null, `${r.token_prefix}…`),
+    render: (r: ApiToken) => h("code", null, `${r.token_prefix}…`),
   },
   {
     title: t("api_tokens.scope"), key: "scopes", width: 110,
-    render: (r) =>
+    sorter: (a: ApiToken, b: ApiToken) => cmpNatural(scopeText(a), scopeText(b)),
+    render: (r: ApiToken) =>
       r.scopes?.includes("read")
         ? h(NTag, { size: "small", type: "info" }, () => t("api_tokens.tag_read"))
         : h(NTag, { size: "small" }, () => t("api_tokens.tag_full")),
   },
-  { title: t("api_tokens.status"), key: "st", width: 100, render: statusTag },
+  { title: t("api_tokens.status"), key: "st", width: 100, render: statusTag,
+    sorter: (a: ApiToken, b: ApiToken) => stRank(a) - stRank(b) },
   {
     title: t("api_tokens.expires_at"), key: "expires_at", width: 170,
-    render: (r) => fmtDateTime(r.expires_at),
+    render: (r: ApiToken) => fmtDateTime(r.expires_at),
   },
   {
     title: t("api_tokens.last_used"), key: "last_used_at", width: 150,
-    render: (r) => (r.last_used_at ? fmtRelative(r.last_used_at) : "—"),
+    render: (r: ApiToken) => (r.last_used_at ? fmtRelative(r.last_used_at) : "—"),
   },
-  { title: t("api_tokens.last_used_ip"), key: "last_used_ip", width: 140, render: (r) => r.last_used_ip || "—" },
+  { title: t("api_tokens.last_used_ip"), key: "last_used_ip", width: 140, render: (r: ApiToken) => r.last_used_ip || "—" },
   {
     title: t("common.actions"), key: "actions", width: 90, align: "center",
-    render: (r) =>
+    render: (r: ApiToken) =>
       r.revoked_at
         ? "—"
         : h(
@@ -245,7 +252,7 @@ const columns = computed<DataTableColumns<ApiToken>>(() => [
             },
           ),
   },
-]);
+]));
 
 onMounted(refresh);
 </script>

@@ -104,4 +104,4 @@ async def test_guest_kind_and_proxmox_oui(db_session) -> None:
     assert await virtual_guest_kind(db_session, "198.51.100.81", "bc:24:11:00:00:81") == "ct"
     assert await virtual_guest_kind(db_session, "198.51.100.82", "BC:24:11:00:00:82") == "vm"
     assert await virtual_guest_kind(db_session, "198.51.100.83", "bc:24:11:aa:bb:cc") == "vm"
-    assert await virtual_guest_kind(db_session, "198.51.100.84", "3c:ec:ef:00:00:84") is None
+    assert await virtual_guest_kind(db_session, "198.51.100.84", "00:25:90:00:00:84") is None

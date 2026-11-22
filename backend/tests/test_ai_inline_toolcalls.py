@@ -22,10 +22,10 @@ def test_gemma_call_syntax_recovered_to_oui_lookup():
 
 
 def test_json_tool_call_recovered():
-    s = '{"name": "get_subnet_detail", "arguments": {"subnet_cidr": "192.168.1.0/24"}}'
+    s = '{"name": "get_subnet_detail", "arguments": {"subnet_cidr": "192.168.123.0/24"}}'
     calls = _inline_tool_calls(s, None)
     assert calls == [{"function": {"name": "get_subnet_detail",
-                                   "arguments": {"subnet_cidr": "192.168.1.0/24"}}}]
+                                   "arguments": {"subnet_cidr": "192.168.123.0/24"}}}]
 
 
 def test_normal_prose_is_not_a_tool_call():

@@ -96,7 +96,7 @@ Or an intranet self-signed certificate (for nginx):
 sudo ./scripts/generate-self-signed-cert.sh \
     --out-dir /etc/jt-ipam/tls \
     --cn ipam.local \
-    --san "DNS:ipam.local,IP:192.168.1.10"
+    --san "DNS:ipam.local,IP:192.168.123.10"
 
 # Edit /etc/nginx/sites-available/jt-ipam and change the ssl_certificate paths to:
 #   ssl_certificate     /etc/jt-ipam/tls/server.crt;
@@ -139,7 +139,7 @@ Generate / reissue a self-signed certificate (ECDSA P-384, 5 years; auto-detects
 sudo ./scripts/generate-self-signed-cert.sh \
     --out-dir /etc/jt-ipam/tls \
     --cn ipam.local \
-    --san "DNS:ipam.local,DNS:ipam,IP:192.168.1.10" \
+    --san "DNS:ipam.local,DNS:ipam,IP:192.168.123.10" \
     --days 1825 \
     --owner root:jtipam
 ```

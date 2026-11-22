@@ -1,0 +1,40 @@
+# Paths that may be published to GitHub. Anything not listed stays private (an opt-in list: a new top-level
+# file or a new document under docs/ is private until it is added here). A path ending in "/" includes
+# everything below it. Checked by scripts/publish/preflight.py (tree mode and the pre-push hook).
+.dockerignore
+.editorconfig
+.env.example
+.gitattributes
+.gitignore
+.nvmrc
+.github/
+LICENSE
+PUBLISH.txt
+README.md
+README_ja.md
+README_zh-TW.md
+SECURITY.md
+SECURITY_ja.md
+SECURITY_zh-TW.md
+CHANGELOG.md
+CHANGELOG_zh-TW.md
+TEST_CHECKLIST.md
+TEST_CHECKLIST_zh-TW.md
+ruff.toml
+agent/
+backend/
+deploy/
+frontend/
+scripts/
+# docs/ is curated: design specs (docs/SPEC*), the release checklist and the internal security notes stay private
+docs/.nojekyll
+docs/COMPLIANCE*.md
+docs/DATA_MODEL*.md
+docs/INSTALL*.md
+docs/PHPIPAM_API_MAPPING*.md
+docs/PLUGINS*.md
+docs/UPGRADE_FROM_0.4*.md
+docs/*.html
+docs/*.js
+docs/*.svg
+docs/shots/

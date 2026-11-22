@@ -908,7 +908,7 @@ async def agent_report(
     await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": report_lock_key(agent.id)})
     now = datetime.now(UTC)
     # 只在「指派給此 agent 的子網路」範圍內配對 —— 解決重疊網段（A/B 客戶都用
-    # 192.168.1.0/24）誤配到別人子網路的問題。同時帶出 CIDR，供自動新增比對。
+    # 192.168.123.0/24）誤配到別人子網路的問題。同時帶出 CIDR，供自動新增比對。
     agent_subnets = (await session.execute(
         select(Subnet.id, Subnet.cidr, Subnet.scan_enabled)
         .where(Subnet.scan_agent_id == agent.id)

@@ -6,7 +6,7 @@
 #   sudo ./scripts/generate-self-signed-cert.sh \
 #       [--out-dir /etc/jt-ipam/tls] \
 #       [--cn ipam.local] \
-#       [--san "DNS:ipam.local,DNS:ipam.example.com,IP:192.168.1.10"] \
+#       [--san "DNS:ipam.local,DNS:ipam.example.com,IP:192.168.123.10"] \
 #       [--days 1825] \
 #       [--owner root:jtipam]
 #

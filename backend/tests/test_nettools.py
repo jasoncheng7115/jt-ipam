@@ -38,9 +38,9 @@ def test_eui64_known_vector() -> None:
 
 
 def test_ip_in_cidr_family_mismatch() -> None:
-    assert nettools.ip_in_cidr("192.168.1.5", "192.168.1.0/24")["contains"] is True
+    assert nettools.ip_in_cidr("192.168.123.5", "192.168.123.0/24")["contains"] is True
     with pytest.raises(NetToolError):
-        nettools.ip_in_cidr("::1", "192.168.1.0/24")
+        nettools.ip_in_cidr("::1", "192.168.123.0/24")
 
 
 def test_cidr_relation() -> None:
@@ -49,9 +49,9 @@ def test_cidr_relation() -> None:
 
 
 def test_range_and_aggregate() -> None:
-    assert nettools.range_to_cidr("192.168.1.0", "192.168.1.255")["cidrs"] == ["192.168.1.0/24"]
-    agg = nettools.aggregate("192.168.0.0/24, 192.168.1.0/24")
-    assert agg["aggregated"] == ["192.168.0.0/23"]
+    assert nettools.range_to_cidr("192.168.123.0", "192.168.123.255")["cidrs"] == ["192.168.123.0/24"]
+    agg = nettools.aggregate("192.168.122.0/24, 192.168.123.0/24")
+    assert agg["aggregated"] == ["192.168.122.0/23"]
 
 
 def test_netmask_and_mac() -> None:

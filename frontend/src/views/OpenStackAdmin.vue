@@ -274,6 +274,8 @@ import {
 } from "@/icons";
 import { fmtDateTime } from "@/utils/datetime";
 import { withExportValue } from "@/utils/tableExport";
+import { autoSort } from "@/composables/useTableSort";
+import { cmpNatural } from "@/utils/sort";
 
 const { t, te } = useI18n();
 const router = useRouter();
@@ -425,7 +427,9 @@ function authText(r: OpenStackInstance): string {
   return who ? `${t("openstack.auth_password")} · ${who}` : t("openstack.auth_password");
 }
 
-const cols = computed<DataTableColumns<OpenStackInstance>>(() => [
+const productText = (r: OpenStackInstance) => (r.product === "cubecos" ? "Bigstack CubeCOS" : "OpenStack");
+const endpointText = (r: OpenStackInstance) => `${r.region || "—"} · ${r.interface}`;
+const cols = computed<DataTableColumns<OpenStackInstance>>(() => autoSort<OpenStackInstance>([
   {
     title: t("common.name"), key: "name", minWidth: 150, ellipsis: { tooltip: true },
     render: (r) => h(NButton, { text: true, type: "primary", onClick: () => { tab.value = `inst:${r.id}`; } },
@@ -433,16 +437,20 @@ const cols = computed<DataTableColumns<OpenStackInstance>>(() => [
   },
   withExportValue({
     title: t("openstack.product"), key: "product", width: 150,
+    sorter: (a: OpenStackInstance, b: OpenStackInstance) => cmpNatural(productText(a), productText(b)),
     render: (r) => h(NTag, { size: "small", bordered: false, type: r.product === "cubecos" ? "info" : "default" },
       { default: () => (r.product === "cubecos" ? "Bigstack CubeCOS" : "OpenStack") }),
   }, (r) => (r.product === "cubecos" ? "Bigstack CubeCOS" : "OpenStack")),
   { title: t("openstack.auth_url"), key: "auth_url", minWidth: 220, ellipsis: { tooltip: true } },
   withExportValue({ title: t("openstack.col_auth"), key: "auth", minWidth: 200, ellipsis: { tooltip: true },
-    render: (r) => authText(r) }, (r) => authText(r)),
+    render: (r) => authText(r), sorter: (a: OpenStackInstance, b: OpenStackInstance) => cmpNatural(authText(a), authText(b)) },
+  (r) => authText(r)),
   withExportValue({ title: t("openstack.col_endpoint"), key: "interface", width: 150,
-    render: (r) => `${r.region || "—"} · ${r.interface}` }, (r) => `${r.region || ""} ${r.interface}`),
+    render: endpointText, sorter: (a: OpenStackInstance, b: OpenStackInstance) => cmpNatural(endpointText(a), endpointText(b)) },
+  (r) => `${r.region || ""} ${r.interface}`),
   withExportValue({
     title: t("openstack.col_counts"), key: "counts", width: 140,
+    sorter: (a: OpenStackInstance, b: OpenStackInstance) => (a.vm_count ?? 0) - (b.vm_count ?? 0),
     render: (r) => h(NTooltip, null, {
       trigger: () => h("span", { "data-testid": "os-counts" },
         `${r.vm_count ?? 0} / ${r.port_count ?? 0} / ${r.product === "cubecos" ? (r.node_count ?? 0) : "—"}`),
@@ -473,7 +481,7 @@ const cols = computed<DataTableColumns<OpenStackInstance>>(() => [
           default: () => t("common.confirm_delete") }),
     ]),
   },
-]);
+]));
 
 const ALL_KEYS = ["name", "product", "auth_url", "auth", "interface", "counts", "enabled", "last_sync_at", "last_error"];
 const colPrefs = useColumnPrefs("openstack_admin", ALL_KEYS, ALL_KEYS);

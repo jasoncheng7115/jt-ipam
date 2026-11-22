@@ -11,7 +11,8 @@ import {
 } from "naive-ui";
 import { apiClient, apiErrMsg } from "@/api/client";
 import { Advanced } from "@/api/phase3";
-import { listDevices } from "@/api/basic";
+import { listDevices, listVLANs } from "@/api/basic";
+import { useDeviceOptions } from "@/composables/useDeviceOptions";
 import {
   AdvancedIcon, PlusIcon, DeleteIcon, EditIcon, RefreshIcon, SaveIcon, CancelIcon,
   CustomersIcon, VlansIcon, PhysicalIcon, UsersIcon, ScanAgentsIcon, ListIcon, VpnIcon,
@@ -63,6 +64,11 @@ const circuits = ref<any[]>([]);
 const contactGroups = ref<any[]>([]);
 const contacts = ref<any[]>([]);
 const ssids = ref<any[]>([]);
+const wlinks = ref<any[]>([]);
+// 無線連線兩端：遠端搜尋（裝置多時不會只看到第一頁）
+const devA = useDeviceOptions();
+const devB = useDeviceOptions();
+const vlans = ref<{ label: string; value: string }[]>([]);
 const devices = ref<{ id: string; name: string }[]>([]);
 const deviceOptions = computed(() => devices.value.map((d) => ({ label: d.name, value: d.id })));
 const loading = ref(false);
@@ -72,11 +78,11 @@ async function loadAll() {
   try {
     [tenants.value, tenantGroups.value, asns.value, providers.value,
      circuitTypes.value, circuits.value, contactGroups.value,
-     contacts.value, ssids.value]
+     contacts.value, ssids.value, wlinks.value]
       = await Promise.all([
         Advanced.tenants(), Advanced.tenantGroups(), Advanced.asns(),
         Advanced.providers(), Advanced.circuitTypes(), Advanced.circuits(),
-        Advanced.contactGroups(), Advanced.contacts(), Advanced.ssids(),
+        Advanced.contactGroups(), Advanced.contacts(), Advanced.ssids(), Advanced.links(),
       ]);
     try { devices.value = (await listDevices({ pageSize: 500 })).items.map((d: any) => ({ id: d.id, name: d.name })); } catch { /* */ }
   } catch (e) { msg.error(apiErrMsg(e)); }
@@ -91,7 +97,8 @@ async function delResource(resource: string, id: string) {
 }
 
 // ── 各資源的 modal state ──
-type Resource = "tenant" | "tenant_group" | "asn" | "provider" | "circuit" | "circuit_type" | "contact_group" | "contact" | "ssid";
+type Resource = "tenant" | "tenant_group" | "asn" | "provider" | "circuit" | "circuit_type" | "contact_group" | "contact" | "ssid"
+  | "wireless_link";
 const showCreate = ref(false);
 const createKind = ref<Resource>("tenant");
 const form = ref<Record<string, any>>({});
@@ -102,29 +109,44 @@ function formFor(kind: Resource, row?: any): Record<string, any> {
   const g = (k: string, d: any = null) => (row ? (row[k] ?? d) : d);
   switch (kind) {
     case "tenant":        return { name: g("name", ""), group_id: g("group_id"), description: g("description", "") };
-    case "tenant_group":  return { name: g("name", ""), description: g("description", "") };
+    case "tenant_group":  return { name: g("name", ""), parent_id: g("parent_id"), description: g("description", "") };
     case "asn":           return { asn: g("asn", 65000), rir: g("rir", ""), description: g("description", ""), tenant_id: g("tenant_id") };
-    case "provider":      return { name: g("name", ""), account_number: g("account_number", ""), description: g("description", "") };
+    case "provider":      return { name: g("name", ""), asn: g("asn"), account_number: g("account_number", ""), portal_url: g("portal_url", ""), noc_contact: g("noc_contact", ""), description: g("description", "") };
     case "circuit_type":  return { name: g("name", ""), description: g("description", "") };
     case "circuit":       return { cid: g("cid", ""), provider_id: g("provider_id"), type_id: g("type_id"), status: g("status", "active"), up_kbps: g("up_kbps"), down_kbps: g("down_kbps"), commit_rate_kbps: g("commit_rate_kbps"), monthly_fee_cents: g("monthly_fee_cents"), install_date: g("install_date"), contract_end_date: g("contract_end_date"), ip_address: g("ip_address", ""), gateway: g("gateway", ""), netmask: g("netmask", ""), dns_servers: g("dns_servers", ""), device_id: g("device_id"), description: g("description", "") };
-    case "contact_group": return { name: g("name", ""), description: g("description", "") };
-    case "contact":       return { name: g("name", ""), email: g("email", ""), phone: g("phone", ""), group_id: g("group_id"), description: g("description", "") };
-    case "ssid":          return { ssid: g("ssid", ""), description: g("description", "") };
+    case "contact_group": return { name: g("name", ""), parent_id: g("parent_id"), description: g("description", "") };
+    case "contact":       return { name: g("name", ""), title: g("title", ""), email: g("email", ""), phone: g("phone", ""), address: g("address", ""), group_id: g("group_id"), tenant_id: g("tenant_id"), description: g("description", "") };
+    case "ssid":          return { ssid: g("ssid", ""), auth_type: g("auth_type"), vlan_id: g("vlan_id"), tenant_id: g("tenant_id"), description: g("description", "") };
+    case "wireless_link": return { name: g("name", ""), a_device_id: g("a_device_id"), b_device_id: g("b_device_id"), ssid: g("ssid"), distance_m: g("distance_m"), description: g("description", "") };
     default:              return {};
   }
 }
 
-function openCreate(kind: Resource) {
+async function prepareForm(kind: Resource, row?: any) {
+  if (kind === "wireless_link") {
+    await Promise.all([devA.search(), devB.search()]);
+    await Promise.all([devA.ensure(row?.a_device_id), devB.ensure(row?.b_device_id)]);
+  }
+  if (kind === "ssid" && !vlans.value.length) {
+    try {
+      vlans.value = (await listVLANs()).items.map((v: any) => ({ label: `${v.number} ${v.name ?? ""}`.trim(), value: v.id }));
+    } catch { /* 讀不到就只少了 VLAN 選項 */ }
+  }
+}
+
+async function openCreate(kind: Resource) {
   createKind.value = kind;
   editingId.value = null;
   form.value = formFor(kind);
+  await prepareForm(kind);
   showCreate.value = true;
 }
 
-function openEdit(kind: Resource, row: any) {
+async function openEdit(kind: Resource, row: any) {
   createKind.value = kind;
   editingId.value = row.id;
   form.value = formFor(kind, row);
+  await prepareForm(kind, row);
   showCreate.value = true;
 }
 
@@ -138,6 +160,7 @@ const URL_MAP: Record<Resource, string> = {
   contact_group: "contact-groups",
   contact:       "contacts",
   ssid:          "wireless/ssids",
+  wireless_link: "wireless/links",
 };
 
 async function submit() {
@@ -153,6 +176,10 @@ async function submit() {
   }
   if (createKind.value === "ssid" && !payload.ssid) {
     msg.error(t("advanced.error_name_required"));
+    return;
+  }
+  if (createKind.value === "wireless_link" && payload.a_device_id && payload.a_device_id === payload.b_device_id) {
+    msg.error(t("advanced.wlink_same_device"));
     return;
   }
   if (createKind.value === "asn" && !payload.asn) {
@@ -179,6 +206,19 @@ async function submit() {
 
 // ── select options ──
 const tenantGroupOpts = computed(() => tenantGroups.value.map((g) => ({ label: g.name, value: g.id })));
+// 群組的上層選單：排除自己與自己底下的群組（後端也擋 parent_cycle）
+function parentOpts(rows: any[]) {
+  const banned = new Set<string>();
+  if (editingId.value) {
+    banned.add(editingId.value);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const r of rows) if (r.parent_id && banned.has(r.parent_id) && !banned.has(r.id)) { banned.add(r.id); grew = true; }
+    }
+  }
+  return rows.filter((r) => !banned.has(r.id)).map((r) => ({ label: r.name, value: r.id }));
+}
 const tenantOpts = computed(() => tenants.value.map((g) => ({ label: g.name, value: g.id })));
 const providerOpts = computed(() => providers.value.map((g) => ({ label: g.name, value: g.id })));
 const circuitTypeOpts = computed(() => circuitTypes.value.map((g) => ({ label: g.name, value: g.id })));
@@ -230,6 +270,8 @@ const tenantCols = computed<DataTableColumns<any>>(() => autoSort([
 ]));
 const tenantGroupCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
+  { title: t("advanced.parent_group"), key: "parent_id", width: 160, ellipsis: { tooltip: true },
+    render: (r) => tenantGroups.value.find((g) => g.id === r.parent_id)?.name ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("tenant_group", "tenant-groups", r) },
 ]));
@@ -242,6 +284,11 @@ const asnCols = computed<DataTableColumns<any>>(() => autoSort([
 const providerCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
   { title: t("circuits.account"), key: "account_number", width: 160, ellipsis: { tooltip: true }, render: (r) => r.account_number ?? "—" },
+  { title: "ASN", key: "asn", width: 100, render: (r) => (r.asn ? `AS${r.asn}` : "—") },
+  { title: t("advanced.noc_contact"), key: "noc_contact", minWidth: 160, ellipsis: { tooltip: true }, render: (r) => r.noc_contact ?? "—" },
+  { title: t("advanced.portal_url"), key: "portal_url", minWidth: 160, ellipsis: { tooltip: true },
+    render: (r) => (r.portal_url && /^https?:\/\//i.test(r.portal_url)
+      ? h("a", { href: r.portal_url, target: "_blank", rel: "noopener noreferrer" }, r.portal_url) : (r.portal_url ?? "—")) },
   { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("provider", "providers", r) },
 ]));
@@ -290,6 +337,7 @@ const circuitTypeCols = computed<DataTableColumns<any>>(() => autoSort([
 ]));
 const contactCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
+  { title: t("advanced.contact_title"), key: "title", width: 140, ellipsis: { tooltip: true }, render: (r) => r.title ?? "—" },
   { title: t("cols.email"), key: "email", minWidth: 180, ellipsis: { tooltip: true }, render: (r) => r.email ?? "—" },
   { title: t("cols.phone"), key: "phone", width: 140, render: (r) => r.phone ?? "—" },
   { title: t("contacts.group"), key: "group_id", width: 160, ellipsis: { tooltip: true },
@@ -298,14 +346,34 @@ const contactCols = computed<DataTableColumns<any>>(() => autoSort([
 ]));
 const contactGroupCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("common.name"), key: "name", minWidth: 180, ellipsis: { tooltip: true } },
+  { title: t("advanced.parent_group"), key: "parent_id", width: 160, ellipsis: { tooltip: true },
+    render: (r) => contactGroups.value.find((g) => g.id === r.parent_id)?.name ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("contact_group", "contact-groups", r) },
 ]));
 const ssidCols = computed<DataTableColumns<any>>(() => autoSort([
   { title: "SSID", key: "ssid", minWidth: 180, ellipsis: { tooltip: true } },
+  { title: t("advanced.ssid_auth"), key: "auth_type", width: 160, render: (r) => r.auth_type ?? "—" },
+  { title: "VLAN", key: "vlan_label", width: 160, ellipsis: { tooltip: true }, render: (r) => r.vlan_label ?? "—" },
+  { title: t("advanced.tenant"), key: "tenant_name", width: 160, ellipsis: { tooltip: true }, render: (r) => r.tenant_name ?? "—" },
   { title: t("sections.description"), key: "description", minWidth: 220, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
   { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("ssid", "wireless/ssids", r) },
 ]));
+const wlinkCols = computed<DataTableColumns<any>>(() => autoSort([
+  { title: t("common.name"), key: "name", minWidth: 160, ellipsis: { tooltip: true } },
+  { title: t("advanced.wlink_a"), key: "a_device_name", minWidth: 150, ellipsis: { tooltip: true },
+    render: (r) => (r.a_device_id ? links.device(r.a_device_id, r.a_device_name ?? r.a_device_id) : "—") },
+  { title: t("advanced.wlink_b"), key: "b_device_name", minWidth: 150, ellipsis: { tooltip: true },
+    render: (r) => (r.b_device_id ? links.device(r.b_device_id, r.b_device_name ?? r.b_device_id) : "—") },
+  { title: "SSID", key: "ssid", width: 140, ellipsis: { tooltip: true }, render: (r) => r.ssid ?? "—" },
+  { title: t("advanced.wlink_distance"), key: "distance_m", width: 110,
+    render: (r) => (r.distance_m == null ? "—" : `${Number(r.distance_m).toLocaleString()} m`) },
+  { title: t("sections.description"), key: "description", minWidth: 200, ellipsis: { tooltip: true }, render: (r) => r.description ?? "—" },
+  { title: t("common.actions"), key: "_", className: "col-actions", width: 92, render: (r) => actionsCell("wireless_link", "wireless/links", r) },
+]));
+const ssidNameOpts = computed(() => ssids.value.map((s) => ({ label: s.ssid, value: s.ssid })));
+const authOpts = ["open", "wep", "wpa2-personal", "wpa2-enterprise", "wpa3-personal", "wpa3-enterprise", "owe"]
+  .map((v) => ({ label: v, value: v }));
 
 // 每張表的欄位顯示偏好（ColumnPicker + useColumnPrefs）+ 即時篩選。actions 欄(key="_")永遠保留。
 function useTablePrefs(name: string, cols: typeof tenantCols, rows: typeof tenants) {
@@ -329,6 +397,7 @@ const circuitTypeP = useTablePrefs("circuit_types", circuitTypeCols, circuitType
 const contactGroupP = useTablePrefs("contact_groups", contactGroupCols, contactGroups);
 const contactP = useTablePrefs("contacts", contactCols, contacts);
 const ssidP = useTablePrefs("ssids", ssidCols, ssids);
+const wlinkP = useTablePrefs("wireless_links", wlinkCols, wlinks);
 
 onMounted(() => { void loadAll(); });
 </script>
@@ -435,7 +504,7 @@ onMounted(() => { void loadAll(); });
                             :order="providerP.order" @update:order="providerP.setOrder" />
               <ExportButton :columns="providerP.visibleCols" :rows="providerP.filtered" filename="providers" :title="t('circuits.providers')" />
             </n-space>
-            <n-data-table :columns="providerP.visibleCols" :data="providerP.filtered" :loading="loading" :bordered="false" :scroll-x="596" :pagination="pg" />
+            <n-data-table :columns="providerP.visibleCols" :data="providerP.filtered" :loading="loading" :bordered="false" :scroll-x="1100" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="circuits">
             <template #tab>
@@ -512,7 +581,7 @@ onMounted(() => { void loadAll(); });
                             :order="contactP.order" @update:order="contactP.setOrder" />
               <ExportButton :columns="contactP.visibleCols" :rows="contactP.filtered" filename="contacts" :title="t('advanced.contacts')" />
             </n-space>
-            <n-data-table :columns="contactP.visibleCols" :data="contactP.filtered" :loading="loading" :bordered="false" :scroll-x="696" :pagination="pg" />
+            <n-data-table :columns="contactP.visibleCols" :data="contactP.filtered" :loading="loading" :bordered="false" :scroll-x="840" :pagination="pg" />
           </n-tab-pane>
           <n-tab-pane name="contact_groups">
             <template #tab>
@@ -541,21 +610,51 @@ onMounted(() => { void loadAll(); });
         <template #tab>
           <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ScanAgentsIcon /></n-icon>{{ t('advanced.wireless') }}</span>
         </template>
-        <n-space style="margin: 8px 0" align="center">
-          <n-input v-model:value="ssidP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
-          <n-button @click="loadAll" :loading="loading">
-            <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
-          </n-button>
-          <n-button type="primary" @click="openCreate('ssid')">
-            <template #icon><n-icon><PlusIcon /></n-icon></template>
-            {{ t("common.create") }}
-          </n-button>
-          <ColumnPicker :all="ssidP.items" :visible="ssidP.visibleKeys"
-                        @update:visible="ssidP.setVisible" @reset="ssidP.reset"
-                        :order="ssidP.order" @update:order="ssidP.setOrder" />
-          <ExportButton :columns="ssidP.visibleCols" :rows="ssidP.filtered" filename="ssids" title="SSID" />
-        </n-space>
-        <n-data-table :columns="ssidP.visibleCols" :data="ssidP.filtered" :loading="loading" :bordered="false" :scroll-x="456" :pagination="pg" />
+        <n-tabs type="line">
+          <n-tab-pane name="ssids">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ScanAgentsIcon /></n-icon>SSID ({{ ssids.length }})</span>
+            </template>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="ssidP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('ssid')">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="ssidP.items" :visible="ssidP.visibleKeys"
+                            @update:visible="ssidP.setVisible" @reset="ssidP.reset"
+                            :order="ssidP.order" @update:order="ssidP.setOrder" />
+              <ExportButton :columns="ssidP.visibleCols" :rows="ssidP.filtered" filename="ssids" title="SSID" />
+            </n-space>
+            <n-data-table :columns="ssidP.visibleCols" :data="ssidP.filtered" :loading="loading" :bordered="false" :scroll-x="940" :pagination="pg"
+                          data-testid="ssid-table" />
+          </n-tab-pane>
+          <n-tab-pane name="links">
+            <template #tab>
+              <span style="display:inline-flex;align-items:center;gap:6px"><n-icon :size="16"><ListIcon /></n-icon>{{ t('advanced.wlinks') }} ({{ wlinks.length }})</span>
+            </template>
+            <div class="adv-hint">{{ t("advanced.wlinks_hint") }}</div>
+            <n-space style="margin: 8px 0" align="center">
+              <n-input v-model:value="wlinkP.query" clearable style="width:180px" :placeholder="t('common.filter')" />
+              <n-button @click="loadAll" :loading="loading">
+                <template #icon><n-icon><RefreshIcon /></n-icon></template>{{ t("common.refresh") }}
+              </n-button>
+              <n-button type="primary" @click="openCreate('wireless_link')" data-testid="wlink-create">
+                <template #icon><n-icon><PlusIcon /></n-icon></template>
+                {{ t("common.create") }}
+              </n-button>
+              <ColumnPicker :all="wlinkP.items" :visible="wlinkP.visibleKeys"
+                            @update:visible="wlinkP.setVisible" @reset="wlinkP.reset"
+                            :order="wlinkP.order" @update:order="wlinkP.setOrder" />
+              <ExportButton :columns="wlinkP.visibleCols" :rows="wlinkP.filtered" filename="wireless-links" :title="t('advanced.wlinks')" />
+            </n-space>
+            <n-data-table :columns="wlinkP.visibleCols" :data="wlinkP.filtered" :loading="loading" :bordered="false" :scroll-x="1000" :pagination="pg"
+                          data-testid="wlink-table" />
+          </n-tab-pane>
+        </n-tabs>
       </n-tab-pane>
     </n-tabs>
 
@@ -587,6 +686,10 @@ onMounted(() => { void loadAll(); });
           <n-form-item :label="t('common.name')">
             <n-input v-model:value="form.name" />
           </n-form-item>
+          <n-form-item :label="t('advanced.parent_group')">
+            <n-select v-model:value="form.parent_id" :options="parentOpts(tenantGroups)" clearable filterable
+                      :placeholder="t('advanced.no_parent_group')" data-testid="tenant-group-parent" />
+          </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
           </n-form-item>
@@ -614,8 +717,20 @@ onMounted(() => { void loadAll(); });
           <n-form-item :label="t('common.name')">
             <n-input v-model:value="form.name" placeholder="HiNet / TFN / NTT …" />
           </n-form-item>
-          <n-form-item :label="t('circuits.account')">
-            <n-input v-model:value="form.account_number" :placeholder="t('advanced.account_ph')" />
+          <div class="circuit-row">
+            <n-form-item :label="t('circuits.account')">
+              <n-input v-model:value="form.account_number" :placeholder="t('advanced.account_ph')" />
+            </n-form-item>
+            <n-form-item label="ASN">
+              <n-input-number v-model:value="form.asn" :min="1" :max="4294967294" clearable :show-button="false"
+                              placeholder="3462" data-testid="provider-asn" />
+            </n-form-item>
+          </div>
+          <n-form-item :label="t('advanced.portal_url')">
+            <n-input v-model:value="form.portal_url" placeholder="https://portal.example.net" data-testid="provider-portal" />
+          </n-form-item>
+          <n-form-item :label="t('advanced.noc_contact')">
+            <n-input v-model:value="form.noc_contact" :placeholder="t('advanced.noc_contact_ph')" data-testid="provider-noc" />
           </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
@@ -704,6 +819,10 @@ onMounted(() => { void loadAll(); });
           <n-form-item :label="t('common.name')">
             <n-input v-model:value="form.name" :placeholder="t('advanced.contact_name_ph')" />
           </n-form-item>
+          <n-form-item :label="t('advanced.parent_group')">
+            <n-select v-model:value="form.parent_id" :options="parentOpts(contactGroups)" clearable filterable
+                      :placeholder="t('advanced.no_parent_group')" data-testid="contact-group-parent" />
+          </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
           </n-form-item>
@@ -711,9 +830,14 @@ onMounted(() => { void loadAll(); });
 
         <!-- Contact -->
         <template v-else-if="createKind === 'contact'">
-          <n-form-item :label="t('common.name')">
-            <n-input v-model:value="form.name" />
-          </n-form-item>
+          <div class="circuit-row">
+            <n-form-item :label="t('common.name')">
+              <n-input v-model:value="form.name" />
+            </n-form-item>
+            <n-form-item :label="t('advanced.contact_title')">
+              <n-input v-model:value="form.title" :placeholder="t('advanced.contact_title_ph')" data-testid="contact-title" />
+            </n-form-item>
+          </div>
           <n-space>
             <n-form-item label="Email" style="min-width: 240px">
               <n-input v-model:value="form.email" placeholder="alice@example.com" />
@@ -722,8 +846,16 @@ onMounted(() => { void loadAll(); });
               <n-input v-model:value="form.phone" placeholder="+886-2-1234-5678" />
             </n-form-item>
           </n-space>
-          <n-form-item :label="t('contacts.group')">
-            <n-select v-model:value="form.group_id" :options="contactGroupOpts" clearable filterable />
+          <div class="circuit-row">
+            <n-form-item :label="t('contacts.group')">
+              <n-select v-model:value="form.group_id" :options="contactGroupOpts" clearable filterable />
+            </n-form-item>
+            <n-form-item :label="t('advanced.tenant')">
+              <n-select v-model:value="form.tenant_id" :options="tenantOpts" clearable filterable />
+            </n-form-item>
+          </div>
+          <n-form-item :label="t('locations.address')">
+            <n-input v-model:value="form.address" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }" data-testid="contact-address" />
           </n-form-item>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
@@ -735,6 +867,46 @@ onMounted(() => { void loadAll(); });
           <n-form-item label="SSID">
             <n-input v-model:value="form.ssid" placeholder="Corp-WiFi" />
           </n-form-item>
+          <n-form-item :label="t('advanced.ssid_auth')">
+            <n-select v-model:value="form.auth_type" :options="authOpts" filterable tag clearable data-testid="ssid-auth" />
+          </n-form-item>
+          <n-form-item label="VLAN">
+            <n-select v-model:value="form.vlan_id" :options="vlans" filterable clearable />
+          </n-form-item>
+          <n-form-item :label="t('advanced.tenant')">
+            <n-select v-model:value="form.tenant_id" :options="tenantOpts" filterable clearable />
+          </n-form-item>
+          <n-form-item :label="t('sections.description')">
+            <n-input v-model:value="form.description" type="textarea" :rows="2" />
+          </n-form-item>
+        </template>
+
+        <!-- 無線連線（點對點） -->
+        <template v-else-if="createKind === 'wireless_link'">
+          <n-form-item :label="t('common.name')" required>
+            <n-input v-model:value="form.name" :placeholder="t('advanced.wlink_name_ph')" data-testid="wlink-name" />
+          </n-form-item>
+          <div class="circuit-row">
+            <n-form-item :label="t('advanced.wlink_a')">
+              <n-select v-model:value="form.a_device_id" :options="devA.options.value" filterable clearable remote
+                        :loading="devA.loading.value" @search="devA.onSearch" data-testid="wlink-a" />
+            </n-form-item>
+            <n-form-item :label="t('advanced.wlink_b')">
+              <n-select v-model:value="form.b_device_id" :options="devB.options.value" filterable clearable remote
+                        :loading="devB.loading.value" @search="devB.onSearch" data-testid="wlink-b" />
+            </n-form-item>
+          </div>
+          <div class="circuit-row">
+            <n-form-item label="SSID">
+              <n-select v-model:value="form.ssid" :options="ssidNameOpts" filterable tag clearable
+                        :placeholder="t('advanced.wlink_ssid_ph')" />
+            </n-form-item>
+            <n-form-item :label="t('advanced.wlink_distance')">
+              <n-input-number v-model:value="form.distance_m" :min="0" :max="100000" clearable data-testid="wlink-distance">
+                <template #suffix>m</template>
+              </n-input-number>
+            </n-form-item>
+          </div>
           <n-form-item :label="t('sections.description')">
             <n-input v-model:value="form.description" type="textarea" :rows="2" />
           </n-form-item>
@@ -762,4 +934,5 @@ onMounted(() => { void loadAll(); });
 /* Circuit 表單兩欄：等寬、輸入框填滿欄寬、上緣對齊（取代會錯位的固定寬 n-space） */
 .circuit-row { display: flex; gap: 12px; margin-bottom: 14px; }
 .circuit-row > * { flex: 1 1 0; min-width: 0; }
+.adv-hint { font-size: 12px; opacity: .7; margin-top: 6px; }
 </style>

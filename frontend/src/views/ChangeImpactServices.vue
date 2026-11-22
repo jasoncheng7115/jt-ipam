@@ -25,7 +25,7 @@
       <n-input v-model:value="q" size="small" clearable style="width: 240px; margin-bottom: 10px"
                :placeholder="t('common.search')" />
       <n-data-table :columns="columns" :data="rows" :loading="loading" size="small" :bordered="false"
-                    :row-key="(r: ImpactService) => r.id" :row-props="rowProps" remote
+                    :row-key="(r: ImpactService) => r.id" :row-props="rowProps" remote @update:sorter="onSorter"
                     :pagination="{ page, pageSize, itemCount: total, onChange: (p: number) => { page = p } }"
                     data-testid="svc-list" />
     </n-card>
@@ -61,16 +61,24 @@ const editing = ref<string | null>(null);
 const CRIT_TYPE: Record<string, "error" | "warning" | "default" | "info"> = {
   critical: "error", high: "warning", normal: "default", low: "info",
 };
+// 後端分頁：點標題排序交給後端（分頁前排），不能只排畫面上那一頁
+const sortState = ref<{ key: string; order: "ascend" | "descend" } | null>(null);
+const so = (k: string) => (sortState.value?.key === k ? sortState.value.order : false);
+function onSorter(st: { columnKey: string | number; order: "ascend" | "descend" | false } | null) {
+  sortState.value = st && st.order ? { key: String(st.columnKey), order: st.order } : null;
+  if (page.value !== 1) page.value = 1;   // 換頁的 watch 會重抓
+  else void fetchRows();
+}
 const columns = computed<DataTableColumns<ImpactService>>(() => [
-  { title: t("change_impact.svc.f_name"), key: "name", minWidth: 200,
+  { title: t("change_impact.svc.f_name"), key: "name", minWidth: 200, sorter: true, sortOrder: so("name"),
     render: (r) => h("span", { style: r.status === "retired" ? "opacity: .55" : "" }, r.name) },
-  { title: t("change_impact.svc.col_criticality"), key: "criticality", width: 110,
+  { title: t("change_impact.svc.col_criticality"), key: "criticality", width: 110, sorter: true, sortOrder: so("criticality"),
     render: (r) => h(NTag, { size: "small", type: CRIT_TYPE[r.criticality] ?? "default", bordered: false },
                      { default: () => t(`change_impact.param.criticality.${r.criticality}`) }) },
-  { title: t("change_impact.svc.col_status"), key: "status", width: 100,
+  { title: t("change_impact.svc.col_status"), key: "status", width: 100, sorter: true, sortOrder: so("status"),
     render: (r) => t(`change_impact.svc.status.${r.status}`) },
-  { title: t("change_impact.svc.groups"), key: "group_count", width: 110 },
-  { title: t("change_impact.svc.col_updated"), key: "updated_at", width: 170,
+  { title: t("change_impact.svc.groups"), key: "group_count", width: 110, sorter: true, sortOrder: so("group_count") },
+  { title: t("change_impact.svc.col_updated"), key: "updated_at", width: 170, sorter: true, sortOrder: so("updated_at"),
     render: (r) => (r.updated_at ? fmtDateTime(r.updated_at) : "—") },
 ]);
 
@@ -86,7 +94,8 @@ async function fetchRows() {
   loading.value = true;
   error.value = "";
   try {
-    const r = await listServices({ q: q.value.trim(), page: page.value, pageSize });
+    const r = await listServices({ q: q.value.trim(), page: page.value, pageSize, sort: sortState.value?.key,
+                                   order: sortState.value?.order === "descend" ? "desc" : "asc" });
     rows.value = r.items;
     total.value = r.total;
     canEdit.value = r.can_edit;

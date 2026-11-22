@@ -18,6 +18,7 @@ from app.api.v1.write_guards import require_create, require_move, require_visibl
 from app.core.audit import append_audit
 from app.core.db import get_session
 from app.core.sqlin import in_values
+from app.core.ui_error import ui_detail
 from app.models.section import Section
 from app.models.subnet import Subnet
 from app.schemas.base import Paginated, StrictModel
@@ -164,6 +165,9 @@ async def update_section(
                            dest_type="customer", dest_id=changes["customer_id"])
     if "parent_id" in changes and changes["parent_id"] != section.parent_id:
         await require_visible(session, user, "section", changes["parent_id"], "Section not found")
+        if changes["parent_id"] is not None and await _is_self_or_descendant(session, section.id, changes["parent_id"]):
+            raise HTTPException(422, detail=ui_detail("section_parent_cycle",
+                                                      "上層區段不可以是自己或自己底下的區段"))
     for key, value in changes.items():
         setattr(section, key, value)
 
@@ -181,6 +185,18 @@ async def update_section(
     await session.commit()
     await session.refresh(section)
     return SectionRead.model_validate(section)
+
+
+async def _is_self_or_descendant(session: AsyncSession, section_id: uuid.UUID, candidate: uuid.UUID) -> bool:
+    """candidate 是 section 自己或它底下的區段（往上走 candidate 的祖先鏈；資料若已經有循環也會停）。"""
+    seen: set[uuid.UUID] = set()
+    cur: uuid.UUID | None = candidate
+    while cur is not None and cur not in seen:
+        if cur == section_id:
+            return True
+        seen.add(cur)
+        cur = await session.scalar(select(Section.parent_id).where(Section.id == cur))
+    return False
 
 
 @router.delete(

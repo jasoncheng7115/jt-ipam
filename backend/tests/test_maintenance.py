@@ -28,13 +28,17 @@ from app.services import maintenance as m
 from app.services.state_alert import observe
 from sqlalchemy import select
 
-NOW = datetime.now(UTC)
+
+def _now() -> datetime:
+    # 每次呼叫當下取：模組載入時算好的話，全套跑到這個檔已過了一兩個小時，
+    # 「前 10 分到後 60 分」的維護早就結束（2026-11-21 全套 10 個失敗、單獨跑全過）
+    return datetime.now(UTC)
 
 
 def _once(minutes_before: int = 10, minutes_after: int = 60, behavior: str = "mute") -> MaintenanceWindow:
     return MaintenanceWindow(title="韌體更新", behavior=behavior, schedule_type="once",
-                             starts_at=NOW - timedelta(minutes=minutes_before),
-                             ends_at=NOW + timedelta(minutes=minutes_after))
+                             starts_at=_now() - timedelta(minutes=minutes_before),
+                             ends_at=_now() + timedelta(minutes=minutes_after))
 
 
 async def _window(db, scopes: list[dict[str, Any]], **kw: Any) -> MaintenanceWindow:  # type: ignore[no-untyped-def]
@@ -53,7 +57,7 @@ async def _window(db, scopes: list[dict[str, Any]], **kw: Any) -> MaintenanceWin
 def test_weekly_occurrence_crosses_midnight_and_respects_validity() -> None:
     z = m.tz()
     w = MaintenanceWindow(title="例行", schedule_type="weekly", weekdays=[1], start_time=time(23, 0),
-                          end_time=time(2, 0), valid_until=(NOW + timedelta(days=365)).date())
+                          end_time=time(2, 0), valid_until=(_now() + timedelta(days=365)).date())
     tue = datetime(2026, 11, 3, 23, 30, tzinfo=z)          # 2026-11-03 是週二
     wed = datetime(2026, 11, 4, 1, 30, tzinfo=z)
     assert m.occurrence(w, tue) is not None
@@ -67,7 +71,7 @@ def test_weekly_occurrence_crosses_midnight_and_respects_validity() -> None:
 def test_skip_and_extend_one_weekly_occurrence() -> None:
     z = m.tz()
     w = MaintenanceWindow(title="例行", schedule_type="weekly", weekdays=[1], start_time=time(2, 0),
-                          end_time=time(4, 0), valid_until=(NOW + timedelta(days=365)).date())
+                          end_time=time(4, 0), valid_until=(_now() + timedelta(days=365)).date())
     at = datetime(2026, 11, 3, 3, 0, tzinfo=z)
     w.skip_until = datetime(2026, 11, 3, 4, 0, tzinfo=z)
     assert m.occurrence(w, at) is None, "這一次提前結束"
@@ -172,7 +176,7 @@ async def test_state_alert_is_held_during_maintenance_and_fires_after(db_session
     sup = (await db_session.execute(select(MaintenanceSuppression))).scalars().all()
     assert [s.key for s in sup] == [key] and sup[0].window_id == w.id
     # 維護結束（改成已結束）→ 下一輪照常補發
-    w.ends_at = NOW - timedelta(minutes=1)
+    w.ends_at = _now() - timedelta(minutes=1)
     await db_session.commit()
     m.invalidate(db_session)
     assert await observe(db_session, key=key, failing=True, threshold=2) == "down"
@@ -221,7 +225,7 @@ async def test_tick_notifies_start_and_end_with_summary(db_session, admin_user) 
     assert (await m.tick(db_session))["started"] == 1
     assert (await m.tick(db_session))["started"] == 0, "同一次不重發"
     await observe(db_session, key=key, failing=True, threshold=1)        # 被靜音，而且到結束都還壞著
-    w.ends_at = NOW - timedelta(seconds=1)
+    w.ends_at = _now() - timedelta(seconds=1)
     await db_session.commit()
     assert (await m.tick(db_session))["ended"] == 1
     rows = (await db_session.execute(select(Notification).where(Notification.object_type == "maintenance")
@@ -281,14 +285,14 @@ async def test_quick_maintenance_then_extend_and_end(client, auth_headers, db_se
 @pytest.mark.anyio
 async def test_create_once_weekly_and_validation(client, auth_headers, db_session) -> None:
     n = await _net(db_session)
-    start = (NOW + timedelta(days=1)).isoformat()
+    start = (_now() + timedelta(days=1)).isoformat()
     body = {"title": "機房斷電", "ticket": "CHG-001", "schedule": {"type": "once", "starts_at": start,
-            "ends_at": (NOW + timedelta(days=1, hours=4)).isoformat()},
+            "ends_at": (_now() + timedelta(days=1, hours=4)).isoformat()},
             "scopes": [{"scope_type": "location", "object_id": str(n["loc"].id)}]}
     r = await client.post("/api/v1/maintenance", headers=auth_headers, json=body)
     assert r.status_code == 201, r.text
     assert r.json()["status"] == "upcoming"
-    body["schedule"]["ends_at"] = (NOW + timedelta(days=10)).isoformat()
+    body["schedule"]["ends_at"] = (_now() + timedelta(days=10)).isoformat()
     r = await client.post("/api/v1/maintenance", headers=auth_headers, json=body)
     assert r.status_code == 422 and _code(r) == "maintenance_too_long"
     weekly = {"title": "例行", "schedule": {"type": "weekly", "weekdays": [1], "start_time": "02:00",
@@ -296,7 +300,7 @@ async def test_create_once_weekly_and_validation(client, auth_headers, db_sessio
               "scopes": [{"scope_type": "subnet", "object_id": str(n["sub"].id)}]}
     r = await client.post("/api/v1/maintenance", headers=auth_headers, json=weekly)
     assert r.status_code == 422 and _code(r) == "maintenance_weekly_incomplete", "每週例行一定要到期日"
-    weekly["schedule"]["valid_until"] = (NOW + timedelta(days=90)).date().isoformat()
+    weekly["schedule"]["valid_until"] = (_now() + timedelta(days=90)).date().isoformat()
     r = await client.post("/api/v1/maintenance", headers=auth_headers, json=weekly)
     assert r.status_code == 201, r.text
     lst = (await client.get("/api/v1/maintenance", headers=auth_headers)).json()["items"]
@@ -312,8 +316,8 @@ async def test_large_scope_needs_confirmation_and_preview_counts(client, auth_he
     assert p["subnets"] == 2 and p["ips"] == 3 and p["range_addresses"] >= 256
     db_session.add_all([IPAddress(subnet_id=n["sub"].id, ip=f"198.51.100.{i}", state="active") for i in range(100, 112)])
     await db_session.commit()
-    body = {"title": "大範圍", "schedule": {"type": "once", "starts_at": NOW.isoformat(),
-            "ends_at": (NOW + timedelta(hours=1)).isoformat()}, "scopes": scopes}
+    body = {"title": "大範圍", "schedule": {"type": "once", "starts_at": _now().isoformat(),
+            "ends_at": (_now() + timedelta(hours=1)).isoformat()}, "scopes": scopes}
     r = await client.post("/api/v1/maintenance", headers=auth_headers, json=body)
     assert r.status_code == 409 and _code(r) == "maintenance_scope_large"
     body["confirm_large"] = True

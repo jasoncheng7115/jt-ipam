@@ -1,4 +1,4 @@
-# jt-ipam v1.0.22
+# jt-ipam v1.0.23
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -105,7 +105,7 @@ SOL が中継するのはホストの**シリアルポート**だけなので、
 
 例：
 - `10.1.1.5` は `10.0.0.0/8` と `10.1.1.0/24` の両方に含まれるため、**小さい方**の `10.1.1.0/24` に入ります。
-- 組織 A と組織 B が**それぞれ `192.168.1.0/24` を持っている**場合、その機器がどちらのものか知る術がないため、**何も作成しません**。間違った組織に記録するくらいなら、記録が無い方がましだからです。
+- 組織 A と組織 B が**それぞれ `192.168.123.0/24` を持っている**場合、その機器がどちらのものか知る術がないため、**何も作成しません**。間違った組織に記録するくらいなら、記録が無い方がましだからです。
 - そのアドレスがどの既存サブネットにも入らない場合も、何も作成しません（サブネットを勝手に作ることはありません）。
 
 二つ目のケースは、その連携の対象サブネット範囲を自分たちのサブネットに絞れば解消します。候補が自分たちのものだけになれば判別でき、レコードは通常どおり作成されます。
@@ -167,7 +167,7 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts
 
 このスクリプトは `postgresql-16` / `python3.12` / `nginx` / `redis`（PDF レポートに埋め込む中国語・日本語フォント `fonts-noto-cjk` も）を導入し、`jtipam` のシステムアカウントと PG のロールを作成し、鍵を生成して `/etc/jt-ipam/backend.env` に書き込み、`alembic upgrade head` を実行し、フロントエンドをビルドして `jt-ipam-backend.service` を有効にします。
 
-既存の環境の更新は `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade` です。**スクリプト自身が `git pull` を実行し**、続いてバックアップ → 依存関係 → alembic → ビルド → 再起動を行います。詳細は [`docs/INSTALL_ja.md`](docs/INSTALL_ja.md) を参照してください。
+既存の環境の更新は `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade` です。**スクリプト自身が `git pull` を実行し**、続いてバックアップ → 依存関係 → 書き込みを止めて基準を記録 → alembic → 基準と 1 件ずつ照合（欠落や変更があれば停止し、書き込みは止めたまま）→ ビルド → 再起動を行います。詳細は [`docs/INSTALL_ja.md`](docs/INSTALL_ja.md) を参照してください。
 
 > **0.5.170 以前から上げる場合は `upgrade` を 2 回実行してください。** アップグレードスクリプト自体も `git pull` で更新されますが、その回は古い方のコピーで動いています（0.5.171 以降は、pull の後に新しい方へ引き継ぎます）。その後 `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh doctor` を実行すると結果を確認でき、確認できなかった項目には対処コマンドが表示されます。
 

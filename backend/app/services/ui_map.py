@@ -31,6 +31,7 @@ LOCALES = ("zh-TW", "en-US", "ja-JP")
 #: 沒有出現在選單上、要從清單點進去的詳細頁 → 從哪個選單項目進去
 DETAIL_PARENTS: dict[str, str] = {
     "section-detail": "sections",
+    "location-detail": "locations",
     "subnet-detail": "subnets",
     "address-detail": "addresses",
     "address-unmanaged": "subnets",

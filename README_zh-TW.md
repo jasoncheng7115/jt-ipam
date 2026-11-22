@@ -1,4 +1,4 @@
-# jt-ipam v1.0.22
+# jt-ipam v1.0.23
 
 [![License](https://img.shields.io/github/license/jasoncheng7115/jt-ipam?color=blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/jasoncheng7115/jt-ipam)](https://github.com/jasoncheng7115/jt-ipam/commits/main)
@@ -107,7 +107,7 @@ SOL 只是把主機的**序列埠**轉播出來，所以主機端要先設好序
 
 舉例：
 - `10.1.1.5` 同時落在 `10.0.0.0/8` 與 `10.1.1.0/24` → 放進**比較小**的 `10.1.1.0/24`。
-- 甲、乙兩個單位**各自都有一個 `192.168.1.0/24`** → 系統無從得知這台機器算誰的，
+- 甲、乙兩個單位**各自都有一個 `192.168.123.0/24`** → 系統無從得知這台機器算誰的，
   **不建立**。把紀錄掛到錯的單位，比沒有這筆紀錄更糟。
 - 位址不在任何既有網段內 → 不建立（不會自己生一個網段出來）。
 
@@ -178,7 +178,7 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-ipam/main/scripts
 
 腳本會安裝 `postgresql-16` / `python3.12` / `nginx` / `redis`（以及 PDF 報告內嵌用的中文/日文字型 `fonts-noto-cjk`），建立 `jtipam` 系統帳號與 PG 角色，產生金鑰寫入 `/etc/jt-ipam/backend.env`，跑 `alembic upgrade head`，build 前端並啟用 `jt-ipam-backend.service`。
 
-升級：`sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade`（**腳本內含 `git pull`**，直接跑即可），接著備份 → 相依 → alembic → build → 重啟。詳見 [`docs/INSTALL.md`](docs/INSTALL.md)。
+升級：`sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade`（**腳本內含 `git pull`**，直接跑即可），接著備份 → 相依 → 停止寫入並記下基準 → alembic → 與基準逐筆比對（有缺或有變就停下、維持停止寫入）→ build → 重啟。詳見 [`docs/INSTALL.md`](docs/INSTALL.md)。
 
 > **從 0.5.170 以前的版本升上來時，請跑兩次 `upgrade`。** 升級腳本自己也會被 `git pull` 更新，但那一次仍由舊腳本主導後續步驟（0.5.171 起才會在 pull 後交棒給新版）。跑完後可用 `sudo bash /opt/jt-ipam/scripts/jt-ipam.sh doctor` 確認，它會把過不了的項目連同修法一起印出來。
 

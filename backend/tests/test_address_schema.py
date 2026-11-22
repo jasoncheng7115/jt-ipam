@@ -13,7 +13,7 @@ from app.schemas.address import IPAddressCreate
 def _payload(**overrides):
     base = {
         "subnet_id": uuid.uuid4(),
-        "ip": "192.168.1.10",
+        "ip": "192.168.123.10",
     }
     base.update(overrides)
     return base
@@ -21,7 +21,7 @@ def _payload(**overrides):
 
 def test_valid_ipv4():
     obj = IPAddressCreate(**_payload())
-    assert obj.ip == "192.168.1.10"
+    assert obj.ip == "192.168.123.10"
 
 
 def test_valid_ipv6():
