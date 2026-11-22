@@ -58,6 +58,7 @@ import {
   Text,
   ServerConnection,
   Usb,
+  PathArrow,
   Settings,
   GraphUp,
   ScaleFrameEnlarge,
@@ -284,6 +285,8 @@ export const AdvancedIcon = Group;
 export const VirtualizationIcon = Server;
 /** 佈線（纜線＋線標）：選單上跟「機櫃」並排，不可同一個圖示（2026-11-22） */
 export const PhysicalIcon = Usb;
+/** 電路（ISP 線路）：進階選單裡跟佈線排在一起，不能同一個圖示（2026-11-23） */
+export const CircuitIcon = PathArrow;
 export const PowerIcon = Flash;
 /** 迴路失效模擬（唯讀計算） */
 export const PowerFailureIcon = FlashOff;

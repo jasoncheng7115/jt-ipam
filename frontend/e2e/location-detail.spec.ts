@@ -57,14 +57,16 @@ test("機房詳情：總覽、裝置與 IP、佈線、編輯入口", async ({ pa
     const c2 = await api(page, "POST", "/api/v1/cables/connect", { a_port_id: pa2, b_port_id: po, label: `x-${u}` });
     made.unshift(["cables", c1.id], ["cables", c2.id]);
 
-    // 0. 選單：機房、機櫃、佈線、電力排在一起（不在「進階」裡）
+    // 0. 選單：「進階」裡相關的排在一起：電路、ASN、佈線、電力相鄰（使用者 2026-11-23）
     await page.goto("/locations");
     const headers = page.locator(".n-menu-item-content-header");
     await expect(headers.filter({ hasText: /^機櫃$/ }).first()).toBeVisible({ timeout: 15_000 });
-    const items = await headers.allInnerTexts();
-    const top = items.map((x) => x.trim());
-    const i = top.indexOf("機櫃");
-    expect(top.slice(i, i + 4)).toEqual(["機櫃", "機房 / 地點", "佈線", "電力"]);
+    if (!(await headers.filter({ hasText: /^佈線$/ }).count())) await headers.filter({ hasText: /^進階$/ }).first().click();
+    await expect(headers.filter({ hasText: /^佈線$/ }).first()).toBeVisible({ timeout: 10_000 });
+    const top = (await headers.allInnerTexts()).map((x) => x.trim());
+    const c = top.indexOf("電路");
+    expect(top.slice(c, c + 4)).toEqual(["電路", "ASN", "佈線", "電力"]);
+    expect(top.indexOf("佈線")).toBeGreaterThan(top.indexOf("進階"));
 
     // 5. 清單的裝置數（有效位置）＋ 1. 點名稱進詳情
     const row = page.locator(".n-data-table-tbody tr", { hasText: `e2e-tyo-${u}` });

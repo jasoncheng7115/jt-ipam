@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
+## [Unreleased]
+
+### Changed
+- **The Advanced menu keeps related items together**: organisation (Tenants, Contacts), lines and physical (Circuits, ASN, Cabling, Power, Wireless, Site-to-site VPN), names and certificates (Domains, DNS records, Certificate distribution), firewalls and NAT, virtualisation, then Connections and MAC addresses. Cabling and Power are back under Advanced (1.0.23 had moved them next to Racks), and Circuits gets its own icon.
+
 ## [1.0.23] - 2026-11-22
 
 > **Upgrading takes a little longer:** `jt-ipam.sh upgrade` now stops the site and its background jobs, snapshots every record, runs the migrations and compares each record before reopening. If anything was lost or changed it stops there with the site still down and prints how to restore the backup.

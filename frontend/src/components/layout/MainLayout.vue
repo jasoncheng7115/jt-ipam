@@ -39,7 +39,7 @@ import {
   NatIcon, DevicesIcon, IdentifyIcon, ScreensIcon, OpenNewWindowIcon, MacIcon, RacksIcon, LocationsIcon, RequestsIcon, TopologyIcon,
   ToolsIcon, SettingsIcon, TasksIcon,
   // Phase 3 / Admin
-  Phase3Icon, VirtualizationIcon, PhysicalIcon, DomainIcon, MaintenanceIcon, PowerIcon, VpnIcon,
+  Phase3Icon, VirtualizationIcon, PhysicalIcon, CircuitIcon, DomainIcon, MaintenanceIcon, PowerIcon, VpnIcon,
   AdminIcon, AuditIcon, UsersIcon, GroupsIcon, CustomFieldsIcon, CustomersIcon, AnomalyIcon,
   AiAuditIcon, ChatHistoryIcon, ChangeImpactIcon,
   IntegrationsIcon, OkIcon, DnsIcon, LibreNMSIcon, FirewallIcon, WindowsDhcpIcon, KeaDhcpIcon, IscDhcpIcon, IsoInsightIcon, TechnitiumIcon, RustDeskIcon, WazuhIcon,
@@ -277,9 +277,6 @@ const menuOptions = computed<MenuOption[]>(() => {
     { label: () => t("nav.devices"),     key: "devices",    icon: renderIcon(DevicesIcon) },
     { label: () => t("nav.racks"),       key: "racks",      icon: renderIcon(RacksIcon) },
     { label: () => t("nav.locations"),   key: "locations",  icon: renderIcon(LocationsIcon) },
-    // 機房、機櫃、佈線、電力排在一起（使用者 2026-11-22：機房機櫃相關的要排在一起；以前佈線 / 電力在「進階」裡）
-    { label: () => t("nav.cabling"),     key: "cabling",    icon: renderIcon(PhysicalIcon) },
-    { label: () => t("nav.power"),       key: "power",      icon: renderIcon(PowerIcon) },
     ...(me.value?.is_admin
       ? [{ label: () => t("nav.customers"), key: "customers", icon: renderIcon(CustomersIcon) }]
       : []),
@@ -293,26 +290,20 @@ const menuOptions = computed<MenuOption[]>(() => {
       key: "phase3",
       icon: renderIcon(Phase3Icon),
       children: [
+        // 相關的排在一起（使用者 2026-11-23）：組織 → 線路與實體 → 名稱與憑證 → 防火牆與 NAT → 虛擬化 → 連線與 MAC → 匯入
         { label: () => t("advanced.tenancy"),   key: "adv-tenancy",  icon: renderIcon(CustomersIcon) },
-        { label: () => "ASN",                    key: "adv-asn",      icon: renderIcon(VlansIcon) },
-        { label: () => t("advanced.circuits"),   key: "adv-circuits", icon: renderIcon(PhysicalIcon) },
-        { label: () => t("advanced.domains"),    key: "adv-domains",  icon: renderIcon(DomainIcon) },
         { label: () => t("advanced.contacts"),   key: "adv-contacts", icon: renderIcon(UsersIcon) },
+        { label: () => t("advanced.circuits"),   key: "adv-circuits", icon: renderIcon(CircuitIcon) },
+        { label: () => "ASN",                    key: "adv-asn",      icon: renderIcon(VlansIcon) },
+        { label: () => t("nav.cabling"),        key: "cabling",     icon: renderIcon(PhysicalIcon) },
+        { label: () => t("nav.power"),          key: "power",       icon: renderIcon(PowerIcon) },
         { label: () => t("advanced.wireless"),   key: "adv-wireless", icon: renderIcon(ScanAgentsIcon) },
+        { label: () => t("nav.vpn_tunnels"),    key: "vpn-tunnels", icon: renderIcon(VpnIcon) },
+        { label: () => t("advanced.domains"),    key: "adv-domains",  icon: renderIcon(DomainIcon) },
         ...(intgPresence.value.dns
           ? [{ label: () => t("nav.dns_records"), key: "adv-dns-records", icon: renderIcon(DnsIcon) }] : []),
         ...(intgPresence.value.cert_agents
           ? [{ label: () => t("nav.cert_status"), key: "adv-cert-status", icon: renderIcon(LockIcon) }] : []),
-        { label: () => t("nav.connections"),     key: "adv-connections", icon: renderIcon(TerminalIcon) },
-        { label: () => t("nav.mac_history"),     key: "mac-history",     icon: renderIcon(MacIcon) },
-        ...(intgPresence.value.proxmox
-          ? [{ label: () => t("nav.virt_pve"), key: "virt", icon: renderIcon(VirtualizationIcon) }] : []),
-        ...(intgPresence.value.esxi
-          ? [{ label: () => t("nav.virt_vmware"), key: "virt_vmware", icon: renderIcon(VirtualizationIcon) }] : []),
-        ...(intgPresence.value.hyperv
-          ? [{ label: () => t("nav.virt_hyperv"), key: "virt_hyperv", icon: renderIcon(VirtualizationIcon) }] : []),
-        ...(intgPresence.value.openstack
-          ? [{ label: () => t("nav.virt_openstack"), key: "virt_openstack", icon: renderIcon(VirtualizationIcon) }] : []),
         ...(intgPresence.value.opnsense
           ? [{ label: () => t("nav.firewall"), key: "firewall", icon: renderIcon(FirewallIcon) }] : []),
         ...(intgPresence.value.pfsense
@@ -324,7 +315,16 @@ const menuOptions = computed<MenuOption[]>(() => {
         ...(intgPresence.value.mikrotik
           ? [{ label: () => t("nav.mikrotik_fw"), key: "mikrotik_fw", icon: renderIcon(FirewallIcon) }] : []),
         { label: () => t("nav.nat"),            key: "nat",         icon: renderIcon(NatIcon) },
-        { label: () => t("nav.vpn_tunnels"),    key: "vpn-tunnels", icon: renderIcon(VpnIcon) },
+        ...(intgPresence.value.proxmox
+          ? [{ label: () => t("nav.virt_pve"), key: "virt", icon: renderIcon(VirtualizationIcon) }] : []),
+        ...(intgPresence.value.esxi
+          ? [{ label: () => t("nav.virt_vmware"), key: "virt_vmware", icon: renderIcon(VirtualizationIcon) }] : []),
+        ...(intgPresence.value.hyperv
+          ? [{ label: () => t("nav.virt_hyperv"), key: "virt_hyperv", icon: renderIcon(VirtualizationIcon) }] : []),
+        ...(intgPresence.value.openstack
+          ? [{ label: () => t("nav.virt_openstack"), key: "virt_openstack", icon: renderIcon(VirtualizationIcon) }] : []),
+        { label: () => t("nav.connections"),     key: "adv-connections", icon: renderIcon(TerminalIcon) },
+        { label: () => t("nav.mac_history"),     key: "mac-history",     icon: renderIcon(MacIcon) },
         // 匯入會寫入子網路、後端六支端點都是 admin → 非 admin 不顯示，
         // 否則點進去只會拿到 403
         ...(me.value?.is_admin
