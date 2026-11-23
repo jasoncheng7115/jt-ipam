@@ -18,7 +18,7 @@
 - [ ] i18n：這次新增的 key 在 `zh-TW.json` 與 `en-US.json` 都有；無寫死中文漏網
 - [ ] **套件弱點用跟 CI 一模一樣的指令**：`cd frontend && pnpm audit --audit-level moderate`（含開發套件；只跑 `--prod` 會漏掉 CI 的
   audit job，v0.6.61 就這樣推上去才轉紅）、`cd backend && .venv/bin/pip-audit`。沒有修補版本的開發用套件弱點，才逐筆寫進
-  `frontend/package.json` 的 `pnpm.auditConfig.ignoreGhsas`，並在提交訊息寫明理由；有修補版本就升級，不可以忽略
+  `frontend/package.json` 的 `pnpm.auditConfig.ignoreGhsas`，並在提交訊息寫明理由；有修補版本就升級，不可以忽略。每次發版逐筆重新確認既有的忽略仍然有效：lock 檔裡還有落在受影響範圍內的版本、而且該則弱點沒有被撤銷，不再適用就刪掉（`package.json` 與 `.github/audit-allowlist.txt` 兩處；GitHub issue #60 指出兩筆早已失效）
 
 ## 2. 資料庫 / Migration（用拋棄式 test DB，勿碰正式資料）
 

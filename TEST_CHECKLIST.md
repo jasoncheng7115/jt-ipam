@@ -24,6 +24,9 @@ the titles of the three READMEs and the CHANGELOG section; `tests/test_changelog
   dependencies included; running only `--prod` misses what CI's audit job checks, which is how v0.6.61 went out and turned
   red) and `cd backend && .venv/bin/pip-audit`. Only a dev-only advisory with no patched version may be listed in
   `frontend/package.json` `pnpm.auditConfig.ignoreGhsas`, with the reason in the commit message; if a patch exists, upgrade
+  instead. On every release re-check each existing ignore: the lock file still holds a version inside the affected range and
+  the advisory has not been withdrawn; drop entries that no longer apply, in both `package.json` and
+  `.github/audit-allowlist.txt` (GitHub issue #60 found two that had stopped matching)
 
 ## 2. Database / migration (use a throwaway test DB, never touch prod data)
 

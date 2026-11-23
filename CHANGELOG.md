@@ -7,6 +7,7 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 ## [Unreleased]
 
 ### Changed
+- Two `pnpm audit` ignore entries that no longer matched anything were removed (GitHub issue #60): the braces advisory was withdrawn, and the minimatch one does not cover the 3.x and 11.x versions in the lock file. `pnpm audit` still reports no vulnerabilities without them.
 - **The Advanced menu keeps related items together**: organisation (Tenants, Contacts), lines and physical (Circuits, ASN, Cabling, Power, Wireless, Site-to-site VPN), names and certificates (Domains, DNS records, Certificate distribution), firewalls and NAT, virtualisation, then Connections and MAC addresses. Cabling and Power are back under Advanced (1.0.23 had moved them next to Racks), and Circuits gets its own icon.
 
 ## [1.0.23] - 2026-11-22

@@ -88,10 +88,7 @@
       "minimatch@9": ">=11.0.1"
     },
     "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-vfj7-8cjw-p6xm",
-        "GHSA-g3hv-75wg-m249"
-      ]
+      "ignoreGhsas": []
     }
   }
 }
