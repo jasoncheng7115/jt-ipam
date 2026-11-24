@@ -17,10 +17,10 @@ if [ $# -gt 0 ]; then TARGETS=("$@"); else mapfile -t TARGETS < <(grep -v '^\s*#
 RDP_TARGET=""
 if [ -z "${NO_RDP:-}" ]; then
   docker image inspect jtipam-rdp-target >/dev/null 2>&1 || docker build -q -t jtipam-rdp-target "$ROOT/scripts/rdp-test-target" >/dev/null
-  docker rm -f jtipam-guacd-rdp-target >/dev/null 2>&1 || true
+  docker rm -f -v jtipam-guacd-rdp-target >/dev/null 2>&1 || true
   # 只綁 127.0.0.1：這台 RDP 伺服器的密碼寫在原始碼裡
   docker run -d --name jtipam-guacd-rdp-target -p 127.0.0.1:13390:3389 jtipam-rdp-target >/dev/null
-  trap 'docker rm -f jtipam-guacd-rdp-target >/dev/null 2>&1 || true' EXIT
+  trap 'docker rm -f -v jtipam-guacd-rdp-target >/dev/null 2>&1 || true' EXIT
   sleep 3
   RDP_TARGET="127.0.0.1:13390:rdpuser:TestPw-123"
 fi

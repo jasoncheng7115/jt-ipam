@@ -1617,7 +1617,12 @@
     "scan_scope_auto_large_hint": "This subnet has {total} addresses. Registered IPs and addresses seen in ARP in the last 7 days are scanned every cycle (accurate liveness); the rest of every /24 that already has devices is explored first each cycle and covered quickly, so a newly connected device is usually found within a few cycles (agent 1.20.0 or later, updated automatically); every other address is explored in the background, {per} per cycle, about {rounds} cycles for one pass. Register the subnet with its real mask; there is no need to split it.",
     "scan_scope_all_large_hint": "This subnet has {total} addresses. Only 4,096 are scanned per cycle, so one pass takes {rounds} cycles; if that exceeds the online threshold, devices show offline between scans. Use Automatic for large subnets.",
     "scan_scope_known_hint": "Scans only registered IPs and addresses seen in ARP in the last 7 days. New devices are not discovered automatically (register them first, or let an integration's ARP data see them).",
-    "scan_scope_ranges_hint": "Scans only the address ranges defined in this subnet (for example DHCP ranges). With no ranges defined, nothing is scanned."
+    "scan_scope_ranges_hint": "Scans only the address ranges defined in this subnet (for example DHCP ranges). With no ranges defined, nothing is scanned.",
+    "scan_intensity": "Detection intensity",
+    "scan_intensity_normal": "Normal",
+    "scan_intensity_gentle": "Endpoint-protection friendly",
+    "scan_intensity_normal_hint": "OS and port detection use nmap OS fingerprinting, a fast scan of the top 100 ports and an SMB probe, for the most accurate results. Endpoint protection (for example Symantec Endpoint Protection, Defender or CrowdStrike) may treat this as an attack and block the scan agent; if that happens, switch to \"Endpoint-protection friendly\" or add the scan agent's IP to the endpoint protection exclusions.",
+    "scan_intensity_gentle_hint": "No OS fingerprinting, a slower pace, only the dozen or so ports that tell the device type, and no SMB probe; it only reads the banners, page titles and certificates the services send themselves. Endpoint protection is much less likely to block it, but OS and device type detection is less accurate. Needs scan agent 1.23.0 or later (agents update themselves; older agents keep scanning at normal intensity)."
   },
   "csv_import": {
     "title": "Import addresses (CSV)",

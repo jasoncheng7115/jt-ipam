@@ -28,7 +28,7 @@ import {
 import { listSections } from "@/api/sections";
 import { listScanAgents } from "@/api/phase3";
 import { listVLANs, listVRFs, listLocations, type VLAN, type VRF } from "@/api/basic";
-import type { Subnet, Section, ScanScope } from "@/types";
+import type { Subnet, Section, ScanScope, ScanIntensity } from "@/types";
 import { EditIcon, PlusIcon, SaveIcon, CancelIcon, InfoIcon } from "@/icons";
 import { probeInstall } from "@/utils/probeInstall";
 import { useCustomers } from "@/composables/useCustomers";
@@ -136,6 +136,7 @@ const form = ref({
   threshold_pct: null as number | null,
   scan_agent_id: null as string | null,
   scan_scope: "auto" as ScanScope,
+  scan_intensity: "normal" as ScanIntensity,
   gateway: "" as string,
   dns_servers: "" as string,
   location_id: null as string | null,
@@ -158,6 +159,10 @@ function usableV4(cidr: string): number | null {
   const n = 2 ** (32 - p);
   return p < 31 ? n - 2 : n;
 }
+const scanIntensityOpts = computed(() => (["normal", "gentle"] as const)
+  .map((v) => ({ label: t(`subnets.scan_intensity_${v}`), value: v })));
+// 只有 OS 偵測或連接埠探測（nmap）才有差：其餘探測本來就很輕
+const intensityMatters = computed(() => form.value.scan_method.some((m) => m === "os" || m === "ports"));
 const scanScopeHint = computed<{ type: "info" | "warning"; text: string } | null>(() => {
   const scope = form.value.scan_scope;
   const n = usableV4(form.value.cidr);
@@ -237,6 +242,7 @@ function resetForm() {
       // 既有已啟用掃描但沒代理的子網路＝本機直掃 → 顯示為「本機直接掃」(不強迫重選)
       scan_agent_id: r.scan_agent_id ?? (r.scan_enabled ? LOCAL_SCAN : null),
       scan_scope: r.scan_scope ?? "auto",
+      scan_intensity: r.scan_intensity ?? "normal",
       gateway: r.gateway ?? "",
       dns_servers: r.dns_servers ?? "",
       location_id: r.location_id ?? null,
@@ -256,6 +262,7 @@ function resetForm() {
       threshold_pct: null,
       scan_agent_id: null,
       scan_scope: "auto",
+      scan_intensity: "normal",
       gateway: "", dns_servers: "", location_id: null,
       allow_overlap: false,
     };
@@ -309,6 +316,7 @@ async function submit() {
         threshold_pct: form.value.threshold_pct ?? null,
         scan_agent_id: scanAgentId,
         scan_scope: form.value.scan_scope,
+        scan_intensity: form.value.scan_intensity,
         gateway: form.value.gateway.trim() || null,
         dns_servers: form.value.dns_servers.trim() || null,
         location_id: form.value.location_id ?? null,
@@ -333,6 +341,7 @@ async function submit() {
         threshold_pct: form.value.threshold_pct ?? null,
         scan_agent_id: scanAgentId,
         scan_scope: form.value.scan_scope,
+        scan_intensity: form.value.scan_intensity,
         gateway: form.value.gateway.trim() || null,
         dns_servers: form.value.dns_servers.trim() || null,
         location_id: form.value.location_id ?? null,
@@ -498,6 +507,14 @@ async function submit() {
           <n-alert v-if="scanScopeHint" :type="scanScopeHint.type" :show-icon="false" :bordered="false"
                    data-testid="subnet-scan-scope-hint">
             {{ scanScopeHint.text }}
+          </n-alert>
+        </n-space>
+      </n-form-item>
+      <n-form-item v-if="form.scan_enabled && intensityMatters" :label="t('subnets.scan_intensity')">
+        <n-space vertical :size="6" style="width:100%">
+          <n-select v-model:value="form.scan_intensity" :options="scanIntensityOpts" data-testid="subnet-scan-intensity" />
+          <n-alert :show-icon="false" :bordered="false" type="info" data-testid="subnet-scan-intensity-hint">
+            {{ t(`subnets.scan_intensity_${form.scan_intensity}_hint`) }}
           </n-alert>
         </n-space>
       </n-form-item>

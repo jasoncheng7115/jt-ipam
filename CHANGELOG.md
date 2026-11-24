@@ -6,6 +6,9 @@ based on [Keep a Changelog](https://keepachangelog.com/); versions track
 
 ## [Unreleased]
 
+### Added
+- **Detection intensity per subnet: "Endpoint-protection friendly"** (customer report: Symantec Endpoint Protection popped up warnings and blocked the scan agent once every detection was on). With OS or port detection ticked, the scan agent uses nmap OS fingerprinting, a fast top-100 port scan and an SMB probe, which endpoint intrusion prevention reads as an attack. The friendly mode skips OS fingerprinting and the SMB probe, slows down and looks only at the dozen or so ports that tell the device type, still reading banners, page titles and certificates; OS and device type detection is less accurate. Normal stays the default. Needs scan agent 1.23.0 (agents update themselves; older agents keep scanning at normal intensity). The troubleshooting page has a new section on excluding the scan agent in endpoint protection.
+
 ### Changed
 - Two `pnpm audit` ignore entries that no longer matched anything were removed (GitHub issue #60): the braces advisory was withdrawn, and the minimatch one does not cover the 3.x and 11.x versions in the lock file. `pnpm audit` still reports no vulnerabilities without them.
 - **The Advanced menu keeps related items together**: organisation (Tenants, Contacts), lines and physical (Circuits, ASN, Cabling, Power, Wireless, Site-to-site VPN), names and certificates (Domains, DNS records, Certificate distribution), firewalls and NAT, virtualisation, then Connections and MAC addresses. Cabling and Power are back under Advanced (1.0.23 had moved them next to Racks), and Circuits gets its own icon.

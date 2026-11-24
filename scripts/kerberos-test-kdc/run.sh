@@ -3,7 +3,7 @@
 # （backend/app/services/winrm_kerberos.py）。只在 docker 內部網路，不綁主機的連接埠。
 #
 #   bash scripts/kerberos-test-kdc/run.sh          # 建映像、起容器、建帳號與 HTTP/hv1.corp.test 服務名稱
-#   docker rm -f jtipam-samba-dc                   # 用完收掉
+#   docker rm -f -v jtipam-samba-dc                   # 用完收掉
 #
 # 起好之後：
 #   JTIPAM_TEST_KDC=<容器 IP> JTIPAM_TEST_KRB_USER=svc-ipam@CORP.TEST JTIPAM_TEST_KRB_PASS='Svc-Ipam-2026!' \
@@ -15,7 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 docker build -q -t jtipam-samba-dc . >/dev/null
-docker rm -f jtipam-samba-dc >/dev/null 2>&1 || true
+docker rm -f -v jtipam-samba-dc >/dev/null 2>&1 || true
 docker run -d --name jtipam-samba-dc --hostname dc1.corp.test --privileged jtipam-samba-dc >/dev/null
 for _ in $(seq 1 60); do
   docker exec jtipam-samba-dc bash -c 'samba-tool user list >/dev/null 2>&1' && break

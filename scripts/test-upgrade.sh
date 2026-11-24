@@ -64,7 +64,7 @@ else
 fi
 
 say "Starting a clean $IMAGE with systemd"
-docker rm -f "$NAME" >/dev/null 2>&1 || true
+docker rm -f -v "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" --privileged --cgroupns=host \
     -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run --tmpfs /run/lock \
     "${MOUNT_ARGS[@]}" \
@@ -260,5 +260,5 @@ else
     printf '\033[1;31m%d check(s) failed.\033[0m\n' "$FAILED"
 fi
 echo "Container kept as '$NAME' for inspection: docker exec -it $NAME bash"
-echo "Remove it with: docker rm -f $NAME"
+echo "Remove it with: docker rm -f -v $NAME"
 exit $((FAILED > 0))

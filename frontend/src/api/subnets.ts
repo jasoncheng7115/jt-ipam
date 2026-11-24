@@ -1,5 +1,5 @@
 import { apiClient } from "@/api/client";
-import type { Paginated, ScanScope, Subnet, SubnetUsage } from "@/types";
+import type { Paginated, ScanScope, ScanIntensity, Subnet, SubnetUsage } from "@/types";
 
 export async function listSubnets(
   params: { sectionId?: string; archived?: boolean; page?: number; pageSize?: number; q?: string } = {},
@@ -74,6 +74,7 @@ export interface SubnetCreate {
   console_agent_id?: string | null;
   scan_agent_id?: string | null;
   scan_scope?: ScanScope;
+  scan_intensity?: ScanIntensity;
   gateway?: string | null;
   dns_servers?: string | null;
   location_id?: string | null;
@@ -100,6 +101,7 @@ export interface SubnetUpdate {
   console_agent_id?: string | null;
   scan_agent_id?: string | null;
   scan_scope?: ScanScope;
+  scan_intensity?: ScanIntensity;
   gateway?: string | null;
   dns_servers?: string | null;
   location_id?: string | null;

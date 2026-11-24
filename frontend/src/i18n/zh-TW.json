@@ -1617,7 +1617,12 @@
     "scan_scope_auto_large_hint": "這個子網路有 {total} 個位址。已登記的 IP 與最近 7 天 ARP 看過的位址每一輪都掃（上線狀態準確）；已經有設備的 /24 裡其餘的位址每輪優先探索，很快就繞完一圈，新接的設備通常幾輪內就會被發現（代理需 1.20.0 以上，會自動更新）；其他位址每輪在背景探索 {per} 個、約 {rounds} 輪找過一遍。子網路照實際遮罩登記即可，不必切小。",
     "scan_scope_all_large_hint": "這個子網路有 {total} 個位址，每輪只能掃 4,096 個，要 {rounds} 輪才繞完一圈；超過上線判定時間的話，設備會在兩次掃描之間被判成離線。大子網路建議用「自動」。",
     "scan_scope_known_hint": "只掃已登記的 IP 與最近 7 天 ARP 看過的位址，不會自動發現新設備（新設備要先登記，或由整合的 ARP 資料看到）。",
-    "scan_scope_ranges_hint": "只掃這個子網路底下設定的位址範圍（例如 DHCP 範圍）；沒有設定位址範圍的話，什麼都不掃。"
+    "scan_scope_ranges_hint": "只掃這個子網路底下設定的位址範圍（例如 DHCP 範圍）；沒有設定位址範圍的話，什麼都不掃。",
+    "scan_intensity": "偵測強度",
+    "scan_intensity_normal": "一般",
+    "scan_intensity_gentle": "對端點防護友善",
+    "scan_intensity_normal_hint": "作業系統與連接埠偵測用 nmap 的作業系統指紋、快速掃前 100 個常用埠與 SMB 探測，判讀最準。端點防護（例如 Symantec Endpoint Protection、Defender、CrowdStrike）可能把它當成攻擊並封鎖掃描代理；遇到這種情況改用「對端點防護友善」，或把掃描代理的 IP 加進端點防護的排除清單。",
+    "scan_intensity_gentle_hint": "不做作業系統指紋、放慢速度、只看判斷設備類型用的十幾個埠、不做 SMB 探測，只讀服務自己送出的 banner、網頁標題與憑證。比較不會被端點防護擋，但作業系統與設備類型的判讀會比較不準。需要掃描代理 1.23.0 以上（代理會自動更新；舊代理照一般強度掃）。"
   },
   "csv_import": {
     "title": "匯入 IP 清單 (CSV)",

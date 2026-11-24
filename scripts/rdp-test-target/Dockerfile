@@ -13,7 +13,7 @@
 #   docker build -t jtipam-rdp-target scripts/rdp-test-target
 #   docker run -d --name jtipam-rdp-target -p 127.0.0.1:13389:3389 jtipam-rdp-target
 #   # 帳號 rdpuser / 密碼 TestPw-123
-#   docker rm -f jtipam-rdp-target
+#   docker rm -f -v jtipam-rdp-target
 #
 # ⚠️ 只綁 127.0.0.1。這是一台密碼寫在原始碼裡的 RDP 伺服器，不可以對外開。
 FROM debian:12

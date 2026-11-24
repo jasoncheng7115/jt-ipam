@@ -89,6 +89,9 @@ class Subnet(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     #: 掃描範圍（0205）：auto（4,096 個以內全掃，更大的改成已知位址每輪掃＋其餘背景探索）／all（一律全掃）／
     #: known（只掃已知位址）／ranges（只掃這個子網路的位址範圍）。規則在 services/scan_plan.py
     scan_scope: Mapped[str] = mapped_column(String(16), default="auto", server_default="auto", nullable=False)
+    #: 偵測強度（0249）：normal（照舊）／gentle（對端點防護友善：不做 OS 指紋、放慢、只看少數埠、不跑 SMB 腳本；
+    #: 客戶的 Symantec Endpoint Protection 把一般強度的 OS 偵測當成攻擊封鎖）。只有 gentle 才帶給代理
+    scan_intensity: Mapped[str] = mapped_column(String(16), default="normal", server_default="normal", nullable=False)
 
     customer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -112,4 +115,5 @@ class Subnet(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         CheckConstraint("jump_host_id IS NULL OR console_agent_id IS NULL",
                         name="subnet_console_egress_one"),
         CheckConstraint("scan_scope IN ('auto','all','known','ranges')", name="ck_subnets_scan_scope"),
+        CheckConstraint("scan_intensity IN ('normal','gentle')", name="ck_subnets_scan_intensity"),
     )

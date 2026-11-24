@@ -9,7 +9,9 @@
 # 兩個叢集都建唯讀的 ServiceAccount jt-ipam-ro（manifest 與管理頁提供給客戶的同一份），印出 API 位址、CA 與 token 的檔案位置。
 #
 #   bash scripts/k8s-test-target/run.sh
-#   docker rm -f jtipam-k3s; kind delete cluster --name jtipam     # 用完收掉
+#   docker rm -f -v jtipam-k3s; kind delete cluster --name jtipam     # 用完收掉
+#   （-v 不可省：k3s 映像宣告了 /var/lib/rancher/k3s 等 volume，不加會留下每個 0.6～1.2G 的匿名 volume；
+#    2026-11-24 開發機硬碟滿時清出 6 個、約 5.9G）
 set -euo pipefail
 cd "$(dirname "$0")"
 OUT="${K8S_TARGET_OUT:-/tmp/jtipam-k8s}"
@@ -17,7 +19,7 @@ mkdir -p "$OUT"
 KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.32.8}"
 
 # ── k3s ──
-docker rm -f jtipam-k3s >/dev/null 2>&1 || true
+docker rm -f -v jtipam-k3s >/dev/null 2>&1 || true
 docker run -d --privileged --name jtipam-k3s rancher/k3s:latest server --disable servicelb >/dev/null
 K3S_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' jtipam-k3s)
 k3s() { docker exec -i jtipam-k3s kubectl "$@"; }

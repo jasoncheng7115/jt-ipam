@@ -83,7 +83,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-AGENT_VERSION = "1.22.0"
+AGENT_VERSION = "1.23.0"
 SERVER = os.environ.get("JT_IPAM_URL", "").rstrip("/")
 KEY = os.environ.get("JT_IPAM_AGENT_KEY", "")
 INTERVAL = int(os.environ.get("JT_IPAM_INTERVAL", "300"))
@@ -855,6 +855,8 @@ BANNER_SCRIPT_ARGS = f'banner.ports="{BANNER_PORTS}"'
 #: 定期 OS 偵測額外跑的腳本：都只是讀服務自己送出來的東西（banner、網頁標題、伺服器標頭、憑證），
 #: 伺服器拿去比對 Recog 指紋庫（1.14.0 起）。與 IP 探測相比少了 ssh-hostkey、rdp-ntlm-info
 _OS_SCRIPTS = "smb-os-discovery,banner,http-title,http-server-header,ssl-cert"
+#: 對端點防護友善（gentle）時的腳本：拿掉 smb-os-discovery（SMB 協商是端點入侵防護常見的偵測對象）
+_OS_SCRIPTS_GENTLE = "banner,http-title,http-server-header,ssl-cert"
 _OS_MAX_PORTS = 32
 _OS_MAX_TEXT = 300
 
@@ -869,17 +871,24 @@ def _compact_nmap(parsed: dict) -> dict:
             "hostnames": (parsed.get("hostnames") or [])[:5]}
 
 
-def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
+def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool, gentle: bool = False) -> dict:
     """os / ports 重量探測：有 nmap 才跑，回 {os_guess?, open_ports?, nmap?}。
 
     os 偵測需 root（-O），失敗就只回 ports；任何錯誤都回空 dict（略過）。
     `nmap`（1.14.0 起）：結構化結果，伺服器用 IP 探測同一套判讀（含 Recog）推 OS 與設備類型；
     `os_guess` 照舊附上（舊伺服器只認這個）。
+
+    gentle（1.23.0 起，子網路的「對端點防護友善」）：端點入侵防護（客戶的 Symantec Endpoint Protection）
+    會把 -T4 掃前 100 個埠、-O 作業系統指紋、smb-os-discovery 判成攻擊並封鎖掃描代理。這時不做 -O、
+    改 -T2、只看判斷設備類型用的那十幾個埠、腳本只讀服務自己送出來的東西（banner、網頁標題、憑證）。
+    OS 改由 banner 與 Recog 判讀，準確度差一點。
     """
     result: dict = {}
     if not shutil.which("nmap"):
         return result
-    if want_ports:
+    if gentle:
+        port_args = ["-p", ",".join(str(p) for p in sorted(set(TCP_PROBE_PORTS) | set(OS_PROBE_KIND_PORTS)))]
+    elif want_ports:
         port_args = ["--top-ports", "100"]
     else:
         # 沒開「連接埠」探測時只看幾個埠：OS 偵測至少要看得到最能說明設備類型的那幾個
@@ -890,9 +899,16 @@ def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
         v6 = ["-6"] if ipaddress.ip_address(ip).version == 6 else []     # 沒有 -6，IPv6 位址一定失敗
     except ValueError:
         v6 = []
-    args = ["nmap", "-Pn", "-T4", "--host-timeout", "90s" if want_os else "30s", *v6, *port_args]
+    timing = "-T2" if gentle else "-T4"
+    args = ["nmap", "-Pn", timing, "--host-timeout", "90s" if want_os or gentle else "30s", *v6, *port_args]
     xml_path = None
-    if want_os:
+    if want_os and gentle:
+        args += ["-sV", "--version-light", "--script", _OS_SCRIPTS_GENTLE, "--script-args", BANNER_SCRIPT_ARGS,
+                 "--script-timeout", "15s"]
+        fd, xml_path = tempfile.mkstemp(prefix="jtipam-nmap-", suffix=".xml")
+        os.close(fd)
+        args += ["-oX", xml_path]
+    elif want_os:
         # -sV（服務/banner 偵測）+ smb-os-discovery 遠比純 TCP/IP 堆疊指紋（-O）可靠：
         # 裝置/BMC 用 -O 常被自信地誤判。_derive_os 綜合這些訊號、優先採信 banner。
         # --version-light：預設強度會對認不得的服務一連試幾十種探針、每種等好幾秒，一個慢服務（PVE 的 8006）
@@ -905,7 +921,7 @@ def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
     args.append(ip)
 
     def _run(cmd: list) -> tuple:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120 if want_os else 60)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120 if want_os or gentle else 60)
         parsed: dict = {}
         if xml_path:
             try:
@@ -920,7 +936,7 @@ def _nmap_os_ports(ip: str, want_os: bool, want_ports: bool) -> dict:
 
     try:
         text, parsed = _run(args)
-        if want_os and not _has_data(parsed):
+        if want_os and not gentle and not _has_data(parsed):
             # 還是拖過單台時限（或腳本卡住）：nmap 不留這台的任何結果。退回只做 OS 指紋（十幾秒），
             # 至少有 OS 與設備類型可判讀，不要整筆白跑
             text2, parsed2 = _run(["nmap", "-Pn", "-T4", "--host-timeout", "60s", *v6, *port_args,
@@ -1472,7 +1488,7 @@ def _heavy_nmap(ip: str, probes: list[str]) -> dict:
     """OS 指紋／連接埠（nmap）：每台可能要一分多鐘。"""
     want_os, want_ports = "os" in probes, "ports" in probes
     item: dict = {"ip": ip, "alive": True, "liveness": False}
-    np = _nmap_os_ports(ip, want_os, want_ports)
+    np = _nmap_os_ports(ip, want_os, want_ports, gentle="gentle" in probes)
     item["probes_run"] = [p for p in ("os", "ports") if p in probes]
     if np.get("os_guess"):
         item["os_guess"] = np["os_guess"]
@@ -1604,6 +1620,7 @@ def scan_once() -> None:
         subnet_id = s.get("subnet_id")
         # server 要求的探測；缺/空 -> 向下相容用 icmp。再交集本機能力。
         requested = s.get("probes") or list(DEFAULT_PROBES)
+        gentle = s.get("intensity") == "gentle"
         requested = [p for p in requested if p in ALL_PROBES]
         if not requested:
             requested = list(DEFAULT_PROBES)
@@ -1694,7 +1711,8 @@ def scan_once() -> None:
             results.append(item)
             # 重量探測只對在線主機、丟給背景跑，不佔住這一輪
             if host_heavy:
-                _HEAVY.submit(subnet_id, ip, host_heavy)
+                # 子網路設成「對端點防護友善」：標記帶進佇列，nmap 改用溫和參數（1.23.0 起）
+                _HEAVY.submit(subnet_id, ip, host_heavy + (["gentle"] if gentle else []))
 
         # 每個子網路做完就回報，不等其他子網路（大子網路或慢的子網路不會拖住別人）
         if results or dhcp_servers:

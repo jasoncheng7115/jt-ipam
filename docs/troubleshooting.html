@@ -660,6 +660,28 @@ sudo bash /opt/jt-ipam/scripts/jt-ipam.sh upgrade --no-pull</code></pre>
         </p>
       </article>
 
+      <article class="qa" id="qa-endpoint-protection">
+        <h3>
+          <span class="zh">端點防護（Symantec、Defender、CrowdStrike…）把掃描代理當成攻擊、跳出通知或封鎖</span>
+          <span class="en">Endpoint protection (Symantec, Defender, CrowdStrike…) treats the scan agent as an attack, pops up a warning or blocks it</span>
+          <span class="ja">エンドポイント保護（Symantec、Defender、CrowdStrike など）がスキャンエージェントを攻撃とみなし、通知や遮断をする</span>
+        </h3>
+        <p>
+          <span class="zh">子網路勾了「作業系統」或「連接埠」偵測時，掃描代理用 nmap 做作業系統指紋、快速掃前 100 個常用埠並做 SMB 探測。端點的入侵防護常把這些判成埠掃描或作業系統探測，於是跳通知、把掃描代理的 IP 封鎖一段時間（例如 Symantec Endpoint Protection 預設 600 秒），封鎖期間那台主機看起來就像離線。兩種處理方式，擇一即可：</span>
+          <span class="en">When a subnet has "OS" or "Ports" detection ticked, the scan agent uses nmap OS fingerprinting, a fast scan of the top 100 ports and an SMB probe. Endpoint intrusion prevention often sees this as a port scan or OS probe, shows a warning and blocks the scan agent's IP for a while (600 seconds by default in Symantec Endpoint Protection), so the host looks offline in the meantime. Either of these fixes it:</span>
+          <span class="ja">サブネットで「OS」または「ポート」の検出を有効にすると、スキャンエージェントは nmap で OS フィンガープリント、上位 100 ポートの高速スキャン、SMB プローブを行います。エンドポイントの侵入防止機能はこれをポートスキャンや OS 探査と判定して通知を出し、スキャンエージェントの IP を一定時間遮断することがよくあります（Symantec Endpoint Protection の既定は 600 秒）。遮断中はそのホストがオフラインに見えます。次のどちらかで解決できます。</span>
+        </p>
+        <ol>
+          <li><span class="zh">在端點防護的管理主控台，把掃描代理的 IP 加進排除清單。以 Symantec Endpoint Protection 為例：入侵防護政策的「排除的主機」（Excluded Hosts）加入掃描代理的 IP，必要時在防火牆政策關掉對它的埠掃描偵測。這是允許內部授權掃描器的標準做法，判讀最準。</span><span class="en">Add the scan agent's IP to the endpoint protection exclusions in its management console. In Symantec Endpoint Protection, add it to Excluded Hosts in the Intrusion Prevention policy and, if needed, turn off port scan detection for it in the Firewall policy. This is the usual way to allow an authorised internal scanner, and keeps detection fully accurate.</span><span class="ja">エンドポイント保護の管理コンソールで、スキャンエージェントの IP を除外リストに追加します。Symantec Endpoint Protection の場合は、侵入防止ポリシーの「除外ホスト」（Excluded Hosts）に追加し、必要に応じてファイアウォールポリシーでポートスキャン検出の対象から外します。社内で許可したスキャナーを通す標準的な方法で、判定の精度も落ちません。</span></li>
+          <li><span class="zh">無法加排除時，把子網路的「偵測強度」改成「對端點防護友善」：不做作業系統指紋、放慢速度、只看判斷設備類型用的十幾個埠、不做 SMB 探測，只讀服務自己送出的 banner、網頁標題與憑證。比較不會被擋，但作業系統與設備類型的判讀會比較不準。需要掃描代理 1.23.0 以上（代理會自動更新）。</span><span class="en">If you cannot add an exclusion, set the subnet's "Detection intensity" to "Endpoint-protection friendly": no OS fingerprinting, a slower pace, only the dozen or so ports that tell the device type, and no SMB probe; it only reads the banners, page titles and certificates the services send themselves. It is much less likely to be blocked, but OS and device type detection is less accurate. Needs scan agent 1.23.0 or later (agents update themselves).</span><span class="ja">除外を追加できない場合は、サブネットの「検出の強度」を「エンドポイント保護に配慮」にします。OS フィンガープリントを行わず、速度を落とし、装置の種類の判定に使う十数個のポートだけを確認し、SMB プローブも行わず、サービス自身が送るバナー、ページタイトル、証明書だけを読みます。遮断されにくくなりますが、OS と装置の種類の判定精度は下がります。スキャンエージェント 1.23.0 以降が必要です（エージェントは自動更新されます）。</span></li>
+        </ol>
+        <p>
+          <span class="zh">只開 Ping、ARP、NetBIOS、mDNS、反解這類輕量偵測時不會有這個問題。要確認是哪一項觸發，看端點防護的記錄裡的攻擊名稱（例如埠掃描、作業系統指紋、SMB）。</span>
+          <span class="en">Light detection only (Ping, ARP, NetBIOS, mDNS, reverse DNS) does not cause this. To see which probe triggered it, look at the attack name in the endpoint protection log (for example port scan, OS fingerprint or SMB).</span>
+          <span class="ja">Ping、ARP、NetBIOS、mDNS、逆引きなどの軽い検出だけなら、この問題は起きません。どの検出が原因かは、エンドポイント保護のログに記録された攻撃名（ポートスキャン、OS フィンガープリント、SMB など）で確認できます。</span>
+        </p>
+      </article>
+
       <article class="qa" id="qa-hostname-source">
         <h3>
           <span class="zh">主機名稱是哪裡來的？NetBIOS 名稱和主機名稱不一樣</span>

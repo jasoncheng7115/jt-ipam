@@ -49,7 +49,7 @@ up() {
     log "建置映像…"
     docker build -q -t jtipam-rdtest-server -f "$HERE/Dockerfile.server" "$HERE" >/dev/null
     docker build -q -t jtipam-rdtest-client -f "$HERE/Dockerfile.client" "$HERE" >/dev/null
-    docker rm -f "$SRV" "$CLI" >/dev/null 2>&1 || true
+    docker rm -f -v "$SRV" "$CLI" >/dev/null 2>&1 || true
     docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
     docker network inspect "$INT" >/dev/null 2>&1 || docker network create --internal "$INT" >/dev/null
     log "啟動 hbbs／hbbr…"
@@ -77,7 +77,7 @@ up() {
 }
 
 down() {
-    docker rm -f "$SRV" "$CLI" >/dev/null 2>&1 || true
+    docker rm -f -v "$SRV" "$CLI" >/dev/null 2>&1 || true
     docker network rm "$INT" "$NET" >/dev/null 2>&1 || true
     log "已移除"
 }

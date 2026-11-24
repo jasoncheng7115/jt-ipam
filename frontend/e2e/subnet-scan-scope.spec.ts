@@ -38,6 +38,9 @@ test("大子網路：掃描範圍的說明跟著選項變，存檔後記住", as
     sub = await (await ok(await request.post(`${API}/api/v1/subnets`, {
       headers: h, data: { section_id: sec.id, cidr: CIDR, description: "e2e 掃描範圍" } }), "建立子網路")).json();
   }
+  // 偵測強度只在勾了作業系統或連接埠偵測時出現：先用 API 把探測設成含作業系統（勾選框依代理能力可能反灰）
+  await ok(await request.patch(`${API}/api/v1/subnets/${sub.id}`, {
+    headers: h, data: { scan_method: ["icmp", "os"], scan_intensity: "normal" } }), "設定探測");
   try {
     await page.goto("/login");
     await page.getByPlaceholder(/帳號|Username/).fill(ADMIN_USER);
@@ -69,6 +72,18 @@ test("大子網路：掃描範圍的說明跟著選項變，存檔後記住", as
     await page.locator(".n-base-select-option", { hasText: "只掃已知位址" }).click();
     await expect(hint).toContainText("不會自動發現新設備");
 
+    // 偵測強度（客戶 2026-11-24：SEP 把一般強度的 OS 偵測當成攻擊）：預設一般，說明提到端點防護
+    const intensity = page.getByTestId("subnet-scan-intensity");
+    const iHint = page.getByTestId("subnet-scan-intensity-hint");
+    await intensity.scrollIntoViewIfNeeded();
+    await expect(intensity).toContainText("一般");
+    await expect(iHint).toContainText("Symantec Endpoint Protection");
+    await intensity.click();
+    await page.locator(".n-base-select-option", { hasText: "對端點防護友善" }).click();
+    await expect(iHint).toContainText("不做作業系統指紋");
+    await expect(iHint).toContainText("1.23.0");
+    await page.screenshot({ path: "test-results/subnet-scan-intensity.png" });
+
     // 啟用掃描一定要選代理（隨便一台 e2e 代理），然後存檔
     const agentField = page.locator(".n-form-item", { hasText: "掃描代理" }).locator(".n-select").first();
     await agentField.click();
@@ -78,6 +93,7 @@ test("大子網路：掃描範圍的說明跟著選項變，存檔後記住", as
 
     const saved = await (await ok(await request.get(`${API}/api/v1/subnets/${sub.id}`, { headers: h }), "讀子網路")).json();
     expect(saved.scan_scope).toBe("known");
+    expect(saved.scan_intensity).toBe("gentle");
     expect(saved.scan_enabled).toBe(true);
   } finally {
     await request.delete(`${API}/api/v1/subnets/${sub.id}`, { headers: h });

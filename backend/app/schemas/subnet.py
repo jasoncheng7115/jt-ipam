@@ -37,6 +37,8 @@ class SubnetBase(StrictModel):
     scan_enabled: bool = False
     #: 掃描範圍：auto／all／known／ranges（services/scan_plan.py）
     scan_scope: Literal["auto", "all", "known", "ranges"] = "auto"
+    #: 偵測強度：gentle＝對端點防護友善（不做 OS 指紋、放慢、只看少數埠）
+    scan_intensity: Literal["normal", "gentle"] = "normal"
     scan_method: list[str] = Field(default_factory=lambda: ["icmp"])
     threshold_pct: Annotated[int | None, Field(ge=0, le=100)] = None
     auto_dns: bool = False
@@ -99,6 +101,7 @@ class SubnetUpdate(StrictModel):
     anomaly_enabled: bool | None = None
     scan_enabled: bool | None = None
     scan_scope: Literal["auto", "all", "known", "ranges"] | None = None
+    scan_intensity: Literal["normal", "gentle"] | None = None
     scan_method: list[str] | None = None
     threshold_pct: Annotated[int | None, Field(ge=0, le=100)] = None
     auto_dns: bool | None = None

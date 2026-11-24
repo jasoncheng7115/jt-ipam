@@ -63,6 +63,8 @@ export interface Section {
 }
 
 export type ScanScope = "auto" | "all" | "known" | "ranges";
+/** 偵測強度：gentle＝對端點防護友善（不做 OS 指紋、放慢、只看少數埠） */
+export type ScanIntensity = "normal" | "gentle";
 
 export interface Subnet {
   id: string;
@@ -81,6 +83,7 @@ export interface Subnet {
   scan_agent_id: string | null;
   /** 掃描範圍（0205）：auto／all／known／ranges，規則在 backend services/scan_plan.py */
   scan_scope?: ScanScope;
+  scan_intensity?: ScanIntensity;
   threshold_pct: number | null;
   auto_dns: boolean;
   customer_id: string | null;

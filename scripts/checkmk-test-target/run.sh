@@ -2,7 +2,7 @@
 # 可丟棄的 Checkmk 測試靶：2.4（Raw）與 2.5（Community）各一個容器，只在 docker 內部網路，不綁主機的連接埠。
 #
 #   bash scripts/checkmk-test-target/run.sh       # 起容器、建 5 台測試主機與唯讀自動化帳號 jt-ipam-ro
-#   docker rm -f jtipam-cmk24 jtipam-cmk25          # 用完收掉
+#   docker rm -f -v jtipam-cmk24 jtipam-cmk25          # 用完收掉
 #
 # 起好之後照最後印出的那行跑 tests/test_checkmk_real.py。
 set -euo pipefail
@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 urls=()
 for spec in "cmk24 checkmk/check-mk-raw:2.4.0-latest" "cmk25 checkmk/check-mk-community:2.5.0-latest"; do
   set -- $spec
-  docker rm -f "jtipam-$1" >/dev/null 2>&1 || true
+  docker rm -f -v "jtipam-$1" >/dev/null 2>&1 || true
   docker run -d --name "jtipam-$1" --tmpfs /opt/omd/sites/cmk/tmp:uid=1000,gid=1000 \
     -e CMK_PASSWORD='Cmk-Admin-2026!' -e CMK_SITE_ID=cmk "$2" >/dev/null
 done

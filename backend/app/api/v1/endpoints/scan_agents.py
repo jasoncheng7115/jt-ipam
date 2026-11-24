@@ -620,7 +620,7 @@ async def agent_poll(
 
     cap = set(agent.enabled_probes or ["icmp"])   # 代理能力天花板
     rows = (await session.execute(
-        select(Subnet.id, Subnet.cidr, Subnet.scan_method, Subnet.scan_scope).where(
+        select(Subnet.id, Subnet.cidr, Subnet.scan_method, Subnet.scan_scope, Subnet.scan_intensity).where(
             Subnet.scan_agent_id == agent.id,
             Subnet.scan_enabled.is_(True),
             Subnet.archived_at.is_(None),
@@ -632,10 +632,13 @@ async def agent_poll(
     plan_by_id = await _scan_plans(session, rows)
     subnets_out: list[dict[str, Any]] = []
     sub_ids: list[Any] = []
-    for sid, cidr, methods, _scope in rows:
+    for sid, cidr, methods, _scope, intensity in rows:
         sub_ids.append(sid)
         probes = [p for p in scan_probes.normalize_probes(list(methods or [])) if p in cap]
         entry: dict[str, Any] = {"subnet_id": str(sid), "cidr": str(cidr), "probes": probes}
+        # 對端點防護友善（1.23.0 起的代理才認得；一般強度不帶，跟舊伺服器送的一模一樣）
+        if intensity == "gentle":
+            entry["intensity"] = "gentle"
         if plan_by_id.get(sid) is not None:
             entry["plan"] = plan_by_id[sid]
         subnets_out.append(entry)
