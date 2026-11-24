@@ -103,7 +103,7 @@ def test_heavy_results_are_not_liveness_evidence(monkeypatch) -> None:
     monkeypatch.setattr(mod, "_rdns", lambda ip: ("h.example.net", False))
     monkeypatch.setattr(mod, "_netbios", lambda ip: "WIN1")
     monkeypatch.setattr(mod, "_mdns", lambda ip: None)
-    monkeypatch.setattr(mod, "_nmap_os_ports", lambda ip, want_os, want_ports: {"os_guess": "Linux 5.x"})
+    monkeypatch.setattr(mod, "_nmap_os_ports", lambda ip, want_os, want_ports, gentle=False: {"os_guess": "Linux 5.x"})
     item = mod._heavy_probe_host("198.51.100.1", ["rdns", "netbios", "mdns", "os"])
     assert item["liveness"] is False
     assert item["alive"] is True
