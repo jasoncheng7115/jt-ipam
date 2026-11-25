@@ -136,3 +136,5 @@ docker compose exec -T postgres pg_dump -U jt_ipam jt_ipam | gzip > jt-ipam-$(da
 - The plaintext Graylog DSV port 8088 is not included (use the HTTPS DSV URL inside containers).
 - GeoIP / OUI scheduled refreshes are not bundled — add a cron or run them separately if needed.
 - HTTPS is enforced: the app sets Secure cookies and https public URLs; do not expose plain http externally.
+- The backend and sync containers run as the unprivileged `jtipam` account (uid 10001), which owns only
+  `/var/lib/jt-ipam`. If you mount a volume there, make it writable by uid 10001.

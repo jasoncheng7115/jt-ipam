@@ -590,3 +590,21 @@ def test_every_snmp_error_code_is_translated() -> None:
         errors = json.loads((root / "frontend" / "src" / "i18n" / f"{loc}.json").read_text())["errors"]
         missing = sorted(c for c in codes if c not in errors)
         assert not missing, f"{loc}: {missing}"
+
+
+async def test_match_neighbors_by_sysname(db_session) -> None:
+    """管理位址與 MAC 都對不到時用系統名稱（去掉網域）比對裝置名稱。
+
+    以前這條路徑引用了不存在的 Device.archived_at，一走到就 AttributeError —— 拓樸圖與鄰居清單跟著 500
+    （11-25 寫佈線自動推斷時發現）。"""
+    from types import SimpleNamespace
+
+    from app.models.device import Device
+    from app.services.snmp_collect import match_neighbors
+    d = Device(name=f"edge-{uuid.uuid4().hex[:4]}", type="switch")
+    db_session.add(d)
+    await db_session.flush()
+    row = SimpleNamespace(id=uuid.uuid4(), remote_mgmt_address=None, remote_mac=None,
+                          remote_sysname=f"{d.name.upper()}.example.net")
+    got = await match_neighbors(db_session, [row])
+    assert got[row.id]["remote_device_id"] == str(d.id)

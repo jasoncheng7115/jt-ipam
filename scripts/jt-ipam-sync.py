@@ -1047,6 +1047,24 @@ async def _run() -> int:
             await session.rollback()
             log.error("ip-device autolink failed: %s", exc)
 
+        # ── 佈線自動推斷（每輪一次；預設開啟，網頁上可關）──
+        # 鄰居宣告（LLDP / CDP）與交換器 MAC 表推得出兩端各是哪個埠的，就自動接線；不明確的只列成建議。
+        # 人建的線一律不動。放在 ARP / FDB / 鄰居都同步完之後（services/cable_inference）
+        try:
+            from app.services.cable_inference import run_if_enabled as _cable_infer
+            cst = await _cable_infer(session)
+            if cst is not None:
+                await session.commit()
+                if cst["created"] or cst["retired"] or cst["conflicts"]:
+                    log.info("cable inference: %s", cst)
+                await _hb(session, kind="cable_inference.run", target_type="system", target_id=None,
+                          target_label="cable-inference", ok=True, summary=cst)
+        except Exception as exc:
+            await session.rollback()
+            log.error("cable inference failed: %s", exc)
+            await _hb(session, kind="cable_inference.run", target_type="system", target_id=None,
+                      target_label="cable-inference", ok=False, error=str(exc))
+
         # ── 裝置類型自動判斷：工作站／伺服器（每輪一次）──
         # 只碰「other 而且沒人定過」或「上次就是自動判斷」的裝置，人工設定的一律不動；
         # 依據是這台裝置 IP 上代理回報的作業系統（Wazuh／RustDesk／OCS），其次 nmap，再其次 OCS 機殼。

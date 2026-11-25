@@ -262,6 +262,18 @@ export async function syncLibreNMS(id: string): Promise<{ task_id: string }> {
 }
 
 export interface LinkDevicesResult { candidates: number; linked: number; created: number; }
+export interface LibreNMSGapRow { ip_address_id: string; ip: string | null; hostname: string | null; }
+
+/** IPAM 有主機名稱、但沒有被這台 LibreNMS 監控的位址（與 Zabbix / Checkmk 相同）。 */
+export async function libreNMSCoverageGap(
+  id: string, subnetIds?: string[],
+): Promise<{ items: LibreNMSGapRow[]; count: number; scope: string }> {
+  const { data } = await apiClient.get(`/api/v1/librenms/instances/${id}/coverage-gap`, {
+    params: subnetIds?.length ? { subnet_ids: subnetIds } : {},
+  });
+  return data;
+}
+
 export async function linkLibreNMSDevices(id: string): Promise<LinkDevicesResult> {
   const { data } = await apiClient.post<LinkDevicesResult>(
     `/api/v1/librenms/instances/${id}/link-devices`,

@@ -312,11 +312,18 @@ const cols = computed<DataTableColumns<DevicePort>>(() => [
     sorter: (a, b) => natCompare(a.link ?? "", b.link ?? ""),
     render: (r) => r.link
       // 純文字 tooltip：避免把綠色 tag 放進深色 tooltip 造成淺色主題配色錯
-      ? h(NTooltip, null, {
-          trigger: () => h(NTag, { size: "small", type: "success", bordered: false, style: "max-width:100%" },
-            () => h("span", { style: "display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" }, "→ " + r.link)),
-          default: () => "→ " + r.link,
-        })
+      ? h("span", { style: "display:inline-flex;align-items:center;gap:4px;max-width:100%" }, [
+          h(NTooltip, null, {
+            trigger: () => h(NTag, { size: "small", type: "success", bordered: false, style: "max-width:100%" },
+              () => h("span", { style: "display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" }, "→ " + r.link)),
+            default: () => "→ " + r.link,
+          }),
+          // 佈線自動推斷建立的線（人改過就變人工）
+          r.cable_source === "auto"
+            ? h(NTag, { size: "tiny", type: "info", bordered: false, "data-testid": `port-cable-auto-${r.name}` },
+                () => t("cable_infer.source_auto"))
+            : null,
+        ])
       : "—" },
   // MAC 在上、OUI 廠商在下（與 IP 清單同一個呈現，utils/macVendor）
   withExportValue({ title: t("ports.col_mac"), key: "mac_address", minWidth: 150,

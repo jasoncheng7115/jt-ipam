@@ -18,6 +18,9 @@ import CableAttrFields, { blankCableAttrs, type CableAttrs } from "@/components/
 import { useDeviceOptions } from "@/composables/useDeviceOptions";
 import VpnTunnelTable from "@/components/VpnTunnelTable.vue";
 import PhysicalCheckDrawer from "@/components/PhysicalCheckDrawer.vue";
+import CableInferenceDrawer from "@/components/CableInferenceDrawer.vue";
+import { evidenceText } from "@/utils/cableEvidence";
+import { fmtDateTime } from "@/utils/datetime";
 import PowerFailureDrawer from "@/components/PowerFailureDrawer.vue";
 import ExportButton from "@/components/ExportButton.vue";
 import { useColumnPrefs } from "@/composables/useColumnPrefs";
@@ -62,6 +65,7 @@ const cableFilterLocation = ref<string | null>(null);
 const cableFilterRack = ref<string | null>(null);
 const cableFilterStatus = ref<string | null>(null);
 const cableFilterNoLabel = ref(false);
+const cableFilterSource = ref<string | null>(null);
 const filteredCables = computed(() => {
   const q = cableFilterText.value.trim().toLowerCase();
   const dev = cableFilterDevice.value;
@@ -75,6 +79,7 @@ const filteredCables = computed(() => {
     if ((dev || loc || rack) && !endOk(c, "a") && !endOk(c, "b")) return false;
     if (cust && c.a_customer_id !== cust && c.b_customer_id !== cust) return false;
     if (cableFilterStatus.value && c.status !== cableFilterStatus.value) return false;
+    if (cableFilterSource.value && (c.source ?? "manual") !== cableFilterSource.value) return false;
     if (cableFilterNoLabel.value && String(c.label ?? "").trim()) return false;
     if (q) {
       const hay = [c.type, c.label, c.a_end, c.b_end, c.status, c.description]
@@ -86,13 +91,15 @@ const filteredCables = computed(() => {
 });
 const locationOpts = computed(() => locations.value.map((l) => ({ label: l.name, value: l.id })));
 const cableStatusOpts = computed(() => ["connected", "planned", "decommissioned"].map((v) => ({ label: t(`physical.cable_status_${v}`), value: v })));
+const cableSourceOpts = computed(() => ["auto", "manual"].map((v) => ({ label: t(`cable_infer.source_${v}`), value: v })));
 // 追線側欄
 const traceCable = ref<any | null>(null);
 const showTrace = ref(false);
 function openTrace(r: any) { traceCable.value = r; showTrace.value = true; }
 // 篩選條件寫進網址（可以分享給別人）
 const FILTER_KEYS = { q: cableFilterText, device: cableFilterDevice, customer: cableFilterCustomer,
-                      location: cableFilterLocation, rack: cableFilterRack, status: cableFilterStatus } as const;
+                      location: cableFilterLocation, rack: cableFilterRack, status: cableFilterStatus,
+                      source: cableFilterSource } as const;
 function readFilterQuery() {
   for (const [k, r] of Object.entries(FILTER_KEYS)) {
     const v = route.query[k];
@@ -100,7 +107,8 @@ function readFilterQuery() {
   }
   if (route.query.nolabel === "1") cableFilterNoLabel.value = true;
 }
-watch([cableFilterText, cableFilterDevice, cableFilterCustomer, cableFilterLocation, cableFilterRack, cableFilterStatus, cableFilterNoLabel], () => {
+watch([cableFilterText, cableFilterDevice, cableFilterCustomer, cableFilterLocation, cableFilterRack, cableFilterStatus,
+       cableFilterNoLabel, cableFilterSource], () => {
   if (mode.value !== "cabling") return;
   const q: Record<string, string> = {};
   for (const [k, r] of Object.entries(FILTER_KEYS)) if ((r as any).value) q[k] = String((r as any).value).trim();
@@ -151,6 +159,19 @@ function statusTag(s: string) {
     () => (["connected", "planned", "decommissioned"].includes(s) ? t(`physical.cable_status_${s}`) : s));
 }
 
+// 來源：自動推斷的線標出依據與最後確認時間（人改過就變成人工）
+function sourceTag(r: any) {
+  if ((r.source ?? "manual") !== "auto") {
+    return h(NTag, { size: "small", bordered: false }, () => t("cable_infer.source_manual"));
+  }
+  return h(NTooltip, null, {
+    trigger: () => h(NTag, { size: "small", bordered: false, type: "info", "data-testid": `cable-source-auto-${r.id}` },
+      () => t("cable_infer.source_auto")),
+    default: () => [evidenceText(t, r.evidence),
+                    r.verified_at ? h("div", null, t("cable_infer.verified_at", { at: fmtDateTime(r.verified_at) })) : null],
+  });
+}
+
 // 纜線兩端 device@port：把分隔符 @ 染成不同顏色，裝置與連接埠一眼分得開
 function renderEnd(val: string | null) {
   if (!val) return "—";
@@ -168,6 +189,9 @@ const cableColsAll = computed<DataTableColumns<any>>(() => autoSort([
   { title: t("physical.a_end"), key: "a_end", minWidth: 190, ellipsis: { tooltip: true }, render: (r: any) => renderEnd(r.a_end) },
   { title: t("physical.b_end"), key: "b_end", minWidth: 190, ellipsis: { tooltip: true }, render: (r: any) => renderEnd(r.b_end) },
   { title: t("common.status"), key: "status", width: 100, render: (r: any) => statusTag(r.status) },
+  { title: t("cable_infer.col_source"), key: "source", width: 90, render: sourceTag,
+    exportValue: (r: any) => ((r.source ?? "manual") === "auto" ? `${t("cable_infer.source_auto")}: ${evidenceText(t, r.evidence)}`
+                                                               : t("cable_infer.source_manual")) } as any,
   { title: t("sections.description"), key: "description", minWidth: 150, ellipsis: { tooltip: true }, render: (r: any) => r.description ?? "—" },
   { title: t("common.actions"), key: "actions", width: 120, render: (r: any) => h(NSpace, { size: 4, wrap: false }, () => [
     h(NTooltip, null, {
@@ -181,11 +205,12 @@ const cableColsAll = computed<DataTableColumns<any>>(() => autoSort([
     h(NPopconfirm, { onPositiveClick: () => delCable(r) }, {
       trigger: () => h(NButton, { size: "tiny", quaternary: true, type: "error", disabled: !canEdit.value },
         { icon: () => h(NIcon, null, () => h(DeleteIcon)) }),
-      default: () => t("common.confirm_delete"),
+      // 自動線刪掉會被記住（不再自動建回來），要講清楚
+      default: () => ((r.source ?? "manual") === "auto" ? t("cable_infer.confirm_delete_auto") : t("common.confirm_delete")),
     }),
   ]) },
 ]));
-const cableKeys = ["type", "label", "a_end", "b_end", "status", "description", "actions"];
+const cableKeys = ["type", "label", "a_end", "b_end", "status", "source", "description", "actions"];
 const cablePickerItems = computed(() => cableColsAll.value
   .map((c: any) => ({ key: c.key, label: typeof c.title === "function" ? c.title() : c.title }))
   .filter((c: any) => c.key));
@@ -460,6 +485,8 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
                   style="width: 150px" :placeholder="t('physical.cable_filter_rack')" data-testid="cable-filter-rack" />
         <n-select v-model:value="cableFilterStatus" :options="cableStatusOpts" clearable
                   style="width: 130px" :placeholder="t('common.status')" data-testid="cable-filter-status" />
+        <n-select v-model:value="cableFilterSource" :options="cableSourceOpts" clearable
+                  style="width: 120px" :placeholder="t('cable_infer.col_source')" data-testid="cable-filter-source" />
         <n-checkbox v-model:checked="cableFilterNoLabel" data-testid="cable-filter-nolabel">{{ t("physical.cable_filter_nolabel") }}</n-checkbox>
       </template>
       <n-button @click="refresh" :loading="loading">
@@ -475,6 +502,7 @@ watch(mode, () => { void refresh(); if (mode.value === "cabling") ensureCablingF
                     :order="cableOrder" @update:order="setCableOrder" />
       <ExportButton v-if="mode === 'cabling'" :columns="orderCableCols(cablePickerItems)" :rows="filteredCables"
                     filename="cables" :title="t('nav.cabling')" />
+      <CableInferenceDrawer v-if="isAdmin" @changed="refresh" />
       <PhysicalCheckDrawer v-if="isAdmin" />
     </n-space>
 

@@ -122,3 +122,4 @@ docker compose exec -T postgres pg_dump -U jt_ipam jt_ipam | gzip > jt-ipam-$(da
 - 未包含 Graylog DSV 的明文 8088 埠（容器內建議直接用 HTTPS 那條 DSV 網址）。
 - GeoIP / OUI 等排程更新未內建，需要可自行加 cron 或另跑。
 - 強制 HTTPS：app 會送 Secure cookie、公開 URL 為 https，請勿改成純 http 對外。
+- 後端與同步容器以非特權帳號 `jtipam`（uid 10001）執行，只擁有 `/var/lib/jt-ipam`。若要把它掛成 volume，請讓 uid 10001 可以寫入。

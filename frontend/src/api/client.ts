@@ -114,6 +114,9 @@ export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/",
   timeout: 15_000,
   withCredentials: false,
+  // 陣列參數一律重複同一個 key（a=1&a=2）：FastAPI 只認這種。axios 預設的 a[]=1 後端會當成沒帶，
+  // 「只問限定網段」就靜靜變成全站（11-25 在 Zabbix / Checkmk / LibreNMS 的未監控位址發現）
+  paramsSerializer: { indexes: null },
 });
 
 apiClient.interceptors.request.use((config) => {

@@ -7,10 +7,12 @@
 # ---------- stage: build the frontend (static dist) ----------
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install --no-audit --no-fund
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+# pnpm (the version pinned in package.json "packageManager") with the lockfile, as scripts/jt-ipam.sh does;
+# npm cannot read the pnpm overrides and would not honour the locked versions
+RUN corepack enable && CI=true pnpm install --frozen-lockfile
 COPY frontend/ ./
-RUN npm run build
+RUN pnpm run build
 
 # ---------- stage: backend (FastAPI / uvicorn + sync + alembic) ----------
 FROM python:3.12-slim-bookworm AS backend
@@ -27,6 +29,11 @@ RUN pip install ./backend
 COPY scripts/ /app/scripts/
 COPY deploy/docker/entrypoint-backend.sh /usr/local/bin/entrypoint-backend.sh
 RUN chmod +x /usr/local/bin/entrypoint-backend.sh
+# run as an unprivileged account like the systemd install (jtipam); it owns only the runtime data dir
+# (uploads, audit anchors, GeoIP) — the code under /app stays root-owned and read-only to it
+RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/jt-ipam --shell /usr/sbin/nologin jtipam \
+    && install -d -o jtipam -g jtipam -m 0750 /var/lib/jt-ipam /var/lib/jt-ipam/uploads
+USER jtipam
 WORKDIR /app/backend
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/entrypoint-backend.sh"]

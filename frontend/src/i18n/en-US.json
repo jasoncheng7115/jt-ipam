@@ -1804,7 +1804,8 @@
       "hyperv_sync": "Hyper-V sync",
       "cert_push": "Push certificate to device",
       "openstack_sync": "OpenStack sync",
-      "domain_rdap": "Domain RDAP lookup"
+      "domain_rdap": "Domain RDAP lookup",
+      "cable_inference_run": "Cable inference"
     },
     "tracker": {
       "title": "Background jobs",
@@ -2329,7 +2330,10 @@
     "vlan_domain": "VLAN domain",
     "vlan_domain_placeholder": "LibreNMS (dedicated, default)",
     "vlan_domain_hint": "When set, a VLAN number reuses the existing VLAN in this domain and only adds which switches carry it; names you already gave are not overwritten by the switch's name (such as VLAN0010). If VLANs migrated from phpIPAM are in default, choose it to avoid two copies.",
-    "vlan_only_existing": "Only map VLANs that already exist in this domain; do not create new ones (keeps switch defaults such as 1002 to 1005 out)"
+    "vlan_only_existing": "Only map VLANs that already exist in this domain; do not create new ones (keeps switch defaults such as 1002 to 1005 out)",
+    "gap": "Monitoring coverage gap",
+    "gap_scoped": "Within the configured subnet scope, {n} address(es) with a known hostname are not monitored by this LibreNMS.",
+    "gap_global": "{n} address(es) with a known hostname are not monitored by this LibreNMS (no subnet scope configured on this instance)."
   },
   "firewall": {
     "scope_title": "Association scope (NAT mapping)",
@@ -4338,7 +4342,10 @@
     "feed_in_use": "This feed still has {n} outlets; delete them or move them to another feed",
     "outlet_in_use": "This outlet powers {ports}; move or unplug it first",
     "trace_cable_not_on_port": "That cable is not connected to this port",
-    "floorplan_conflict": "Someone else just changed this layout; reload and adjust again"
+    "floorplan_conflict": "Someone else just changed this layout; reload and adjust again",
+    "smtp_cert_verify_failed": "SMTP server certificate verification failed: {reason}. If the relay uses a self-signed certificate, paste its CA certificate in Notification Channels; turn off \"Verify server certificate\" only if you cannot get it.",
+    "smtp_ca_invalid": "The CA certificate is not valid PEM: {reason}",
+    "smtp_cert_name_mismatch": "The SMTP server's certificate is issued to {names}, which does not match the configured host '{host}'. Change SMTP Host to a name on the certificate (the DNS name that points to this server)."
   },
   "adguard_admin": {
     "scope_subnets": "Limit to subnets",
@@ -4775,6 +4782,11 @@
     "password_keep": "Set; leave blank to keep unchanged",
     "from": "From address",
     "tls_none": "None (trusted LAN only)",
+    "verify_tls": "Verify server certificate",
+    "verify_tls_off_hint": "Without verification, a man-in-the-middle can capture the SMTP credentials. Turn this off only for an internal relay with a self-signed certificate.",
+    "ca": "CA certificate (PEM, optional)",
+    "ca_hint": "If the relay uses a self-signed certificate or an internal CA, paste that certificate here (starting with -----BEGIN CERTIFICATE-----; several are allowed). Only these certificates are then trusted, and the host name is still checked. Leave empty to use the system trust store.",
+    "ca_current": "Currently trusted: {names}",
     "test": "Send test email",
     "test_to_ph": "Recipient email",
     "test_to_required": "Enter a test recipient",
@@ -4860,7 +4872,8 @@
     "webhook_title": "Generic Webhook",
     "webhook_hint": "POSTs JSON to your URL: {'{'} \"app\":\"jt-ipam\", \"subject\":..., \"text\":..., \"url\":..., \"severity\":... {'}'} (url is the full link to the related page and severity the level; each is sent only when there is one). Works with n8n, custom endpoints, etc.; an optional Bearer token is sent as the Authorization header.",
     "webhook_token": "Bearer token (optional)",
-    "webhook_token_ph": "leave blank for no Authorization header"
+    "webhook_token_ph": "leave blank for no Authorization header",
+    "host_ip_hint": "Connecting by IP usually fails the certificate check, because certificates are mostly issued to host names. Use the host name on the certificate."
   },
   "system_settings": {
     "agent_auto_pin_hint": "When on, certificate, scan and RustDesk agents that do not verify the server yet switch to verifying it after they update: system CAs first, else this server's certificate is pinned, and only a setting they actually connected with is kept. No need to re-run the install command on every host. When jt-ipam changes its certificate, verified agents check the new one against this server's identity key and follow it (not affected by this switch). When off, unverified agents stay as they are.",
@@ -10633,5 +10646,47 @@
     "pick": "Click a port to see its mapping and labels",
     "view_list": "List",
     "view_grid": "Panel ports"
+  },
+  "cable_infer": {
+    "title": "Cable inference",
+    "intro": "After each sync round the system connects cables on its own when the evidence is clear: neighbour information reported by switches (LLDP / CDP) names both ports, or a switch port sees only one device's MAC. Cables entered by people are never touched. Anything less certain, or anything that disagrees with a manual cable, is listed below for you to decide.",
+    "enabled": "Infer and connect automatically",
+    "run_now": "Run now",
+    "never_run": "Not run yet",
+    "last_run": "Last round {at}: {created} connected, {refreshed} confirmed, {retired} removed, {conflicts} conflicts, {suggested} suggestions, {ports} NIC ports created",
+    "run_done": "Done: {created} connected, {refreshed} confirmed, {retired} removed, {conflicts} conflicts, {suggested} suggestions",
+    "tab_open": "Suggestions ({n})",
+    "tab_dismissed": "Dismissed ({n})",
+    "open_hint": "Accepting creates a confirmed cable. It is refused while a port already has another cable; deal with that cable first.",
+    "dismissed_hint": "Dismissed links (including auto cables someone deleted) are not created automatically again. After restoring, the next round decides from the evidence again.",
+    "col_basis": "Evidence",
+    "col_reason": "Why not automatic",
+    "col_last_seen": "Last seen",
+    "col_dismissed_at": "Dismissed",
+    "col_source": "Source",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "restore": "Restore",
+    "accepted": "Cable created",
+    "dismissed_ok": "Dismissed",
+    "restored": "Restored",
+    "source_auto": "Auto",
+    "source_manual": "Manual",
+    "verified_at": "Last confirmed: {at}",
+    "confirm_delete_auto": "This cable was inferred automatically. Once deleted it is remembered and not created again (restore it under Cable inference, Dismissed). Delete?",
+    "ev_neighbor": "{proto} neighbour ({source}): the far end is {port} on {remote}",
+    "ev_single_mac": "Switch port {port} sees only this device's MAC ({mac})",
+    "ev_vm_host": "All {n} MACs on switch port {port} belong to this host and its VMs",
+    "ev_uplink": "Each switch's MAC table sees the other, but an unmanaged switch may sit in between",
+    "kind_fdb_single_mac": "Single MAC",
+    "kind_fdb_vm_host": "Virtualisation host",
+    "kind_fdb_uplink": "Switch to switch",
+    "kind_auto": "Auto",
+    "reason_conflict_manual": "Disagrees with a manual cable",
+    "reason_uplink_unverified": "MAC tables only",
+    "reason_conflicting_evidence": "Conflicting evidence",
+    "accept_replace": "Accept and replace",
+    "confirm_replace": "The cables currently on {a} and {b} (manual ones included) will be removed and this cable created instead. Continue?",
+    "replaced": "Replaced and connected"
   }
 }

@@ -5,9 +5,10 @@
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { NAlert, NTag } from "naive-ui";
+import { NAlert, NTag, NTooltip } from "naive-ui";
 import type { PortTrace, TraceNode } from "@/api/phase3";
 import SwitchPortLabel from "@/components/SwitchPortLabel.vue";
+import { evidenceText } from "@/utils/cableEvidence";
 
 const props = defineProps<{ trace: PortTrace }>();
 const { t } = useI18n();
@@ -28,7 +29,17 @@ const stopText = computed(() => {
   <div>
     <div v-for="(s, i) in steps" :key="i">
       <div v-if="i > 0 && s.hop" class="ct-seg" :data-testid="`trace-seg-${s.hop.kind}`">
-        <template v-if="s.hop.kind === 'cable'">{{ s.hop.cable_label || t("physical_check.no_label") }} · {{ s.hop.cable_type || t("cable_trace.cable") }}</template>
+        <template v-if="s.hop.kind === 'cable'">{{ s.hop.cable_label || t("physical_check.no_label") }} · {{ s.hop.cable_type || t("cable_trace.cable") }}
+          <!-- 自動推斷的線：標出來，提示框講依據 -->
+          <n-tooltip v-if="s.hop.source === 'auto'">
+            <template #trigger>
+              <n-tag size="tiny" type="info" :bordered="false" style="margin-left: 6px" data-testid="trace-seg-auto">
+                {{ t("cable_infer.source_auto") }}
+              </n-tag>
+            </template>
+            {{ evidenceText(t, s.hop.evidence) }}
+          </n-tooltip>
+        </template>
         <template v-else-if="s.hop.kind === 'panel_passthrough'">{{ t("cable_trace.passthrough") }}</template>
         <template v-else>{{ t("cable_trace.bridge") }}</template>
       </div>

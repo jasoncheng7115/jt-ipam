@@ -2,6 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import axios from "axios";
 import { apiClient } from "@/api/client";
 
+describe("apiClient 陣列參數", () => {
+  // FastAPI 的 list 參數只認重複同一個 key（a=1&a=2）；axios 預設送 a[]=1&a[]=2，後端會當成沒帶，
+  // 「只問限定網段」就靜靜變成全站（11-25 LibreNMS / Zabbix / Checkmk 的未監控位址）
+  it("陣列用重複 key 送出，不加 []", () => {
+    const uri = apiClient.getUri({ url: "/api/v1/x", params: { subnet_ids: ["a", "b"], q: "z" } });
+    expect(uri).toContain("subnet_ids=a&subnet_ids=b");
+    expect(uri).not.toContain("%5B%5D");
+  });
+});
+
 describe("apiClient interceptors", () => {
   beforeEach(() => {
     localStorage.clear();

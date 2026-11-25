@@ -672,7 +672,26 @@ export const Virt = {
 
 // ─────────────────── Physical ───────────────────
 
-export interface Cable { id: string; type: string; status: string; description: string | null; }
+export interface Cable {
+  id: string; type: string; status: string; description: string | null;
+  /** manual＝人建的；auto＝依證據自動建立（佈線自動推斷） */
+  source?: "manual" | "auto"; evidence?: CableEvidence | null; verified_at?: string | null;
+}
+/** 自動推斷的依據：kind 是哪一種證據，其餘欄位依種類而定 */
+export interface CableEvidence {
+  kind: string; source?: string; switch_port?: string; macs?: string[]; mac_count?: number;
+  local_port?: string; remote_sysname?: string; remote_port?: string; a_port?: string; b_port?: string;
+}
+export interface CableInferenceConfig {
+  enabled: boolean; last_run_at: string | null;
+  last_summary: { created: number; refreshed: number; retired: number; conflicts: number; suggested: number;
+                  ports_created: number; ports_removed?: number; confirmed_manual?: number } | null;
+}
+export interface CableSuggestion {
+  id: string; kind: string; reason: string | null; status: "open" | "dismissed"; evidence: CableEvidence | null;
+  a_port_id: string; b_port_id: string; a_device_id: string | null; b_device_id: string | null;
+  a_end: string | null; b_end: string | null; first_seen_at: string; last_seen_at: string; dismissed_at: string | null;
+}
 export interface PowerPanel { id: string; name: string; location_id: string | null; }
 export interface PowerFeed {
   id: string; name: string; panel_id: string; voltage_v?: number; amperage_a?: number; phase?: "single" | "three";
@@ -751,6 +770,8 @@ export interface DevicePort {
   link?: string | null; mac_address?: string | null;
   /** 接在這個埠的線（有多條時優先已接線的） */
   cable_id?: string | null; cable_label?: string | null; cable_status?: string | null;
+  /** auto＝佈線自動推斷建立的線 */
+  cable_source?: "manual" | "auto" | null;
   /** OUI 廠商（後端依 MAC 前綴查） */
   mac_vendor?: string | null;
 }
@@ -764,6 +785,8 @@ export interface TraceHop {
   cable_color: string | null; to: TraceNode | null; internal?: boolean;
   /** cable：實體線；panel_passthrough：面板正背面；logical_bridge：bridge ↔ NIC（不是線） */
   kind?: "cable" | "panel_passthrough" | "logical_bridge";
+  /** 自動推斷的線（auto）帶出依據 */
+  source?: "manual" | "auto" | null; evidence?: CableEvidence | null;
 }
 /** 為什麼停下來（交接包 physical-v1.2 CABLING.md） */
 export type TraceStop = "end" | "unpaired_panel_port" | "no_connected_cable" | "ambiguous" | "loop" | "limit"
@@ -860,6 +883,24 @@ export const Physical = {
   async deleteCable(id: string): Promise<void> {
     await apiClient.delete(`/api/v1/cables/${id}`);
   },
+  // 佈線自動推斷（管理員）
+  async cableInference(): Promise<CableInferenceConfig> {
+    return (await apiClient.get<CableInferenceConfig>("/api/v1/cables/inference")).data;
+  },
+  async setCableInference(enabled: boolean): Promise<CableInferenceConfig> {
+    return (await apiClient.put<CableInferenceConfig>("/api/v1/cables/inference", { enabled })).data;
+  },
+  async runCableInference(): Promise<NonNullable<CableInferenceConfig["last_summary"]>> {
+    return (await apiClient.post("/api/v1/cables/inference/run", null, { timeout: 120_000 })).data;
+  },
+  async cableSuggestions(status: "open" | "dismissed" = "open"): Promise<{ items: CableSuggestion[]; total: number }> {
+    return (await apiClient.get("/api/v1/cables/suggestions", { params: { status, page_size: 500 } })).data;
+  },
+  async acceptCableSuggestion(id: string, replace = false): Promise<void> {
+    await apiClient.post(`/api/v1/cables/suggestions/${id}/accept`, null, { params: replace ? { replace: true } : undefined });
+  },
+  async dismissCableSuggestion(id: string): Promise<void> { await apiClient.post(`/api/v1/cables/suggestions/${id}/dismiss`); },
+  async restoreCableSuggestion(id: string): Promise<void> { await apiClient.post(`/api/v1/cables/suggestions/${id}/restore`); },
 };
 
 /** 異常偵測的排程設定（管理員）。形狀與巡檢排程一致；`interval` 是每隔 N 分鐘。 */

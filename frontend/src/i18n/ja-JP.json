@@ -1804,7 +1804,8 @@
       "hyperv_sync": "Hyper-V 同期",
       "cert_push": "証明書をデバイスに配信",
       "openstack_sync": "OpenStack 同期",
-      "domain_rdap": "ドメインの RDAP 照会"
+      "domain_rdap": "ドメインの RDAP 照会",
+      "cable_inference_run": "配線の自動推定"
     },
     "tracker": {
       "title": "バックグラウンドジョブ",
@@ -2329,7 +2330,10 @@
     "vlan_domain": "VLAN の書き込み先ドメイン",
     "vlan_domain_placeholder": "LibreNMS（専用、既定）",
     "vlan_domain_hint": "指定すると、同じ番号の VLAN はこのドメインの既存の VLAN を使い、「どのスイッチがこの VLAN を持つか」だけを追加します。既に付けた名前はスイッチ側の名前（VLAN0010 など）で上書きされません。phpIPAM から移行した VLAN が default にある場合はそれを選ぶと二重になりません。",
-    "vlan_only_existing": "このドメインに既にある VLAN だけを対応付け、新規作成しない（スイッチ既定の 1002〜1005 などを取り込まない）"
+    "vlan_only_existing": "このドメインに既にある VLAN だけを対応付け、新規作成しない（スイッチ既定の 1002〜1005 などを取り込まない）",
+    "gap": "監視の抜け",
+    "gap_scoped": "設定したサブネットの範囲内で、ホスト名が分かっているアドレス {n} 件がこの LibreNMS で監視されていません。",
+    "gap_global": "ホスト名が分かっているアドレス {n} 件がこの LibreNMS で監視されていません（このインスタンスにはサブネットの範囲が設定されていません）。"
   },
   "firewall": {
     "scope_title": "対応付けの範囲（NAT の照合）",
@@ -4338,7 +4342,10 @@
     "feed_in_use": "この回路にはまだ {n} 個のコンセントがあります。先に削除するか別の回路に移してください",
     "outlet_in_use": "このコンセントには {ports} が接続されています。先に付け替えるか外してください",
     "trace_cable_not_on_port": "そのケーブルはこのポートに接続されていません",
-    "floorplan_conflict": "配置は他の人が変更したばかりです。再読み込みしてから調整してください"
+    "floorplan_conflict": "配置は他の人が変更したばかりです。再読み込みしてから調整してください",
+    "smtp_cert_verify_failed": "SMTP サーバー証明書の検証に失敗しました：{reason}。リレーが自己署名証明書を使う場合は、「通知チャネル」でその CA 証明書を貼り付けてください。入手できない場合のみ「サーバー証明書を検証」をオフにしてください。",
+    "smtp_ca_invalid": "CA 証明書が有効な PEM ではありません：{reason}",
+    "smtp_cert_name_mismatch": "SMTP サーバーの証明書は {names} 向けに発行されており、設定したホスト「{host}」と一致しません。SMTP Host を証明書上の名前（このサーバーを指す DNS 名）に変更してください。"
   },
   "adguard_admin": {
     "scope_subnets": "対象サブネットを限定",
@@ -4775,6 +4782,11 @@
     "password_keep": "設定済み。空欄のままにすると変更しません",
     "from": "送信元アドレス",
     "tls_none": "なし（信頼できる LAN 内のみ）",
+    "verify_tls": "サーバー証明書を検証",
+    "verify_tls_off_hint": "検証しない場合、中間者に SMTP の認証情報を傍受される可能性があります。社内リレーが自己署名証明書を使う場合のみオフにしてください。",
+    "ca": "CA 証明書（PEM、任意）",
+    "ca_hint": "リレーが自己署名証明書や社内 CA を使う場合は、その証明書を貼り付けてください（-----BEGIN CERTIFICATE----- で始まるもの、複数可）。設定後はここの証明書のみを信頼し、ホスト名も引き続き照合します。空欄ならシステムの信頼ストアを使います。",
+    "ca_current": "現在の信頼先：{names}",
     "test": "テストメールを送信",
     "test_to_ph": "宛先のメールアドレス",
     "test_to_required": "テストの宛先を入力してください",
@@ -4860,7 +4872,8 @@
     "webhook_title": "汎用 Webhook",
     "webhook_hint": "指定した URL へ JSON を POST します：{'{'} \"app\":\"jt-ipam\", \"subject\":..., \"text\":..., \"url\":..., \"severity\":... {'}'}（url は該当ページへの完全な URL、severity は重要度で、それぞれある場合のみ付きます）。n8n や自作のエンドポイントなどで使えます。任意の Bearer トークンを指定すると Authorization ヘッダとして送信します。",
     "webhook_token": "Bearer トークン（任意）",
-    "webhook_token_ph": "空欄にすると Authorization ヘッダを送りません"
+    "webhook_token_ph": "空欄にすると Authorization ヘッダを送りません",
+    "host_ip_hint": "IP で接続すると、証明書は通常ホスト名向けに発行されているため照合できません。証明書上のホスト名を入力してください。"
   },
   "system_settings": {
     "agent_auto_pin_hint": "オンのとき、まだサーバーを検証していない配布・スキャン・RustDesk エージェントは更新後に自分で検証するように切り替わります。まずシステムの CA を試し、だめならこのサーバーの証明書を固定し、実際に接続できた設定だけを使います。各ホストでインストールコマンドを再実行する必要はありません。jt-ipam が証明書を変えたときは、検証済みのエージェントがこのサーバーの識別鍵で新しい証明書を確認して追従します（このスイッチの影響を受けません）。オフにすると、未検証のエージェントはそのままです。",
@@ -10633,5 +10646,47 @@
     "pick": "ポートをクリックすると対応とラベルを表示します",
     "view_list": "一覧",
     "view_grid": "パネルのポート"
+  },
+  "cable_infer": {
+    "title": "配線の自動推定",
+    "intro": "同期のたびに、証拠が明確なものは自動で配線します。スイッチが報告する隣接情報（LLDP / CDP）が両端のポートを示している場合や、スイッチのポートに 1 台の機器の MAC しか見えない場合です。手動で登録したケーブルは一切変更しません。確実でないもの、手動のケーブルと食い違うものは下に一覧し、判断をお任せします。",
+    "enabled": "自動で推定して配線する",
+    "run_now": "今すぐ実行",
+    "never_run": "まだ実行していません",
+    "last_run": "前回 {at}：新規 {created} 本、確認 {refreshed} 本、撤去 {retired} 本、競合 {conflicts} 本、提案 {suggested} 本、NIC ポート作成 {ports} 個",
+    "run_done": "完了：新規 {created} 本、確認 {refreshed} 本、撤去 {retired} 本、競合 {conflicts} 本、提案 {suggested} 本",
+    "tab_open": "提案（{n}）",
+    "tab_dismissed": "無視済み（{n}）",
+    "open_hint": "承認すると確認済みのケーブルを作成します。ポートに別のケーブルがある場合は拒否されるので、先にそのケーブルを処理してください。",
+    "dismissed_hint": "無視した接続（削除された自動ケーブルを含む）は再び自動作成されません。元に戻すと、次回から証拠に基づいて再判断します。",
+    "col_basis": "根拠",
+    "col_reason": "自動にしなかった理由",
+    "col_last_seen": "最終確認",
+    "col_dismissed_at": "無視した日時",
+    "col_source": "由来",
+    "accept": "承認",
+    "dismiss": "無視",
+    "restore": "元に戻す",
+    "accepted": "ケーブルを作成しました",
+    "dismissed_ok": "無視しました",
+    "restored": "元に戻しました",
+    "source_auto": "自動",
+    "source_manual": "手動",
+    "verified_at": "最終確認：{at}",
+    "confirm_delete_auto": "このケーブルは自動推定です。削除すると記録され、再び自動作成されません（配線の自動推定の「無視済み」から元に戻せます）。削除しますか？",
+    "ev_neighbor": "{proto} 隣接情報（{source}）：相手は {remote} の {port}",
+    "ev_single_mac": "スイッチのポート {port} にはこの機器の MAC（{mac}）しか見えません",
+    "ev_vm_host": "スイッチのポート {port} に見える {n} 個の MAC はすべてこのホストとその VM です",
+    "ev_uplink": "両スイッチの MAC テーブルが互いを見ていますが、間に管理できないスイッチがある可能性があります",
+    "kind_fdb_single_mac": "単一 MAC",
+    "kind_fdb_vm_host": "仮想化ホスト",
+    "kind_fdb_uplink": "スイッチ間直結",
+    "kind_auto": "自動",
+    "reason_conflict_manual": "手動のケーブルと食い違う",
+    "reason_uplink_unverified": "MAC テーブルのみ",
+    "reason_conflicting_evidence": "証拠が矛盾",
+    "accept_replace": "承認して置き換え",
+    "confirm_replace": "{a} と {b} に現在あるケーブル（手動のものを含む）を削除し、このケーブルに置き換えます。よろしいですか？",
+    "replaced": "置き換えて接続しました"
   }
 }

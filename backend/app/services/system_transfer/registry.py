@@ -75,6 +75,7 @@ CATEGORY: dict[str, str] = {
     "cables": "core",
     "cable_terminations": "core",
     "device_ports": "core",
+    "cable_suggestions": "core",           # 佈線自動推斷的建議與「已忽略」（人的決定，搬機要帶走）
     "device_power_ports": "core",
     "device_power_profiles": "core",
     "power_panels": "core",

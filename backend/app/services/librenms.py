@@ -1696,3 +1696,43 @@ async def sync_instance(
         raise
     await session.commit()
     return summary
+
+
+async def coverage_gap(
+    session: AsyncSession, *, instance_id: uuid.UUID | None = None,
+    subnet_ids: list[uuid.UUID] | None = None,
+) -> list[dict[str, Any]]:
+    """有主機名稱、卻沒有被 LibreNMS 監控的 IP（監控涵蓋缺口；與 Zabbix / Checkmk 同一個模式）。
+
+    被監控＝任一成立：IP 是 LibreNMS 裝置的主要 IP；LibreNMS 的 hostname 直接填這個 IP
+    （用 IP 新增的裝置 primary_ip 可能還沒值）；IP 所屬的 jt-ipam 裝置已對應到 LibreNMS 的裝置
+    （同一台機器的其他介面 IP 也算有監控）。`subnet_ids` 必給才不會用全站資料回答某網段的問題。
+    """
+    devs = select(LibreNMSDevice.primary_ip, LibreNMSDevice.hostname, LibreNMSDevice.jt_ipam_device_id)
+    if instance_id is not None:
+        devs = devs.where(LibreNMSDevice.instance_id == instance_id)
+    monitored_ips: set[str] = set()
+    monitored_devices: set[uuid.UUID] = set()
+    for pip, host, dev_id in (await session.execute(devs)).all():
+        if pip:
+            monitored_ips.add(str(pip).split("/", 1)[0])
+        if host:
+            try:
+                monitored_ips.add(str(ipaddress.ip_address(host.strip())))
+            except ValueError:
+                pass
+        if dev_id:
+            monitored_devices.add(dev_id)
+    stmt = select(IPAddress.id, IPAddress.ip, IPAddress.hostname, IPAddress.device_id).where(
+        IPAddress.hostname.is_not(None), IPAddress.hostname != "")
+    if subnet_ids is not None:
+        if not subnet_ids:
+            return []
+        stmt = stmt.where(in_values(IPAddress.subnet_id, subnet_ids))
+    out: list[dict[str, Any]] = []
+    for i, ip, hn, dev_id in (await session.execute(stmt.order_by(IPAddress.ip))).all():
+        addr = str(ip).split("/", 1)[0] if ip else None
+        if addr in monitored_ips or (dev_id is not None and dev_id in monitored_devices):
+            continue
+        out.append({"ip_address_id": str(i), "ip": addr, "hostname": hn})
+    return out

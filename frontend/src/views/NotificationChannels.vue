@@ -20,6 +20,17 @@ const saving = ref(false);
 const testing = ref(false);
 const cfg = ref<NotificationChannels | null>(null);
 const pw = ref("");          // 留空＝不變更
+// 用 IP 連線而且要驗證憑證：憑證多半是發給主機名稱，幾乎一定比對不到（11-25 正式站台升級後就是這樣）
+const hostIsIp = computed(() => {
+  const c = cfg.value;
+  if (!c || c.smtp_tls === "none" || !c.smtp_verify_tls) return false;
+  const h = (c.smtp_host ?? "").trim();
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":");
+});
+const caPem = computed<string>({
+  get: () => cfg.value?.smtp_ca_cert_pem ?? "",
+  set: (v) => { if (cfg.value) cfg.value.smtp_ca_cert_pem = v; },
+});
 const testTo = ref("");
 // 各管道密鑰輸入（留空＝不變更）
 const tgToken = ref("");
@@ -59,6 +70,8 @@ async function save() {
       smtp_host: c.smtp_host,
       smtp_port: c.smtp_port,
       smtp_tls: c.smtp_tls,
+      smtp_verify_tls: c.smtp_verify_tls,
+      smtp_ca_cert_pem: c.smtp_ca_cert_pem ?? "",
       smtp_username: c.smtp_username,
       smtp_from: c.smtp_from,
       telegram_enabled: c.telegram_enabled,
@@ -234,8 +247,9 @@ onMounted(() => { void load(); void loadMatrix(); });
         <n-form-item :label="t('notify_ch.email_enabled')" label-placement="left" class="ch-full">
           <n-switch v-model:value="cfg.email_enabled" />
         </n-form-item>
-        <n-form-item label="SMTP Host" label-placement="top">
-          <n-input v-model:value="cfg.smtp_host" placeholder="smtp.example.com" />
+        <n-form-item label="SMTP Host" label-placement="top"
+                     :feedback="hostIsIp ? t('notify_ch.host_ip_hint') : ''" :validation-status="hostIsIp ? 'warning' : undefined">
+          <n-input v-model:value="cfg.smtp_host" placeholder="smtp.example.com" data-testid="smtp-host" />
         </n-form-item>
         <div class="ch-pair">
           <n-form-item label="Port" label-placement="top">
@@ -245,6 +259,24 @@ onMounted(() => { void load(); void loadMatrix(); });
             <n-select v-model:value="cfg.smtp_tls" :options="tlsOptions" />
           </n-form-item>
         </div>
+        <n-form-item v-if="cfg.smtp_tls !== 'none'" :label="t('notify_ch.verify_tls')" label-placement="left"
+                     class="ch-full" :feedback="cfg.smtp_verify_tls ? '' : t('notify_ch.verify_tls_off_hint')"
+                     :validation-status="cfg.smtp_verify_tls ? undefined : 'warning'">
+          <n-switch v-model:value="cfg.smtp_verify_tls" data-testid="smtp-verify-tls" />
+        </n-form-item>
+        <!-- 自簽憑證或企業 CA：貼上就照樣驗證（使用者 11-25：「但如果是自簽憑證呢」） -->
+        <n-form-item v-if="cfg.smtp_tls !== 'none' && cfg.smtp_verify_tls" :label="t('notify_ch.ca')"
+                     label-placement="top" class="ch-full" :show-feedback="false">
+          <div style="width: 100%">
+            <n-input v-model:value="caPem" type="textarea" :autosize="{ minRows: 2, maxRows: 8 }"
+                     placeholder="-----BEGIN CERTIFICATE-----" data-testid="smtp-ca-pem"
+                     style="font-family: var(--jt-mono, monospace); font-size: 12px" />
+            <div class="hint">{{ t("notify_ch.ca_hint") }}</div>
+            <div v-if="cfg.smtp_ca_cert_subjects?.length" class="hint" data-testid="smtp-ca-current">
+              {{ t("notify_ch.ca_current", { names: cfg.smtp_ca_cert_subjects.join("；") }) }}
+            </div>
+          </div>
+        </n-form-item>
         <n-form-item :label="t('notify_ch.username')" label-placement="top">
           <n-input v-model:value="cfg.smtp_username" placeholder="user@example.com" />
         </n-form-item>
@@ -453,4 +485,5 @@ onMounted(() => { void load(); void loadMatrix(); });
   .nmx-key { word-break: break-all; }
 }
 .nmx-colh { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
+.hint { font-size: 12px; opacity: .7; line-height: 1.5; margin-top: 4px; }
 </style>

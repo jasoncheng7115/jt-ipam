@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.models.device import Device
 from app.models.librenms import FDBEntry, LibreNMSDevice
 from app.models.physical import (
     Cable,
+    CableSuggestion,
     CableTermination,
     DevicePort,
     DevicePowerPort,
@@ -74,6 +75,10 @@ class CableRead(StrictModel):
     length_m: float | None
     description: str | None
     status: str
+    # manual＝人建的；auto＝依證據自動建立（services/cable_inference），evidence 講得出依據
+    source: str = "manual"
+    evidence: dict[str, Any] | None = None
+    verified_at: datetime | None = None
     a_end: str | None = None       # 「裝置 / 連接埠」可讀字串
     b_end: str | None = None
     a_device_id: uuid.UUID | None = None
@@ -128,17 +133,192 @@ class CableTerminationWrite(StrictModel):
     port_label: Annotated[str | None, Field(max_length=64)] = None
 
 
+# ─────────────────── 佈線自動推斷（services/cable_inference）───────────────────
+class CableInferenceConfig(StrictModel):
+    enabled: bool
+    last_run_at: str | None = None
+    last_summary: dict[str, Any] | None = None
+
+
+class CableInferenceUpdate(StrictModel):
+    enabled: bool
+
+
+class CableSuggestionRead(StrictModel):
+    id: uuid.UUID
+    kind: str
+    reason: str | None
+    status: str
+    evidence: dict[str, Any] | None
+    a_port_id: uuid.UUID
+    b_port_id: uuid.UUID
+    a_device_id: uuid.UUID | None = None
+    b_device_id: uuid.UUID | None = None
+    a_end: str | None = None
+    b_end: str | None = None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    dismissed_at: datetime | None = None
+
+
+@router.get("/cables/inference", response_model=CableInferenceConfig, dependencies=[Depends(require_admin)])
+async def get_cable_inference(session: Annotated[AsyncSession, Depends(get_session)]) -> CableInferenceConfig:
+    from app.services.cable_inference import get_config
+    return CableInferenceConfig(**await get_config(session))
+
+
+@router.put("/cables/inference", response_model=CableInferenceConfig, dependencies=[Depends(require_admin)])
+async def put_cable_inference(
+    payload: CableInferenceUpdate, user: CurrentUser, request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CableInferenceConfig:
+    from app.services.cable_inference import set_config
+    cfg = await set_config(session, enabled=payload.enabled, user_id=user.id)
+    await _audit(session, user=user, request=request, object_type="cable_inference", object_id=None,
+                 action="update", diff={"enabled": payload.enabled})
+    await session.commit()
+    return CableInferenceConfig(**cfg)
+
+
+@router.post("/cables/inference/run", dependencies=[Depends(require_admin)])
+async def run_cable_inference(
+    user: CurrentUser, request: Request, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """立即跑一輪（不管開關：管理員按了就是要看結果）。"""
+    from app.services.cable_inference import run
+    st = await run(session)
+    await _audit(session, user=user, request=request, object_type="cable_inference", object_id=None,
+                 action="run", diff=st)
+    await session.commit()
+    return st
+
+
+async def _suggestion_rows(session: AsyncSession, rows: list[CableSuggestion]) -> list[CableSuggestionRead]:
+    pids = {r.a_port_id for r in rows} | {r.b_port_id for r in rows}
+    ports = {p.id: p for p in (await session.execute(
+        select(DevicePort).where(in_values(DevicePort.id, pids)))).scalars().all()} if pids else {}
+    devs: dict[uuid.UUID, str] = {}
+    if ports:
+        devs = {i: n for i, n in (await session.execute(select(Device.id, Device.name).where(
+            in_values(Device.id, {p.device_id for p in ports.values()})))).all()}
+    out = []
+    for r in rows:
+        pa, pb = ports.get(r.a_port_id), ports.get(r.b_port_id)
+        out.append(CableSuggestionRead(
+            id=r.id, kind=r.kind, reason=r.reason, status=r.status, evidence=r.evidence,
+            a_port_id=r.a_port_id, b_port_id=r.b_port_id,
+            a_device_id=pa.device_id if pa else None, b_device_id=pb.device_id if pb else None,
+            a_end=f"{devs.get(pa.device_id, '?')}@{pa.name}" if pa else None,
+            b_end=f"{devs.get(pb.device_id, '?')}@{pb.name}" if pb else None,
+            first_seen_at=r.first_seen_at, last_seen_at=r.last_seen_at, dismissed_at=r.dismissed_at))
+    return out
+
+
+@router.get("/cables/suggestions", dependencies=[Depends(require_admin)])
+async def list_cable_suggestions(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    status: Literal["open", "dismissed"] = "open",
+    page: int = Query(1, ge=1, le=10_000), page_size: int = Query(200, ge=1, le=500),
+) -> dict[str, Any]:
+    base = select(CableSuggestion).where(CableSuggestion.status == status)
+    total = int(await session.scalar(select(func.count()).select_from(base.subquery())) or 0)
+    rows = list((await session.execute(base.order_by(CableSuggestion.last_seen_at.desc())
+                                       .offset((page - 1) * page_size).limit(page_size))).scalars().all())
+    return {"items": [r.model_dump(mode="json") for r in await _suggestion_rows(session, rows)],
+            "total": total, "page": page, "page_size": page_size}
+
+
+async def _suggestion_or_404(session: AsyncSession, sid: uuid.UUID) -> CableSuggestion:
+    s = await session.get(CableSuggestion, sid)
+    if s is None:
+        raise HTTPException(404, detail="Suggestion not found")
+    return s
+
+
+@router.post("/cables/suggestions/{sid}/accept", response_model=CableRead, status_code=201,
+             dependencies=[Depends(require_admin)])
+async def accept_cable_suggestion(
+    sid: uuid.UUID, user: CurrentUser, request: Request, session: Annotated[AsyncSession, Depends(get_session)],
+    replace: bool = False,
+) -> CableRead:
+    """接受建議：建一條「人確認過」的線（source=manual，留著依據）。埠被占用就 409，不會變成兩條。
+
+    `replace=true`（「接受並取代」）：先移除兩端埠上已接線的線（例如人工接到 vmbr 的那條），每條各記一筆刪除稽核。"""
+    s = await _suggestion_or_404(session, sid)
+    ports = await lock_ports(session, [s.a_port_id, s.b_port_id])
+    for pid in (s.a_port_id, s.b_port_id):
+        if pid not in ports:
+            raise HTTPException(422, detail=ui_detail("port_not_found", "找不到這個連接埠"))
+    if replace:
+        occupied = (await session.execute(
+            select(Cable).join(CableTermination, CableTermination.cable_id == Cable.id)
+            .where(CableTermination.object_type == "device_port",
+                   in_values(CableTermination.object_id, [s.a_port_id, s.b_port_id]),
+                   Cable.status == "connected"))).scalars().unique().all()
+        for old in occupied:
+            await _audit(session, user=user, request=request, object_type="cable", object_id=str(old.id),
+                         action="delete", diff={"replaced_by_suggestion": str(sid), "label": old.label,
+                                                "source": old.source})
+            await session.execute(delete(CableTermination).where(CableTermination.cable_id == old.id))
+            await session.delete(old)
+        await session.flush()
+    for pid in (s.a_port_id, s.b_port_id):
+        await ensure_port_free(session, ports[pid])
+    obj = Cable(status="connected", source="manual", evidence=s.evidence, verified_at=datetime.now(UTC))
+    session.add(obj)
+    await session.flush()
+    for side, pid in (("A", s.a_port_id), ("B", s.b_port_id)):
+        session.add(CableTermination(cable_id=obj.id, side=side, object_type="device_port", object_id=pid))
+    await session.delete(s)
+    await session.flush()
+    await _audit(session, user=user, request=request, object_type="cable", object_id=str(obj.id),
+                 action="create", diff={"from_suggestion": str(sid), "evidence": s.evidence})
+    await session.commit()
+    await session.refresh(obj)
+    return CableRead.model_validate(obj)
+
+
+@router.post("/cables/suggestions/{sid}/dismiss", dependencies=[Depends(require_admin)])
+async def dismiss_cable_suggestion(
+    sid: uuid.UUID, user: CurrentUser, request: Request, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    s = await _suggestion_or_404(session, sid)
+    s.status, s.dismissed_by, s.dismissed_at = "dismissed", user.id, datetime.now(UTC)
+    await session.flush()
+    await _audit(session, user=user, request=request, object_type="cable_suggestion", object_id=str(sid),
+                 action="dismiss", diff={"kind": s.kind, "reason": s.reason})
+    await session.commit()
+    return (await _suggestion_rows(session, [s]))[0].model_dump(mode="json")
+
+
+@router.post("/cables/suggestions/{sid}/restore", dependencies=[Depends(require_admin)])
+async def restore_cable_suggestion(
+    sid: uuid.UUID, user: CurrentUser, request: Request, session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, Any]:
+    """取消忽略：刪掉這筆記錄，下一輪推斷又會照證據處理這對埠。"""
+    s = await _suggestion_or_404(session, sid)
+    await session.delete(s)
+    await _audit(session, user=user, request=request, object_type="cable_suggestion", object_id=str(sid),
+                 action="restore", diff={"kind": s.kind})
+    await session.commit()
+    return {"ok": True}
+
+
 @router.get("/cables", response_model=Paginated[CableRead])
 async def list_cables(
     _user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
     page: int = Query(1, ge=1, le=10_000), page_size: int = Query(50, ge=1, le=500),
+    source: Literal["manual", "auto"] | None = None,
 ) -> Paginated[CableRead]:
+    base = select(Cable)
+    if source is not None:
+        base = base.where(Cable.source == source)
     rows = list((await session.execute(
-        select(Cable).order_by(Cable.created_at.desc())
+        base.order_by(Cable.created_at.desc())
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all())
-    total = int(await session.scalar(select(func.count()).select_from(Cable)) or 0)
+    total = int(await session.scalar(select(func.count()).select_from(base.subquery())) or 0)
 
     # 兩端「裝置 / 連接埠」解析：把各 cable 的 A/B termination 還原成可讀字串
     cable_ids = [r.id for r in rows]
@@ -262,6 +442,8 @@ async def update_cable(
         await ensure_cable_ports_free(session, cable_id)
     for k, v in changes.items():
         setattr(obj, k, v)
+    if changes and obj.source == "auto":
+        obj.source = "manual"     # 人改過＝確認過：之後系統不再更新或撤掉它
     await session.flush()
     await _audit(session, user=user, request=request, object_type="cable",
                  object_id=str(obj.id), action="update",
@@ -280,14 +462,12 @@ async def delete_cable(
     obj = await session.get(Cable, cable_id)
     if obj is None:
         raise HTTPException(404, detail="Cable not found")
-    # 先刪兩端 termination 再刪 cable
-    for t in (await session.execute(
-        select(CableTermination).where(CableTermination.cable_id == cable_id)
-    )).scalars().all():
-        await session.delete(t)
-    await session.delete(obj)
+    was_auto = obj.source == "auto"
+    # 自動線被刪：記住這對埠，下一輪不再自動建回來（cable_inference.dismiss_cable 一併刪掉線與兩端）
+    from app.services.cable_inference import dismiss_cable
+    await dismiss_cable(session, cable_id, user_id=user.id)
     await _audit(session, user=user, request=request, object_type="cable",
-                 object_id=str(cable_id), action="delete", diff=None)
+                 object_id=str(cable_id), action="delete", diff={"source": "auto"} if was_auto else None)
     await session.commit()
 
 
@@ -372,6 +552,7 @@ class DevicePortRead(StrictModel):
     cable_id: uuid.UUID | None = None
     cable_label: str | None = None
     cable_status: str | None = None
+    cable_source: str | None = None      # auto＝佈線自動推斷建立的線
     mac_address: str | None = None   # 此埠自身的實體 MAC（ifPhysAddress）
     mac_vendor: str | None = None    # MAC 的 OUI 廠商（清單的 MAC 欄第二行，與 IP 清單一致）
 
@@ -418,7 +599,7 @@ async def list_device_ports(
 
     # ── 纜線與對端（link）── 批次查：一台裝置可以有上萬個埠（issue #47），以前每個端點各查一次
     rows = (await session.execute(
-        select(CableTermination.object_id, CableTermination.id, Cable.id, Cable.label, Cable.status)
+        select(CableTermination.object_id, CableTermination.id, Cable.id, Cable.label, Cable.status, Cable.source)
         .join(Cable, Cable.id == CableTermination.cable_id)
         .where(CableTermination.object_type == "device_port", in_values(CableTermination.object_id, port_ids))
     )).all()
@@ -444,7 +625,7 @@ async def list_device_ports(
         item = by_id.get(pid)
         if item is None:
             continue
-        item.cable_id, item.cable_label, item.cable_status = r[2], r[3], r[4]
+        item.cable_id, item.cable_label, item.cable_status, item.cable_source = r[2], r[3], r[4], r[5]
         other = next((o for o in others.get(r[2], []) if o.id != r[1]), None)
         if other is None:
             continue

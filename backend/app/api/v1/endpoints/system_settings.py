@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import CurrentUser, require_admin, require_global_read
 from app.core.audit import append_audit
+from app.core.ca_pem import clean_ca_pem, safe_subjects
 from app.core.db import get_session
 from app.core.safe_http import UnsafeOutboundURL, safe_request, transport_detail
 from app.core.ui_error import ui_detail
@@ -1996,6 +1997,9 @@ class NotificationChannelsOut(StrictModel):
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_tls: str = "starttls"           # none / starttls / tls
+    smtp_verify_tls: bool = True         # STARTTLS / SMTPS 驗證伺服器憑證
+    smtp_ca_cert_pem: str | None = None  # 自簽憑證或企業 CA：只信任這裡的憑證；沒設＝系統信任清單
+    smtp_ca_cert_subjects: list[str] = []
     smtp_username: str | None = None
     smtp_from: str | None = None
     smtp_password_set: bool = False      # 是否已存密碼（不回傳明文）
@@ -2033,6 +2037,8 @@ class NotificationChannelsIn(StrictModel):
     smtp_host: str | None = None
     smtp_port: int | None = Field(default=None, ge=1, le=65535)
     smtp_tls: str | None = None
+    smtp_verify_tls: bool | None = None
+    smtp_ca_cert_pem: str | None = None  # ""＝清除（回到系統信任清單）
     smtp_username: str | None = None
     smtp_from: str | None = None
     smtp_password: str | None = None     # 給非空才更新；"" 清除；不給保留
@@ -2075,6 +2081,9 @@ def _channels_payload(cfg: dict[str, Any]) -> NotificationChannelsOut:
         smtp_host=cfg.get("smtp_host"),
         smtp_port=int(cfg.get("smtp_port") or 587),
         smtp_tls=cfg.get("smtp_tls") or "starttls",
+        smtp_verify_tls=cfg.get("smtp_verify_tls") is not False,
+        smtp_ca_cert_pem=cfg.get("smtp_ca_cert_pem"),
+        smtp_ca_cert_subjects=safe_subjects(cfg.get("smtp_ca_cert_pem")),
         smtp_username=cfg.get("smtp_username"),
         smtp_from=cfg.get("smtp_from"),
         smtp_password_set=bool(cfg.get("smtp_password_enc")),
@@ -2123,6 +2132,13 @@ async def put_notification_channels_ep(
         from fastapi import HTTPException
         raise HTTPException(400, detail="smtp_tls must be none/starttls/tls")
     data = payload.model_dump(exclude_unset=True)
+    if "smtp_ca_cert_pem" in data:
+        try:
+            data["smtp_ca_cert_pem"] = clean_ca_pem(data["smtp_ca_cert_pem"])
+        except ValueError as exc:
+            from fastapi import HTTPException
+            raise HTTPException(422, detail=ui_detail("smtp_ca_invalid", f"CA 憑證不是有效的 PEM：{exc}",
+                                                      reason=str(exc)[:200])) from exc
     cfg = await set_notification_channels(session, data=data, updated_by_user_id=user.id)
     await append_audit(
         session, actor_user_id=str(user.id),
@@ -2204,6 +2220,9 @@ async def test_notification_email(
     except EmailNotConfigured:
         raise HTTPException(400, detail="missing_smtp_host") from None
     except EmailSendError as exc:
+        if exc.code in ("smtp_cert_verify_failed", "smtp_cert_name_mismatch"):
+            from app.core.ui_error import detail_of
+            raise HTTPException(502, detail=detail_of(exc, exc.code)) from exc
         raise HTTPException(502, detail=f"SMTP send failed: {exc}") from exc
     return {"ok": True}
 

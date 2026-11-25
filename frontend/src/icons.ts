@@ -47,6 +47,7 @@ import {
   Reports,
   Folder,
   Network,
+  DataTransferCheck,
   Internet,
   IpAddressTag,
   Server,
@@ -287,6 +288,7 @@ export const VirtualizationIcon = Server;
 export const PhysicalIcon = Usb;
 /** 電路（ISP 線路）：進階選單裡跟佈線排在一起，不能同一個圖示（2026-11-23） */
 export const CircuitIcon = PathArrow;
+export const CableInferIcon = DataTransferCheck; // 佈線自動推斷
 export const PowerIcon = Flash;
 /** 迴路失效模擬（唯讀計算） */
 export const PowerFailureIcon = FlashOff;

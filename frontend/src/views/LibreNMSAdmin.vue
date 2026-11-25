@@ -11,14 +11,15 @@ import {
 } from "naive-ui";
 import {
   listLibreNMS, createLibreNMS, updateLibreNMS, deleteLibreNMS, testLibreNMS, syncLibreNMS,
-  linkLibreNMSDevices,
-  type LibreNMSInstance,
+  linkLibreNMSDevices, libreNMSCoverageGap,
+  type LibreNMSInstance, type LibreNMSGapRow,
 } from "@/api/integrations";
 import {
   LibreNMSIcon, PlusIcon, EditIcon, DeleteIcon, RefreshIcon, SyncIcon, TestIcon, SaveIcon, CancelIcon,
 } from "@/icons";
 import { Link as LinkDevicesIcon } from "@iconoir/vue";
 import { autoSort } from "@/composables/useTableSort";
+import { useTablePagination } from "@/composables/useTablePagination";
 import { listSubnets } from "@/api/subnets";
 import ColumnPicker from "@/components/ColumnPicker.vue";
 import ExportButton from "@/components/ExportButton.vue";
@@ -187,6 +188,30 @@ async function del(id: string) {
   catch (e: any) { msg.error(e?.response?.data?.detail ?? t("errors.server")); }
 }
 
+// 監控涵蓋缺口（使用者 11-25：未納管比對的監控系統「librenms 也是」；與 Zabbix / Checkmk 同一個做法）
+const gapOpen = ref(false);
+const gap = ref<LibreNMSGapRow[]>([]);
+const gapFor = ref("");
+const gapScope = ref<"instance" | "global">("instance");
+const gapLoading = ref(false);
+const gapPager = useTablePagination();
+async function openGap(r: LibreNMSInstance) {
+  gapFor.value = r.name;
+  gapScope.value = (r.scope_subnet_ids?.length ?? 0) > 0 ? "instance" : "global";
+  gap.value = [];
+  gapOpen.value = true;
+  gapLoading.value = true;
+  try {
+    // 有設限定範圍就只問那些網段，否則是全站（與後端的 scope 語意一致）
+    gap.value = (await libreNMSCoverageGap(r.id, r.scope_subnet_ids ?? undefined)).items;
+  } catch (e) { msg.error(apiErrMsg(e)); }
+  finally { gapLoading.value = false; }
+}
+const gapCols = computed<DataTableColumns<LibreNMSGapRow>>(() => autoSort([
+  { title: "IP", key: "ip", width: 160 },
+  { title: t("cols.hostname"), key: "hostname", minWidth: 200, ellipsis: { tooltip: true } },
+]));
+
 function iconAction(icon: any, label: string, onClick: () => void, type?: any) {
   return h(NTooltip, null, {
     // 只有圖示的按鈕要有可存取名稱（螢幕閱讀器、鍵盤使用者才知道這顆是什麼）
@@ -211,12 +236,13 @@ const allCols = computed<DataTableColumns<LibreNMSInstance>>(() => autoSort([
   },
   { title: t("cols.last_error"), key: "last_error", minWidth: 160, ellipsis: { tooltip: true }, render: (r) => r.last_error ?? "—" },
   {
-    title: t("common.actions"), key: "actions", className: "col-actions", width: 216,
+    title: t("common.actions"), key: "actions", className: "col-actions", width: 250,
     render: (r) => h(NSpace, { size: 2, wrapItem: false, wrap: false }, () => [
       iconAction(EditIcon, t("common.edit"), () => openEdit(r)),
       iconAction(TestIcon, t("common.test"), () => test(r.id)),
       iconAction(SyncIcon, t("common.pull"), () => sync(r.id), "primary"),
       iconAction(LinkDevicesIcon, t("librenms_admin.link_devices"), () => linkDevices(r.id)),
+      iconAction(LibreNMSIcon, t("librenms_admin.gap"), () => openGap(r)),
       h(NPopconfirm, { onPositiveClick: () => del(r.id) }, {
         trigger: () => iconAction(DeleteIcon, t("common.delete"), () => {}, "error"),
         default: () => t("common.confirm_delete"),
@@ -371,6 +397,20 @@ onMounted(() => { void refresh(); void loadSubnetOptions(); void loadVlanDomains
           {{ t("common.save") }}
         </n-button>
       </n-space>
+    </n-modal>
+
+    <!-- 監控涵蓋缺口 -->
+    <n-modal v-model:show="gapOpen" preset="card" :title="`${t('librenms_admin.gap')} — ${gapFor}`"
+             style="width: min(720px, 96vw)" data-testid="librenms-gap">
+      <n-alert v-if="!gapLoading" :type="gap.length ? 'warning' : 'success'" :bordered="false" style="margin-bottom: 10px">
+        {{ gapScope === "instance" ? t("librenms_admin.gap_scoped", { n: gap.length })
+                                   : t("librenms_admin.gap_global", { n: gap.length }) }}
+      </n-alert>
+      <n-space justify="end" style="margin-bottom: 6px">
+        <ExportButton :columns="gapCols" :rows="gap" filename="librenms-unmonitored" :title="t('librenms_admin.gap')" />
+      </n-space>
+      <n-data-table :columns="gapCols" :data="gap" :bordered="false" :loading="gapLoading"
+                    :pagination="gapPager" :row-key="(r: LibreNMSGapRow) => r.ip_address_id" />
     </n-modal>
   </n-card>
 </template>

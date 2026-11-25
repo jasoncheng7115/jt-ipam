@@ -2523,11 +2523,14 @@ cmd_upgrade() {
       /var/lib/jt-ipam/uploads /var/lib/jt-ipam/uploads/floorplans 2>/dev/null || true
 
     # -- 4. backend dependencies --
-    log "Updating backend dependencies (pip install -e .)…"
+    log "Updating backend dependencies to the latest compatible versions…"
     # 先把 pip 升到安全版本（以前升級完全不升 pip）：舊版 pip 內嵌的 certifi 仍信任 2026-10 外洩的 emSign 中間憑證
     ( cd "$ROOT/backend"; as_user .venv/bin/pip install --quiet --upgrade "pip>=26.2.2" ) \
         || warn "Could not upgrade pip to 26.2.2 or later; continuing with the current pip"
-    ( cd "$ROOT/backend"; as_user .venv/bin/pip install --quiet -e . )
+    # 相依套件一起升到最新（--upgrade-strategy eager）：以前只裝缺的，已經裝著的一律不動 → 升級上來的站台
+    # 一直停在舊版，帶著已公開的弱點（11-25：正式站台 Authlib 1.7.2、pyasn1 0.6.4…），而全新安裝與 CI 的
+    # pip-audit 拿的都是最新版，看不出來。現在升級後與全新安裝是同一組版本
+    ( cd "$ROOT/backend"; as_user .venv/bin/pip install --quiet --upgrade --upgrade-strategy eager -e . )
     install_rdp_optional
     ensure_kerberos_support
     ensure_freerdp_if_selected

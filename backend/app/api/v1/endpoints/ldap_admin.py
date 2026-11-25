@@ -16,6 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import CurrentUser, require_admin
 from app.core.audit import append_audit
+from app.core.ca_pem import CA_PEM_MAX as _CA_PEM_MAX
+from app.core.ca_pem import ca_subjects as _ca_subjects
+from app.core.ca_pem import safe_subjects as _safe_subjects
 from app.core.db import get_session
 from app.core.ui_error import detail_of, ui_detail
 from app.models.system_setting import SystemSetting
@@ -28,19 +31,6 @@ from app.services.system_config import (
 )
 
 log = logging.getLogger("ldap_admin")
-
-#: CA 憑證欄位上限（一整串內部 CA 鏈也遠低於這個大小）
-_CA_PEM_MAX = 64 * 1024
-
-
-def _ca_subjects(pem: str | None) -> list[str]:
-    """解析 PEM 裡的每一張憑證，回傳主旨（畫面顯示「目前信任：…」）；不是有效憑證就丟 ValueError。"""
-    if not pem or not pem.strip():
-        return []
-    from cryptography import x509
-    certs = x509.load_pem_x509_certificates(pem.encode())
-    return [c.subject.rfc4514_string() for c in certs]
-
 
 admin_router = APIRouter(
     prefix="/system", tags=["system"], dependencies=[Depends(require_admin)]
@@ -106,13 +96,6 @@ async def _as_out(session: AsyncSession) -> dict:  # type: ignore[type-arg]
         "ca_cert_pem": cfg.ca_cert_pem, "ca_cert_subjects": _safe_subjects(cfg.ca_cert_pem),
         "allow_weak_tls": cfg.allow_weak_tls,
     }
-
-
-def _safe_subjects(pem: str | None) -> list[str]:
-    try:
-        return _ca_subjects(pem)
-    except ValueError:
-        return []
 
 
 @admin_router.get("/ldap", response_model=LdapOut)

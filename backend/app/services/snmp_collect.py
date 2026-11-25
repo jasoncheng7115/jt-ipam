@@ -583,8 +583,7 @@ async def match_neighbors(session: AsyncSession, rows: list[Any]) -> dict[Any, d
     if wanted:
         by_name: dict[str, list[tuple[Any, str]]] = {}
         for did, dname in (await session.execute(select(Device.id, Device.name).where(
-                in_values(func.lower(Device.name), wanted, type_=Device.name.type),
-                Device.archived_at.is_(None)))).all():
+                in_values(func.lower(Device.name), wanted, type_=Device.name.type)))).all():
             by_name.setdefault(str(dname).strip().lower(), []).append((did, dname))
         for rid, n in rest.items():
             cand = by_name.get(n) or []

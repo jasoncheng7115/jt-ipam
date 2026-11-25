@@ -60,10 +60,15 @@ async def trace(session: AsyncSession, user: User, start_id: uuid.UUID, *,
     def add(kind: str, frm: DevicePort, to: dict[str, Any] | None, cable: Cable | None = None) -> None:
         segments.append({"kind": kind, "from_port_id": str(frm.id), "to_port_id": (to or {}).get("port_id"),
                          "cable_id": str(cable.id) if cable else None, "cable_label": cable.label if cable else None,
-                         "status": cable.status if cable else None})
+                         "status": cable.status if cable else None,
+                         # 自動推斷的線：路徑上標出來，提示框講依據（services/cable_inference）
+                         "source": cable.source if cable else None,
+                         "evidence": cable.evidence if cable and cable.source == "auto" else None})
         hops.append({"cable_id": str(cable.id) if cable else None, "cable_label": cable.label if cable else None,
                      "cable_type": (cable.type if cable else "internal"), "cable_color": cable.color if cable else None,
-                     "internal": cable is None, "kind": kind, "to": to})
+                     "internal": cable is None, "kind": kind, "to": to,
+                     "source": cable.source if cable else None,
+                     "evidence": cable.evidence if cable and cable.source == "auto" else None})
         if to is not None:
             nodes.append(to)
 

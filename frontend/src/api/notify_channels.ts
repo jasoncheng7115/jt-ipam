@@ -7,6 +7,9 @@ export interface NotificationChannels {
   smtp_host: string | null;
   smtp_port: number;
   smtp_tls: "none" | "starttls" | "tls";
+  smtp_verify_tls: boolean;
+  smtp_ca_cert_pem: string | null;
+  smtp_ca_cert_subjects: string[];
   smtp_username: string | null;
   smtp_from: string | null;
   smtp_password_set: boolean;
@@ -44,6 +47,8 @@ export interface NotificationChannelsUpdate {
   smtp_host?: string | null;
   smtp_port?: number;
   smtp_tls?: string;
+  smtp_verify_tls?: boolean;
+  smtp_ca_cert_pem?: string | null;   // ""＝清除（回到系統信任清單）
   smtp_username?: string | null;
   smtp_from?: string | null;
   smtp_password?: string | null;   // 給非空才更新；"" 清除；不給保留

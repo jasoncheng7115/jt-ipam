@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -24,9 +25,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     true,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -77,12 +79,46 @@ class Cable(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     length_m: Mapped[float | None] = mapped_column(Numeric(6, 2))
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="connected", nullable=False)
+    # manual＝人建的（系統一律不動）；auto＝依證據自動建立（services/cable_inference），證據改變或消失會跟著更新、撤掉。
+    # 人改過的自動線就變成 manual（等於確認過）
+    source: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual", nullable=False)
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(
             "status IN ('planned','connected','decommissioned')",
             name="ck_cables_status_valid",
         ),
+        CheckConstraint("source IN ('manual','auto')", name="ck_cables_source_valid"),
+    )
+
+
+class CableSuggestion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """證據不夠明確（或跟人工的線衝突）的連線建議；人刪掉的自動線也記在這裡（dismissed）不再建回來。
+
+    兩端照 id 排序存（a < b），同一對埠只有一筆。"""
+
+    __tablename__ = "cable_suggestions"
+
+    a_port_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("device_ports.id", ondelete="CASCADE"), nullable=False)
+    b_port_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("device_ports.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(32))
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(16), default="open", server_default="open", nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    dismissed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("a_port_id", "b_port_id", name="cable_suggestion_pair_uq"),
+        CheckConstraint("status IN ('open','dismissed')", name="ck_cable_suggestions_status"),
+        CheckConstraint("a_port_id < b_port_id", name="ck_cable_suggestions_order"),
     )
 
 

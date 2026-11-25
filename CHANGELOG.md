@@ -4,14 +4,38 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/); versions track
 `frontend/package.json` / `backend/app/version.py`.
 
-## [Unreleased]
+## [1.0.24] - 2026-11-25
+
+### Security
+- **Upgrading now updates the backend's Python dependencies too.** The upgrade used to install only what was missing, so packages already present stayed at whatever version the site first got, including ones with published vulnerabilities (Authlib, dnspython, pyasn1 and others on a long-running site), while fresh installs and the CI audit always saw the latest versions. The upgrade now brings every dependency to its latest compatible version, the same set a fresh install gets.
+- **Email notifications now verify the SMTP server's certificate** (found by an internal source code scan). With STARTTLS or SMTPS, the mail server's certificate was never checked (Python's mail library does not check it by default), so anyone in the middle could present any certificate and read the SMTP user name and password. The certificate and the host name are now checked against the system trust store.
+  - **A relay with a self-signed certificate or an internal CA**: paste that certificate in Admin → Notification Channels → Email (SMTP) → CA certificate. Only the pasted certificates are trusted and the host name is still checked, so the connection stays protected. Only if you cannot get the certificate, turn off "Verify server certificate" (the mail is still encrypted, but no longer protected against interception; the page says so).
+  - A failed check now says so ("SMTP server certificate verification failed") and points to the two options, instead of a bare SMTP error. When only the name does not match (most often: SMTP Host is an IP while the certificate is issued to a host name), the message names the certificate's names so you know what to enter, and the settings page warns when SMTP Host is an IP.
+  - Sites using `SMTP_*` environment settings: `SMTP_VERIFY_TLS=false` turns verification off.
+- **The Docker image's backend runs as an unprivileged account** (same scan). The backend and sync containers ran as root; they now run as `jtipam` (uid 10001), which owns only `/var/lib/jt-ipam`. The application code is read-only to it. The systemd install already used a dedicated account and is unchanged.
+
+> **Upgrade note:** if your email notifications go through a relay with a self-signed certificate, sending will fail after this upgrade until you paste its certificate (or turn verification off) in Notification Channels. The same happens when SMTP Host is an IP address and the certificate is issued to a host name: enter the host name instead. Use "Send test" there to check.
 
 ### Added
+- **Cable inference: cables connect themselves when the evidence is clear** (cabling, cable trace). After every sync round, jt-ipam connects a cable on its own when it can tell both ports:
+  - **LLDP / CDP neighbours** from LibreNMS, the scan agent's SNMP collection or MikroTik: the far end declares which port it is on, and both ports match jt-ipam ports.
+  - **A switch port that sees only one MAC**, which belongs to exactly one device and appears on no other port of that switch. A device known only through its IP record (MAC plus device) gets a NIC port created for the cable.
+  - **A switch port that sees only one virtualisation host and its VMs.**
+  - Bridges, bonds and VLAN interfaces are never used as cable ends; bond members sharing a MAC, a MAC on two devices or on two ports, and stale MAC tables (older than 24 hours) are not guessed.
+  - **Manual cables come first**: cables entered by people are never changed. Evidence that disagrees with one, switch-to-switch links seen only in MAC tables, and conflicting neighbour reports are listed as suggestions to accept or dismiss; a conflict has "Accept and replace", which removes the cable currently on those ports (after confirming) and connects the suggested one. Editing an auto cable makes it manual; deleting one is remembered so it is not created again (restorable).
+  - When a device moves to another port the auto cable moves with it; when the evidence just disappears (powered off, aged-out tables) the cable stays for 14 days before it is removed.
+  - The cable list has a Source column and filter (auto cables show their evidence and last confirmation), the trace path and the device's port list mark auto cables, and the AI tools return the source too. "Cable inference" on the cabling page has the on / off switch (on by default), Run now, the last round's counts, and the suggestion and dismissed lists. Every automatic change is in the audit log.
+- **LibreNMS "Monitoring coverage gap"**, as Zabbix and Checkmk already had: a button in the integration's action column lists IPs that have a hostname in IPAM but are not monitored by this LibreNMS (only the scoped subnets when the integration has a subnet scope), with export. An IP counts as monitored when it is a LibreNMS device's primary IP, when the LibreNMS hostname is that IP, or when its jt-ipam device is linked to a LibreNMS device (other interface IPs of the same machine count too). API: `GET /librenms/instances/{id}/coverage-gap`.
 - **Detection intensity per subnet: "Endpoint-protection friendly"** (customer report: Symantec Endpoint Protection popped up warnings and blocked the scan agent once every detection was on). With OS or port detection ticked, the scan agent uses nmap OS fingerprinting, a fast top-100 port scan and an SMB probe, which endpoint intrusion prevention reads as an attack. The friendly mode skips OS fingerprinting and the SMB probe, slows down and looks only at the dozen or so ports that tell the device type, still reading banners, page titles and certificates; OS and device type detection is less accurate. Normal stays the default. Needs scan agent 1.23.0 (agents update themselves; older agents keep scanning at normal intensity). The troubleshooting page has a new section on excluding the scan agent in endpoint protection.
 
 ### Changed
 - Two `pnpm audit` ignore entries that no longer matched anything were removed (GitHub issue #60): the braces advisory was withdrawn, and the minimatch one does not cover the 3.x and 11.x versions in the lock file. `pnpm audit` still reports no vulnerabilities without them.
 - **The Advanced menu keeps related items together**: organisation (Tenants, Contacts), lines and physical (Circuits, ASN, Cabling, Power, Wireless, Site-to-site VPN), names and certificates (Domains, DNS records, Certificate distribution), firewalls and NAT, virtualisation, then Connections and MAC addresses. Cabling and Power are back under Advanced (1.0.23 had moved them next to Racks), and Circuits gets its own icon.
+
+### Fixed
+- **SNMP neighbours matched by system name made the topology and the neighbour list fail**: matching a neighbour by its system name referred to a device field that does not exist, so any neighbour that could not be matched by address or MAC raised an error. Fixed while building cable inference.
+- **"Monitoring coverage gap" for Zabbix and Checkmk ignored the subnet scope**: the page sent the subnets as `subnet_ids[]=…`, which the server does not read, so the list covered the whole site while it said "within the configured subnet scope". The web page's API client now sends every list parameter as a repeated key (`subnet_ids=a&subnet_ids=b`), which also covers any other call that had the same omission.
+- **The Docker build works again**: the frontend stage ran `npm install`, which fails on this pnpm-managed project ("Cannot read properties of null"). It now installs with pnpm from the lock file, as the regular installer does.
 
 ## [1.0.23] - 2026-11-22
 

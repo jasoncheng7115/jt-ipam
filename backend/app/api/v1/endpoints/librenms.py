@@ -332,6 +332,24 @@ async def delete_instance(
     await session.commit()
 
 
+@router.get("/instances/{instance_id}/coverage-gap")
+async def coverage_gap(
+    instance_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    subnet_ids: Annotated[list[uuid.UUID] | None, Query()] = None,
+) -> dict[str, Any]:
+    """IPAM 有主機名稱、但沒有被這台 LibreNMS 監控的位址（與 Zabbix / Checkmk 相同）。
+
+    `subnet_ids` 沒帶＝全站；帶了就只看那些網段（避免用全域資料回答局部問題）。
+    """
+    if await session.get(LibreNMSInstance, instance_id) is None:
+        raise HTTPException(404, detail="Not found")
+    from app.services.librenms import coverage_gap as _gap
+    rows = await _gap(session, instance_id=instance_id,
+                      subnet_ids=list(subnet_ids) if subnet_ids else None)
+    return {"items": rows, "count": len(rows), "scope": "subnets" if subnet_ids else "global"}
+
+
 @router.post("/instances/{instance_id}/test",
              dependencies=[Depends(require_admin)])
 async def test_instance(

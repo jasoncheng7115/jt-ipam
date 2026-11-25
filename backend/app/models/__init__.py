@@ -103,6 +103,7 @@ from app.models.permission import Permission
 from app.models.pfsense import PfSenseFirewall, PfSenseSyncedAlias
 from app.models.physical import (
     Cable,
+    CableSuggestion,
     CableTermination,
     DevicePort,
     DevicePowerPort,
@@ -156,6 +157,7 @@ __all__ = [
     "AuditLog",
     "Base",
     "Cable",
+    "CableSuggestion",
     "CableTermination",
     "CertAgent",
     "CertDeployNotice",

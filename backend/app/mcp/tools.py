@@ -3941,6 +3941,8 @@ async def list_cables(session: AsyncSession, *, user: User, limit: int = 200) ->
         "id": str(c.id), "label": c.label, "type": c.type, "color": c.color,
         "length_m": float(c.length_m) if c.length_m is not None else None, "status": c.status,
         "description": c.description, "terminations": ends.get(c.id, []),
+        # auto＝佈線自動推斷（LLDP / CDP 或交換器 MAC 表），evidence 是依據
+        "source": c.source, "evidence": c.evidence if c.source == "auto" else None,
     } for c in rows]}
 
 
@@ -4024,7 +4026,8 @@ async def cable_trace(session: AsyncSession, *, user: User, cable_id: str) -> di
     return {
         "cable": {"id": str(c.id), "label": c.label, "type": c.type, "color": c.color,
                   "length_m": float(c.length_m) if c.length_m is not None else None,
-                  "status": c.status, "description": c.description},
+                  "status": c.status, "description": c.description,
+                  "source": c.source, "evidence": c.evidence if c.source == "auto" else None},
         "terminations": ends.get(c.id, []),
         "path": path[:60], "path_truncated": len(path) > 60,
         # 為什麼停下來（end＝走到底；unpaired_panel_port、ambiguous、no_connected_cable…見 services/port_trace）
@@ -6058,7 +6061,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "list_cables": {
         "fn": list_cables,
-        "description": "List cables (佈線：線標、類型、顏色、長度、狀態、說明) with both ends resolved to device name and port name. For the full path through patch panels use cable_trace.",
+        "description": "List cables (佈線：線標、類型、顏色、長度、狀態、說明、來源) with both ends resolved to device name and port name. For the full path through patch panels use cable_trace.",
         "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 500}}},
     },
     "cable_trace": {

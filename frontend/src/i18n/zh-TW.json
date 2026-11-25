@@ -1804,7 +1804,8 @@
       "hyperv_sync": "Hyper-V 同步",
       "cert_push": "推送憑證到設備",
       "openstack_sync": "OpenStack 同步",
-      "domain_rdap": "網域 RDAP 查詢"
+      "domain_rdap": "網域 RDAP 查詢",
+      "cable_inference_run": "佈線自動推斷"
     },
     "tracker": {
       "title": "背景作業",
@@ -2329,7 +2330,10 @@
     "vlan_domain": "VLAN 寫進哪個 domain",
     "vlan_domain_placeholder": "LibreNMS（專用，預設）",
     "vlan_domain_hint": "指定後，同一個編號的 VLAN 沿用這個 domain 裡既有的那一筆，只補上「哪台交換器帶了這個 VLAN」，已經取好的名稱不會被交換器上的名稱（例如 VLAN0010）蓋掉。從 phpIPAM 搬來的 VLAN 在 default 時，選它就不會出現兩份。",
-    "vlan_only_existing": "只對應這個 domain 裡既有的 VLAN，不新建（交換器預設的 1002 到 1005 之類就不會被帶進來）"
+    "vlan_only_existing": "只對應這個 domain 裡既有的 VLAN，不新建（交換器預設的 1002 到 1005 之類就不會被帶進來）",
+    "gap": "未監控的位址",
+    "gap_scoped": "在限定的子網路範圍內，有 {n} 個已知主機名稱的位址沒有被這台 LibreNMS 監控。",
+    "gap_global": "全站有 {n} 個已知主機名稱的位址沒有被這台 LibreNMS 監控（這台未設限定子網路範圍）。"
   },
   "firewall": {
     "scope_title": "關聯範圍 (NAT 對應)",
@@ -4338,7 +4342,10 @@
     "feed_in_use": "這個迴路還有 {n} 個插座，先刪除或改到別的迴路",
     "outlet_in_use": "這個插座接著 {ports}，先改接或拔掉",
     "trace_cable_not_on_port": "這條線沒有接在這個埠上",
-    "floorplan_conflict": "平面配置剛被別人改過，請重新載入後再調整"
+    "floorplan_conflict": "平面配置剛被別人改過，請重新載入後再調整",
+    "smtp_cert_verify_failed": "SMTP 伺服器憑證驗證失敗：{reason}。若轉信主機使用自簽憑證，請在「通知發送設定」貼上它的 CA 憑證；確定無法取得時才關閉「驗證伺服器憑證」。",
+    "smtp_ca_invalid": "CA 憑證不是有效的 PEM：{reason}",
+    "smtp_cert_name_mismatch": "SMTP 伺服器的憑證是發給 {names}，跟設定的主機「{host}」對不上。請把 SMTP Host 改成憑證上的名稱（DNS 指向這台主機的那個名稱）。"
   },
   "adguard_admin": {
     "scope_subnets": "限定子網路範圍",
@@ -4775,6 +4782,11 @@
     "password_keep": "已設定，留空表示不變更",
     "from": "寄件者（From）",
     "tls_none": "不加密（僅限信任內網）",
+    "verify_tls": "驗證伺服器憑證",
+    "verify_tls_off_hint": "未驗證憑證時，中間人可以攔截 SMTP 帳密。只有內部轉信主機使用自簽憑證時才關閉。",
+    "ca": "CA 憑證（PEM，選填）",
+    "ca_hint": "轉信主機使用自簽憑證或企業內部 CA 時，貼上該憑證（-----BEGIN CERTIFICATE----- 開頭，可以多張）。設定後只信任這裡的憑證，主機名稱仍會比對；留空則使用系統信任清單。",
+    "ca_current": "目前信任：{names}",
     "test": "寄送測試信",
     "test_to_ph": "收件者 Email",
     "test_to_required": "請輸入測試收件者",
@@ -4860,7 +4872,8 @@
     "webhook_title": "通用 Webhook",
     "webhook_hint": "POST 一段 JSON 到你指定的 URL：{'{'} \"app\":\"jt-ipam\", \"subject\":..., \"text\":..., \"url\":..., \"severity\":... {'}'}（url 是前往檢視的完整網址、severity 是嚴重度，有才帶）。可串 n8n、自寫端點等；選填 Bearer token 會以 Authorization 標頭帶上。",
     "webhook_token": "Bearer Token（選填）",
-    "webhook_token_ph": "留空＝不帶授權標頭"
+    "webhook_token_ph": "留空＝不帶授權標頭",
+    "host_ip_hint": "用 IP 連線時，憑證通常比對不到（憑證多半是發給主機名稱）；建議填憑證上的主機名稱。"
   },
   "system_settings": {
     "agent_auto_pin_hint": "開啟時，還沒驗證伺服器的派送、掃描、RustDesk 代理更新後會自己改成驗證：先試系統 CA，不行就釘選這台的憑證，實際連得上才換，不必到每台主機重跑安裝指令。jt-ipam 換憑證時，已驗證的代理用這台的身分金鑰確認新憑證後自動跟上（這部分不受這個開關影響）。關閉後，未驗證的代理維持原狀。",
@@ -10633,5 +10646,47 @@
     "pick": "點一個埠位查看對應與線標",
     "view_list": "清單",
     "view_grid": "面板埠位"
+  },
+  "cable_infer": {
+    "title": "佈線自動推斷",
+    "intro": "每輪同步後，系統會依證據自動接線：交換器回報的鄰居資訊（LLDP / CDP）指出兩端各是哪個埠，或交換器的某個埠只看到一台設備的 MAC。人工建立的線一律不動。證據不夠明確、或跟人工的線不一致時，只列在下面由你決定。",
+    "enabled": "自動推斷並接線",
+    "run_now": "立即執行",
+    "never_run": "還沒執行過",
+    "last_run": "上一輪 {at}：新接 {created} 條、確認 {refreshed} 條、撤掉 {retired} 條、衝突 {conflicts} 條、建議 {suggested} 條、新建網卡埠 {ports} 個",
+    "run_done": "完成：新接 {created} 條、確認 {refreshed} 條、撤掉 {retired} 條、衝突 {conflicts} 條、建議 {suggested} 條",
+    "tab_open": "建議（{n}）",
+    "tab_dismissed": "已忽略（{n}）",
+    "open_hint": "接受會建立一條已確認的線；埠已經接了別條線時會擋下，請先處理那條線。",
+    "dismissed_hint": "已忽略的連線（包含被刪掉的自動線）不會再自動建立。復原後，下一輪會照證據重新判斷。",
+    "col_basis": "依據",
+    "col_reason": "為什麼沒有自動接",
+    "col_last_seen": "最後看到",
+    "col_dismissed_at": "忽略時間",
+    "col_source": "來源",
+    "accept": "接受",
+    "dismiss": "忽略",
+    "restore": "復原",
+    "accepted": "已建立連線",
+    "dismissed_ok": "已忽略",
+    "restored": "已復原",
+    "source_auto": "自動",
+    "source_manual": "人工",
+    "verified_at": "最後確認：{at}",
+    "confirm_delete_auto": "這條線是自動推斷的。刪掉後系統會記住，不會再自動建回來（可在「佈線自動推斷」的「已忽略」復原）。確定刪除？",
+    "ev_neighbor": "{proto} 鄰居宣告（{source}）：對方是 {remote} 的 {port}",
+    "ev_single_mac": "交換器埠 {port} 只看到這台設備的 MAC（{mac}）",
+    "ev_vm_host": "交換器埠 {port} 看到的 {n} 個 MAC 都是這台主機和它的 VM",
+    "ev_uplink": "兩台交換器的 MAC 表互相看得到對方，但中間可能還有不能管理的交換器",
+    "kind_fdb_single_mac": "單一 MAC",
+    "kind_fdb_vm_host": "虛擬化主機",
+    "kind_fdb_uplink": "交換器直連",
+    "kind_auto": "自動",
+    "reason_conflict_manual": "跟人工的線不一致",
+    "reason_uplink_unverified": "只靠 MAC 表推斷",
+    "reason_conflicting_evidence": "證據互相矛盾",
+    "accept_replace": "接受並取代",
+    "confirm_replace": "會移除 {a} 與 {b} 上目前的線（包含人工建立的），改接成這一條。確定？",
+    "replaced": "已取代並建立連線"
   }
 }

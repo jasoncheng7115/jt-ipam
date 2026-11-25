@@ -1713,7 +1713,7 @@ _NOTIFY_BOOL_KEYS = (
     "teams_enabled", "nextcloud_enabled", "zulip_enabled", "webhook_enabled",
 )
 _NOTIFY_STR_KEYS = (
-    "smtp_host", "smtp_username", "smtp_from",
+    "smtp_host", "smtp_username", "smtp_from", "smtp_ca_cert_pem",
     "telegram_chat_id", "nextcloud_url", "nextcloud_token",
     "zulip_site", "zulip_bot_email", "zulip_stream", "zulip_topic",
 )
@@ -1748,6 +1748,7 @@ def _dec_smtp(blob: str) -> str | None:
 def _default_notify() -> dict[str, Any]:
     cfg: dict[str, Any] = dict.fromkeys(_NOTIFY_BOOL_KEYS, False)
     cfg.update({"smtp_port": 587, "smtp_tls": "starttls"})  # none/starttls/tls
+    cfg["smtp_verify_tls"] = True      # 預設驗證；舊站台沒存過這個鍵也是驗證
     for k in _NOTIFY_STR_KEYS:
         cfg[k] = None
     for enc in _NOTIFY_SECRETS.values():
@@ -1772,6 +1773,8 @@ async def get_notification_channels(session: AsyncSession) -> dict[str, Any]:
             cfg["smtp_port"] = v["smtp_port"]
         if v.get("smtp_tls") in ("none", "starttls", "tls"):
             cfg["smtp_tls"] = v["smtp_tls"]
+        if isinstance(v.get("smtp_verify_tls"), bool):
+            cfg["smtp_verify_tls"] = v["smtp_verify_tls"]
         for k in (*_NOTIFY_STR_KEYS, *_NOTIFY_SECRETS.values()):
             if isinstance(v.get(k), str) and v[k]:
                 cfg[k] = v[k]
@@ -1791,7 +1794,7 @@ async def set_notification_channels(
         row = SystemSetting(key=NOTIFY_CH_KEY, value={}, updated_by=updated_by_user_id)
         session.add(row)
     val = dict(row.value or {})
-    for k in (*_NOTIFY_BOOL_KEYS, "smtp_port", "smtp_tls", *_NOTIFY_STR_KEYS):
+    for k in (*_NOTIFY_BOOL_KEYS, "smtp_port", "smtp_tls", "smtp_verify_tls", *_NOTIFY_STR_KEYS):
         if k in data:
             val[k] = data[k]
     # 密鑰：給了非空字串才更新（空字串/未給 = 保留原本）；明確傳 null/"" 清除

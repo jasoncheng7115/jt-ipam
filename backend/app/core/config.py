@@ -155,6 +155,7 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_from: str = "jt-ipam@localhost"
     smtp_tls_mode: Literal["none", "starttls", "tls"] = "starttls"
+    smtp_verify_tls: bool = True   # STARTTLS / SMTPS 驗證伺服器憑證；內部自簽轉信主機才設 false
     smtp_timeout: float = 10.0
 
     # ── LDAP / AD ──
