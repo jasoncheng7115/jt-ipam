@@ -128,7 +128,8 @@ def test_pip_is_raised_to_a_safe_minimum_on_both_paths() -> None:
     src = SCRIPT.read_text(encoding="utf-8")
     install = src[src.index("# -- 5. backend venv --"):src.index("install_rdp_optional", src.index("# -- 5. backend venv --"))]
     upgrade = src[src.index("cmd_upgrade() {"):]
-    upgrade = upgrade[:upgrade.index("pip install --quiet -e .")]
+    # 升級時安裝後端相依套件那一行之前（那行的旗標會變：11-25 加了 --upgrade-strategy eager）
+    upgrade = upgrade[:re.search(r"\.venv/bin/pip install [^\n]*-e \.", upgrade).start()]
     for name, block in (("install", install), ("upgrade", upgrade)):
         m = re.search(r'pip install[^\n]*--upgrade[^\n]*"pip>=(\d+)\.(\d+)\.(\d+)"', block)
         assert m, f"{name} 路徑要先把 pip 升到安全的最低版本"
